@@ -1,3 +1,5 @@
+from ai_trader.signals.models import TradeProposal
+
 def format_price(symbol: str, df) -> str:
     last = df.iloc[-1]
     prev = df.iloc[-2] if len(df) > 1 else last
@@ -41,3 +43,17 @@ def format_trend(symbol: str, snap: dict) -> str:
         f"Direction: {direction}\n"
         f"{atr_line}"
     )
+
+def format_trade_proposal(p: TradeProposal) -> str:
+    if p.side == "NONE":
+        return f"🟡 {p.symbol} Signal\nNo trade.\nReason: {p.reason}"
+
+    return (
+        f"🟢 {p.symbol} Signal ({p.side})\n"
+        f"Entry: {p.entry:.2f}\n"
+        f"Stop: {p.stop:.2f}\n"
+        f"Target: {p.target:.2f}\n"
+        f"R/R: {p.rr:.2f}\n"
+        f"Reason: {p.reason}"
+    )
+
