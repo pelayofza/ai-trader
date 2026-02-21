@@ -1,30 +1,48 @@
-import os
-from dotenv import load_dotenv
+from datetime import datetime, timedelta, timezone
+
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-load_dotenv()
+from ai_trader.data.providers.alpaca import AlpacaProvider
+from ai_trader.data.formatting import format_price
 
 
-async def ping(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text("Hi! I'm online")
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Hi! I'm online.")
 
 
-def main() -> None:
-    token = os.getenv("TELEGRAM_BOT_TOKEN")
+async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    if not token:
-        raise RuntimeError(
-            "Falta TELEGRAM_BOT_TOKEN en el archivo .env"
-        )
+    if not context.args:
+        await update.message.reply_text("Usage: /price TICKER (e.g. /price AAPL)")
+        return
+
+    symbol = context.args[0].strip().upper()
+
+    try:
+        provider = AlpacaProvider()
+
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(days=180)
+
+        df = provider.get_daily_bars(symbol, start, end)
+
+        if df is None or df.empty:
+            await update.message.reply_text(f"No data found for {symbol}.")
+            return
+
+        message = format_price(symbol, df)
+        await update.message.reply_text(message)
+
+    except Exception as e:
+        await update.message.reply_text(f"Error: {e!r}")
+
+
+def build_application(token: str) -> Application:
 
     app = Application.builder().token(token).build()
 
-    app.add_handler(CommandHandler("ping", ping))
+    app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(CommandHandler("price", price_command))
 
-    print("Argos iniciado correctamente...")
-    app.run_polling()
-
-
-if __name__ == "__main__":
-    main()
+    return app
