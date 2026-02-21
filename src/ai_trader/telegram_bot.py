@@ -7,7 +7,7 @@ load_dotenv()
 
 
 async def ping(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text("Argos online 👁️")
+    await update.message.reply_text("Hi! I'm online")
 
 
 def main() -> None:
