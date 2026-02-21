@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-from ai_trader.data.providers.alpaca import AlpacaProvider
+from ai_trader.data.market_data import MarketDataService
 from ai_trader.data.formatting import format_price
 
 
@@ -25,7 +25,7 @@ async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     symbol = context.args[0].strip().upper()
 
     try:
-        provider = AlpacaProvider()
+        provider = MarketDataService()
 
         end = datetime.now(timezone.utc)
         start = end - timedelta(days=180)
