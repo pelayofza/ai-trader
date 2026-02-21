@@ -9,3 +9,7 @@ Para ejecutar:
 - Ejecutar "poetry install"
 - Ejecutar "Python -m ai_trader.telegram_bot"
 
+Alpaca:
+- Password: a61d1cd8-f68f-4077-8c59-ec56de275169
+- Key: PK5DLWFMR42D7EL6V7AGDHN7DY
+- Secret: AdSNeazjWshdDegmE5BN4bT9brSUYcbMoac9X9fkXHLf
