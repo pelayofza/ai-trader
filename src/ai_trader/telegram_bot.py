@@ -6,6 +6,9 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 from ai_trader.data.market_data import MarketDataService
 from ai_trader.data.formatting import format_price
 
+from ai_trader.indicators.trend import trend_snapshot
+from ai_trader.data.formatting import format_trend
+
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Hi! I'm online.")
@@ -42,6 +45,32 @@ async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"Error: {e!r}")
 
+async def trend_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if not context.args:
+        await update.message.reply_text("Usage: /trend TICKER (e.g. /trend AAPL)")
+        return
+
+    symbol = context.args[0].strip().upper()
+
+    try:
+        service = MarketDataService()
+
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(days=365)  # 1 año para SMA50 y ATR
+
+        df = service.get_daily_bars(symbol, start, end)
+
+        if df is None or df.empty:
+            await update.message.reply_text(f"No data found for {symbol}.")
+            return
+
+        snap = trend_snapshot(df)
+        msg = format_trend(symbol, snap)
+        await update.message.reply_text(msg)
+
+    except Exception as e:
+        await update.message.reply_text(f"Error: {e!r}")
 
 def build_application(token: str) -> Application:
 
@@ -51,5 +80,6 @@ def build_application(token: str) -> Application:
     app.add_handler(CommandHandler("ping", ping))
     app.add_handler(CommandHandler("status", status))
     app.add_handler(CommandHandler("price", price_command))
+    app.add_handler(CommandHandler("trend", trend_command))
 
     return app
