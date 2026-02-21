@@ -7,6 +7,8 @@ load_dotenv()
 
 
 def main():
+    print("Argos is running")
+    
     token = os.getenv("TELEGRAM_BOT_TOKEN")
 
     if not token:

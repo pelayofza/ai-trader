@@ -10,6 +10,11 @@ from ai_trader.data.formatting import format_price
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Hi! I'm online.")
 
+async def ping(update: Update, context:ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("pong")
+
+async def status(update: Update, context:ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("All good, and you?")
 
 async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -43,6 +48,8 @@ def build_application(token: str) -> Application:
     app = Application.builder().token(token).build()
 
     app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(CommandHandler("ping", ping))
+    app.add_handler(CommandHandler("status", status))
     app.add_handler(CommandHandler("price", price_command))
 
     return app
