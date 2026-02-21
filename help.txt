@@ -1,0 +1,4 @@
+Para mover tool a otro ordenador:
+1. Copias la carpeta "ai-trader" entera (sin .venv)
+2. Instalas Python + Poetry
+3. Ejecutas en PowerShell (desde carpeta donde se guarde): poetry install

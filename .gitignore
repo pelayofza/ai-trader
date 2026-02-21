@@ -1,0 +1,20 @@
+# Entorno virtual
+.venv/
+
+# Variables de entorno (secretos)
+.env
+
+# Cachés Python
+__pycache__/
+*.pyc
+
+# Logs
+*.log
+
+# VS Code
+.vscode/
+
+# Base de datos / datos locales
+data/*.db
+data/*.sqlite
+data/*.sqlite3
