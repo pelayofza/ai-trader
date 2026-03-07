@@ -93,12 +93,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "/risk\n"
         "/pause\n"
         "/resume\n"
-        "/run_cycle"
-        "/history"
-        "/performance"
-        "/symbols"
-        "/autoon"
-        "/autooff"
+        "/run_cycle\n"
+        "/history\n"
+        "/performance\n"
+        "/symbols\n"
+        "/autoon\n"
+        "/autooff\n"
     )
 
 
