@@ -1,5 +1,5 @@
 import pandas as pd
-from ai_trader.indicators.ta import sma, atr
+from ai_trader.research.indicators.ta import sma, atr
 
 
 def trend_snapshot(df: pd.DataFrame) -> dict:

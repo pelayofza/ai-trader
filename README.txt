@@ -5,6 +5,5 @@ Para mover tool a otro ordenador:
 
 Para ejecutar:
 - Ir a la ruta de ai-trader en PowerShell
-- Ejecutar ".\.venv\Scripts\Activate.ps1"
-- Ejecutar "poetry install"
-- Ejecutar "Python -m ai_trader.telegram_bot"
+- Ejecutar "venv\Scripts\Activate.ps1"
+- Ejecutar "python -m ai_trader.bots.telegram_bot"
