@@ -12,8 +12,10 @@ from ai_trader.shared.schemas import (
     OrderRequest,
     OrderType,
     Position,
+    PositionStatus,
     Signal,
 )
+
 from ai_trader.app.state_store import JsonStateStore
 from ai_trader.shared.schemas import Side
 
@@ -54,12 +56,15 @@ class RunnerConfig:
     order_type: OrderType = OrderType.MARKET
     timeframe_label: str = "1d"
     cycle_enabled: bool = True
+    max_holding_days: int = 10
 
     def __post_init__(self) -> None:
         if not self.symbols:
             raise ValueError("symbols cannot be empty")
         if self.lookback_days <= 0:
             raise ValueError("lookback_days must be greater than 0")
+        if self.max_holding_days <= 0:
+            raise ValueError("max_holding_days must be greater than 0")
 
 
 @dataclass(slots=True)
@@ -141,6 +146,8 @@ class TradingRunner:
         if self.state.is_paused:
             self.supervisor.send_warning("Runner is paused. Skipping cycle.")
             return []
+        
+        closed_positions = self._process_open_positions()
 
         logger.info(
             "Starting run_cycle | symbols=%s | lookback_days=%s | strategies=%s",
@@ -169,7 +176,7 @@ class TradingRunner:
         self.state.execution_results.extend(cycle_results)
         self._persist_state()
 
-        summary = self._build_cycle_summary(cycle_results, diagnostics)
+        summary = self._build_cycle_summary(cycle_results, diagnostics, closed_positions)
         logger.info(summary)
         self.supervisor.send_info(summary)
 
@@ -331,6 +338,113 @@ class TradingRunner:
             "is_paused": self.state.is_paused,
         })
     
+    def _process_open_positions(self) -> list[Position]:
+        closed_positions: list[Position] = []
+
+        for position in self.get_positions():
+            last_price = self._get_last_price(position.symbol)
+
+            if last_price is None:
+                logger.warning(
+                    "Could not load last price for open position symbol=%s",
+                    position.symbol,
+                )
+                continue
+
+            close_reason = self._get_close_reason(position, last_price)
+
+            if close_reason is None:
+                continue
+
+            logger.info(
+                "Closing position | symbol=%s | position_id=%s | reason=%s | last_price=%s",
+                position.symbol,
+                position.position_id,
+                close_reason,
+                last_price,
+            )
+
+            self._close_position(
+                position=position,
+                exit_price=last_price,
+                reason=close_reason,
+            )
+            closed_positions.append(position)
+
+        if closed_positions:
+            self._persist_state()
+
+        return closed_positions
+
+
+    def _get_close_reason(self, position: Position, last_price: float) -> str | None:
+        if position.side == Side.BUY:
+            if position.stop_loss is not None and last_price <= position.stop_loss:
+                return "stop_loss"
+
+            if position.take_profit is not None and last_price >= position.take_profit:
+                return "take_profit"
+
+        holding_days = (utc_now() - position.opened_at).days
+        if holding_days >= self.config.max_holding_days:
+            return "max_holding_days"
+
+        return None
+
+
+    def _close_position(
+        self,
+        position: Position,
+        exit_price: float,
+        reason: str,
+    ) -> None:
+        position.status = PositionStatus.CLOSED
+        position.closed_at = utc_now()
+        position.exit_price = exit_price
+
+        realized_pnl = self._compute_realized_pnl(position, exit_price)
+        position.realized_pnl = realized_pnl
+        self.state.daily_realized_pnl_usd += realized_pnl
+
+        logger.info(
+            (
+                "Position closed | symbol=%s | position_id=%s | reason=%s | "
+                "entry_price=%s | exit_price=%s | size=%s | realized_pnl=%s"
+            ),
+            position.symbol,
+            position.position_id,
+            reason,
+            position.entry_price,
+            exit_price,
+            position.size,
+            realized_pnl,
+        )
+
+        self.supervisor.send_info(
+            self._format_position_closed_message(position, reason)
+        )
+
+
+    @staticmethod
+    def _compute_realized_pnl(position: Position, exit_price: float) -> float:
+        if position.side == Side.BUY:
+            return round((exit_price - position.entry_price) * position.size, 2)
+
+        return round((position.entry_price - exit_price) * position.size, 2)
+
+
+    @staticmethod
+    def _format_position_closed_message(position: Position, reason: str) -> str:
+        return (
+            f"Position closed | "
+            f"symbol={position.symbol} | "
+            f"side={position.side.value.upper()} | "
+            f"reason={reason} | "
+            f"entry={position.entry_price:.2f} | "
+            f"exit={position.exit_price or 0:.2f} | "
+            f"pnl={position.realized_pnl or 0:.2f} USD"
+        )
+
     def _process_symbol(
         self,
         symbol: str,
@@ -544,6 +658,7 @@ class TradingRunner:
         self,
         cycle_results: list[ExecutionResult],
         diagnostics: list[SymbolCycleDiagnostics],
+        closed_positions: list[Position],
     ) -> str:
         filled = sum(1 for result in cycle_results if result.success)
         total_signals = sum(diag.signals_generated for diag in diagnostics)
@@ -558,6 +673,7 @@ class TradingRunner:
         return (
             f"Cycle complete | "
             f"symbols={len(self.config.symbols)} | "
+            f"closed_positions={len(closed_positions)} | "
             f"signals={total_signals} | "
             f"risk_rejected={total_risk_rejected} | "
             f"no_signal_events={total_no_signal} | "

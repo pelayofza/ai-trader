@@ -64,6 +64,7 @@ def build_runner(market_data_service: MarketDataService) -> TradingRunner | None
         config=RunnerConfig(
             symbols=["BTC/USDT", "ETH/USDT", "SOL/USDT"],
             lookback_days=180,
+            max_holding_days=10,
         ),
         market_data_reader=market_data_service,
         strategies=strategies,
