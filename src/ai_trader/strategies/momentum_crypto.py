@@ -5,9 +5,12 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 import pandas as pd
+import logging
 
 from ai_trader.shared.schemas import Side, Signal
 
+
+logger = logging.getLogger(__name__)
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -115,7 +118,24 @@ class CryptoMomentumStrategy:
         breakout_ok = bool(latest_close > float(breakout_level))
         volatility_ok = bool(atr_pct >= self.config.min_atr_pct)
 
+        logger.info(
+            (
+                "Momentum check | symbol=%s | close=%.6f | fast_sma=%.6f | slow_sma=%.6f | "
+                "breakout_level=%.6f | atr_pct=%.2f | trend_ok=%s | breakout_ok=%s | volatility_ok=%s"
+            ),
+            symbol,
+            latest_close,
+            float(latest_fast_sma),
+            float(latest_slow_sma),
+            float(breakout_level),
+            atr_pct,
+            trend_ok,
+            breakout_ok,
+            volatility_ok,
+        )
+
         if not (trend_ok and breakout_ok and volatility_ok):
+            logger.info("Strategy produced no signal for symbol=%s", symbol)
             return None
 
         stop_loss = float(latest_close - (latest_atr * self.config.risk_atr_multiple))
@@ -128,6 +148,8 @@ class CryptoMomentumStrategy:
             atr_pct=atr_pct,
             breakout_level=float(breakout_level),
         )
+
+        logger.info("Strategy produced BUY signal for symbol=%s", symbol)
 
         return Signal(
             strategy_id=self.strategy_id,
