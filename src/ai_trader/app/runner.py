@@ -325,10 +325,10 @@ class TradingRunner:
 
     def _persist_state(self) -> None:
         self.state_store.save({
-        "open_positions": self.state.open_positions,
-        "execution_results": self.state.execution_results,
-        "daily_realized_pnl_usd": self.state.daily_realized_pnl_usd,
-        "is_paused": self.state.is_paused,
+            "open_positions": self.state.open_positions,
+            "execution_results": self.state.execution_results,
+            "daily_realized_pnl_usd": self.state.daily_realized_pnl_usd,
+            "is_paused": self.state.is_paused,
         })
     
     def _process_symbol(

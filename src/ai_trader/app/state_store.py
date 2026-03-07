@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
@@ -20,30 +19,41 @@ class JsonStateStore:
 
     def load(self) -> dict:
         if not self.path.exists():
-            return payload
+            return {}
 
         payload = json.loads(self.path.read_text(encoding="utf-8"))
 
-        return {}
+        return {
+            "open_positions": [
+                self._deserialize_position(item)
+                for item in payload.get("open_positions", [])
+            ],
+            "execution_results": [
+                self._deserialize_execution_result(item)
+                for item in payload.get("execution_results", [])
+            ],
+            "daily_realized_pnl_usd": float(payload.get("daily_realized_pnl_usd", 0.0)),
+            "is_paused": bool(payload.get("is_paused", False)),
+        }
 
-    def save(self, state: RunnerState) -> None:
+    def save(self, payload: dict) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
-        payload = {
+        serialized_payload = {
             "open_positions": [
                 self._serialize_position(position)
-                for position in state.open_positions
+                for position in payload.get("open_positions", [])
             ],
             "execution_results": [
                 self._serialize_execution_result(result)
-                for result in state.execution_results
+                for result in payload.get("execution_results", [])
             ],
-            "daily_realized_pnl_usd": state.daily_realized_pnl_usd,
-            "is_paused": state.is_paused,
+            "daily_realized_pnl_usd": payload.get("daily_realized_pnl_usd", 0.0),
+            "is_paused": payload.get("is_paused", False),
         }
 
         self.path.write_text(
-            json.dumps(payload, indent=2, ensure_ascii=False),
+            json.dumps(serialized_payload, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
 
