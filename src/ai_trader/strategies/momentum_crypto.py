@@ -47,8 +47,8 @@ class CryptoMomentumConfig:
     fast_sma_window: int = 20
     slow_sma_window: int = 50
     atr_window: int = 14
-    breakout_lookback: int = 20
-    min_atr_pct: float = 1.5
+    breakout_lookback: int = 5
+    min_atr_pct: float = 0.5
     risk_atr_multiple: float = 2.0
     reward_atr_multiple: float = 3.0
     min_bars: int = 60
