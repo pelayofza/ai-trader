@@ -114,7 +114,7 @@ class CryptoMomentumStrategy:
         if pd.isna(breakout_level):
             return None
 
-        trend_ok = bool(latest_close > latest_fast_sma and latest_fast_sma > latest_slow_sma)
+        trend_ok = bool(latest_fast_sma > latest_slow_sma)
         breakout_ok = True
         volatility_ok = bool(atr_pct >= self.config.min_atr_pct)
         
