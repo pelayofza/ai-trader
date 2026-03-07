@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Protocol
 
+from numpy import diag
+
 from ai_trader.execution.paper import PaperExecutionEngine
 from ai_trader.risk.engine import PortfolioState, RiskEngine
 from ai_trader.shared.schemas import (
@@ -546,12 +548,27 @@ class TradingRunner:
 
 
     def _symbol_in_cooldown(self, symbol: str) -> bool:
-        for result in reversed(self.state.execution_results):
-            if result.symbol == symbol:
-                delta = utc_now() - result.executed_at
-                return delta.total_seconds() < self.config.symbol_cooldown_hours * 3600
-        return False
+        if self.config.symbol_cooldown_hours <= 0:
+            return False
 
+        last_event_at: datetime | None = None
+
+        for position in self.state.open_positions:
+            if position.symbol != symbol:
+                continue
+
+            candidate = position.closed_at or position.opened_at
+
+            if last_event_at is None or candidate > last_event_at:
+                last_event_at = candidate
+
+        if last_event_at is None:
+            return False
+
+        cooldown_seconds = self.config.symbol_cooldown_hours * 3600
+        elapsed_seconds = (utc_now() - last_event_at).total_seconds()
+
+        return elapsed_seconds < cooldown_seconds
 
     def _close_position(
         self,
@@ -630,7 +647,14 @@ class TradingRunner:
 
         results: list[ExecutionResult] = []
 
+        if any(position.symbol == symbol for position in self.get_positions()):
+            logger.info("Skipping symbol=%s because there is already an open position", symbol)
+            diag.notes.append("open_position_exists")
+            return []
+
         if self._symbol_in_cooldown(symbol):
+            logger.info("Skipping symbol=%s because it is in cooldown", symbol)
+            diag.notes.append("symbol_cooldown")
             return []
 
         for strategy in self.strategies:
@@ -747,7 +771,7 @@ class TradingRunner:
                 )
             else:
                 diag.notes.append(
-                    f"{strategy.strategy_id}:execution_failed:{execution_result.reason}"
+                    f"{strategy.strategy_id}:execution_failed:{execution_result.message}"
                 )
 
         return results

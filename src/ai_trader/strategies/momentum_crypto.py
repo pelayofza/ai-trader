@@ -160,7 +160,7 @@ class CryptoMomentumStrategy:
             stop_loss=stop_loss,
             take_profit=take_profit,
             reason=(
-                "Momentum breakout: close > SMA20 > SMA50, "
+                "Momentum breakout: fast_sma > slow_sma, "
                 f"ATR%={atr_pct:.2f}"
             ),
             features={
