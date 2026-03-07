@@ -283,14 +283,14 @@ class TradingRunner:
         limits = self.risk_engine.limits
         open_positions = self.get_positions()
 
-        total_nominal = sum(position.notional_value for position in open_positions)
+        total_exposure = sum(position.size * self._get_last_price(position.symbol) for position in open_positions)
 
-        nominal_by_symbol: dict[str, float] = {}
+        exposure_by_symbol: dict[str, float] = {}
         positions_by_symbol: dict[str, int] = {}
 
         for position in open_positions:
-            nominal_by_symbol[position.symbol] = (
-                nominal_by_symbol.get(position.symbol, 0.0) + position.notional_value
+            exposure_by_symbol[position.symbol] = (
+                exposure_by_symbol.get(position.symbol, 0.0) + position.notional_value
             )
             positions_by_symbol[position.symbol] = (
                 positions_by_symbol.get(position.symbol, 0) + 1
@@ -306,7 +306,7 @@ class TradingRunner:
             ),
             (
                 f"Total nominal exposure: "
-                f"{total_nominal:,.2f} USD / "
+                f"{total_exposure:,.2f} USD / "
                 f"{limits.max_total_exposure_usd:,.2f} USD"
             ),
             f"Max position size: {limits.max_position_size_usd:,.2f} USD",
@@ -329,10 +329,10 @@ class TradingRunner:
         if not open_positions:
             lines.append("None")
         else:
-            for symbol in sorted(nominal_by_symbol):
+            for symbol in sorted(exposure_by_symbol):
                 lines.append(
                     f"{symbol}: "
-                    f"{nominal_by_symbol[symbol]:,.2f} USD "
+                    f"{exposure_by_symbol[symbol]:,.2f} USD "
                     f"({positions_by_symbol[symbol]} pos) / "
                     f"{limits.max_symbol_exposure_usd:,.2f} USD"
                 )
