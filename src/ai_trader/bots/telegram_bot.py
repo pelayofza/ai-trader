@@ -9,7 +9,6 @@ from telegram import Update # type: ignore
 from telegram.ext import Application, CommandHandler, ContextTypes # type: ignore
 
 from ai_trader.data.market_data import MarketDataService
-from ai_trader.research.indicators.trend import trend_snapshot
 from ai_trader.shared.schemas import Signal
 
 
@@ -21,10 +20,20 @@ def utc_now() -> datetime:
 
 
 class RunnerLike(Protocol):
-    def get_status(self) -> str: ...
-    def pause(self) -> None: ...
-    def resume(self) -> None: ...
-    def run_cycle(self): ...
+    def get_status(self) -> str:
+        ...
+
+    def get_positions(self):
+        ...
+
+    def pause(self) -> None:
+        ...
+
+    def resume(self) -> None:
+        ...
+
+    def run_cycle(self):
+        ...
 
 
 @dataclass(slots=True)
@@ -53,6 +62,28 @@ def format_price(symbol: str, bars) -> str:
     )
 
 
+def format_positions(positions) -> str:
+    if not positions:
+        return "No open positions."
+
+    lines = [f"Open positions: {len(positions)}"]
+
+    for position in positions:
+        lines.append("")
+        lines.append(f"Symbol: {position.symbol}")
+        lines.append(f"Side: {position.side.value.upper()}")
+        lines.append(f"Size: {position.size:.8f}")
+        lines.append(f"Entry: {position.entry_price:,.2f}")
+        lines.append(f"Strategy: {position.strategy_id}")
+        if position.stop_loss is not None:
+            lines.append(f"Stop loss: {position.stop_loss:,.2f}")
+        if position.take_profit is not None:
+            lines.append(f"Take profit: {position.take_profit:,.2f}")
+        lines.append(f"Opened at: {position.opened_at}")
+
+    return "\n".join(lines)
+
+
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message is None:
         return
@@ -63,7 +94,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "/ping\n"
         "/status\n"
         "/price SYMBOL\n"
-        "/trend SYMBOL\n"
+        "/positions\n"
         "/pause\n"
         "/resume\n"
         "/run_cycle"
@@ -89,6 +120,25 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     await update.message.reply_text(runner.get_status())
+
+
+async def positions_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.message is None:
+        return
+
+    deps: TelegramBotDependencies = context.application.bot_data["deps"]
+    runner = deps.runner
+
+    if runner is None:
+        await update.message.reply_text("Runner not configured.")
+        return
+
+    try:
+        positions = runner.get_positions()
+        await update.message.reply_text(format_positions(positions))
+    except Exception as exc:
+        logger.exception("positions_command failed")
+        await update.message.reply_text(f"Error loading positions: {exc}")
 
 
 def normalize_symbol(symbol: str) -> str:
@@ -197,6 +247,7 @@ def build_application(
     app.add_handler(CommandHandler("ping", ping_command))
     app.add_handler(CommandHandler("status", status_command))
     app.add_handler(CommandHandler("price", price_command))
+    app.add_handler(CommandHandler("positions", positions_command))
     app.add_handler(CommandHandler("pause", pause_command))
     app.add_handler(CommandHandler("resume", resume_command))
     app.add_handler(CommandHandler("run_cycle", run_cycle_command))

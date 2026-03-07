@@ -194,6 +194,9 @@ class TradingRunner:
             f"stored_results={len(self.state.execution_results)}"
         )
 
+    def get_positions(self) -> list[Position]:
+        return [position for position in self.state.open_positions if position.is_open]
+
     def _process_symbol(
         self,
         symbol: str,
