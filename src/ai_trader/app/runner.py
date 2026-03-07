@@ -313,8 +313,8 @@ class TradingRunner:
                 execution_result.status.value,
                 execution_result.filled_size,
                 execution_result.filled_price,
-                execution_result.fees_paid,
-                execution_result.reason,
+                execution_result.fees,
+                execution_result.message,
             )
 
             results.append(execution_result)
