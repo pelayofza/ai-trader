@@ -1,4 +1,4 @@
-[project]
+git [project]
 name = "ai-trader"
 version = "0.1.0"
 description = "AI-driven paper trading system"
