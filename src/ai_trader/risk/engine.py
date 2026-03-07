@@ -10,7 +10,7 @@ from ai_trader.shared.schemas import Position, RiskDecision, Signal
 class RiskLimits:
     max_position_size_usd: float = 1_000.0
     max_open_positions: int = 5
-    max_symbol_exposure_usd: float = 1_000.0
+    max_symbol_exposure_usd: float = 3_000.0
     max_total_exposure_usd: float = 5_000.0
     max_daily_loss_usd: float = 200.0
     max_confidence_per_trade: float = 1.0
