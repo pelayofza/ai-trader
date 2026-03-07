@@ -44,14 +44,14 @@ def _atr(df: pd.DataFrame, window: int = 14) -> pd.Series:
 @dataclass(slots=True)
 class CryptoMomentumConfig:
     timeframe: str = "1d"
-    fast_sma_window: int = 20
-    slow_sma_window: int = 50
+    fast_sma_window: int = 10
+    slow_sma_window: int = 20
     atr_window: int = 14
     breakout_lookback: int = 5
-    min_atr_pct: float = 0.5
+    min_atr_pct: float = 0.2
     risk_atr_multiple: float = 2.0
     reward_atr_multiple: float = 3.0
-    min_bars: int = 60
+    min_bars: int = 30
 
     def __post_init__(self) -> None:
         if self.fast_sma_window <= 0:
@@ -114,27 +114,25 @@ class CryptoMomentumStrategy:
         if pd.isna(breakout_level):
             return None
 
-        trend_ok = bool(latest_close > latest_fast_sma > latest_slow_sma)
-        breakout_ok = bool(latest_close > float(breakout_level))
+        trend_ok = bool(latest_close > latest_fast_sma and latest_fast_sma > latest_slow_sma)
+        breakout_ok = True
         volatility_ok = bool(atr_pct >= self.config.min_atr_pct)
-
+        
         logger.info(
             (
                 "Momentum check | symbol=%s | close=%.6f | fast_sma=%.6f | slow_sma=%.6f | "
-                "breakout_level=%.6f | atr_pct=%.2f | trend_ok=%s | breakout_ok=%s | volatility_ok=%s"
+                "atr_pct=%.2f | trend_ok=%s | volatility_ok=%s"
             ),
             symbol,
             latest_close,
             float(latest_fast_sma),
             float(latest_slow_sma),
-            float(breakout_level),
             atr_pct,
             trend_ok,
-            breakout_ok,
             volatility_ok,
         )
 
-        if not (trend_ok and breakout_ok and volatility_ok):
+        if not (trend_ok and volatility_ok):
             logger.info("Strategy produced no signal for symbol=%s", symbol)
             return None
 
@@ -163,7 +161,6 @@ class CryptoMomentumStrategy:
             take_profit=take_profit,
             reason=(
                 "Momentum breakout: close > SMA20 > SMA50, "
-                f"close > {self.config.breakout_lookback}-bar high, "
                 f"ATR%={atr_pct:.2f}"
             ),
             features={
