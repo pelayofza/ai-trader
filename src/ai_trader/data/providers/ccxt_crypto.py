@@ -21,7 +21,7 @@ def datetime_to_milliseconds(value: datetime) -> int:
 
 @dataclass(slots=True)
 class CCXTCryptoConfig:
-    exchange_id: str = "kraken"
+    exchange_id: str = "binance"
     rate_limit: bool = True
     timeout_ms: int = 10_000
     max_batch_size: int = 1_000
