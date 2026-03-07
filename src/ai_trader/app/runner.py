@@ -290,10 +290,7 @@ class TradingRunner:
 
         for position in open_positions:
             exposure_by_symbol[position.symbol] = (
-                exposure_by_symbol.get(position.symbol, 0.0) + position.notional_value
-            )
-            positions_by_symbol[position.symbol] = (
-                positions_by_symbol.get(position.symbol, 0) + 1
+                exposure_by_symbol.get(position.symbol, 0.0) + position.size * self._get_last_price(position.symbol)
             )
 
         lines: list[str] = [
@@ -305,7 +302,7 @@ class TradingRunner:
                 f"-{limits.max_daily_loss_usd:,.2f} USD limit"
             ),
             (
-                f"Total nominal exposure: "
+                f"Total current exposure: "
                 f"{total_exposure:,.2f} USD / "
                 f"{limits.max_total_exposure_usd:,.2f} USD"
             ),
@@ -324,7 +321,7 @@ class TradingRunner:
             )
 
         lines.append("")
-        lines.append("Nominal exposure by symbol:")
+        lines.append("Current exposure by symbol:")
 
         if not open_positions:
             lines.append("None")
@@ -332,8 +329,7 @@ class TradingRunner:
             for symbol in sorted(exposure_by_symbol):
                 lines.append(
                     f"{symbol}: "
-                    f"{exposure_by_symbol[symbol]:,.2f} USD "
-                    f"({positions_by_symbol[symbol]} pos) / "
+                    f"{exposure_by_symbol[symbol]:,.2f} USD / "
                     f"{limits.max_symbol_exposure_usd:,.2f} USD"
                 )
 
