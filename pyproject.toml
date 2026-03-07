@@ -1,25 +1,19 @@
-git [project]
+[tool.poetry]
 name = "ai-trader"
 version = "0.1.0"
 description = "AI-driven paper trading system"
-authors = [
-    {name = "Pelayo"}
-]
-requires-python = "^3.11"
-dependencies = [
-    "python-telegram-bot (>=22.6,<23.0)",
-    "python-dotenv (>=1.2.1,<2.0.0)",
-    "ccxt (>=4.5.42,<5.0.0)"
-]
-
-[tool.poetry]
+authors = ["Pelayo"]
 packages = [{ include = "ai_trader", from = "src" }]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+python-telegram-bot = { version = ">=22.6,<23.0", extras = ["job-queue"] }
+python-dotenv = ">=1.2.1,<2.0.0"
+ccxt = ">=4.5.42,<5.0.0"
+
+[tool.poetry.group.dev.dependencies]
+watchfiles = ">=1.1.1,<2.0.0"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
-
-[dependency-groups]
-dev = [
-    "watchfiles (>=1.1.1,<2.0.0)"
-]
