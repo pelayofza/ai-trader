@@ -10,6 +10,7 @@ from ai_trader.data.market_data import MarketDataService
 from ai_trader.execution.paper import PaperExecutionConfig, PaperExecutionEngine
 from ai_trader.risk.engine import RiskEngine, RiskLimits
 from ai_trader.app.runner import RunnerConfig, TradingRunner
+from ai_trader.strategies import CryptoMomentumStrategy
 
 
 logging.basicConfig(
@@ -33,7 +34,9 @@ def build_runner(market_data_service: MarketDataService) -> TradingRunner | None
     Returns None until at least one strategy is migrated to the new
     `generate_signal(...) -> Signal | None` contract.
     """
-    strategies = []
+    strategies = [
+        CryptoMomentumStrategy(),
+    ]
 
     if not strategies:
         logger.warning("No strategies configured yet. Runner will not be created.")
@@ -59,7 +62,7 @@ def build_runner(market_data_service: MarketDataService) -> TradingRunner | None
 
     runner = TradingRunner(
         config=RunnerConfig(
-            symbols=["BTC/USD", "ETH/USD"],
+            symbols=["BTC/USDT", "ETH/USDT", "SOL/USDT"],
             lookback_days=180,
         ),
         market_data_reader=market_data_service,
