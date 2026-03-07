@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from itertools import count
+from uuid import uuid4
 
 from ai_trader.shared.schemas import (
     ExecutionResult,
@@ -55,7 +55,6 @@ class PaperExecutionEngine:
     def __init__(self, config: PaperExecutionConfig | None = None) -> None:
         self.config = config or PaperExecutionConfig()
         self._fills: list[PaperFill] = []
-        self._order_sequence = count(1)
 
     def execute(
         self,
@@ -166,8 +165,8 @@ class PaperExecutionEngine:
         return filled_size, OrderStatus.PARTIALLY_FILLED
 
     def _next_order_id(self) -> str:
-        return f"paper-{next(self._order_sequence):06d}"
-
+        return f"paper-{utc_now():%Y%m%d%H%M%S}-{uuid4().hex[:8]}"
+    
     @staticmethod
     def _build_message(
         order_request: OrderRequest,

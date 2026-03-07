@@ -485,7 +485,7 @@ class TradingRunner:
 
     def _get_last_price(self, symbol: str) -> float | None:
         end = utc_now()
-        start = end - timedelta(days=30)
+        start = end - timedelta(days=7)
         bars = self.market_data_reader.get_daily_bars(symbol, start, end)
 
         if bars is None or bars.empty:

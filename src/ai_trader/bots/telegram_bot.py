@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Protocol
@@ -54,6 +55,26 @@ class TelegramBotDependencies:
     runner: RunnerLike | None = None
     chat_id: int | None = None
     auto_cycle_enabled: bool = False
+    cycle_running: bool = False
+
+
+async def run_blocking(func, *args, **kwargs):
+    return await asyncio.to_thread(func, *args, **kwargs)
+
+
+async def run_cycle_in_thread(deps: TelegramBotDependencies):
+    runner = deps.runner
+    if runner is None:
+        raise RuntimeError("Runner not configured.")
+
+    if deps.cycle_running:
+        return None
+
+    deps.cycle_running = True
+    try:
+        return await asyncio.to_thread(runner.run_cycle)
+    finally:
+        deps.cycle_running = False
 
 
 def format_price(symbol: str, bars) -> str:
@@ -135,14 +156,15 @@ async def positions_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     try:
-        await update.message.reply_text(runner.get_positions_report())
+        report = await run_blocking(runner.get_positions_report)
+        await update.message.reply_text(report)
     except Exception as exc:
         logger.exception("positions_command failed")
         await update.message.reply_text(f"Error loading positions: {exc}")
 
 
 def normalize_symbol(symbol: str) -> str:
-    return symbol.strip().upper().replace("/", "")
+    return symbol.strip().upper()
 
 async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message is None:
@@ -157,15 +179,19 @@ async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     try:
         end = utc_now()
-        start = end - timedelta(days=180)
-        bars = deps.market_data_service.get_daily_bars(symbol, start, end)
+        start = end - timedelta(days=7)
+        bars = await run_blocking(
+            deps.market_data_service.get_daily_bars,
+            symbol,
+            start,
+            end,
+        )
 
         if bars is None or bars.empty:
             await update.message.reply_text(f"No data found for {symbol}.")
             return
 
         await update.message.reply_text(format_price(symbol, bars))
-
     except Exception as exc:
         logger.exception("price_command failed for %s", symbol)
         await update.message.reply_text(f"Error loading price for {symbol}: {exc}")
@@ -183,7 +209,7 @@ async def pause_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
 
     try:
-        runner.pause()
+        await run_blocking(runner.pause)
         await update.message.reply_text("Runner paused.")
     except Exception as exc:
         logger.exception("pause_command failed")
@@ -202,7 +228,7 @@ async def resume_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     try:
-        runner.resume()
+        await run_blocking(runner.resume)
         await update.message.reply_text("Runner resumed.")
     except Exception as exc:
         logger.exception("resume_command failed")
@@ -221,7 +247,11 @@ async def run_cycle_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     try:
-        results = runner.run_cycle()
+        results = await run_cycle_in_thread(deps)
+        if results is None:
+            await update.message.reply_text("Cycle already running.")
+            return
+
         await update.message.reply_text(
             f"Cycle executed. Execution results: {len(results)}"
         )
@@ -244,7 +274,10 @@ async def scheduled_run_cycle(context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     try:
-        results = runner.run_cycle()
+        results = await run_cycle_in_thread(deps)
+        if results is None:
+            return
+
         await context.bot.send_message(
             chat_id=deps.chat_id,
             text=f"Scheduled cycle executed. Execution results: {len(results)}",
@@ -269,7 +302,8 @@ async def risk_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     try:
-        await update.message.reply_text(runner.get_risk_report())
+        report = await run_blocking(runner.get_risk_report)
+        await update.message.reply_text(report)
     except Exception as exc:
         logger.exception("risk_command failed")
         await update.message.reply_text(f"Error loading risk report: {exc}")
@@ -305,7 +339,8 @@ async def performance_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     try:
-        await update.message.reply_text(runner.get_performance_report())
+        report = await run_blocking(runner.get_performance_report)
+        await update.message.reply_text(report)
     except Exception as exc:
         logger.exception("performance_command failed")
         await update.message.reply_text(f"Error loading performance report: {exc}")
@@ -323,7 +358,8 @@ async def symbols_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     try:
-        await update.message.reply_text(runner.get_symbols_report())
+        report = await run_blocking(runner.get_symbols_report)
+        await update.message.reply_text(report)
     except Exception as exc:
         logger.exception("symbols_command failed")
         await update.message.reply_text(f"Error loading symbols report: {exc}")
