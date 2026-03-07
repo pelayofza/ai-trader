@@ -280,43 +280,61 @@ class TradingRunner:
         return "\n".join(lines)
 
     def get_risk_report(self) -> str:
-        portfolio_state = self.state.build_portfolio_state()
         limits = self.risk_engine.limits
-        positions = self.get_positions()
+        open_positions = self.get_positions()
+
+        total_nominal = sum(position.notional_value for position in open_positions)
+
+        nominal_by_symbol: dict[str, float] = {}
+        positions_by_symbol: dict[str, int] = {}
+
+        for position in open_positions:
+            nominal_by_symbol[position.symbol] = (
+                nominal_by_symbol.get(position.symbol, 0.0) + position.notional_value
+            )
+            positions_by_symbol[position.symbol] = (
+                positions_by_symbol.get(position.symbol, 0) + 1
+            )
 
         lines: list[str] = [
             f"Runner paused: {self.state.is_paused}",
-            f"Open positions: {portfolio_state.open_positions_count()} / {limits.max_open_positions}",
+            f"Open positions: {len(open_positions)} / {limits.max_open_positions}",
             (
                 f"Daily realized PnL: "
-                f"{portfolio_state.daily_realized_pnl_usd:,.2f} USD / "
+                f"{self.state.daily_realized_pnl_usd:,.2f} USD / "
                 f"-{limits.max_daily_loss_usd:,.2f} USD limit"
             ),
             (
-                f"Total exposure: "
-                f"{portfolio_state.total_exposure_usd:,.2f} USD / "
+                f"Total nominal exposure: "
+                f"{total_nominal:,.2f} USD / "
                 f"{limits.max_total_exposure_usd:,.2f} USD"
             ),
-            (
-                f"Max position size: "
-                f"{limits.max_position_size_usd:,.2f} USD"
-            ),
-            (
-                f"Confidence range: "
-                f"{limits.min_confidence_per_trade:.2f} - "
-                f"{limits.max_confidence_per_trade:.2f}"
-            ),
-            "",
-            "Exposure by symbol:",
+            f"Max position size: {limits.max_position_size_usd:,.2f} USD",
         ]
 
-        if not positions:
+        if limits.max_confidence_per_trade >= 1.0:
+            lines.append(
+                f"Minimum confidence required: {limits.min_confidence_per_trade:.2f}"
+            )
+        else:
+            lines.append(
+                "Accepted confidence range: "
+                f"{limits.min_confidence_per_trade:.2f} - "
+                f"{limits.max_confidence_per_trade:.2f}"
+            )
+
+        lines.append("")
+        lines.append("Nominal exposure by symbol:")
+
+        if not open_positions:
             lines.append("None")
         else:
-            for symbol in sorted({position.symbol for position in positions}):
-                symbol_exposure = portfolio_state.symbol_exposure_usd(symbol)
+            for symbol in sorted(nominal_by_symbol):
                 lines.append(
-                    f"{symbol}: {symbol_exposure:,.2f} USD / {limits.max_symbol_exposure_usd:,.2f} USD"
+                    f"{symbol}: "
+                    f"{nominal_by_symbol[symbol]:,.2f} USD "
+                    f"({positions_by_symbol[symbol]} pos) / "
+                    f"{limits.max_symbol_exposure_usd:,.2f} USD"
                 )
 
         return "\n".join(lines)
