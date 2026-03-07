@@ -7,7 +7,7 @@ packages = [{ include = "ai_trader", from = "src" }]
 
 [tool.poetry.dependencies]
 python = "^3.11"
-python-telegram-bot = { version = ">=22.6,<23.0", extras = ["job-queue"] }
+python-telegram-bot = {extras = ["job-queue"], version = "^22.6"}
 python-dotenv = ">=1.2.1,<2.0.0"
 ccxt = ">=4.5.42,<5.0.0"
 

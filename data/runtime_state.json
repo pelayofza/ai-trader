@@ -1,0 +1,86 @@
+{
+  "open_positions": [
+    {
+      "symbol": "BTC/USDT",
+      "side": "buy",
+      "size": 0.00961134,
+      "entry_price": 67662.27423,
+      "opened_at": "2026-03-07T18:25:47.242615+00:00",
+      "strategy_id": "crypto_momentum_v1",
+      "status": "open",
+      "position_id": "paper-000001",
+      "stop_loss": 60764.97259684868,
+      "take_profit": 77923.691104727,
+      "closed_at": null,
+      "exit_price": null,
+      "realized_pnl": null
+    },
+    {
+      "symbol": "ETH/USDT",
+      "side": "buy",
+      "size": 0.33440071,
+      "entry_price": 1974.66684,
+      "opened_at": "2026-03-07T18:25:47.504718+00:00",
+      "strategy_id": "crypto_momentum_v1",
+      "status": "open",
+      "position_id": "paper-000002",
+      "stop_loss": 1703.331924323507,
+      "take_profit": 2379.2021135147397,
+      "closed_at": null,
+      "exit_price": null,
+      "realized_pnl": null
+    },
+    {
+      "symbol": "SOL/USDT",
+      "side": "buy",
+      "size": 8.03164709,
+      "entry_price": 83.46171,
+      "opened_at": "2026-03-07T18:25:47.768861+00:00",
+      "strategy_id": "crypto_momentum_v1",
+      "status": "open",
+      "position_id": "paper-000003",
+      "stop_loss": 70.84667331220813,
+      "take_profit": 102.27999003168782,
+      "closed_at": null,
+      "exit_price": null,
+      "realized_pnl": null
+    }
+  ],
+  "execution_results": [
+    {
+      "success": true,
+      "status": "filled",
+      "message": "Paper order filled: BUY BTC/USDT | size=0.00961134 | price=67662.27423000 | fees=0.65032512",
+      "order_id": "paper-000001",
+      "filled_price": 67662.27423,
+      "filled_size": 0.00961134,
+      "executed_at": "2026-03-07T18:25:47.242471+00:00",
+      "fees": 0.65032512,
+      "slippage_bps": 5.0
+    },
+    {
+      "success": true,
+      "status": "filled",
+      "message": "Paper order filled: BUY ETH/USDT | size=0.33440071 | price=1974.66684000 | fees=0.66032999",
+      "order_id": "paper-000002",
+      "filled_price": 1974.66684,
+      "filled_size": 0.33440071,
+      "executed_at": "2026-03-07T18:25:47.504478+00:00",
+      "fees": 0.66032999,
+      "slippage_bps": 5.0
+    },
+    {
+      "success": true,
+      "status": "filled",
+      "message": "Paper order filled: BUY SOL/USDT | size=8.03164709 | price=83.46171000 | fees=0.67033500",
+      "order_id": "paper-000003",
+      "filled_price": 83.46171,
+      "filled_size": 8.03164709,
+      "executed_at": "2026-03-07T18:25:47.768611+00:00",
+      "fees": 0.670335,
+      "slippage_bps": 5.0
+    }
+  ],
+  "daily_realized_pnl_usd": 0.0,
+  "is_paused": false
+}
