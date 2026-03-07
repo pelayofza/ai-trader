@@ -44,12 +44,12 @@ def build_runner(market_data_service: MarketDataService) -> TradingRunner | None
 
     risk_engine = RiskEngine(
         RiskLimits(
-            max_position_size_usd=1_000.0,
-            max_open_positions=3,
+            max_position_size_usd=2_000.0,
+            max_open_positions=5,
             max_symbol_exposure_usd=1_000.0,
-            max_total_exposure_usd=2_500.0,
+            max_total_exposure_usd=5_000.0,
             max_daily_loss_usd=150.0,
-            min_confidence_per_trade=0.55,
+            min_confidence_per_trade=0.65,
         )
     )
 
