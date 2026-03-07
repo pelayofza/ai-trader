@@ -5,7 +5,6 @@ from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
-from ai_trader.app.runner import RunnerState
 from ai_trader.shared.schemas import (
     ExecutionResult,
     OrderStatus,
@@ -19,24 +18,13 @@ class JsonStateStore:
     def __init__(self, filepath: str = "data/runtime_state.json") -> None:
         self.path = Path(filepath)
 
-    def load(self) -> RunnerState:
+    def load(self) -> dict:
         if not self.path.exists():
-            return RunnerState()
+            return payload
 
         payload = json.loads(self.path.read_text(encoding="utf-8"))
 
-        return RunnerState(
-            open_positions=[
-                self._deserialize_position(item)
-                for item in payload.get("open_positions", [])
-            ],
-            execution_results=[
-                self._deserialize_execution_result(item)
-                for item in payload.get("execution_results", [])
-            ],
-            daily_realized_pnl_usd=float(payload.get("daily_realized_pnl_usd", 0.0)),
-            is_paused=bool(payload.get("is_paused", False)),
-        )
+        return {}
 
     def save(self, state: RunnerState) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)

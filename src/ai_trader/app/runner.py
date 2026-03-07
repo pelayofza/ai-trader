@@ -121,7 +121,17 @@ class TradingRunner:
         self.execution_engine = execution_engine
         self.supervisor = supervisor or NullSupervisor()
         self.state_store = state_store or JsonStateStore()
-        self.state = self.state_store.load()
+        payload = self.state_store.load()
+
+        if not payload:
+            self.state = RunnerState()
+        else:
+            self.state = RunnerState(
+                open_positions=payload.get("open_positions", []),
+                execution_results=payload.get("execution_results", []),
+                daily_realized_pnl_usd=payload.get("daily_realized_pnl_usd", 0.0),
+                is_paused=payload.get("is_paused", False),
+            )
 
     def run_cycle(self) -> list[ExecutionResult]:
         if not self.config.cycle_enabled:
@@ -314,7 +324,12 @@ class TradingRunner:
         return None
 
     def _persist_state(self) -> None:
-        self.state_store.save(self.state)
+        self.state_store.save({
+        "open_positions": self.state.open_positions,
+        "execution_results": self.state.execution_results,
+        "daily_realized_pnl_usd": self.state.daily_realized_pnl_usd,
+        "is_paused": self.state.is_paused,
+        })
     
     def _process_symbol(
         self,
