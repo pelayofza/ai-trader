@@ -23,7 +23,10 @@ class RunnerLike(Protocol):
     def get_status(self) -> str:
         ...
 
-    def get_positions(self):
+    def get_positions_report(self) -> str:
+        ...
+
+    def get_risk_report(self) -> str:
         ...
 
     def pause(self) -> None:
@@ -62,28 +65,6 @@ def format_price(symbol: str, bars) -> str:
     )
 
 
-def format_positions(positions) -> str:
-    if not positions:
-        return "No open positions."
-
-    lines = [f"Open positions: {len(positions)}"]
-
-    for position in positions:
-        lines.append("")
-        lines.append(f"Symbol: {position.symbol}")
-        lines.append(f"Side: {position.side.value.upper()}")
-        lines.append(f"Size: {position.size:.8f}")
-        lines.append(f"Entry: {position.entry_price:,.2f}")
-        lines.append(f"Strategy: {position.strategy_id}")
-        if position.stop_loss is not None:
-            lines.append(f"Stop loss: {position.stop_loss:,.2f}")
-        if position.take_profit is not None:
-            lines.append(f"Take profit: {position.take_profit:,.2f}")
-        lines.append(f"Opened at: {position.opened_at}")
-
-    return "\n".join(lines)
-
-
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message is None:
         return
@@ -95,6 +76,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "/status\n"
         "/price SYMBOL\n"
         "/positions\n"
+        "/risk\n"
         "/pause\n"
         "/resume\n"
         "/run_cycle"
@@ -134,8 +116,7 @@ async def positions_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     try:
-        positions = runner.get_positions()
-        await update.message.reply_text(format_positions(positions))
+        await update.message.reply_text(runner.get_positions_report())
     except Exception as exc:
         logger.exception("positions_command failed")
         await update.message.reply_text(f"Error loading positions: {exc}")
@@ -230,6 +211,24 @@ async def run_cycle_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await update.message.reply_text(f"Error running cycle: {exc}")
 
 
+async def risk_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.message is None:
+        return
+
+    deps: TelegramBotDependencies = context.application.bot_data["deps"]
+    runner = deps.runner
+
+    if runner is None:
+        await update.message.reply_text("Runner not configured.")
+        return
+
+    try:
+        await update.message.reply_text(runner.get_risk_report())
+    except Exception as exc:
+        logger.exception("risk_command failed")
+        await update.message.reply_text(f"Error loading risk report: {exc}")
+
+
 def build_application(
     token: str,
     market_data_service: MarketDataService | None = None,
@@ -248,6 +247,7 @@ def build_application(
     app.add_handler(CommandHandler("status", status_command))
     app.add_handler(CommandHandler("price", price_command))
     app.add_handler(CommandHandler("positions", positions_command))
+    app.add_handler(CommandHandler("risk", risk_command))
     app.add_handler(CommandHandler("pause", pause_command))
     app.add_handler(CommandHandler("resume", resume_command))
     app.add_handler(CommandHandler("run_cycle", run_cycle_command))

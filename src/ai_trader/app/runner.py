@@ -14,6 +14,8 @@ from ai_trader.shared.schemas import (
     Position,
     Signal,
 )
+from ai_trader.app.state_store import JsonStateStore
+from ai_trader.shared.schemas import Side
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +109,7 @@ class TradingRunner:
         risk_engine: RiskEngine,
         execution_engine: PaperExecutionEngine,
         supervisor: Supervisor | None = None,
+        state_store: JsonStateStore | None = None,
     ) -> None:
         if not strategies:
             raise ValueError("strategies cannot be empty")
@@ -117,7 +120,8 @@ class TradingRunner:
         self.risk_engine = risk_engine
         self.execution_engine = execution_engine
         self.supervisor = supervisor or NullSupervisor()
-        self.state = RunnerState()
+        self.state_store = state_store or JsonStateStore()
+        self.state = self.state_store.load()
 
     def run_cycle(self) -> list[ExecutionResult]:
         if not self.config.cycle_enabled:
@@ -153,6 +157,7 @@ class TradingRunner:
                 self.supervisor.send_error(f"Error processing {symbol}: {exc}")
 
         self.state.execution_results.extend(cycle_results)
+        self._persist_state()
 
         summary = self._build_cycle_summary(cycle_results, diagnostics)
         logger.info(summary)
@@ -180,10 +185,12 @@ class TradingRunner:
 
     def pause(self) -> None:
         self.state.is_paused = True
+        self._persist_state()
         self.supervisor.send_warning("Trading runner paused.")
 
     def resume(self) -> None:
         self.state.is_paused = False
+        self._persist_state()
         self.supervisor.send_info("Trading runner resumed.")
 
     def get_status(self) -> str:
@@ -197,6 +204,118 @@ class TradingRunner:
     def get_positions(self) -> list[Position]:
         return [position for position in self.state.open_positions if position.is_open]
 
+    def get_positions_report(self) -> str:
+        positions = self.get_positions()
+
+        if not positions:
+            return "No open positions."
+
+        lines: list[str] = [f"Open positions: {len(positions)}"]
+        total_unrealized = 0.0
+
+        for position in positions:
+            last_price = self._get_last_price(position.symbol)
+            pnl_usd = None
+            pnl_pct = None
+
+            if last_price is not None:
+                pnl_usd = self._compute_unrealized_pnl_usd(position, last_price)
+                pnl_pct = self._compute_unrealized_pnl_pct(position, last_price)
+                total_unrealized += pnl_usd
+
+            lines.append("")
+            lines.append(f"Symbol: {position.symbol}")
+            lines.append(f"Side: {position.side.value.upper()}")
+            lines.append(f"Size: {position.size:.8f}")
+            lines.append(f"Entry: {position.entry_price:,.2f}")
+            lines.append(
+                f"Notional at entry: {position.notional_value:,.2f} USD"
+            )
+
+            if last_price is None:
+                lines.append("Last price: unavailable")
+                lines.append("Unrealized PnL: unavailable")
+            else:
+                lines.append(f"Last price: {last_price:,.2f}")
+                lines.append(f"Unrealized PnL: {pnl_usd:,.2f} USD")
+                lines.append(f"Unrealized PnL %: {pnl_pct:,.2f}%")
+
+            lines.append(f"Strategy: {position.strategy_id}")
+
+            if position.stop_loss is not None:
+                lines.append(f"Stop loss: {position.stop_loss:,.2f}")
+
+            if position.take_profit is not None:
+                lines.append(f"Take profit: {position.take_profit:,.2f}")
+
+            lines.append(f"Opened at: {position.opened_at.isoformat()}")
+
+        lines.append("")
+        lines.append(f"Total unrealized PnL: {total_unrealized:,.2f} USD")
+
+        return "\n".join(lines)
+
+    def get_risk_report(self) -> str:
+        portfolio_state = self.state.build_portfolio_state()
+        limits = self.risk_engine.limits
+        positions = self.get_positions()
+
+        lines: list[str] = [
+            f"Runner paused: {self.state.is_paused}",
+            f"Open positions: {portfolio_state.open_positions_count()} / {limits.max_open_positions}",
+            (
+                f"Daily realized PnL: "
+                f"{portfolio_state.daily_realized_pnl_usd:,.2f} USD / "
+                f"-{limits.max_daily_loss_usd:,.2f} USD limit"
+            ),
+            (
+                f"Total exposure: "
+                f"{portfolio_state.total_exposure_usd:,.2f} USD / "
+                f"{limits.max_total_exposure_usd:,.2f} USD"
+            ),
+            (
+                f"Max position size: "
+                f"{limits.max_position_size_usd:,.2f} USD"
+            ),
+            (
+                f"Confidence range: "
+                f"{limits.min_confidence_per_trade:.2f} - "
+                f"{limits.max_confidence_per_trade:.2f}"
+            ),
+            "",
+            "Exposure by symbol:",
+        ]
+
+        if not positions:
+            lines.append("None")
+        else:
+            for symbol in sorted({position.symbol for position in positions}):
+                symbol_exposure = portfolio_state.symbol_exposure_usd(symbol)
+                lines.append(
+                    f"{symbol}: {symbol_exposure:,.2f} USD / {limits.max_symbol_exposure_usd:,.2f} USD"
+                )
+
+        return "\n".join(lines)
+
+    def _get_last_price(self, symbol: str) -> float | None:
+        end = utc_now()
+        start = end - timedelta(days=30)
+        bars = self.market_data_reader.get_daily_bars(symbol, start, end)
+
+        if bars is None or bars.empty:
+            return None
+
+        last = bars.iloc[-1]
+
+        for candidate in ("close", "Close"):
+            if candidate in bars.columns:
+                return float(last[candidate])
+
+        return None
+
+    def _persist_state(self) -> None:
+        self.state_store.save(self.state)
+    
     def _process_symbol(
         self,
         symbol: str,
@@ -404,6 +523,33 @@ class TradingRunner:
             position.size,
             position.entry_price,
         )
+        self._persist_state()
+
+    def _build_cycle_summary(
+        self,
+        cycle_results: list[ExecutionResult],
+        diagnostics: list[SymbolCycleDiagnostics],
+    ) -> str:
+        filled = sum(1 for result in cycle_results if result.success)
+        total_signals = sum(diag.signals_generated for diag in diagnostics)
+        total_risk_rejected = sum(diag.risk_rejected for diag in diagnostics)
+        total_no_signal = sum(
+            1
+            for diag in diagnostics
+            for note in diag.notes
+            if note.endswith(":no_signal")
+        )
+
+        return (
+            f"Cycle complete | "
+            f"symbols={len(self.config.symbols)} | "
+            f"signals={total_signals} | "
+            f"risk_rejected={total_risk_rejected} | "
+            f"no_signal_events={total_no_signal} | "
+            f"executions={len(cycle_results)} | "
+            f"successful={filled} | "
+            f"open_positions={len([p for p in self.state.open_positions if p.is_open])}"
+        )
 
     @staticmethod
     def _format_signal_message(signal: Signal) -> str:
@@ -432,28 +578,16 @@ class TradingRunner:
             f"price={execution_result.filled_price or 0:.2f}"
         )
 
-    def _build_cycle_summary(
-        self,
-        cycle_results: list[ExecutionResult],
-        diagnostics: list[SymbolCycleDiagnostics],
-    ) -> str:
-        filled = sum(1 for result in cycle_results if result.success)
-        total_signals = sum(diag.signals_generated for diag in diagnostics)
-        total_risk_rejected = sum(diag.risk_rejected for diag in diagnostics)
-        total_no_signal = sum(
-            1
-            for diag in diagnostics
-            for note in diag.notes
-            if note.endswith(":no_signal")
-        )
+    @staticmethod
+    def _compute_unrealized_pnl_usd(position: Position, last_price: float) -> float:
+        if position.side == Side.BUY:
+            return round((last_price - position.entry_price) * position.size, 2)
 
-        return (
-            f"Cycle complete | "
-            f"symbols={len(self.config.symbols)} | "
-            f"signals={total_signals} | "
-            f"risk_rejected={total_risk_rejected} | "
-            f"no_signal_events={total_no_signal} | "
-            f"executions={len(cycle_results)} | "
-            f"successful={filled} | "
-            f"open_positions={len([p for p in self.state.open_positions if p.is_open])}"
-        )
+        return round((position.entry_price - last_price) * position.size, 2)
+
+    @staticmethod
+    def _compute_unrealized_pnl_pct(position: Position, last_price: float) -> float:
+        if position.side == Side.BUY:
+            return round(((last_price / position.entry_price) - 1.0) * 100.0, 2)
+
+        return round(((position.entry_price / last_price) - 1.0) * 100.0, 2)
