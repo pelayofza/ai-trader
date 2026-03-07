@@ -35,11 +35,20 @@ class TelegramBotDependencies:
 
 def format_price(symbol: str, bars) -> str:
     last = bars.iloc[-1]
-    close = float(last["close"])
+
+    close_value = None
+    for candidate in ("close", "Close"):
+        if candidate in bars.columns:
+            close_value = float(last[candidate])
+            break
+
+    if close_value is None:
+        raise KeyError(f"Could not find close column. Available columns: {list(bars.columns)}")
+
     timestamp = bars.index[-1]
     return (
         f"{symbol}\n"
-        f"Close: {close:,.2f}\n"
+        f"Close: {close_value:,.2f}\n"
         f"Timestamp: {timestamp}"
     )
 
@@ -131,6 +140,9 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await update.message.reply_text(runner.get_status())
 
 
+def normalize_symbol(symbol: str) -> str:
+    return symbol.strip().upper().replace("/", "")
+
 async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message is None:
         return
@@ -139,7 +151,7 @@ async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.message.reply_text("Usage: /price SYMBOL")
         return
 
-    symbol = context.args[0].strip().upper()
+    symbol = normalize_symbol(context.args[0])
     deps: TelegramBotDependencies = context.application.bot_data["deps"]
 
     try:
@@ -166,7 +178,7 @@ async def trend_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.message.reply_text("Usage: /trend SYMBOL")
         return
 
-    symbol = context.args[0].strip().upper()
+    symbol = normalize_symbol(context.args[0])
     deps: TelegramBotDependencies = context.application.bot_data["deps"]
 
     try:
