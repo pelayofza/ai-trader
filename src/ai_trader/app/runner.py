@@ -57,6 +57,8 @@ class RunnerConfig:
     timeframe_label: str = "1d"
     cycle_enabled: bool = True
     max_holding_days: int = 10
+    symbol_cooldown_hours: int = 12
+    max_trades_per_cycle: int = 5
 
     def __post_init__(self) -> None:
         if not self.symbols:
@@ -146,7 +148,7 @@ class TradingRunner:
         if self.state.is_paused:
             self.supervisor.send_warning("Runner is paused. Skipping cycle.")
             return []
-        
+                
         closed_positions = self._process_open_positions()
 
         logger.info(
@@ -162,6 +164,9 @@ class TradingRunner:
         for symbol in self.config.symbols:
             diag = SymbolCycleDiagnostics(symbol=symbol)
             diagnostics.append(diag)
+
+            if len(cycle_results) >= self.config.max_trades_per_cycle:
+                break
 
             try:
                 logger.info("Processing symbol=%s", symbol)
@@ -314,6 +319,154 @@ class TradingRunner:
 
         return "\n".join(lines)
 
+    def get_history_report(self) -> str:
+        closed_positions = [
+            position
+            for position in self.state.open_positions
+            if position.status == PositionStatus.CLOSED
+        ]
+
+        if not closed_positions:
+            return "No closed positions yet."
+
+        closed_positions = sorted(
+            closed_positions,
+            key=lambda position: position.closed_at or position.opened_at,
+            reverse=True,
+        )
+
+        total_realized = sum(position.realized_pnl or 0.0 for position in closed_positions)
+        wins = sum(1 for position in closed_positions if (position.realized_pnl or 0.0) > 0)
+        losses = sum(1 for position in closed_positions if (position.realized_pnl or 0.0) < 0)
+        total = len(closed_positions)
+        win_rate = (wins / total * 100.0) if total > 0 else 0.0
+
+        lines = [
+            f"Closed positions: {total}",
+            f"Realized PnL: {total_realized:,.2f} USD",
+            f"Wins: {wins}",
+            f"Losses: {losses}",
+            f"Win rate: {win_rate:.2f}%",
+            "",
+            "Last closed positions:",
+        ]
+
+        for position in closed_positions[:10]:
+            lines.append("")
+            lines.append(f"Symbol: {position.symbol}")
+            lines.append(f"Side: {position.side.value.upper()}")
+            lines.append(f"Strategy: {position.strategy_id}")
+            lines.append(f"Entry: {position.entry_price:,.2f}")
+            lines.append(f"Exit: {(position.exit_price or 0.0):,.2f}")
+            lines.append(f"Size: {position.size:.8f}")
+            lines.append(f"PnL: {(position.realized_pnl or 0.0):,.2f} USD")
+            lines.append(f"Reason: {position.close_reason or 'unknown'}")
+            lines.append(f"Opened at: {position.opened_at.isoformat()}")
+            lines.append(
+                f"Closed at: {position.closed_at.isoformat() if position.closed_at else 'n/a'}"
+            )
+
+        return "\n".join(lines)
+
+    def get_performance_report(self) -> str:
+        closed_positions = [
+            position
+            for position in self.state.open_positions
+            if position.status == PositionStatus.CLOSED
+        ]
+        open_positions = self.get_positions()
+
+        realized_pnl = sum(position.realized_pnl or 0.0 for position in closed_positions)
+
+        unrealized_pnl = 0.0
+        for position in open_positions:
+            last_price = self._get_last_price(position.symbol)
+            if last_price is None:
+                continue
+            unrealized_pnl += self._compute_unrealized_pnl_usd(position, last_price)
+
+        winners = [p for p in closed_positions if (p.realized_pnl or 0.0) > 0]
+        losers = [p for p in closed_positions if (p.realized_pnl or 0.0) < 0]
+
+        gross_profit = sum(p.realized_pnl or 0.0 for p in winners)
+        gross_loss = abs(sum(p.realized_pnl or 0.0 for p in losers))
+
+        win_rate = (len(winners) / len(closed_positions) * 100.0) if closed_positions else 0.0
+        avg_win = (gross_profit / len(winners)) if winners else 0.0
+        avg_loss = (sum((p.realized_pnl or 0.0) for p in losers) / len(losers)) if losers else 0.0
+
+        if gross_loss == 0:
+            profit_factor = "n/a"
+        else:
+            profit_factor = f"{(gross_profit / gross_loss):.2f}"
+
+        holding_days_values = []
+        for position in closed_positions:
+            if position.closed_at is not None:
+                holding_days_values.append((position.closed_at - position.opened_at).days)
+
+        avg_holding_days = (
+            sum(holding_days_values) / len(holding_days_values)
+            if holding_days_values
+            else 0.0
+        )
+
+        net_pnl = realized_pnl + unrealized_pnl
+
+        return "\n".join([
+            f"Closed trades: {len(closed_positions)}",
+            f"Open positions: {len(open_positions)}",
+            f"Realized PnL: {realized_pnl:,.2f} USD",
+            f"Unrealized PnL: {unrealized_pnl:,.2f} USD",
+            f"Net PnL: {net_pnl:,.2f} USD",
+            f"Winners: {len(winners)}",
+            f"Losers: {len(losers)}",
+            f"Win rate: {win_rate:.2f}%",
+            f"Average win: {avg_win:,.2f} USD",
+            f"Average loss: {avg_loss:,.2f} USD",
+            f"Profit factor: {profit_factor}",
+            f"Average holding days: {avg_holding_days:.2f}",
+        ])
+
+    def get_symbols_report(self) -> str:
+        lines = ["Symbols report:"]
+
+        for symbol in self.config.symbols:
+            open_positions = [
+                position
+                for position in self.get_positions()
+                if position.symbol == symbol
+            ]
+            closed_positions = [
+                position
+                for position in self.state.open_positions
+                if position.symbol == symbol and position.status == PositionStatus.CLOSED
+            ]
+
+            last_price = self._get_last_price(symbol)
+            realized_pnl = sum(position.realized_pnl or 0.0 for position in closed_positions)
+
+            unrealized_pnl = 0.0
+            current_exposure = 0.0
+
+            for position in open_positions:
+                current_exposure += position.notional_value
+                if last_price is not None:
+                    unrealized_pnl += self._compute_unrealized_pnl_usd(position, last_price)
+
+            lines.append("")
+            lines.append(f"Symbol: {symbol}")
+            lines.append(f"Open positions: {len(open_positions)}")
+            lines.append(f"Closed positions: {len(closed_positions)}")
+            lines.append(f"Current exposure: {current_exposure:,.2f} USD")
+            lines.append(
+                f"Last price: {last_price:,.2f}" if last_price is not None else "Last price: unavailable"
+            )
+            lines.append(f"Realized PnL: {realized_pnl:,.2f} USD")
+            lines.append(f"Unrealized PnL: {unrealized_pnl:,.2f} USD")
+
+        return "\n".join(lines)
+
     def _get_last_price(self, symbol: str) -> float | None:
         end = utc_now()
         start = end - timedelta(days=30)
@@ -392,6 +545,14 @@ class TradingRunner:
         return None
 
 
+    def _symbol_in_cooldown(self, symbol: str) -> bool:
+        for result in reversed(self.state.execution_results):
+            if result.symbol == symbol:
+                delta = utc_now() - result.executed_at
+                return delta.total_seconds() < self.config.symbol_cooldown_hours * 3600
+        return False
+
+
     def _close_position(
         self,
         position: Position,
@@ -401,6 +562,7 @@ class TradingRunner:
         position.status = PositionStatus.CLOSED
         position.closed_at = utc_now()
         position.exit_price = exit_price
+        position.close_reason = reason
 
         realized_pnl = self._compute_realized_pnl(position, exit_price)
         position.realized_pnl = realized_pnl
@@ -467,6 +629,9 @@ class TradingRunner:
         )
 
         results: list[ExecutionResult] = []
+
+        if self._symbol_in_cooldown(symbol):
+            return []
 
         for strategy in self.strategies:
             diag.strategies_run += 1

@@ -73,6 +73,7 @@ class JsonStateStore:
             "closed_at": position.closed_at.isoformat() if position.closed_at else None,
             "exit_price": position.exit_price,
             "realized_pnl": position.realized_pnl,
+            "close_reason": position.close_reason,
         }
 
     @staticmethod
@@ -95,6 +96,7 @@ class JsonStateStore:
             ),
             exit_price=payload.get("exit_price"),
             realized_pnl=payload.get("realized_pnl"),
+            close_reason=payload.get("close_reason"),
         )
 
     @staticmethod

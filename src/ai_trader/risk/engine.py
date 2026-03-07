@@ -14,7 +14,7 @@ class RiskLimits:
     max_total_exposure_usd: float = 5_000.0
     max_daily_loss_usd: float = 200.0
     max_confidence_per_trade: float = 1.0
-    min_confidence_per_trade: float = 0.0
+    min_confidence_per_trade: float = 0.65
 
     def __post_init__(self) -> None:
         if self.max_position_size_usd <= 0:

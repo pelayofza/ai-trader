@@ -184,6 +184,7 @@ class Position:
     closed_at: datetime | None = None
     exit_price: float | None = None
     realized_pnl: float | None = None
+    close_reason : str | None = None
 
     def __post_init__(self) -> None:
         if not self.symbol:
