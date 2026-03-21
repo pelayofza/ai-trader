@@ -835,6 +835,8 @@ class TradingRunner:
             return []
 
         for strategy in self.strategies:
+            if not hasattr(strategy, "generate_signal"):
+                continue
             diag.strategies_run += 1
 
             logger.info(
