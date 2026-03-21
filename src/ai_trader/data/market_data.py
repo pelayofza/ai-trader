@@ -7,12 +7,16 @@ import pandas as pd
 from ai_trader.data.cache import load_bars, save_bars
 from ai_trader.data.providers.alpaca import AlpacaProvider
 from ai_trader.data.providers.ccxt_crypto import CCXTCrypto
-
+from ai_trader.data.providers.polymarket_gamma import PolymarketGammaProvider
+from ai_trader.data.providers.polymarket_clob import PolymarketClobProvider
+from ai_trader.shared.instruments import PredictionMarket
 
 class MarketDataService:
     def __init__(self) -> None:
         self.stock_provider = AlpacaProvider()
         self.crypto_provider = CCXTCrypto()
+        self.polymarket_gamma = PolymarketGammaProvider()
+        self.polymarket_clob = PolymarketClobProvider()
 
     def get_daily_bars(
         self,
@@ -87,6 +91,13 @@ class MarketDataService:
         normalized_symbol = symbol.strip().upper()
         asset_class = self._detect_asset_class(normalized_symbol)
 
+        if asset_class == "prediction":
+            raise ValueError(
+                "Prediction markets do not expose OHLCV through get_ohlcv(). "
+                "Use search_prediction_markets(), get_prediction_market(), "
+                "get_prediction_orderbook() or get_prediction_midpoint()."
+            )
+
         if asset_class == "crypto":
             return self.crypto_provider.get_ohlcv(
                 symbol=normalized_symbol,
@@ -106,6 +117,27 @@ class MarketDataService:
             end=end,
         )
 
+    def search_prediction_markets(
+        self,
+        query: str,
+        limit: int = 20,
+        active_only: bool = True,
+    ) -> list[PredictionMarket]:
+        return self.polymarket_gamma.search_markets(
+            query=query,
+            limit=limit,
+            active_only=active_only,
+        )
+
+    def get_prediction_market(self, slug: str) -> PredictionMarket | None:
+        return self.polymarket_gamma.get_market_by_slug(slug)
+
+    def get_prediction_orderbook(self, token_id: str) -> dict:
+        return self.polymarket_clob.get_orderbook(token_id)
+
+    def get_prediction_midpoint(self, token_id: str) -> float | None:
+        return self.polymarket_clob.get_midpoint(token_id)
+
     def _fetch_daily_bars(
         self,
         symbol: str,
@@ -118,6 +150,8 @@ class MarketDataService:
         return self.stock_provider.get_daily_bars(symbol, start, end)
 
     def _detect_asset_class(self, symbol: str) -> str:
+        if symbol.startswith("PM::"):
+            return "prediction"
         if "/" in symbol:
             return "crypto"
         if self.crypto_provider.can_handle_symbol(symbol):
