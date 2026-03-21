@@ -4,13 +4,13 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from ai_trader.shared.instruments import AssetClass, Venue
 from ai_trader.shared.schemas import (
     ExecutionResult,
     OrderRequest,
     OrderStatus,
     OrderType,
 )
-
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -23,6 +23,7 @@ class PaperExecutionConfig:
     reject_zero_or_negative_price: bool = True
     allow_partial_fills: bool = False
     partial_fill_ratio: float = 0.5
+    enforce_prediction_price_bounds: bool = True
 
     def __post_init__(self) -> None:
         if self.fee_rate < 0:
@@ -49,6 +50,11 @@ class PaperFill:
     signal_id: str | None
     status: str
     executed_at: datetime = field(default_factory=utc_now)
+    venue: str | None = None
+    asset_class: str | None = None
+    instrument_id: str | None = None
+    outcome: str | None = None
+    metadata: dict[str, str] = field(default_factory=dict)
 
 
 class PaperExecutionEngine:
@@ -62,14 +68,14 @@ class PaperExecutionEngine:
         market_price: float,
     ) -> ExecutionResult:
         self._validate_order_request(order_request)
-        self._validate_market_price(market_price)
+        self._validate_market_price(order_request, market_price)
 
         order_id = self._next_order_id()
-
         reference_price = self._resolve_reference_price(order_request, market_price)
         filled_price = self._apply_slippage(reference_price, order_request.side.value)
-        filled_size, status = self._resolve_fill_size(order_request.size)
+        self._validate_filled_price(order_request, filled_price)
 
+        filled_size, status = self._resolve_fill_size(order_request.size)
         fees = round(filled_price * filled_size * self.config.fee_rate, 8)
 
         fill = PaperFill(
@@ -86,6 +92,11 @@ class PaperExecutionEngine:
             strategy_id=order_request.strategy_id,
             signal_id=order_request.signal_id,
             status=status.value,
+            venue=order_request.venue.value if order_request.venue else None,
+            asset_class=order_request.asset_class.value if order_request.asset_class else None,
+            instrument_id=order_request.instrument_id,
+            outcome=order_request.outcome,
+            metadata={str(k): str(v) for k, v in order_request.metadata.items()},
         )
         self._fills.append(fill)
 
@@ -98,6 +109,12 @@ class PaperExecutionEngine:
             filled_size=filled_size,
             fees=fees,
             slippage_bps=self.config.slippage_bps,
+            venue=order_request.venue,
+            asset_class=order_request.asset_class,
+            symbol=order_request.symbol,
+            instrument_id=order_request.instrument_id,
+            outcome=order_request.outcome,
+            metadata=dict(order_request.metadata),
         )
 
     def list_fills(self) -> list[PaperFill]:
@@ -122,9 +139,24 @@ class PaperExecutionEngine:
         ):
             raise ValueError("limit orders require limit_price")
 
-    def _validate_market_price(self, market_price: float) -> None:
+    def _validate_market_price(self, order_request: OrderRequest, market_price: float) -> None:
         if self.config.reject_zero_or_negative_price and market_price <= 0:
             raise ValueError("market_price must be greater than 0")
+
+        if (
+            self.config.enforce_prediction_price_bounds
+            and order_request.asset_class == AssetClass.PREDICTION
+            and not 0.0 < market_price < 1.0
+        ):
+            raise ValueError("prediction market price must be between 0 and 1")
+    
+    def _validate_filled_price(self, order_request: OrderRequest, filled_price: float) -> None:
+        if (
+            self.config.enforce_prediction_price_bounds
+            and order_request.asset_class == AssetClass.PREDICTION
+            and not 0.0 < filled_price < 1.0
+        ):
+            raise ValueError("prediction market filled_price must be between 0 and 1")
 
     def _resolve_reference_price(
         self,
@@ -175,10 +207,17 @@ class PaperExecutionEngine:
         fees: float,
         status: OrderStatus,
     ) -> str:
+        instrument_suffix = ""
+        if order_request.instrument_id:
+            instrument_suffix = f" | instrument_id={order_request.instrument_id}"
+        if order_request.outcome:
+            instrument_suffix += f" | outcome={order_request.outcome}"
+
         return (
             f"Paper order {status.value}: "
             f"{order_request.side.value.upper()} {order_request.symbol} | "
             f"size={filled_size:.8f} | "
             f"price={filled_price:.8f} | "
             f"fees={fees:.8f}"
+            f"{instrument_suffix}"
         )

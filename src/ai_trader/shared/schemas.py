@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
+from ai_trader.shared.instruments import AssetClass, Venue
+
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -134,6 +136,10 @@ class OrderRequest:
     signal_id: str | None = None
     submitted_at: datetime = field(default_factory=utc_now)
     metadata: dict[str, Any] = field(default_factory=dict)
+    venue: Venue | None = None
+    asset_class: AssetClass | None = None
+    instrument_id: str | None = None
+    outcome: str | None = None
 
     def __post_init__(self) -> None:
         if not self.symbol:
@@ -146,6 +152,10 @@ class OrderRequest:
             raise ValueError("limit_price is required for limit orders")
         if self.limit_price is not None and self.limit_price <= 0:
             raise ValueError("limit_price must be greater than 0")
+        if self.instrument_id is not None and not self.instrument_id.strip():
+            raise ValueError("instrument_id cannot be blank")
+        if self.outcome is not None and not self.outcome.strip():
+            raise ValueError("outcome cannot be blank")
 
 
 @dataclass(slots=True)
@@ -159,6 +169,12 @@ class ExecutionResult:
     executed_at: datetime = field(default_factory=utc_now)
     fees: float = 0.0
     slippage_bps: float = 0.0
+    venue: Venue | None = None
+    asset_class: AssetClass | None = None
+    symbol: str | None = None
+    instrument_id: str | None = None
+    outcome: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.filled_price is not None and self.filled_price <= 0:
@@ -167,6 +183,10 @@ class ExecutionResult:
             raise ValueError("filled_size cannot be negative")
         if self.fees < 0:
             raise ValueError("fees cannot be negative")
+        if self.instrument_id is not None and not self.instrument_id.strip():
+            raise ValueError("instrument_id cannot be blank")
+        if self.outcome is not None and not self.outcome.strip():
+            raise ValueError("outcome cannot be blank")
 
 
 @dataclass(slots=True)
