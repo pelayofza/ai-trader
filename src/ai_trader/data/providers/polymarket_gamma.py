@@ -51,27 +51,36 @@ class PolymarketGammaProvider:
         limit: int | None = None,
         active_only: bool = True,
     ) -> list[PredictionMarket]:
-        normalized_query = query.strip().lower()
+        normalized_query = query.strip()
         if not normalized_query:
             return []
 
-        markets = self.list_markets(
-            limit=limit or self.config.default_limit,
-            active=active_only,
-            closed=not active_only and False,
-            archived=False,
+        payload = self._get_json(
+            "/search",
+            params={
+                "q": normalized_query,
+                "limit": limit or self.config.default_limit,
+            },
         )
 
+        if not isinstance(payload, list):
+            return []
+
         results: list[PredictionMarket] = []
-        for market in markets:
-            haystacks = [
-                market.question.lower(),
-                market.slug.lower(),
-                (market.market_slug or "").lower(),
-                " ".join(market.tags).lower(),
-            ]
-            if any(normalized_query in value for value in haystacks):
-                results.append(market)
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+
+            try:
+                market = self._parse_market(item)
+            except Exception:
+                continue
+
+            if active_only and (not market.active or market.closed or market.archived):
+                continue
+
+            results.append(market)
+
         return results
 
     def get_market_by_slug(self, slug: str) -> PredictionMarket | None:
@@ -79,7 +88,14 @@ class PolymarketGammaProvider:
         if not normalized_slug:
             return None
 
-        markets = self.list_markets(limit=200, active=True, closed=False, archived=False)
+        try:
+            payload = self._get_json(f"/markets/slug/{normalized_slug}")
+            if isinstance(payload, dict):
+                return self._parse_market(payload)
+        except Exception:
+            pass
+
+        markets = self.list_markets(limit=500, active=True, closed=False, archived=False)
         for market in markets:
             if market.slug.lower() == normalized_slug:
                 return market
@@ -122,7 +138,7 @@ class PolymarketGammaProvider:
 
         parsed_outcomes: list[OutcomeToken] = []
         for idx, outcome in enumerate(outcomes):
-            token_id = str(token_ids[idx]) if idx < len(token_ids) and token_ids[idx] is not None else ""
+            token_id = str(token_ids[idx]).strip() if idx < len(token_ids) and token_ids[idx] is not None else ""
             if not token_id:
                 continue
 
@@ -152,6 +168,9 @@ class PolymarketGammaProvider:
 
         question = payload.get("question") or payload.get("title") or payload.get("slug") or "unknown-market"
         slug = payload.get("slug") or payload.get("market_slug") or str(market_id)
+
+        if not parsed_outcomes:
+            raise ValueError("market has no parseable outcome tokens")
 
         return PredictionMarket(
             market_id=str(market_id),
