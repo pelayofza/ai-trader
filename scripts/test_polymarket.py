@@ -1,6 +1,8 @@
 from ai_trader.main import build_runner
+from ai_trader.data.market_data import MarketDataService
 
-runner = build_runner()
+svc = MarketDataService()
+runner = build_runner(svc)
 
 results = runner.run_cycle()
 
