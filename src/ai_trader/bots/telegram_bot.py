@@ -241,46 +241,74 @@ async def run_cycle_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     deps: TelegramBotDependencies = context.application.bot_data["deps"]
     runner = deps.runner
-
     if runner is None:
         await update.message.reply_text("Runner not configured.")
         return
 
     try:
-        results = await run_cycle_in_thread(deps)
-        if results is None:
-            await update.message.reply_text("Cycle already running.")
+        results = runner.run_cycle()
+
+        if not results:
+            await update.message.reply_text("Cycle executed. No new trades.")
             return
 
-        await update.message.reply_text(
-            f"Cycle executed. Execution results: {len(results)}"
-        )
+        await update.message.reply_text(build_trade_notification(runner, results))
     except Exception as exc:
         logger.exception("run_cycle_command failed")
         await update.message.reply_text(f"Error running cycle: {exc}")
 
 
+def build_trade_notification(runner: RunnerLike, results) -> str:
+    lines: list[str] = []
+    lines.append("Trade update")
+    lines.append(f"Executions: {len(results)}")
+
+    try:
+        performance = runner.get_performance_report().strip()
+        if performance:
+            lines.append("")
+            lines.append("Performance:")
+            lines.append(performance)
+    except Exception as exc:
+        logger.exception("build_trade_notification performance failed")
+        lines.append("")
+        lines.append(f"Performance unavailable: {exc}")
+
+    try:
+        history = runner.get_history_report().strip()
+        if history:
+            lines.append("")
+            lines.append("Recent history:")
+            lines.append(history)
+    except Exception as exc:
+        logger.exception("build_trade_notification history failed")
+        lines.append("")
+        lines.append(f"History unavailable: {exc}")
+
+    return "\n".join(lines)
+
+
 async def scheduled_run_cycle(context: ContextTypes.DEFAULT_TYPE) -> None:
     deps: TelegramBotDependencies = context.application.bot_data["deps"]
     runner = deps.runner
-
     if runner is None:
         return
-
     if not deps.auto_cycle_enabled:
         return
-
     if deps.chat_id is None:
         return
 
     try:
-        results = await run_cycle_in_thread(deps)
-        if results is None:
+        results = runner.run_cycle()
+
+        if not results:
+            logger.info("Scheduled cycle executed with no new trades.")
             return
 
+        message = build_trade_notification(runner, results)
         await context.bot.send_message(
             chat_id=deps.chat_id,
-            text=f"Scheduled cycle executed. Execution results: {len(results)}",
+            text=message,
         )
     except Exception as exc:
         logger.exception("scheduled_run_cycle failed")
