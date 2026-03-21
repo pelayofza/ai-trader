@@ -51,35 +51,66 @@ class PolymarketGammaProvider:
         limit: int | None = None,
         active_only: bool = True,
     ) -> list[PredictionMarket]:
-        normalized_query = query.strip()
+        normalized_query = query.strip().lower()
         if not normalized_query:
             return []
 
-        payload = self._get_json(
-            "/search",
-            params={
-                "q": normalized_query,
-                "limit": limit or self.config.default_limit,
-            },
-        )
-
-        if not isinstance(payload, list):
-            return []
+        page_size = min(max(limit or self.config.default_limit, 1), 100)
+        target_results = limit or self.config.default_limit
 
         results: list[PredictionMarket] = []
-        for item in payload:
-            if not isinstance(item, dict):
-                continue
+        seen_slugs: set[str] = set()
 
-            try:
-                market = self._parse_market(item)
-            except Exception:
-                continue
+        offset = 0
+        max_pages = 10
 
-            if active_only and (not market.active or market.closed or market.archived):
-                continue
+        for _ in range(max_pages):
+            params: dict[str, Any] = {
+                "limit": page_size,
+                "offset": offset,
+                "archived": "false",
+            }
 
-            results.append(market)
+            if active_only:
+                params["active"] = "true"
+                params["closed"] = "false"
+
+            payload = self._get_json("/markets", params=params)
+            if not isinstance(payload, list) or not payload:
+                break
+
+            for item in payload:
+                if not isinstance(item, dict):
+                    continue
+
+                try:
+                    market = self._parse_market(item)
+                except Exception:
+                    continue
+
+                haystacks = [
+                    market.question.lower(),
+                    market.slug.lower(),
+                    (market.market_slug or "").lower(),
+                    " ".join(market.tags).lower(),
+                ]
+
+                if not any(normalized_query in value for value in haystacks):
+                    continue
+
+                if market.slug in seen_slugs:
+                    continue
+
+                seen_slugs.add(market.slug)
+                results.append(market)
+
+                if len(results) >= target_results:
+                    return results
+
+            if len(payload) < page_size:
+                break
+
+            offset += page_size
 
         return results
 
@@ -88,19 +119,42 @@ class PolymarketGammaProvider:
         if not normalized_slug:
             return None
 
-        try:
-            payload = self._get_json(f"/markets/slug/{normalized_slug}")
-            if isinstance(payload, dict):
-                return self._parse_market(payload)
-        except Exception:
-            pass
+        page_size = 100
+        offset = 0
+        max_pages = 20
 
-        markets = self.list_markets(limit=500, active=True, closed=False, archived=False)
-        for market in markets:
-            if market.slug.lower() == normalized_slug:
-                return market
-            if market.market_slug and market.market_slug.lower() == normalized_slug:
-                return market
+        for _ in range(max_pages):
+            payload = self._get_json(
+                "/markets",
+                params={
+                    "limit": page_size,
+                    "offset": offset,
+                    "archived": "false",
+                },
+            )
+
+            if not isinstance(payload, list) or not payload:
+                break
+
+            for item in payload:
+                if not isinstance(item, dict):
+                    continue
+
+                try:
+                    market = self._parse_market(item)
+                except Exception:
+                    continue
+
+                if market.slug.lower() == normalized_slug:
+                    return market
+                if market.market_slug and market.market_slug.lower() == normalized_slug:
+                    return market
+
+            if len(payload) < page_size:
+                break
+
+            offset += page_size
+
         return None
 
     def _get_json(
