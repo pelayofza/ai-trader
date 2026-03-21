@@ -36,12 +36,23 @@ class MarketDataReader(Protocol):
     def get_prediction_midpoint(self, token_id: str) -> float | None:
         ...
 
+    def get_prediction_market(self, slug: str):
+        ...
+
 class Strategy(Protocol):
     strategy_id: str
 
     def generate_signal(self, symbol: str, bars) -> Signal | None:
         ...
 
+class PredictionStrategy(Protocol):
+    strategy_id: str
+
+    def supports_symbol(self, symbol: str) -> bool:
+        ...
+
+    def build_order_request(self, market, midpoint: float) -> OrderRequest | None:
+        ...
 
 class Supervisor(Protocol):
     def send_info(self, message: str) -> None:
@@ -179,7 +190,12 @@ class TradingRunner:
 
             try:
                 logger.info("Processing symbol=%s", symbol)
-                symbol_results = self._process_symbol(symbol, diag)
+
+                if symbol.startswith("PM::"):
+                    symbol_results = self._process_prediction_symbol(symbol, diag)
+                else:
+                    symbol_results = self._process_symbol(symbol, diag)
+
                 cycle_results.extend(symbol_results)
 
             except Exception as exc:
@@ -234,6 +250,14 @@ class TradingRunner:
 
     def get_positions(self) -> list[Position]:
         return [position for position in self.state.open_positions if position.is_open]
+
+    def _has_open_prediction_position(self, instrument_id: str) -> bool:
+        for position in self.state.open_positions:
+            if not position.is_open:
+                continue
+            if position.instrument_id == instrument_id:
+                return True
+        return False
 
     def _get_position_mark_price(self, position: Position) -> float | None:
         if (
@@ -701,6 +725,81 @@ class TradingRunner:
             f"exit={position.exit_price or 0:.2f} | "
             f"pnl={position.realized_pnl or 0:.2f} USD"
         )
+
+    def _process_prediction_symbol(
+        self,
+        symbol: str,
+        diag: SymbolCycleDiagnostics,
+    ) -> list[ExecutionResult]:
+        slug = symbol.removeprefix("PM::").strip().lower()
+        if not slug:
+            diag.notes.append("invalid_prediction_symbol")
+            return []
+
+        market = self.market_data_reader.get_prediction_market(slug)
+        if market is None:
+            diag.notes.append("prediction_market_not_found")
+            self.supervisor.send_warning(f"Prediction market not found for symbol {symbol}")
+            return []
+
+        results: list[ExecutionResult] = []
+
+        for strategy in self.strategies:
+            if len(results) >= self.config.max_trades_per_cycle:
+                break
+
+            if not hasattr(strategy, "supports_symbol"):
+                continue
+            if not hasattr(strategy, "build_order_request"):
+                continue
+
+            if not strategy.supports_symbol(symbol):
+                continue
+
+            diag.strategies_run += 1
+
+            outcome_name = getattr(strategy, "config", None)
+            if outcome_name is not None:
+                outcome_name = getattr(strategy.config, "outcome", "yes")
+            else:
+                outcome_name = "yes"
+
+            token = market.yes_token if str(outcome_name).lower() == "yes" else market.no_token
+            if token is None:
+                diag.notes.append("missing_outcome_token")
+                continue
+
+            midpoint = self.market_data_reader.get_prediction_midpoint(token.token_id)
+            if midpoint is None:
+                diag.notes.append("missing_prediction_midpoint")
+                self.supervisor.send_warning(
+                    f"Could not resolve midpoint for prediction market {symbol}"
+                )
+                continue
+
+            if self._has_open_prediction_position(token.token_id):
+                diag.notes.append("prediction_position_already_open")
+                continue
+
+            order_request = strategy.build_order_request(market, midpoint)
+            if order_request is None:
+                diag.notes.append("prediction_strategy_no_signal")
+                continue
+
+            diag.signals_generated += 1
+            diag.risk_approved += 1
+            diag.executions_attempted += 1
+
+            execution_result = self.submit_order(order_request)
+            results.append(execution_result)
+
+            if execution_result.success:
+                diag.executions_successful += 1
+
+            if len(results) >= self.config.max_trades_per_cycle:
+                break
+
+        return results
 
     def _process_symbol(
         self,

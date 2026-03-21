@@ -12,6 +12,10 @@ from ai_trader.execution.polymarket_paper import PolymarketPaperExecutionEngine
 from ai_trader.risk.engine import RiskEngine, RiskLimits
 from ai_trader.app.runner import RunnerConfig, TradingRunner
 from ai_trader.strategies import CryptoMomentumStrategy
+from ai_trader.strategies.polymarket_threshold import (
+    PolymarketThresholdConfig,
+    PolymarketThresholdStrategy,
+)
 
 
 logging.basicConfig(
@@ -37,6 +41,15 @@ def build_runner(market_data_service: MarketDataService) -> TradingRunner | None
     """
     strategies = [
         CryptoMomentumStrategy(),
+        PolymarketThresholdStrategy(
+            PolymarketThresholdConfig(
+                slug="will-bitcoin-hit-1m-before-gta-vi-872",
+                outcome="yes",
+                buy_below_price=0.40,
+                size=10.0,
+                strategy_id="pm_btc_120k_yes",
+            )
+        ),
     ]
 
     if not strategies:
@@ -91,6 +104,7 @@ def build_runner(market_data_service: MarketDataService) -> TradingRunner | None
                 "SUI/USDT",
                 "SEI/USDT",
                 "TIA/USDT",
+                "PM::will-bitcoin-hit-1m-before-gta-vi-872",
             ],
             lookback_days=180,
             max_holding_days=10,
