@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from ai_trader.shared.instruments import AssetClass, Venue
 from ai_trader.shared.schemas import (
     ExecutionResult,
     OrderStatus,
@@ -11,7 +12,6 @@ from ai_trader.shared.schemas import (
     PositionStatus,
     Side,
 )
-
 
 class JsonStateStore:
     def __init__(self, filepath: str = "data/runtime_state.json") -> None:
@@ -74,6 +74,11 @@ class JsonStateStore:
             "exit_price": position.exit_price,
             "realized_pnl": position.realized_pnl,
             "close_reason": position.close_reason,
+            "venue": position.venue.value if position.venue else None,
+            "asset_class": position.asset_class.value if position.asset_class else None,
+            "instrument_id": position.instrument_id,
+            "outcome": position.outcome,
+            "metadata": position.metadata,
         }
 
     @staticmethod
@@ -97,6 +102,11 @@ class JsonStateStore:
             exit_price=payload.get("exit_price"),
             realized_pnl=payload.get("realized_pnl"),
             close_reason=payload.get("close_reason"),
+            venue=Venue(payload["venue"]) if payload.get("venue") else None,
+            asset_class=AssetClass(payload["asset_class"]) if payload.get("asset_class") else None,
+            instrument_id=payload.get("instrument_id"),
+            outcome=payload.get("outcome"),
+            metadata=dict(payload.get("metadata", {})),
         )
 
     @staticmethod
@@ -111,6 +121,12 @@ class JsonStateStore:
             "executed_at": result.executed_at.isoformat(),
             "fees": result.fees,
             "slippage_bps": result.slippage_bps,
+            "venue": result.venue.value if result.venue else None,
+            "asset_class": result.asset_class.value if result.asset_class else None,
+            "symbol": result.symbol,
+            "instrument_id": result.instrument_id,
+            "outcome": result.outcome,
+            "metadata": result.metadata,
         }
 
     @staticmethod
@@ -125,4 +141,10 @@ class JsonStateStore:
             executed_at=datetime.fromisoformat(payload["executed_at"]),
             fees=float(payload.get("fees", 0.0)),
             slippage_bps=float(payload.get("slippage_bps", 0.0)),
+            venue=Venue(payload["venue"]) if payload.get("venue") else None,
+            asset_class=AssetClass(payload["asset_class"]) if payload.get("asset_class") else None,
+            symbol=payload.get("symbol"),
+            instrument_id=payload.get("instrument_id"),
+            outcome=payload.get("outcome"),
+            metadata=dict(payload.get("metadata", {})),
         )

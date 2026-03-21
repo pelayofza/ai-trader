@@ -204,7 +204,12 @@ class Position:
     closed_at: datetime | None = None
     exit_price: float | None = None
     realized_pnl: float | None = None
-    close_reason : str | None = None
+    close_reason: str | None = None
+    venue: Venue | None = None
+    asset_class: AssetClass | None = None
+    instrument_id: str | None = None
+    outcome: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.symbol:
@@ -219,6 +224,10 @@ class Position:
             raise ValueError("stop_loss must be greater than 0")
         if self.take_profit is not None and self.take_profit <= 0:
             raise ValueError("take_profit must be greater than 0")
+        if self.instrument_id is not None and not self.instrument_id.strip():
+            raise ValueError("instrument_id cannot be blank")
+        if self.outcome is not None and not self.outcome.strip():
+            raise ValueError("outcome cannot be blank")
 
     @property
     def is_open(self) -> bool:

@@ -5,10 +5,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Protocol
 
-from numpy import diag
-
 from ai_trader.execution.paper import PaperExecutionEngine
+from ai_trader.execution.polymarket_paper import PolymarketPaperExecutionEngine
 from ai_trader.risk.engine import PortfolioState, RiskEngine
+from ai_trader.shared.instruments import AssetClass, Venue
 from ai_trader.shared.schemas import (
     ExecutionResult,
     OrderRequest,
@@ -16,10 +16,11 @@ from ai_trader.shared.schemas import (
     Position,
     PositionStatus,
     Signal,
+    Side,
 )
 
 from ai_trader.app.state_store import JsonStateStore
-from ai_trader.shared.schemas import Side
+
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,8 @@ class MarketDataReader(Protocol):
     def get_daily_bars(self, symbol: str, start: datetime, end: datetime):
         ...
 
+    def get_prediction_midpoint(self, token_id: str) -> float | None:
+        ...
 
 class Strategy(Protocol):
     strategy_id: str
@@ -117,6 +120,7 @@ class TradingRunner:
         strategies: list[Strategy],
         risk_engine: RiskEngine,
         execution_engine: PaperExecutionEngine,
+        polymarket_execution_engine: PolymarketPaperExecutionEngine | None = None,
         supervisor: Supervisor | None = None,
         state_store: JsonStateStore | None = None,
     ) -> None:
@@ -128,6 +132,9 @@ class TradingRunner:
         self.strategies = strategies
         self.risk_engine = risk_engine
         self.execution_engine = execution_engine
+        self.polymarket_execution_engine = (
+            polymarket_execution_engine or PolymarketPaperExecutionEngine()
+        )
         self.supervisor = supervisor or NullSupervisor()
         self.state_store = state_store or JsonStateStore()
         payload = self.state_store.load()
@@ -228,6 +235,16 @@ class TradingRunner:
     def get_positions(self) -> list[Position]:
         return [position for position in self.state.open_positions if position.is_open]
 
+    def _get_position_mark_price(self, position: Position) -> float | None:
+        if (
+            position.asset_class == AssetClass.PREDICTION
+            and position.venue == Venue.POLYMARKET
+            and position.instrument_id
+        ):
+            return self.market_data_reader.get_prediction_midpoint(position.instrument_id)
+
+        return self._get_last_price(position.symbol)
+
     def get_positions_report(self) -> str:
         positions = self.get_positions()
 
@@ -238,7 +255,7 @@ class TradingRunner:
         total_unrealized = 0.0
 
         for position in positions:
-            last_price = self._get_last_price(position.symbol)
+            last_price = self._get_position_mark_price(position)
             pnl_usd = None
             pnl_pct = None
 
@@ -251,7 +268,7 @@ class TradingRunner:
             lines.append(f"Symbol: {position.symbol}")
             lines.append(f"Side: {position.side.value.upper()}")
             lines.append(f"Size: {position.size:.8f}")
-            lines.append(f"Entry: {position.entry_price:,.2f}")
+            lines.append(f"Entry: {position.entry_price:,.4f}")
             lines.append(
                 f"Notional at entry: {position.notional_value:,.2f} USD"
             )
@@ -260,11 +277,23 @@ class TradingRunner:
                 lines.append("Last price: unavailable")
                 lines.append("Unrealized PnL: unavailable")
             else:
-                lines.append(f"Last price: {last_price:,.2f}")
+                lines.append(f"Last price: {last_price:,.4f}")
                 lines.append(f"Unrealized PnL: {pnl_usd:,.2f} USD")
                 lines.append(f"Unrealized PnL %: {pnl_pct:,.2f}%")
 
             lines.append(f"Strategy: {position.strategy_id}")
+
+            if position.venue is not None:
+                lines.append(f"Venue: {position.venue.value}")
+
+            if position.asset_class is not None:
+                lines.append(f"Asset class: {position.asset_class.value}")
+
+            if position.instrument_id:
+                lines.append(f"Instrument ID: {position.instrument_id}")
+
+            if position.outcome:
+                lines.append(f"Outcome: {position.outcome}")
 
             if position.stop_loss is not None:
                 lines.append(f"Stop loss: {position.stop_loss:,.2f}")
@@ -396,7 +425,7 @@ class TradingRunner:
 
         unrealized_pnl = 0.0
         for position in open_positions:
-            last_price = self._get_last_price(position.symbol)
+            last_price = self._get_position_mark_price(position)
             if last_price is None:
                 continue
             unrealized_pnl += self._compute_unrealized_pnl_usd(position, last_price)
@@ -483,6 +512,41 @@ class TradingRunner:
 
         return "\n".join(lines)
 
+    def submit_order(
+        self,
+        order_request: OrderRequest,
+        *,
+        stop_loss: float | None = None,
+        take_profit: float | None = None,
+    ) -> ExecutionResult:
+        execution_result = self._execute_order(order_request=order_request)
+
+        self.state.execution_results.append(execution_result)
+
+        if execution_result.success and execution_result.filled_price is not None:
+            assert execution_result.filled_size is not None
+
+            position = Position(
+                symbol=order_request.symbol,
+                side=order_request.side,
+                size=execution_result.filled_size,
+                entry_price=execution_result.filled_price,
+                opened_at=utc_now(),
+                strategy_id=order_request.strategy_id,
+                stop_loss=stop_loss,
+                take_profit=take_profit,
+                position_id=execution_result.order_id,
+                venue=execution_result.venue,
+                asset_class=execution_result.asset_class,
+                instrument_id=execution_result.instrument_id,
+                outcome=execution_result.outcome,
+                metadata=dict(order_request.metadata),
+            )
+            self.state.open_positions.append(position)
+
+        self._persist_state()
+        return execution_result
+
     def _get_last_price(self, symbol: str) -> float | None:
         end = utc_now()
         start = end - timedelta(days=7)
@@ -511,7 +575,7 @@ class TradingRunner:
         closed_positions: list[Position] = []
 
         for position in self.get_positions():
-            last_price = self._get_last_price(position.symbol)
+            last_price = self._get_position_mark_price(position)
 
             if last_price is None:
                 logger.warning(
@@ -751,9 +815,9 @@ class TradingRunner:
 
             diag.executions_attempted += 1
 
-            execution_result = self.execution_engine.execute(
+            execution_result = self._execute_order(
                 order_request=order_request,
-                market_price=signal.entry_price,
+                reference_price=signal.entry_price,
             )
 
             logger.info(
@@ -789,6 +853,25 @@ class TradingRunner:
                 )
 
         return results
+
+    def _execute_order(
+        self,
+        order_request: OrderRequest,
+        reference_price: float | None = None,
+    ) -> ExecutionResult:
+        if (
+            order_request.asset_class == AssetClass.PREDICTION
+            and order_request.venue == Venue.POLYMARKET
+        ):
+            return self.polymarket_execution_engine.execute(order_request)
+
+        if reference_price is None:
+            raise ValueError("reference_price is required for non-prediction paper orders")
+
+        return self.execution_engine.execute(
+            order_request=order_request,
+            market_price=reference_price,
+        )
 
     def _load_bars(self, symbol: str):
         end = utc_now()
@@ -844,6 +927,11 @@ class TradingRunner:
             stop_loss=signal.stop_loss,
             take_profit=signal.take_profit,
             position_id=execution_result.order_id,
+            venue=execution_result.venue,
+            asset_class=execution_result.asset_class,
+            instrument_id=execution_result.instrument_id,
+            outcome=execution_result.outcome,
+            metadata=dict(order_request.metadata),
         )
         self.state.open_positions.append(position)
 

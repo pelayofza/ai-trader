@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from ai_trader.bots.telegram_bot import build_application
 from ai_trader.data.market_data import MarketDataService
 from ai_trader.execution.paper import PaperExecutionConfig, PaperExecutionEngine
+from ai_trader.execution.polymarket_paper import PolymarketPaperExecutionEngine
 from ai_trader.risk.engine import RiskEngine, RiskLimits
 from ai_trader.app.runner import RunnerConfig, TradingRunner
 from ai_trader.strategies import CryptoMomentumStrategy
@@ -60,6 +61,8 @@ def build_runner(market_data_service: MarketDataService) -> TradingRunner | None
         )
     )
 
+    polymarket_execution_engine = PolymarketPaperExecutionEngine()
+
     runner = TradingRunner(
         config=RunnerConfig(
             symbols=[
@@ -96,6 +99,7 @@ def build_runner(market_data_service: MarketDataService) -> TradingRunner | None
         strategies=strategies,
         risk_engine=risk_engine,
         execution_engine=execution_engine,
+        polymarket_execution_engine=polymarket_execution_engine,
     )
     return runner
 

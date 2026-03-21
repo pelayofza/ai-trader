@@ -1,30 +1,48 @@
+from ai_trader.app.runner import RunnerConfig, TradingRunner
 from ai_trader.data.market_data import MarketDataService
+from ai_trader.execution.paper import PaperExecutionConfig, PaperExecutionEngine
 from ai_trader.execution.polymarket_paper import PolymarketPaperExecutionEngine
+from ai_trader.risk.engine import RiskEngine, RiskLimits
 from ai_trader.shared.instruments import AssetClass, Venue
 from ai_trader.shared.schemas import OrderRequest, OrderType, Side
 
+
+class DummyStrategy:
+    strategy_id = "dummy"
+
+    def generate_signal(self, symbol: str, bars):
+        return None
+
+
 svc = MarketDataService()
-engine = PolymarketPaperExecutionEngine()
+
+runner = TradingRunner(
+    config=RunnerConfig(
+        symbols=["BTC/USDT"],
+        lookback_days=30,
+        max_holding_days=10,
+    ),
+    market_data_reader=svc,
+    strategies=[DummyStrategy()],
+    risk_engine=RiskEngine(RiskLimits()),
+    execution_engine=PaperExecutionEngine(PaperExecutionConfig()),
+    polymarket_execution_engine=PolymarketPaperExecutionEngine(),
+)
 
 markets = svc.search_prediction_markets("bitcoin", limit=3)
-print("Markets:", len(markets))
-
 if not markets:
-    raise RuntimeError("No markets found")
+    raise RuntimeError("No prediction markets found")
 
 market = markets[0]
-print("Question:", market.question)
-print("Slug:", market.slug)
-
 if market.yes_token is None:
-    raise RuntimeError("First market has no yes token")
+    raise RuntimeError("No yes token found")
 
 order = OrderRequest(
     symbol=f"PM::{market.slug}",
     side=Side.BUY,
     size=10,
     order_type=OrderType.MARKET,
-    strategy_id="manual_test",
+    strategy_id="manual_polymarket_test",
     venue=Venue.POLYMARKET,
     asset_class=AssetClass.PREDICTION,
     instrument_id=market.yes_token.token_id,
@@ -35,19 +53,13 @@ order = OrderRequest(
     },
 )
 
-result = engine.execute(order)
-print("Execution success:", result.success)
-print("Status:", result.status.value)
-print("Order ID:", result.order_id)
-print("Filled price:", result.filled_price)
-print("Filled size:", result.filled_size)
-print("Fees:", result.fees)
-print("Venue:", result.venue.value if result.venue else None)
-print("Asset class:", result.asset_class.value if result.asset_class else None)
-print("Instrument ID:", result.instrument_id)
-print("Outcome:", result.outcome)
+result = runner.submit_order(order)
 
-fills = engine.list_fills()
-print("Stored fills:", len(fills))
-if fills:
-    print("Last fill:", fills[-1])
+print("EXECUTION")
+print(result)
+
+print("\nPOSITIONS REPORT")
+print(runner.get_positions_report())
+
+print("\nPERFORMANCE REPORT")
+print(runner.get_performance_report())
