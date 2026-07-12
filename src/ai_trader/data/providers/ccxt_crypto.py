@@ -61,7 +61,15 @@ class CCXTCrypto:
 
     def __init__(self, config: CCXTCryptoConfig | None = None) -> None:
         self.config = config or CCXTCryptoConfig()
-        self.exchange = self._build_exchange()
+        self._exchange = None
+
+    @property
+    def exchange(self):
+        # Perezoso: load_markets() es una llamada de red y no debe dispararse
+        # solo por construir el servicio de datos.
+        if self._exchange is None:
+            self._exchange = self._build_exchange()
+        return self._exchange
 
     def get_daily_bars(
         self,

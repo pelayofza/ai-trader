@@ -16,6 +16,20 @@ alpaca-py = ">=0.43,<1.0"
 
 [tool.poetry.group.dev.dependencies]
 watchfiles = ">=1.1.1,<2.0.0"
+pytest = "^8.3"
+ruff = "^0.8"
+
+[tool.poetry.scripts]
+ai-trader = "ai_trader.cli:main"
+ai-trader-bot = "ai_trader.main:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

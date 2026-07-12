@@ -18,21 +18,6 @@ class AssetClass(str, Enum):
 
 
 @dataclass(slots=True)
-class Instrument:
-    venue: Venue
-    asset_class: AssetClass
-    symbol: str
-    external_id: str | None = None
-    outcome: str | None = None
-    quote_currency: str | None = "USD"
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        if not self.symbol:
-            raise ValueError("symbol cannot be empty")
-
-
-@dataclass(slots=True)
 class OutcomeToken:
     outcome: str
     token_id: str

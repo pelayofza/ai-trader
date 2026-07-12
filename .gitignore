@@ -1,5 +1,6 @@
 # Entorno virtual
 .venv/
+venv/
 
 # Variables de entorno (secretos)
 .env
@@ -9,14 +10,20 @@ __pycache__/
 *.pyc
 .cache/
 
+# Herramientas
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
 # Logs
 *.log
 
-# VS Code
-.vscode/
-
-# Base de datos / datos locales
+# Estado de ejecución y datos locales (mutables, no son fuente)
 data/*.db
 data/*.sqlite
 data/*.sqlite3
 data/*.json
+data/archive/
+
+# VS Code
+.vscode/

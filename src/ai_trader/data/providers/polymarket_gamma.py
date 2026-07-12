@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urlencode
-from urllib.request import Request, urlopen
 
+from ai_trader.data.providers.http import JsonHttpClient, JsonHttpConfig
 from ai_trader.shared.instruments import OutcomeToken, PredictionMarket
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -14,35 +16,29 @@ class PolymarketGammaConfig:
     base_url: str = "https://gamma-api.polymarket.com"
     timeout_seconds: float = 10.0
     default_limit: int = 50
+    max_search_pages: int = 10
 
 
 class PolymarketGammaProvider:
     def __init__(self, config: PolymarketGammaConfig | None = None) -> None:
         self.config = config or PolymarketGammaConfig()
+        self._http = JsonHttpClient(
+            self.config.base_url,
+            JsonHttpConfig(timeout_seconds=self.config.timeout_seconds),
+        )
 
-    def list_markets(
-        self,
-        *,
-        limit: int | None = None,
-        active: bool = True,
-        closed: bool = False,
-        archived: bool = False,
-        tag: str | None = None,
-    ) -> list[PredictionMarket]:
-        params: dict[str, Any] = {
-            "limit": limit or self.config.default_limit,
-            "active": str(active).lower(),
-            "closed": str(closed).lower(),
-            "archived": str(archived).lower(),
-        }
-        if tag:
-            params["tag"] = tag
+    def get_market_by_slug(self, slug: str) -> PredictionMarket | None:
+        normalized_slug = slug.strip().lower()
+        if not normalized_slug:
+            return None
 
-        payload = self._get_json("/markets", params=params)
-        if not isinstance(payload, list):
-            return []
+        payload = self._http.get_json("/markets", params={"slug": normalized_slug})
 
-        return [self._parse_market(item) for item in payload if isinstance(item, dict)]
+        if not isinstance(payload, list) or not payload:
+            logger.info("No Polymarket market found for slug=%s", normalized_slug)
+            return None
+
+        return self._parse_market(payload[0])
 
     def search_markets(
         self,
@@ -60,22 +56,19 @@ class PolymarketGammaProvider:
 
         results: list[PredictionMarket] = []
         seen_slugs: set[str] = set()
-
         offset = 0
-        max_pages = 10
 
-        for _ in range(max_pages):
+        for _ in range(self.config.max_search_pages):
             params: dict[str, Any] = {
                 "limit": page_size,
                 "offset": offset,
                 "archived": "false",
             }
-
             if active_only:
                 params["active"] = "true"
                 params["closed"] = "false"
 
-            payload = self._get_json("/markets", params=params)
+            payload = self._http.get_json("/markets", params=params)
             if not isinstance(payload, list) or not payload:
                 break
 
@@ -83,22 +76,17 @@ class PolymarketGammaProvider:
                 if not isinstance(item, dict):
                     continue
 
-                try:
-                    market = self._parse_market(item)
-                except Exception:
+                market = self._try_parse_market(item)
+                if market is None or market.slug in seen_slugs:
                     continue
 
-                haystacks = [
+                haystacks = (
                     market.question.lower(),
                     market.slug.lower(),
                     (market.market_slug or "").lower(),
                     " ".join(market.tags).lower(),
-                ]
-
+                )
                 if not any(normalized_query in value for value in haystacks):
-                    continue
-
-                if market.slug in seen_slugs:
                     continue
 
                 seen_slugs.add(market.slug)
@@ -114,85 +102,22 @@ class PolymarketGammaProvider:
 
         return results
 
-    def get_market_by_slug(self, slug: str) -> PredictionMarket | None:
-        normalized_slug = slug.strip().lower()
-        if not normalized_slug:
+    def _try_parse_market(self, payload: dict[str, Any]) -> PredictionMarket | None:
+        try:
+            return self._parse_market(payload)
+        except (ValueError, KeyError, TypeError) as exc:
+            logger.debug("Skipping unparseable market | slug=%s | error=%s", payload.get("slug"), exc)
             return None
 
-        page_size = 100
-        offset = 0
-        max_pages = 20
-
-        for _ in range(max_pages):
-            payload = self._get_json(
-                "/markets",
-                params={
-                    "limit": page_size,
-                    "offset": offset,
-                    "archived": "false",
-                },
-            )
-
-            if not isinstance(payload, list) or not payload:
-                break
-
-            for item in payload:
-                if not isinstance(item, dict):
-                    continue
-
-                try:
-                    market = self._parse_market(item)
-                except Exception:
-                    continue
-
-                if market.slug.lower() == normalized_slug:
-                    return market
-                if market.market_slug and market.market_slug.lower() == normalized_slug:
-                    return market
-
-            if len(payload) < page_size:
-                break
-
-            offset += page_size
-
-        return None
-
-    def _get_json(
-        self,
-        path: str,
-        *,
-        params: dict[str, Any] | None = None,
-    ) -> Any:
-        query = urlencode(params or {}, doseq=True)
-        url = f"{self.config.base_url}{path}"
-        if query:
-            url = f"{url}?{query}"
-
-        request = Request(
-            url,
-            headers={
-                "Accept": "application/json",
-                "User-Agent": "ai-trader/0.1.0",
-            },
-            method="GET",
-        )
-
-        with urlopen(request, timeout=self.config.timeout_seconds) as response:
-            raw = response.read().decode("utf-8")
-            return json.loads(raw)
-
     def _parse_market(self, payload: dict[str, Any]) -> PredictionMarket:
-        outcomes_raw = payload.get("outcomes")
-        prices_raw = payload.get("outcomePrices")
-        token_ids_raw = payload.get("clobTokenIds")
-
-        outcomes = self._safe_json_list(outcomes_raw)
-        prices = self._safe_json_list(prices_raw)
-        token_ids = self._safe_json_list(token_ids_raw)
+        outcomes = self._safe_json_list(payload.get("outcomes"))
+        prices = self._safe_json_list(payload.get("outcomePrices"))
+        token_ids = self._safe_json_list(payload.get("clobTokenIds"))
 
         parsed_outcomes: list[OutcomeToken] = []
         for idx, outcome in enumerate(outcomes):
-            token_id = str(token_ids[idx]).strip() if idx < len(token_ids) and token_ids[idx] is not None else ""
+            raw_token_id = token_ids[idx] if idx < len(token_ids) else None
+            token_id = str(raw_token_id).strip() if raw_token_id is not None else ""
             if not token_id:
                 continue
 
@@ -204,31 +129,22 @@ class PolymarketGammaProvider:
                     price = None
 
             parsed_outcomes.append(
-                OutcomeToken(
-                    outcome=str(outcome),
-                    token_id=token_id,
-                    price=price,
-                )
+                OutcomeToken(outcome=str(outcome), token_id=token_id, price=price)
             )
-
-        tags = []
-        raw_tags = payload.get("tags")
-        if isinstance(raw_tags, list):
-            tags = [str(item) for item in raw_tags]
-
-        market_id = payload.get("id")
-        if market_id is None:
-            market_id = payload.get("conditionId") or payload.get("questionID") or payload.get("slug")
-
-        question = payload.get("question") or payload.get("title") or payload.get("slug") or "unknown-market"
-        slug = payload.get("slug") or payload.get("market_slug") or str(market_id)
 
         if not parsed_outcomes:
             raise ValueError("market has no parseable outcome tokens")
 
+        raw_tags = payload.get("tags")
+        tags = [str(item) for item in raw_tags] if isinstance(raw_tags, list) else []
+
+        market_id = payload.get("id") or payload.get("conditionId") or payload.get("slug")
+        question = payload.get("question") or payload.get("title") or payload.get("slug")
+        slug = payload.get("slug") or payload.get("market_slug") or str(market_id)
+
         return PredictionMarket(
             market_id=str(market_id),
-            question=str(question),
+            question=str(question or "unknown-market"),
             slug=str(slug),
             active=bool(payload.get("active", False)),
             closed=bool(payload.get("closed", False)),
@@ -249,10 +165,10 @@ class PolymarketGammaProvider:
         if isinstance(value, str):
             try:
                 parsed = json.loads(value)
-                if isinstance(parsed, list):
-                    return parsed
             except json.JSONDecodeError:
                 return []
+            if isinstance(parsed, list):
+                return parsed
         return []
 
     @staticmethod

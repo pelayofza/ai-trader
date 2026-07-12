@@ -1,453 +1,321 @@
 from __future__ import annotations
 
-import logging
 import asyncio
-from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+import logging
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from datetime import timedelta
+from functools import wraps
 from typing import Protocol
 
-from telegram import Update # type: ignore
-from telegram.ext import Application, CommandHandler, ContextTypes # type: ignore
+from telegram import Update  # type: ignore
+from telegram.ext import Application, CommandHandler, ContextTypes  # type: ignore
 
 from ai_trader.data.market_data import MarketDataService
-from ai_trader.shared.schemas import Signal
-
+from ai_trader.notifications.telegram import TelegramNotifier
+from ai_trader.shared import bars as bar_schema
+from ai_trader.shared.clock import utc_now
 
 logger = logging.getLogger(__name__)
 
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+AUTO_CYCLE_INTERVAL_SECONDS = 900
 
 
 class RunnerLike(Protocol):
-    def get_status(self) -> str:
-        ...
-
-    def get_positions_report(self) -> str:
-        ...
-
-    def get_risk_report(self) -> str:
-        ...
-
-    def pause(self) -> None:
-        ...
-
-    def resume(self) -> None:
-        ...
-
-    def run_cycle(self):
-        ...
-
-    def get_history_report(self) -> str:
-        ...
-
-    def get_performance_report(self) -> str:
-        ...
-
-    def get_symbols_report(self) -> str:
-        ...
+    def get_status(self) -> str: ...
+    def get_positions_report(self) -> str: ...
+    def get_risk_report(self) -> str: ...
+    def get_history_report(self) -> str: ...
+    def get_performance_report(self) -> str: ...
+    def get_symbols_report(self) -> str: ...
+    def pause(self) -> None: ...
+    def resume(self) -> None: ...
+    def run_cycle(self) -> list: ...
 
 
 @dataclass(slots=True)
 class TelegramBotDependencies:
     market_data_service: MarketDataService
+    allowed_chat_ids: frozenset[int]
     runner: RunnerLike | None = None
-    chat_id: int | None = None
     auto_cycle_enabled: bool = False
-    cycle_running: bool = False
+    # Cerrojo real de reentrada. Antes existia una bandera `cycle_running` en un
+    # helper que nunca se llamaba, asi que un /run_cycle manual y el ciclo
+    # programado podian solaparse y corromper el estado.
+    cycle_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
-async def run_blocking(func, *args, **kwargs):
-    return await asyncio.to_thread(func, *args, **kwargs)
+def _deps(context: ContextTypes.DEFAULT_TYPE) -> TelegramBotDependencies:
+    return context.application.bot_data["deps"]
 
 
-async def run_cycle_in_thread(deps: TelegramBotDependencies):
-    runner = deps.runner
-    if runner is None:
-        raise RuntimeError("Runner not configured.")
+def authorized(handler: Callable):
+    """Rechaza cualquier chat que no este en la lista blanca."""
 
-    if deps.cycle_running:
-        return None
+    @wraps(handler)
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if update.message is None or update.effective_chat is None:
+            return
 
-    deps.cycle_running = True
+        chat_id = update.effective_chat.id
+        allowed = _deps(context).allowed_chat_ids
+
+        if chat_id not in allowed:
+            logger.warning("Rejected Telegram command from unauthorized chat_id=%s", chat_id)
+            await update.message.reply_text(
+                f"Unauthorized. Add this chat id to TELEGRAM_ALLOWED_CHAT_IDS: {chat_id}"
+            )
+            return
+
+        return await handler(update, context)
+
+    return wrapper
+
+
+def requires_runner(handler: Callable):
+    @wraps(handler)
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if _deps(context).runner is None:
+            await update.message.reply_text("Runner not configured.")
+            return
+        return await handler(update, context)
+
+    return wrapper
+
+
+async def _reply_with(update: Update, func: Callable[[], str], label: str) -> None:
+    """Ejecuta el informe fuera del event loop y responde. Nunca deja al bot mudo."""
     try:
-        return await asyncio.to_thread(runner.run_cycle)
-    finally:
-        deps.cycle_running = False
+        report = await asyncio.to_thread(func)
+        await update.message.reply_text(report or f"No {label} available.")
+    except Exception as exc:
+        logger.exception("%s failed", label)
+        await update.message.reply_text(f"Error building {label}: {exc}")
 
 
-def format_price(symbol: str, bars) -> str:
-    last = bars.iloc[-1]
-
-    close_value = None
-    for candidate in ("close", "Close"):
-        if candidate in bars.columns:
-            close_value = float(last[candidate])
-            break
-
-    if close_value is None:
-        raise KeyError(f"Could not find close column. Available columns: {list(bars.columns)}")
-
-    timestamp = bars.index[-1]
-    return (
-        f"{symbol}\n"
-        f"Close: {close_value:,.2f}\n"
-        f"Timestamp: {timestamp}"
-    )
+# --- comandos ---
 
 
+@authorized
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message is None:
-        return
-   
-    deps: TelegramBotDependencies = context.application.bot_data["deps"]
-    deps.chat_id = update.effective_chat.id
-
     await update.message.reply_text(
-        "Argos online.\n"
-        "Commands:\n"
-        "/ping\n"
-        "/status\n"
+        "ai-trader online.\n\n"
+        "/status /positions /risk /history /performance /symbols\n"
         "/price SYMBOL\n"
-        "/positions\n"
-        "/risk\n"
-        "/pause\n"
-        "/resume\n"
-        "/run_cycle\n"
-        "/history\n"
-        "/performance\n"
-        "/symbols\n"
-        "/autoon\n"
-        "/autooff\n"
+        "/pause /resume /run_cycle\n"
+        "/autoon /autooff"
     )
 
 
+@authorized
 async def ping_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message is None:
-        return
-
     await update.message.reply_text("pong")
 
 
+@authorized
+@requires_runner
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message is None:
-        return
-
-    deps: TelegramBotDependencies = context.application.bot_data["deps"]
-    runner = deps.runner
-
-    if runner is None:
-        await update.message.reply_text("Bot online. Runner not configured.")
-        return
-
-    await update.message.reply_text(runner.get_status())
+    await _reply_with(update, _deps(context).runner.get_status, "status")
 
 
+@authorized
+@requires_runner
 async def positions_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message is None:
-        return
-
-    deps: TelegramBotDependencies = context.application.bot_data["deps"]
-    runner = deps.runner
-
-    if runner is None:
-        await update.message.reply_text("Runner not configured.")
-        return
-
-    try:
-        report = await run_blocking(runner.get_positions_report)
-        await update.message.reply_text(report)
-    except Exception as exc:
-        logger.exception("positions_command failed")
-        await update.message.reply_text(f"Error loading positions: {exc}")
+    await _reply_with(update, _deps(context).runner.get_positions_report, "positions report")
 
 
-def normalize_symbol(symbol: str) -> str:
-    return symbol.strip().upper()
+@authorized
+@requires_runner
+async def risk_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _reply_with(update, _deps(context).runner.get_risk_report, "risk report")
 
+
+@authorized
+@requires_runner
+async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _reply_with(update, _deps(context).runner.get_history_report, "history report")
+
+
+@authorized
+@requires_runner
+async def performance_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _reply_with(update, _deps(context).runner.get_performance_report, "performance report")
+
+
+@authorized
+@requires_runner
+async def symbols_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _reply_with(update, _deps(context).runner.get_symbols_report, "symbols report")
+
+
+@authorized
 async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message is None:
-        return
-
     if not context.args:
         await update.message.reply_text("Usage: /price SYMBOL")
         return
 
-    symbol = normalize_symbol(context.args[0])
-    deps: TelegramBotDependencies = context.application.bot_data["deps"]
+    symbol = context.args[0].strip().upper()
+    service = _deps(context).market_data_service
 
     try:
         end = utc_now()
-        start = end - timedelta(days=7)
-        bars = await run_blocking(
-            deps.market_data_service.get_daily_bars,
-            symbol,
-            start,
-            end,
+        bars = await asyncio.to_thread(
+            service.get_daily_bars, symbol, end - timedelta(days=7), end
         )
 
-        if bars is None or bars.empty:
+        close = bar_schema.last_close(bars) if bars is not None else None
+        if close is None:
             await update.message.reply_text(f"No data found for {symbol}.")
             return
 
-        await update.message.reply_text(format_price(symbol, bars))
+        await update.message.reply_text(
+            f"{symbol}\nClose: {close:,.4f}\nTimestamp: {bars.index[-1]}"
+        )
     except Exception as exc:
         logger.exception("price_command failed for %s", symbol)
         await update.message.reply_text(f"Error loading price for {symbol}: {exc}")
 
 
+@authorized
+@requires_runner
 async def pause_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message is None:
-        return
-
-    deps: TelegramBotDependencies = context.application.bot_data["deps"]
-    runner = deps.runner
-
-    if runner is None:
-        await update.message.reply_text("Runner not configured.")
-        return
-
-    try:
-        await run_blocking(runner.pause)
-        await update.message.reply_text("Runner paused.")
-    except Exception as exc:
-        logger.exception("pause_command failed")
-        await update.message.reply_text(f"Error pausing runner: {exc}")
+    await asyncio.to_thread(_deps(context).runner.pause)
+    await update.message.reply_text("Runner paused.")
 
 
+@authorized
+@requires_runner
 async def resume_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message is None:
-        return
-
-    deps: TelegramBotDependencies = context.application.bot_data["deps"]
-    runner = deps.runner
-
-    if runner is None:
-        await update.message.reply_text("Runner not configured.")
-        return
-
-    try:
-        await run_blocking(runner.resume)
-        await update.message.reply_text("Runner resumed.")
-    except Exception as exc:
-        logger.exception("resume_command failed")
-        await update.message.reply_text(f"Error resuming runner: {exc}")
+    await asyncio.to_thread(_deps(context).runner.resume)
+    await update.message.reply_text("Runner resumed.")
 
 
+@authorized
+@requires_runner
 async def run_cycle_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message is None:
+    deps = _deps(context)
+
+    if deps.cycle_lock.locked():
+        await update.message.reply_text("A cycle is already running. Skipping.")
         return
 
-    deps: TelegramBotDependencies = context.application.bot_data["deps"]
-    runner = deps.runner
-    if runner is None:
-        await update.message.reply_text("Runner not configured.")
-        return
+    await update.message.reply_text("Running cycle...")
 
-    try:
-        results = runner.run_cycle()
-
-        if not results:
-            await update.message.reply_text("Cycle executed. No new trades.")
-            return
-
-        await update.message.reply_text(build_trade_notification(runner, results))
-    except Exception as exc:
-        logger.exception("run_cycle_command failed")
-        await update.message.reply_text(f"Error running cycle: {exc}")
+    results = await _run_cycle(deps)
+    if results is None:
+        await update.message.reply_text("Cycle failed. Check logs.")
+    elif not results:
+        await update.message.reply_text("Cycle complete. No new trades.")
+    else:
+        await update.message.reply_text(f"Cycle complete. {len(results)} execution(s).")
 
 
-def build_trade_notification(runner: RunnerLike, results) -> str:
-    lines: list[str] = []
-    lines.append("Trade update")
-    lines.append(f"Executions: {len(results)}")
-
-    try:
-        performance = runner.get_performance_report().strip()
-        if performance:
-            lines.append("")
-            lines.append("Performance:")
-            lines.append(performance)
-    except Exception as exc:
-        logger.exception("build_trade_notification performance failed")
-        lines.append("")
-        lines.append(f"Performance unavailable: {exc}")
-
-    try:
-        history = runner.get_history_report().strip()
-        if history:
-            lines.append("")
-            lines.append("Recent history:")
-            lines.append(history)
-    except Exception as exc:
-        logger.exception("build_trade_notification history failed")
-        lines.append("")
-        lines.append(f"History unavailable: {exc}")
-
-    return "\n".join(lines)
-
-
-async def scheduled_run_cycle(context: ContextTypes.DEFAULT_TYPE) -> None:
-    deps: TelegramBotDependencies = context.application.bot_data["deps"]
-    runner = deps.runner
-    if runner is None:
-        return
-    if not deps.auto_cycle_enabled:
-        return
-    if deps.chat_id is None:
-        return
-
-    try:
-        results = runner.run_cycle()
-
-        if not results:
-            logger.info("Scheduled cycle executed with no new trades.")
-            return
-
-        message = build_trade_notification(runner, results)
-        await context.bot.send_message(
-            chat_id=deps.chat_id,
-            text=message,
-        )
-    except Exception as exc:
-        logger.exception("scheduled_run_cycle failed")
-        await context.bot.send_message(
-            chat_id=deps.chat_id,
-            text=f"Scheduled cycle failed: {exc}",
-        )
-
-
-async def risk_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message is None:
-        return
-
-    deps: TelegramBotDependencies = context.application.bot_data["deps"]
-    runner = deps.runner
-
-    if runner is None:
-        await update.message.reply_text("Runner not configured.")
-        return
-
-    try:
-        report = await run_blocking(runner.get_risk_report)
-        await update.message.reply_text(report)
-    except Exception as exc:
-        logger.exception("risk_command failed")
-        await update.message.reply_text(f"Error loading risk report: {exc}")
-
-
-async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message is None:
-        return
-
-    deps: TelegramBotDependencies = context.application.bot_data["deps"]
-    runner = deps.runner
-
-    if runner is None:
-        await update.message.reply_text("Runner not configured.")
-        return
-
-    try:
-        await update.message.reply_text(runner.get_history_report())
-    except Exception as exc:
-        logger.exception("history_command failed")
-        await update.message.reply_text(f"Error loading history report: {exc}")
-
-
-async def performance_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message is None:
-        return
-
-    deps: TelegramBotDependencies = context.application.bot_data["deps"]
-    runner = deps.runner
-
-    if runner is None:
-        await update.message.reply_text("Runner not configured.")
-        return
-
-    try:
-        report = await run_blocking(runner.get_performance_report)
-        await update.message.reply_text(report)
-    except Exception as exc:
-        logger.exception("performance_command failed")
-        await update.message.reply_text(f"Error loading performance report: {exc}")
-
-
-async def symbols_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message is None:
-        return
-
-    deps: TelegramBotDependencies = context.application.bot_data["deps"]
-    runner = deps.runner
-
-    if runner is None:
-        await update.message.reply_text("Runner not configured.")
-        return
-
-    try:
-        report = await run_blocking(runner.get_symbols_report)
-        await update.message.reply_text(report)
-    except Exception as exc:
-        logger.exception("symbols_command failed")
-        await update.message.reply_text(f"Error loading symbols report: {exc}")
-
-
+@authorized
 async def autoon_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message is None:
-        return
-
-    deps: TelegramBotDependencies = context.application.bot_data["deps"]
-    deps.auto_cycle_enabled = True
-    deps.chat_id = update.effective_chat.id
-
-    await update.message.reply_text("Automatic run_cycle enabled every 15 minutes.")
+    _deps(context).auto_cycle_enabled = True
+    minutes = AUTO_CYCLE_INTERVAL_SECONDS // 60
+    await update.message.reply_text(f"Automatic cycle enabled (every {minutes} minutes).")
 
 
+@authorized
 async def autooff_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message is None:
+    _deps(context).auto_cycle_enabled = False
+    await update.message.reply_text("Automatic cycle disabled.")
+
+
+# --- ciclo ---
+
+
+async def _run_cycle(deps: TelegramBotDependencies) -> list | None:
+    """
+    Ejecuta un ciclo fuera del event loop y bajo cerrojo.
+
+    run_cycle() recorre decenas de simbolos haciendo llamadas de red; ejecutarlo en
+    el loop (como se hacia) dejaba el bot congelado durante todo el ciclo.
+    """
+    if deps.runner is None:
+        return None
+
+    async with deps.cycle_lock:
+        try:
+            return await asyncio.to_thread(deps.runner.run_cycle)
+        except Exception:
+            logger.exception("run_cycle failed")
+            return None
+
+
+async def scheduled_cycle(context: ContextTypes.DEFAULT_TYPE) -> None:
+    deps = _deps(context)
+
+    if not deps.auto_cycle_enabled or deps.runner is None:
         return
 
-    deps: TelegramBotDependencies = context.application.bot_data["deps"]
-    deps.auto_cycle_enabled = False
+    if deps.cycle_lock.locked():
+        logger.info("Scheduled cycle skipped: a cycle is already running.")
+        return
 
-    await update.message.reply_text("Automatic run_cycle disabled.")
+    await _run_cycle(deps)
 
 
 def build_application(
     token: str,
-    market_data_service: MarketDataService | None = None,
-    runner: RunnerLike | None = None,
+    allowed_chat_ids: frozenset[int],
+    market_data_service: MarketDataService,
+    runner_factory: Callable[[TelegramNotifier], RunnerLike | None],
 ) -> Application:
+    """
+    Construye la aplicacion.
+
+    El runner se crea mediante una factoria porque necesita un TelegramNotifier, y el
+    notifier necesita el bot y el event loop, que solo existen una vez construida la
+    aplicacion.
+    """
     app = Application.builder().token(token).build()
 
     deps = TelegramBotDependencies(
-        market_data_service=market_data_service or MarketDataService(),
-        runner=runner,
+        market_data_service=market_data_service,
+        allowed_chat_ids=allowed_chat_ids,
     )
     app.bot_data["deps"] = deps
 
-    app.add_handler(CommandHandler("start", start_command))
-    app.add_handler(CommandHandler("ping", ping_command))
-    app.add_handler(CommandHandler("status", status_command))
-    app.add_handler(CommandHandler("price", price_command))
-    app.add_handler(CommandHandler("positions", positions_command))
-    app.add_handler(CommandHandler("risk", risk_command))
-    app.add_handler(CommandHandler("pause", pause_command))
-    app.add_handler(CommandHandler("resume", resume_command))
-    app.add_handler(CommandHandler("run_cycle", run_cycle_command))
-    app.add_handler(CommandHandler("history", history_command))
-    app.add_handler(CommandHandler("performance", performance_command))
-    app.add_handler(CommandHandler("symbols", symbols_command))
-    app.add_handler(CommandHandler("autoon", autoon_command))
-    app.add_handler(CommandHandler("autooff", autooff_command))
+    async def _wire_runner(application: Application) -> None:
+        notifier = TelegramNotifier(
+            bot=application.bot,
+            chat_ids=list(allowed_chat_ids),
+            loop=asyncio.get_running_loop(),
+        )
+        deps.runner = runner_factory(notifier)
+
+        if deps.runner is None:
+            logger.warning("No runner configured; bot will run in read-only mode.")
+
+    app.post_init = _wire_runner
+
+    commands = {
+        "start": start_command,
+        "ping": ping_command,
+        "status": status_command,
+        "positions": positions_command,
+        "risk": risk_command,
+        "history": history_command,
+        "performance": performance_command,
+        "symbols": symbols_command,
+        "price": price_command,
+        "pause": pause_command,
+        "resume": resume_command,
+        "run_cycle": run_cycle_command,
+        "autoon": autoon_command,
+        "autooff": autooff_command,
+    }
+    for name, handler in commands.items():
+        app.add_handler(CommandHandler(name, handler))
 
     if app.job_queue is not None:
         app.job_queue.run_repeating(
-            scheduled_run_cycle,
-            interval=900,
-            first=10,
-            name="scheduled_run_cycle",
+            scheduled_cycle,
+            interval=AUTO_CYCLE_INTERVAL_SECONDS,
+            first=AUTO_CYCLE_INTERVAL_SECONDS,
+            name="scheduled_cycle",
         )
 
     return app

@@ -1,19 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
 from uuid import uuid4
 
-from ai_trader.shared.instruments import AssetClass, Venue
+from ai_trader.shared.clock import utc_now
+from ai_trader.shared.instruments import AssetClass
 from ai_trader.shared.schemas import (
     ExecutionResult,
     OrderRequest,
     OrderStatus,
     OrderType,
 )
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 @dataclass(slots=True)
@@ -34,33 +31,9 @@ class PaperExecutionConfig:
             raise ValueError("partial_fill_ratio must be between 0 and 1")
 
 
-@dataclass(slots=True)
-class PaperFill:
-    order_id: str
-    symbol: str
-    side: str
-    requested_size: float
-    filled_size: float
-    requested_price: float
-    filled_price: float
-    fees: float
-    slippage_bps: float
-    order_type: str
-    strategy_id: str
-    signal_id: str | None
-    status: str
-    executed_at: datetime = field(default_factory=utc_now)
-    venue: str | None = None
-    asset_class: str | None = None
-    instrument_id: str | None = None
-    outcome: str | None = None
-    metadata: dict[str, str] = field(default_factory=dict)
-
-
 class PaperExecutionEngine:
     def __init__(self, config: PaperExecutionConfig | None = None) -> None:
         self.config = config or PaperExecutionConfig()
-        self._fills: list[PaperFill] = []
 
     def execute(
         self,
@@ -78,28 +51,6 @@ class PaperExecutionEngine:
         filled_size, status = self._resolve_fill_size(order_request.size)
         fees = round(filled_price * filled_size * self.config.fee_rate, 8)
 
-        fill = PaperFill(
-            order_id=order_id,
-            symbol=order_request.symbol,
-            side=order_request.side.value,
-            requested_size=order_request.size,
-            filled_size=filled_size,
-            requested_price=reference_price,
-            filled_price=filled_price,
-            fees=fees,
-            slippage_bps=self.config.slippage_bps,
-            order_type=order_request.order_type.value,
-            strategy_id=order_request.strategy_id,
-            signal_id=order_request.signal_id,
-            status=status.value,
-            venue=order_request.venue.value if order_request.venue else None,
-            asset_class=order_request.asset_class.value if order_request.asset_class else None,
-            instrument_id=order_request.instrument_id,
-            outcome=order_request.outcome,
-            metadata={str(k): str(v) for k, v in order_request.metadata.items()},
-        )
-        self._fills.append(fill)
-
         return ExecutionResult(
             success=True,
             status=status,
@@ -116,18 +67,6 @@ class PaperExecutionEngine:
             outcome=order_request.outcome,
             metadata=dict(order_request.metadata),
         )
-
-    def list_fills(self) -> list[PaperFill]:
-        return list(self._fills)
-
-    def get_fill(self, order_id: str) -> PaperFill | None:
-        for fill in self._fills:
-            if fill.order_id == order_id:
-                return fill
-        return None
-
-    def clear_fills(self) -> None:
-        self._fills.clear()
 
     def _validate_order_request(self, order_request: OrderRequest) -> None:
         if order_request.size <= 0:

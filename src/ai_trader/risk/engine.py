@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable
 
-from ai_trader.shared.schemas import Position, RiskDecision, Signal
+from ai_trader.shared.schemas import Position, RiskDecision, Side, Signal
 
 
 @dataclass(slots=True)
@@ -13,8 +12,14 @@ class RiskLimits:
     max_symbol_exposure_usd: float = 2_000.0
     max_total_exposure_usd: float = 5_000.0
     max_daily_loss_usd: float = 200.0
-    max_confidence_per_trade: float = 1.0
     min_confidence_per_trade: float = 0.65
+
+    # Politica de salida. El riesgo es el dueno del stop-loss y del take-profit:
+    # la estrategia puede proponerlos, pero nunca puede aflojarlos por encima de
+    # `max_stop_distance_pct` ni saltarselos.
+    default_stop_loss_pct: float = 5.0
+    default_take_profit_pct: float = 10.0
+    max_stop_distance_pct: float = 15.0
 
     def __post_init__(self) -> None:
         if self.max_position_size_usd <= 0:
@@ -29,10 +34,12 @@ class RiskLimits:
             raise ValueError("max_daily_loss_usd cannot be negative")
         if not 0.0 <= self.min_confidence_per_trade <= 1.0:
             raise ValueError("min_confidence_per_trade must be between 0 and 1")
-        if not 0.0 <= self.max_confidence_per_trade <= 1.0:
-            raise ValueError("max_confidence_per_trade must be between 0 and 1")
-        if self.min_confidence_per_trade > self.max_confidence_per_trade:
-            raise ValueError("min_confidence_per_trade cannot exceed max_confidence_per_trade")
+        if self.default_stop_loss_pct <= 0:
+            raise ValueError("default_stop_loss_pct must be greater than 0")
+        if self.default_take_profit_pct <= 0:
+            raise ValueError("default_take_profit_pct must be greater than 0")
+        if self.max_stop_distance_pct <= 0:
+            raise ValueError("max_stop_distance_pct must be greater than 0")
 
 
 @dataclass(slots=True)
@@ -42,205 +49,156 @@ class PortfolioState:
 
     @property
     def total_exposure_usd(self) -> float:
-        return sum(position.notional_value for position in self.open_positions if position.is_open)
+        return sum(p.notional_value for p in self.open_positions if p.is_open)
 
     def symbol_exposure_usd(self, symbol: str) -> float:
         return sum(
-            position.notional_value
-            for position in self.open_positions
-            if position.is_open and position.symbol == symbol
+            p.notional_value
+            for p in self.open_positions
+            if p.is_open and p.symbol == symbol
         )
 
     def has_open_position_in_symbol(self, symbol: str) -> bool:
-        return any(
-            position.is_open and position.symbol == symbol
-            for position in self.open_positions
-        )
+        return any(p.is_open and p.symbol == symbol for p in self.open_positions)
 
     def open_positions_count(self) -> int:
-        return sum(1 for position in self.open_positions if position.is_open)
+        return sum(1 for p in self.open_positions if p.is_open)
 
 
 class RiskEngine:
+    """
+    Puerta unica por la que pasa toda senal, sea de cripto, de renta variable o de
+    un mercado de prediccion. Decide tres cosas: si se opera, con cuanto dinero, y
+    con que stop-loss y take-profit.
+    """
+
     def __init__(self, limits: RiskLimits) -> None:
         self.limits = limits
 
-    def evaluate(
-        self,
-        signal: Signal,
-        portfolio_state: PortfolioState,
-    ) -> RiskDecision:
-        warnings: list[str] = []
+    def evaluate(self, signal: Signal, portfolio_state: PortfolioState) -> RiskDecision:
+        rejection = (
+            self._check_daily_loss_limit(portfolio_state)
+            or self._check_confidence(signal)
+            or self._check_open_positions_limit(portfolio_state)
+            or self._check_duplicate_symbol(signal, portfolio_state)
+        )
+        if rejection is not None:
+            return rejection
 
-        decision = self._check_daily_loss_limit(portfolio_state, warnings)
-        if decision is not None:
-            return decision
+        size_usd = self._compute_position_size_usd(signal)
 
-        decision = self._check_confidence(signal, warnings)
-        if decision is not None:
-            return decision
+        rejection = (
+            self._check_position_size_limit(size_usd)
+            or self._check_symbol_exposure_limit(signal, portfolio_state, size_usd)
+            or self._check_total_exposure_limit(portfolio_state, size_usd)
+        )
+        if rejection is not None:
+            return rejection
 
-        decision = self._check_open_positions_limit(portfolio_state, warnings)
-        if decision is not None:
-            return decision
-
-        decision = self._check_duplicate_symbol(signal, portfolio_state, warnings)
-        if decision is not None:
-            return decision
-
-        proposed_size_usd = self._compute_position_size_usd(signal)
-
-        decision = self._check_position_size_limit(proposed_size_usd, warnings)
-        if decision is not None:
-            return decision
-
-        decision = self._check_symbol_exposure_limit(signal, portfolio_state, proposed_size_usd, warnings)
-        if decision is not None:
-            return decision
-
-        decision = self._check_total_exposure_limit(portfolio_state, proposed_size_usd, warnings)
-        if decision is not None:
-            return decision
+        stop_loss, take_profit, warnings = self._resolve_exits(signal)
 
         return RiskDecision(
             approved=True,
-            size_usd=proposed_size_usd,
+            size_usd=size_usd,
             reason="Signal approved by risk engine",
+            stop_loss=stop_loss,
+            take_profit=take_profit,
             warnings=warnings,
         )
 
-    def _check_daily_loss_limit(
-        self,
-        portfolio_state: PortfolioState,
-        warnings: list[str],
-    ) -> RiskDecision | None:
-        if portfolio_state.daily_realized_pnl_usd <= -self.limits.max_daily_loss_usd:
-            return RiskDecision(
-                approved=False,
-                size_usd=0.0,
-                reason=(
-                    "Daily loss limit reached: "
-                    f"{portfolio_state.daily_realized_pnl_usd:.2f} USD"
-                ),
-                warnings=warnings,
+    # --- politica de salida ---
+
+    def _resolve_exits(self, signal: Signal) -> tuple[float, float, list[str]]:
+        """
+        La estrategia propone stop-loss y take-profit; el riesgo los valida.
+
+        Si la estrategia no propone nada, se aplican los porcentajes por defecto.
+        Si propone un stop mas lejano de lo tolerado, se recorta y se avisa.
+        """
+        warnings: list[str] = []
+        entry = signal.entry_price
+        direction = 1.0 if signal.side == Side.BUY else -1.0
+
+        max_distance = entry * (self.limits.max_stop_distance_pct / 100.0)
+
+        stop_loss = signal.stop_loss
+        if stop_loss is None:
+            stop_loss = entry - direction * entry * (self.limits.default_stop_loss_pct / 100.0)
+        elif abs(entry - stop_loss) > max_distance:
+            proposed = stop_loss
+            stop_loss = entry - direction * max_distance
+            warnings.append(
+                f"Stop loss proposed by strategy ({proposed:.6f}) exceeded "
+                f"max_stop_distance_pct={self.limits.max_stop_distance_pct}%; "
+                f"tightened to {stop_loss:.6f}"
+            )
+
+        take_profit = signal.take_profit
+        if take_profit is None:
+            take_profit = entry + direction * entry * (self.limits.default_take_profit_pct / 100.0)
+
+        return stop_loss, take_profit, warnings
+
+    # --- comprobaciones ---
+
+    def _check_daily_loss_limit(self, portfolio: PortfolioState) -> RiskDecision | None:
+        if portfolio.daily_realized_pnl_usd <= -self.limits.max_daily_loss_usd:
+            return self._reject(
+                f"Daily loss limit reached: {portfolio.daily_realized_pnl_usd:.2f} USD"
             )
         return None
 
-    def _check_confidence(
-        self,
-        signal: Signal,
-        warnings: list[str],
-    ) -> RiskDecision | None:
+    def _check_confidence(self, signal: Signal) -> RiskDecision | None:
         if signal.confidence < self.limits.min_confidence_per_trade:
-            return RiskDecision(
-                approved=False,
-                size_usd=0.0,
-                reason=(
-                    "Signal confidence below minimum threshold: "
-                    f"{signal.confidence:.2f}"
-                ),
-                warnings=warnings,
-            )
-        if signal.confidence > self.limits.max_confidence_per_trade:
-            return RiskDecision(
-                approved=False,
-                size_usd=0.0,
-                reason=(
-                    "Signal confidence above configured maximum threshold: "
-                    f"{signal.confidence:.2f}"
-                ),
-                warnings=warnings,
+            return self._reject(
+                f"Signal confidence below minimum threshold: {signal.confidence:.2f}"
             )
         return None
 
-    def _check_open_positions_limit(
-        self,
-        portfolio_state: PortfolioState,
-        warnings: list[str],
-    ) -> RiskDecision | None:
-        current_open_positions = portfolio_state.open_positions_count()
-        if current_open_positions >= self.limits.max_open_positions:
-            return RiskDecision(
-                approved=False,
-                size_usd=0.0,
-                reason=(
-                    "Maximum number of open positions reached: "
-                    f"{current_open_positions}"
-                ),
-                warnings=warnings,
-            )
+    def _check_open_positions_limit(self, portfolio: PortfolioState) -> RiskDecision | None:
+        count = portfolio.open_positions_count()
+        if count >= self.limits.max_open_positions:
+            return self._reject(f"Maximum number of open positions reached: {count}")
         return None
 
     def _check_duplicate_symbol(
         self,
         signal: Signal,
-        portfolio_state: PortfolioState,
-        warnings: list[str],
+        portfolio: PortfolioState,
     ) -> RiskDecision | None:
-        if portfolio_state.has_open_position_in_symbol(signal.symbol):
-            return RiskDecision(
-                approved=False,
-                size_usd=0.0,
-                reason=f"Open position already exists for symbol {signal.symbol}",
-                warnings=warnings,
-            )
+        if portfolio.has_open_position_in_symbol(signal.symbol):
+            return self._reject(f"Open position already exists for symbol {signal.symbol}")
         return None
 
-    def _check_position_size_limit(
-        self,
-        proposed_size_usd: float,
-        warnings: list[str],
-    ) -> RiskDecision | None:
-        if proposed_size_usd > self.limits.max_position_size_usd:
-            return RiskDecision(
-                approved=False,
-                size_usd=0.0,
-                reason=(
-                    "Proposed position size exceeds max_position_size_usd: "
-                    f"{proposed_size_usd:.2f} USD"
-                ),
-                warnings=warnings,
+    def _check_position_size_limit(self, size_usd: float) -> RiskDecision | None:
+        if size_usd > self.limits.max_position_size_usd:
+            return self._reject(
+                f"Proposed position size exceeds max_position_size_usd: {size_usd:.2f} USD"
             )
         return None
 
     def _check_symbol_exposure_limit(
         self,
         signal: Signal,
-        portfolio_state: PortfolioState,
-        proposed_size_usd: float,
-        warnings: list[str],
+        portfolio: PortfolioState,
+        size_usd: float,
     ) -> RiskDecision | None:
-        symbol_exposure_after_trade = (
-            portfolio_state.symbol_exposure_usd(signal.symbol) + proposed_size_usd
-        )
-        if symbol_exposure_after_trade > self.limits.max_symbol_exposure_usd:
-            return RiskDecision(
-                approved=False,
-                size_usd=0.0,
-                reason=(
-                    f"Symbol exposure limit exceeded for {signal.symbol}: "
-                    f"{symbol_exposure_after_trade:.2f} USD"
-                ),
-                warnings=warnings,
+        exposure_after = portfolio.symbol_exposure_usd(signal.symbol) + size_usd
+        if exposure_after > self.limits.max_symbol_exposure_usd:
+            return self._reject(
+                f"Symbol exposure limit exceeded for {signal.symbol}: {exposure_after:.2f} USD"
             )
         return None
 
     def _check_total_exposure_limit(
         self,
-        portfolio_state: PortfolioState,
-        proposed_size_usd: float,
-        warnings: list[str],
+        portfolio: PortfolioState,
+        size_usd: float,
     ) -> RiskDecision | None:
-        total_exposure_after_trade = portfolio_state.total_exposure_usd + proposed_size_usd
-        if total_exposure_after_trade > self.limits.max_total_exposure_usd:
-            return RiskDecision(
-                approved=False,
-                size_usd=0.0,
-                reason=(
-                    "Total portfolio exposure limit exceeded: "
-                    f"{total_exposure_after_trade:.2f} USD"
-                ),
-                warnings=warnings,
+        exposure_after = portfolio.total_exposure_usd + size_usd
+        if exposure_after > self.limits.max_total_exposure_usd:
+            return self._reject(
+                f"Total portfolio exposure limit exceeded: {exposure_after:.2f} USD"
             )
         return None
 
@@ -248,11 +206,5 @@ class RiskEngine:
         return round(self.limits.max_position_size_usd * signal.confidence, 2)
 
     @staticmethod
-    def build_portfolio_state(
-        open_positions: Iterable[Position],
-        daily_realized_pnl_usd: float = 0.0,
-    ) -> PortfolioState:
-        return PortfolioState(
-            open_positions=list(open_positions),
-            daily_realized_pnl_usd=daily_realized_pnl_usd,
-        )
+    def _reject(reason: str) -> RiskDecision:
+        return RiskDecision(approved=False, size_usd=0.0, reason=reason)

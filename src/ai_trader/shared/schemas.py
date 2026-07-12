@@ -1,15 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum
 from typing import Any
 
+from ai_trader.shared.clock import utc_now
 from ai_trader.shared.instruments import AssetClass, Venue
-
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 class Side(str, Enum):
@@ -20,14 +17,6 @@ class Side(str, Enum):
 class OrderType(str, Enum):
     MARKET = "market"
     LIMIT = "limit"
-
-
-class SignalStatus(str, Enum):
-    NEW = "new"
-    APPROVED = "approved"
-    REJECTED = "rejected"
-    EXECUTED = "executed"
-    EXPIRED = "expired"
 
 
 class OrderStatus(str, Enum):
@@ -46,28 +35,6 @@ class PositionStatus(str, Enum):
 
 
 @dataclass(slots=True)
-class MarketSnapshot:
-    symbol: str
-    timeframe: str
-    timestamp: datetime
-    open: float
-    high: float
-    low: float
-    close: float
-    volume: float
-
-    def __post_init__(self) -> None:
-        if not self.symbol:
-            raise ValueError("symbol cannot be empty")
-        if not self.timeframe:
-            raise ValueError("timeframe cannot be empty")
-        if self.high < self.low:
-            raise ValueError("high cannot be lower than low")
-        if self.volume < 0:
-            raise ValueError("volume cannot be negative")
-
-
-@dataclass(slots=True)
 class Signal:
     strategy_id: str
     symbol: str
@@ -80,8 +47,13 @@ class Signal:
     take_profit: float | None = None
     reason: str = ""
     features: dict[str, Any] = field(default_factory=dict)
-    status: SignalStatus = SignalStatus.NEW
     signal_id: str | None = None
+    # Identidad del instrumento. Permiten que una senal de mercado de prediccion
+    # viaje por el mismo camino que una de cripto: estrategia -> riesgo -> ejecucion.
+    venue: Venue | None = None
+    asset_class: AssetClass | None = None
+    instrument_id: str | None = None
+    outcome: str | None = None
 
     def __post_init__(self) -> None:
         if not self.strategy_id:
@@ -99,30 +71,24 @@ class Signal:
         if self.take_profit is not None and self.take_profit <= 0:
             raise ValueError("take_profit must be greater than 0")
 
-    @property
-    def is_long(self) -> bool:
-        return self.side == Side.BUY
-
-    @property
-    def is_short(self) -> bool:
-        return self.side == Side.SELL
-
 
 @dataclass(slots=True)
 class RiskDecision:
     approved: bool
     size_usd: float
     reason: str
-    policy_version: str = "risk_v1"
+    stop_loss: float | None = None
+    take_profit: float | None = None
     warnings: list[str] = field(default_factory=list)
     checked_at: datetime = field(default_factory=utc_now)
-    leverage: float = 1.0
 
     def __post_init__(self) -> None:
         if self.size_usd < 0:
             raise ValueError("size_usd cannot be negative")
-        if self.leverage <= 0:
-            raise ValueError("leverage must be greater than 0")
+        if self.stop_loss is not None and self.stop_loss <= 0:
+            raise ValueError("stop_loss must be greater than 0")
+        if self.take_profit is not None and self.take_profit <= 0:
+            raise ValueError("take_profit must be greater than 0")
 
 
 @dataclass(slots=True)
@@ -205,6 +171,10 @@ class Position:
     exit_price: float | None = None
     realized_pnl: float | None = None
     close_reason: str | None = None
+    # Comisiones pagadas. Se computaban en la ejecucion pero nunca se restaban del
+    # PnL, asi que todo resultado publicado era optimista.
+    entry_fees_usd: float = 0.0
+    exit_fees_usd: float = 0.0
     venue: Venue | None = None
     asset_class: AssetClass | None = None
     instrument_id: str | None = None
@@ -236,3 +206,15 @@ class Position:
     @property
     def notional_value(self) -> float:
         return self.size * self.entry_price
+
+    @property
+    def total_fees_usd(self) -> float:
+        return self.entry_fees_usd + self.exit_fees_usd
+
+    def gross_pnl_at(self, price: float) -> float:
+        direction = 1.0 if self.side == Side.BUY else -1.0
+        return direction * (price - self.entry_price) * self.size
+
+    def net_pnl_at(self, price: float) -> float:
+        """PnL neto de comisiones. Es el unico numero que se debe publicar."""
+        return self.gross_pnl_at(price) - self.total_fees_usd

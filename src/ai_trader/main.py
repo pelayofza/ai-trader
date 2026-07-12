@@ -2,21 +2,20 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 
+from ai_trader.app.runner import TradingRunner
 from ai_trader.bots.telegram_bot import build_application
+from ai_trader.config import DEFAULT_CONFIG_PATH, AppConfig, load_config
 from ai_trader.data.market_data import MarketDataService
-from ai_trader.execution.paper import PaperExecutionConfig, PaperExecutionEngine
+from ai_trader.execution.paper import PaperExecutionEngine
 from ai_trader.execution.polymarket_paper import PolymarketPaperExecutionEngine
-from ai_trader.risk.engine import RiskEngine, RiskLimits
-from ai_trader.app.runner import RunnerConfig, TradingRunner
-from ai_trader.strategies import CryptoMomentumStrategy
-from ai_trader.strategies.polymarket_threshold import (
-    PolymarketThresholdConfig,
-    PolymarketThresholdStrategy,
-)
-
+from ai_trader.execution.router import ExecutionRouter
+from ai_trader.notifications.base import Notifier
+from ai_trader.risk.engine import RiskEngine
+from ai_trader.strategies.registry import build_strategy
 
 logging.basicConfig(
     level=logging.INFO,
@@ -25,111 +24,84 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def load_required_env(name: str) -> str:
+def require_env(name: str) -> str:
     value = os.getenv(name)
     if not value:
         raise RuntimeError(f"Missing required environment variable: {name}")
     return value
 
 
-def build_runner(market_data_service: MarketDataService) -> TradingRunner | None:
-    """
-    Temporary bootstrap.
+def parse_chat_ids(raw: str) -> frozenset[int]:
+    ids = set()
+    for chunk in raw.split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        try:
+            ids.add(int(chunk))
+        except ValueError as exc:
+            raise RuntimeError(
+                f"Invalid chat id in TELEGRAM_ALLOWED_CHAT_IDS: {chunk!r}"
+            ) from exc
 
-    Returns None until at least one strategy is migrated to the new
-    `generate_signal(...) -> Signal | None` contract.
-    """
+    if not ids:
+        raise RuntimeError(
+            "TELEGRAM_ALLOWED_CHAT_IDS is empty. Without it anyone who finds the bot "
+            "could pause it or trigger trades. Send /start to the bot to learn your chat id."
+        )
+
+    return frozenset(ids)
+
+
+def build_runner(
+    config: AppConfig,
+    market_data_service: MarketDataService,
+    notifier: Notifier,
+) -> TradingRunner:
     strategies = [
-        CryptoMomentumStrategy(),
-        PolymarketThresholdStrategy(
-            PolymarketThresholdConfig(
-                slug="will-bitcoin-hit-1m-before-gta-vi-872",
-                outcome="yes",
-                buy_below_price=0.40,
-                size=10.0,
-                strategy_id="pm_btc_120k_yes",
-            )
-        ),
+        build_strategy(spec.type, spec.params, strategy_id=spec.id)
+        for spec in config.strategies
     ]
 
-    if not strategies:
-        logger.warning("No strategies configured yet. Runner will not be created.")
-        return None
+    paper_engine = PaperExecutionEngine(config.execution)
 
-    risk_engine = RiskEngine(
-        RiskLimits(
-            max_position_size_usd=1_000.0,
-            max_open_positions=5,
-            max_symbol_exposure_usd=2_000.0,
-            max_total_exposure_usd=5_000.0,
-            max_daily_loss_usd=200.0,
-            min_confidence_per_trade=0.65,
-        )
-    )
-
-    execution_engine = PaperExecutionEngine(
-        PaperExecutionConfig(
-            fee_rate=0.001,
-            slippage_bps=5.0,
-        )
-    )
-
-    polymarket_execution_engine = PolymarketPaperExecutionEngine()
-
-    runner = TradingRunner(
-        config=RunnerConfig(
-            symbols=[
-                "BTC/USDT",
-                "ETH/USDT",
-                "SOL/USDT",
-                "BNB/USDT",
-                "XRP/USDT",
-                "ADA/USDT",
-                "DOGE/USDT",
-                "AVAX/USDT",
-                "DOT/USDT",
-                "MATIC/USDT",
-                "LINK/USDT",
-                "LTC/USDT",
-                "UNI/USDT",
-                "ATOM/USDT",
-                "NEAR/USDT",
-                "APT/USDT",
-                "ARB/USDT",
-                "OP/USDT",
-                "INJ/USDT",
-                "FIL/USDT",
-                "ETC/USDT",
-                "AAVE/USDT",
-                "SUI/USDT",
-                "SEI/USDT",
-                "TIA/USDT",
-                "PM::will-bitcoin-hit-1m-before-gta-vi-872",
-            ],
-            lookback_days=180,
-            max_holding_days=10,
-        ),
+    return TradingRunner(
+        config=config.runner,
         market_data_reader=market_data_service,
         strategies=strategies,
-        risk_engine=risk_engine,
-        execution_engine=execution_engine,
-        polymarket_execution_engine=polymarket_execution_engine,
+        risk_engine=RiskEngine(config.risk),
+        execution_router=ExecutionRouter.paper(
+            spot_engine=paper_engine,
+            # Comparte el motor de papel para que las comisiones configuradas
+            # tambien se apliquen a los mercados de prediccion.
+            prediction_engine=PolymarketPaperExecutionEngine(paper_engine=paper_engine),
+        ),
+        notifier=notifier,
     )
-    return runner
 
 
 def main() -> None:
     load_dotenv()
 
-    telegram_bot_token = load_required_env("TELEGRAM_BOT_TOKEN")
+    config_path = Path(os.getenv("AI_TRADER_CONFIG", DEFAULT_CONFIG_PATH))
+    config = load_config(config_path)
+    logger.info(
+        "Loaded config | path=%s | symbols=%s | strategies=%s",
+        config_path,
+        len(config.runner.symbols),
+        [spec.type for spec in config.strategies],
+    )
+
+    token = require_env("TELEGRAM_BOT_TOKEN")
+    allowed_chat_ids = parse_chat_ids(os.getenv("TELEGRAM_ALLOWED_CHAT_IDS", ""))
 
     market_data_service = MarketDataService()
-    runner = build_runner(market_data_service)
 
     application = build_application(
-        token=telegram_bot_token,
+        token=token,
+        allowed_chat_ids=allowed_chat_ids,
         market_data_service=market_data_service,
-        runner=runner,
+        runner_factory=lambda notifier: build_runner(config, market_data_service, notifier),
     )
 
     logger.info("Starting Telegram bot")

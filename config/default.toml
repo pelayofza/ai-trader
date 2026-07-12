@@ -1,0 +1,74 @@
+# Configuracion por defecto de ai-trader.
+# Todo esto estaba antes hardcodeado en main.py.
+
+# Universo de simbolos.
+#   "BTC/USDT"  -> cripto (CCXT)
+#   "AAPL"      -> renta variable (Alpaca; requiere ALPACA_API_KEY/SECRET)
+#   "PM::<slug>"-> mercado de prediccion (Polymarket)
+universe = [
+  "BTC/USDT",
+  "ETH/USDT",
+  "SOL/USDT",
+  "BNB/USDT",
+  "XRP/USDT",
+  "ADA/USDT",
+  "DOGE/USDT",
+  "AVAX/USDT",
+  "DOT/USDT",
+  "LINK/USDT",
+  "LTC/USDT",
+  "UNI/USDT",
+  "ATOM/USDT",
+  "NEAR/USDT",
+  "APT/USDT",
+  "ARB/USDT",
+  "OP/USDT",
+  "INJ/USDT",
+  "FIL/USDT",
+  "ETC/USDT",
+  "AAVE/USDT",
+  "SUI/USDT",
+  "SEI/USDT",
+  "TIA/USDT",
+]
+# Nota: MATIC/USDT se ha retirado del universo. Binance lo deslisto (ahora es POL),
+# asi que fallaba en silencio en cada ciclo.
+
+[runner]
+lookback_days = 180
+max_holding_days = 10
+symbol_cooldown_hours = 12
+max_trades_per_cycle = 5
+
+[risk]
+max_position_size_usd = 1000.0
+max_open_positions = 5
+max_symbol_exposure_usd = 2000.0
+max_total_exposure_usd = 5000.0
+max_daily_loss_usd = 200.0
+min_confidence_per_trade = 0.65
+# El motor de riesgo es el dueno de las salidas. La estrategia puede proponer un
+# stop; si no lo hace, o si lo propone mas lejos de max_stop_distance_pct, manda esto.
+default_stop_loss_pct = 5.0
+default_take_profit_pct = 10.0
+max_stop_distance_pct = 15.0
+
+[execution]
+fee_rate = 0.001
+slippage_bps = 5.0
+
+# Estrategias activas. `type` se resuelve contra el registro de strategies/registry.py.
+# Este bloque es el formato que emitira el generador de estrategias con IA.
+[[strategies]]
+type = "crypto_momentum"
+id = "crypto_momentum_v1"
+
+[strategies.params]
+fast_sma_window = 10
+slow_sma_window = 20
+atr_window = 14
+breakout_lookback = 5
+min_atr_pct = 0.2
+risk_atr_multiple = 2.0
+reward_atr_multiple = 3.0
+require_breakout = true

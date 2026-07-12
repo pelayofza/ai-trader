@@ -1,26 +1,16 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from uuid import uuid4
 
 import pandas as pd
-import logging
 
+from ai_trader.shared import bars as bar_schema
+from ai_trader.shared.clock import utc_now
 from ai_trader.shared.schemas import Side, Signal
 
-
 logger = logging.getLogger(__name__)
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
-
-
-def _get_price_column(df: pd.DataFrame, *candidates: str) -> pd.Series:
-    for name in candidates:
-        if name in df.columns:
-            return pd.to_numeric(df[name], errors="coerce")
-    raise KeyError(f"Missing expected columns. Tried: {candidates}. Available: {list(df.columns)}")
 
 
 def _sma(series: pd.Series, window: int) -> pd.Series:
@@ -28,9 +18,9 @@ def _sma(series: pd.Series, window: int) -> pd.Series:
 
 
 def _atr(df: pd.DataFrame, window: int = 14) -> pd.Series:
-    high = _get_price_column(df, "high", "High")
-    low = _get_price_column(df, "low", "Low")
-    close = _get_price_column(df, "close", "Close")
+    high = bar_schema.series(df, bar_schema.HIGH)
+    low = bar_schema.series(df, bar_schema.LOW)
+    close = bar_schema.series(df, bar_schema.CLOSE)
 
     prev_close = close.shift(1)
     tr1 = high - low
@@ -52,6 +42,10 @@ class CryptoMomentumConfig:
     risk_atr_multiple: float = 2.0
     reward_atr_multiple: float = 3.0
     min_bars: int = 30
+    # El filtro de ruptura estaba anulado a mano (`breakout_ok = True`), asi que la
+    # estrategia era en realidad un cruce de medias pese a llamarse "breakout".
+    # Se restaura como puerta real y se deja configurable.
+    require_breakout: bool = True
 
     def __post_init__(self) -> None:
         if self.fast_sma_window <= 0:
@@ -78,6 +72,10 @@ class CryptoMomentumStrategy:
     def __init__(self, config: CryptoMomentumConfig | None = None) -> None:
         self.config = config or CryptoMomentumConfig()
 
+    def supports_symbol(self, symbol: str) -> bool:
+        # Opera cualquier simbolo con barras OHLCV; los de prediccion no las tienen.
+        return not symbol.strip().upper().startswith("PM::")
+
     def generate_signal(self, symbol: str, bars: pd.DataFrame) -> Signal | None:
         if bars is None or bars.empty:
             return None
@@ -85,8 +83,8 @@ class CryptoMomentumStrategy:
         if len(bars) < self.config.min_bars:
             return None
 
-        close = _get_price_column(bars, "close", "Close")
-        high = _get_price_column(bars, "high", "High")
+        close = bar_schema.series(bars, bar_schema.CLOSE)
+        high = bar_schema.series(bars, bar_schema.HIGH)
 
         fast_sma = _sma(close, self.config.fast_sma_window)
         slow_sma = _sma(close, self.config.slow_sma_window)
@@ -115,13 +113,17 @@ class CryptoMomentumStrategy:
             return None
 
         trend_ok = bool(latest_fast_sma > latest_slow_sma)
-        breakout_ok = True
         volatility_ok = bool(atr_pct >= self.config.min_atr_pct)
-        
+        breakout_ok = (
+            bool(latest_close > float(breakout_level))
+            if self.config.require_breakout
+            else True
+        )
+
         logger.info(
             (
                 "Momentum check | symbol=%s | close=%.6f | fast_sma=%.6f | slow_sma=%.6f | "
-                "atr_pct=%.2f | trend_ok=%s | volatility_ok=%s"
+                "atr_pct=%.2f | trend_ok=%s | breakout_ok=%s | volatility_ok=%s"
             ),
             symbol,
             latest_close,
@@ -129,10 +131,11 @@ class CryptoMomentumStrategy:
             float(latest_slow_sma),
             atr_pct,
             trend_ok,
+            breakout_ok,
             volatility_ok,
         )
 
-        if not (trend_ok and volatility_ok):
+        if not (trend_ok and breakout_ok and volatility_ok):
             logger.info("Strategy produced no signal for symbol=%s", symbol)
             return None
 
