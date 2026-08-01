@@ -24,6 +24,7 @@ data/*.sqlite
 data/*.sqlite3
 data/*.json
 data/archive/
+data/synthetic/
 
 # VS Code
 .vscode/

@@ -235,6 +235,70 @@ class TestStoreRoundTrip:
         assert np.allclose(b1, b2)
 
 
+class TestUniverseReconstruction:
+    def test_summary_is_self_contained_round_trip(self):
+        from ai_trader.synthetic.universe import universe_from_summary, universe_summary
+
+        summary = universe_summary(DEFAULT_UNIVERSE)
+        assert all("start_price" in item for item in summary)
+
+        rebuilt = universe_from_summary(summary, DEFAULT_UNIVERSE.factors)
+        assert rebuilt.symbols == DEFAULT_UNIVERSE.symbols
+        for original in DEFAULT_UNIVERSE.assets:
+            clone = rebuilt.asset(original.symbol)
+            assert clone.start_price == original.start_price
+            assert clone.idio_vol == original.idio_vol
+            assert clone.loadings == original.loadings
+
+    def test_missing_start_price_raises(self):
+        from ai_trader.synthetic.universe import universe_from_summary
+
+        bad = [{"symbol": "X", "asset_class": "crypto", "loadings": {}, "idio_vol": 0.01}]
+        with pytest.raises(KeyError):
+            universe_from_summary(bad, DEFAULT_UNIVERSE.factors)
+
+
+class TestResynthesize:
+    """Ampliar el ensemble desde escenarios guardados, sin volver a llamar a la IA."""
+
+    def _service(self, tmp_path):
+        store = SyntheticStore(tmp_path)
+        return SyntheticDataService(TemplateScenarioDesigner(), store=store), store
+
+    def test_adds_paths_keeping_existing_identical(self, tmp_path):
+        service, store = self._service(tmp_path)
+        m0 = service.generate(
+            "lib", n_scenarios=2, n_paths=2, horizon_days=100, seed_base=1000,
+            created_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        )
+        sc = m0.scenarios[0]["id"]
+        before = store.load_bars("lib", sc, 0)["BTC/USDT"]["close"].to_numpy()
+
+        m1 = service.resynthesize("lib", n_paths=5)
+
+        assert m1.n_paths == 5
+        assert len(list(store.iter_samples("lib"))) == 2 * 5
+        # Los paths previos (mismas semillas) no cambian; solo se anaden nuevos.
+        after = store.load_bars("lib", sc, 0)["BTC/USDT"]["close"].to_numpy()
+        assert np.allclose(before, after)
+
+    def test_regenerates_from_specs_only(self, tmp_path):
+        # Borrar el parquet y reconstruir: solo los spec.json son insustituibles.
+        service, store = self._service(tmp_path)
+        m0 = service.generate(
+            "lib", n_scenarios=2, n_paths=3, horizon_days=100, seed_base=1000,
+            created_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        )
+        sc = m0.scenarios[0]["id"]
+        original = store.load_bars("lib", sc, 1)["ETH/USDT"]["close"].to_numpy()
+
+        (tmp_path / "lib" / "scenarios" / sc / "paths.parquet").unlink()
+        service.resynthesize("lib", n_paths=3)
+
+        rebuilt = store.load_bars("lib", sc, 1)["ETH/USDT"]["close"].to_numpy()
+        assert np.allclose(original, rebuilt)
+
+
 class TestSampleWindow:
     def test_leaves_warmup_room(self, tmp_path):
         service = SyntheticDataService(TemplateScenarioDesigner(), store=SyntheticStore(tmp_path))

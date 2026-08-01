@@ -126,6 +126,12 @@ class SyntheticStore:
         path = self.root / library_id / "scenarios" / scenario_id / "spec.json"
         return ScenarioSpec.from_dict(json.loads(path.read_text(encoding="utf-8")))
 
+    def load_specs(self, library_id: str) -> list[ScenarioSpec]:
+        """Todos los specs de la libreria, en el orden del manifiesto. Son la salida
+        (cara) de la IA; a partir de ellos se regeneran paths sin volver a llamarla."""
+        manifest = self.load_manifest(library_id)
+        return [self.load_spec(library_id, s["id"]) for s in manifest.scenarios]
+
     def load_bars(
         self, library_id: str, scenario_id: str, path_index: int
     ) -> dict[str, pd.DataFrame]:

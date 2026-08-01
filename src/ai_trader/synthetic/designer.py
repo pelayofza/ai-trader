@@ -205,7 +205,7 @@ class ClaudeScenarioDesigner:
         model: str = DEFAULT_MODEL,
         api_key: str | None = None,
         *,
-        max_tokens: int = 16_000,
+        max_tokens: int = 32_000,
         temperature: float = 1.0,
     ) -> None:
         self.model = model
@@ -232,14 +232,19 @@ class ClaudeScenarioDesigner:
         prompt = build_prompt(universe, n_scenarios, horizon_days)
 
         logger.info("Requesting %s scenarios from %s", n_scenarios, self.model)
-        message = client.messages.create(
+        # Streaming obligatorio: con max_tokens alto el SDK rechaza las peticiones
+        # no-streaming que podrian superar los 10 min. Ademas evita timeouts.
+        parts: list[str] = []
+        with client.messages.stream(
             model=self.model,
             max_tokens=self.max_tokens,
             temperature=self.temperature,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}],
-        )
-        text = "".join(block.text for block in message.content if block.type == "text")
+        ) as stream:
+            for chunk in stream.text_stream:
+                parts.append(chunk)
+        text = "".join(parts)
         specs = parse_scenarios(text, universe, horizon_days)
         logger.info("Parsed %s scenarios from AI response", len(specs))
         return specs

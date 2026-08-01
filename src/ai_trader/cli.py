@@ -119,6 +119,25 @@ def cmd_synth_generate(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_synth_add_paths(args: argparse.Namespace) -> int:
+    from ai_trader.synthetic.designer import TemplateScenarioDesigner
+    from ai_trader.synthetic.service import SyntheticDataService
+    from ai_trader.synthetic.store import SyntheticStore
+
+    store = SyntheticStore(args.synthetic_root) if args.synthetic_root else SyntheticStore()
+    # El disenador no se usa al regenerar (los escenarios ya estan en disco); se pasa
+    # uno cualquiera valido solo para construir el servicio.
+    service = SyntheticDataService(TemplateScenarioDesigner(), store=store)
+
+    manifest = service.resynthesize(args.library, n_paths=args.paths)
+    print(
+        f"Resynthesized '{manifest.library_id}' from stored scenarios (NO API call): "
+        f"{manifest.num_scenarios} scenarios x {manifest.n_paths} paths = "
+        f"{manifest.num_samples} samples."
+    )
+    return 0
+
+
 def cmd_synth_list(args: argparse.Namespace) -> int:
     from ai_trader.synthetic.store import SyntheticStore
 
@@ -231,6 +250,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     gen.add_argument("--synthetic-root", default=None, help="Root dir (default data/synthetic).")
 
+    addp = synth_sub.add_parser(
+        "add-paths",
+        help="Regenerate/extend Monte Carlo paths from stored scenarios (NO API call).",
+    )
+    addp.add_argument("--library", required=True, help="Existing library id.")
+    addp.add_argument(
+        "--paths", type=int, required=True,
+        help="New TOTAL paths per scenario. Existing paths stay identical; extras are added.",
+    )
+    addp.add_argument("--synthetic-root", default=None, help="Root dir (default data/synthetic).")
+
     lst = synth_sub.add_parser("list", help="List stored synthetic libraries.")
     lst.add_argument("--synthetic-root", default=None, help="Root dir (default data/synthetic).")
 
@@ -245,7 +275,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "synth":
-        synth_handlers = {"generate": cmd_synth_generate, "list": cmd_synth_list}
+        synth_handlers = {
+            "generate": cmd_synth_generate,
+            "add-paths": cmd_synth_add_paths,
+            "list": cmd_synth_list,
+        }
         return synth_handlers[args.synth_command](args)
 
     handlers = {"run-cycle": cmd_run_cycle, "backtest": cmd_backtest, "report": cmd_report}
