@@ -47,7 +47,23 @@ Copy-Item .env.example .env   # y rellena los valores
 poetry run ai-trader run-cycle    # un ciclo, headless
 poetry run ai-trader report       # informes, sin operar
 poetry run ai-trader-bot          # con bot de Telegram
+
+# backtest con split train/test out-of-sample
+poetry run ai-trader backtest --start 2025-12-20 --end 2026-06-01 --capital 10000
 ```
+
+## Backtest
+
+Reproduce las estrategias configuradas sobre histórico, conduciendo el **mismo runner**
+que opera en vivo con un reloj simulado y datos con anti look-ahead. La decisión se toma
+con la barra ya cerrada, la entrada se llena al open del día siguiente y los stop-loss /
+take-profit se comprueban intrabar contra high/low. Dimensiona por fracción del equity
+(compounding real) y separa train (in-sample) de test (out-of-sample); la métrica
+cabecera es el **Calmar out-of-sample** (CAGR / max drawdown), pensada para el futuro
+scoring de estrategias por RL.
+
+Los mercados de predicción (Polymarket) quedan fuera del backtest: no hay histórico
+OHLCV, solo midpoint vivo.
 
 Variables de entorno (ver `.env.example`):
 

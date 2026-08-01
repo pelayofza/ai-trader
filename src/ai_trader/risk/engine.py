@@ -21,6 +21,11 @@ class RiskLimits:
     default_take_profit_pct: float = 10.0
     max_stop_distance_pct: float = 15.0
 
+    # Fraccion del equity que arriesga cada trade. Solo se usa cuando el estado de
+    # cartera trae un equity (backtest / cuenta con capital): entonces el tamano
+    # compone con el capital. En vivo, sin equity, manda la formula absoluta de arriba.
+    risk_fraction_per_trade: float = 0.10
+
     def __post_init__(self) -> None:
         if self.max_position_size_usd <= 0:
             raise ValueError("max_position_size_usd must be greater than 0")
@@ -40,12 +45,22 @@ class RiskLimits:
             raise ValueError("default_take_profit_pct must be greater than 0")
         if self.max_stop_distance_pct <= 0:
             raise ValueError("max_stop_distance_pct must be greater than 0")
+        if not 0.0 < self.risk_fraction_per_trade <= 1.0:
+            raise ValueError("risk_fraction_per_trade must be between 0 and 1")
 
 
 @dataclass(slots=True)
 class PortfolioState:
     open_positions: list[Position] = field(default_factory=list)
     daily_realized_pnl_usd: float = 0.0
+    # Presentes solo cuando hay una cuenta con capital detras (backtest, y en el
+    # futuro dinero real). Activan el dimensionado por fraccion de equity.
+    equity_usd: float | None = None
+    available_cash_usd: float | None = None
+
+    @property
+    def is_equity_aware(self) -> bool:
+        return self.equity_usd is not None
 
     @property
     def total_exposure_usd(self) -> float:
@@ -85,15 +100,23 @@ class RiskEngine:
         if rejection is not None:
             return rejection
 
-        size_usd = self._compute_position_size_usd(signal)
+        size_usd = self._compute_position_size_usd(signal, portfolio_state)
 
-        rejection = (
-            self._check_position_size_limit(size_usd)
-            or self._check_symbol_exposure_limit(signal, portfolio_state, size_usd)
-            or self._check_total_exposure_limit(portfolio_state, size_usd)
-        )
-        if rejection is not None:
-            return rejection
+        if size_usd <= 0:
+            return self._reject("Insufficient available cash to open a position")
+
+        # Los topes en USD absolutos (tamano y exposicion) solo aplican en modo
+        # absoluto. En modo equity el riesgo lo acotan la fraccion por trade, la caja
+        # disponible, el numero maximo de posiciones y la perdida diaria; un tope en
+        # USD fijo estrangularia el compounding en cuanto el equity creciera.
+        if not portfolio_state.is_equity_aware:
+            rejection = (
+                self._check_position_size_limit(size_usd)
+                or self._check_symbol_exposure_limit(signal, portfolio_state, size_usd)
+                or self._check_total_exposure_limit(portfolio_state, size_usd)
+            )
+            if rejection is not None:
+                return rejection
 
         stop_loss, take_profit, warnings = self._resolve_exits(signal)
 
@@ -202,7 +225,15 @@ class RiskEngine:
             )
         return None
 
-    def _compute_position_size_usd(self, signal: Signal) -> float:
+    def _compute_position_size_usd(self, signal: Signal, portfolio: PortfolioState) -> float:
+        if portfolio.is_equity_aware:
+            # Fraccion del equity, escalada por confianza, y nunca por encima de la
+            # caja disponible.
+            size = portfolio.equity_usd * self.limits.risk_fraction_per_trade * signal.confidence
+            if portfolio.available_cash_usd is not None:
+                size = min(size, portfolio.available_cash_usd)
+            return round(max(size, 0.0), 2)
+
         return round(self.limits.max_position_size_usd * signal.confidence, 2)
 
     @staticmethod

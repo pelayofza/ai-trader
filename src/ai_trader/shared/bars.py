@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime
+
 import pandas as pd
 
 OPEN = "open"
@@ -9,6 +12,29 @@ CLOSE = "close"
 VOLUME = "volume"
 
 OHLCV_COLUMNS = (OPEN, HIGH, LOW, CLOSE, VOLUME)
+
+
+@dataclass(slots=True, frozen=True)
+class Bar:
+    """Una barra OHLCV ya cerrada. La usa el backtest para valorar y detectar salidas."""
+
+    timestamp: datetime
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float = 0.0
+
+
+def bar_from_row(timestamp, row) -> Bar:
+    return Bar(
+        timestamp=timestamp.to_pydatetime() if hasattr(timestamp, "to_pydatetime") else timestamp,
+        open=float(row[OPEN]),
+        high=float(row[HIGH]),
+        low=float(row[LOW]),
+        close=float(row[CLOSE]),
+        volume=float(row.get(VOLUME, 0.0)) if hasattr(row, "get") else float(row[VOLUME]),
+    )
 
 
 def normalize_bars(df: pd.DataFrame) -> pd.DataFrame:

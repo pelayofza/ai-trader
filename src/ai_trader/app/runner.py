@@ -9,10 +9,10 @@ import pandas as pd
 
 from ai_trader.app.reports import ReportBuilder
 from ai_trader.app.state_store import JsonStateStore
+from ai_trader.execution.market_model import CloseMarketModel, MarketModel
 from ai_trader.execution.router import ExecutionRouter
 from ai_trader.notifications.base import NullNotifier, Notifier
 from ai_trader.risk.engine import PortfolioState, RiskEngine
-from ai_trader.shared import bars as bar_schema
 from ai_trader.shared.clock import Clock, LiveClock
 from ai_trader.shared.instruments import AssetClass, PredictionMarket, Venue
 from ai_trader.shared.schemas import (
@@ -142,6 +142,8 @@ class TradingRunner:
         notifier: Notifier | None = None,
         state_store: JsonStateStore | None = None,
         clock: Clock | None = None,
+        market_model: MarketModel | None = None,
+        starting_equity: float | None = None,
     ) -> None:
         if not strategies:
             raise ValueError("strategies cannot be empty")
@@ -154,6 +156,11 @@ class TradingRunner:
         self.notifier = notifier or NullNotifier()
         self.state_store = state_store or JsonStateStore()
         self.clock = clock or LiveClock()
+        # Costura de precios. Por defecto, cierre-contra-cierre (comportamiento en vivo);
+        # el backtest inyecta el modelo intrabar realista.
+        self.market_model = market_model or CloseMarketModel(market_data_reader, self.clock)
+        # Capital inicial de la cuenta. Si es None, el riesgo dimensiona en absoluto.
+        self.starting_equity = starting_equity
 
         payload = self.state_store.load()
         self.state = RunnerState(
@@ -251,7 +258,7 @@ class TradingRunner:
             # por completo: se contaban como aprobadas sin evaluarlas siquiera.
             decision = self.risk_engine.evaluate(
                 signal=signal,
-                portfolio_state=self.state.build_portfolio_state(),
+                portfolio_state=self._build_portfolio_state(),
             )
 
             logger.info(
@@ -325,11 +332,16 @@ class TradingRunner:
         decision: RiskDecision,
         diag: SymbolCycleDiagnostics,
     ) -> ExecutionResult | None:
-        order_request = self._build_order_request(signal, decision.size_usd)
+        reference_price = self.market_model.entry_reference_price(signal.symbol, signal)
+        if reference_price is None:
+            diag.notes.append(f"{signal.strategy_id}:no_entry_price")
+            return None
+
+        order_request = self._build_order_request(signal, decision.size_usd, reference_price)
 
         result = self.execution_router.execute(
             order_request,
-            reference_price=signal.entry_price,
+            reference_price=reference_price,
         )
 
         logger.info(
@@ -377,42 +389,44 @@ class TradingRunner:
         closed: list[Position] = []
 
         for position in self.state.open_positions():
-            mark_price = self._get_mark_price(position)
-            if mark_price is None:
-                logger.warning("No mark price for open position symbol=%s", position.symbol)
+            # Primero, salida por precio (stop-loss / take-profit). El modelo de mercado
+            # decide si se ha disparado y a que precio se sale.
+            price_exit = self.market_model.price_exit(position)
+            if price_exit is not None:
+                reason, exit_price = price_exit
+                self._close_position(position, exit_price, reason)
+                closed.append(position)
                 continue
 
-            reason = self._get_close_reason(position, mark_price)
-            if reason is None:
-                continue
-
-            self._close_position(position, mark_price, reason)
-            closed.append(position)
+            # Salida por tiempo. Es la misma para vivo y backtest, asi que la lleva
+            # el runner, no el modelo de mercado.
+            holding_days = (self.clock.now() - position.opened_at).days
+            if holding_days >= self.config.max_holding_days:
+                mark = self.market_model.mark_price(position)
+                if mark is None:
+                    logger.warning("No mark price for open position symbol=%s", position.symbol)
+                    continue
+                self._close_position(position, mark, "max_holding_days")
+                closed.append(position)
 
         if closed:
             self._persist_state()
 
         return closed
 
-    def _get_close_reason(self, position: Position, mark_price: float) -> str | None:
-        # Antes solo se evaluaba el stop en posiciones BUY, asi que un corto nunca
-        # habria saltado por stop loss.
-        if position.side == Side.BUY:
-            if position.stop_loss is not None and mark_price <= position.stop_loss:
-                return "stop_loss"
-            if position.take_profit is not None and mark_price >= position.take_profit:
-                return "take_profit"
-        else:
-            if position.stop_loss is not None and mark_price >= position.stop_loss:
-                return "stop_loss"
-            if position.take_profit is not None and mark_price <= position.take_profit:
-                return "take_profit"
-
-        holding_days = (self.clock.now() - position.opened_at).days
-        if holding_days >= self.config.max_holding_days:
-            return "max_holding_days"
-
-        return None
+    def force_liquidate(self, reason: str = "backtest_end") -> list[Position]:
+        """Cierra todo lo abierto al precio de marca actual. Lo usa el backtest al
+        cerrar cada ventana para que el equity final sea limpio y comparable."""
+        closed: list[Position] = []
+        for position in self.state.open_positions():
+            mark = self.market_model.mark_price(position)
+            if mark is None:
+                continue
+            self._close_position(position, mark, reason)
+            closed.append(position)
+        if closed:
+            self._persist_state()
+        return closed
 
     def _close_position(self, position: Position, exit_price: float, reason: str) -> None:
         # El cierre pasa por el motor de ejecucion, igual que la apertura: si no,
@@ -481,22 +495,40 @@ class TradingRunner:
         elapsed = (self.clock.now() - max(events)).total_seconds()
         return elapsed < self.config.symbol_cooldown_hours * 3600
 
-    # --- precios ---
+    # --- equity y estado de cartera ---
 
-    def _get_mark_price(self, position: Position) -> float | None:
-        if (
-            position.asset_class == AssetClass.PREDICTION
-            and position.venue == Venue.POLYMARKET
-            and position.instrument_id
-        ):
-            return self.market_data_reader.get_prediction_midpoint(position.instrument_id)
+    def _build_portfolio_state(self) -> PortfolioState:
+        base = self.state.build_portfolio_state()
 
-        return self._get_last_price(position.symbol)
+        # Sin capital inicial (modo vivo), el riesgo dimensiona en absoluto y no hace
+        # falta calcular equity.
+        if self.starting_equity is None:
+            return base
 
-    def _get_last_price(self, symbol: str) -> float | None:
-        end = self.clock.now()
-        bars = self.market_data_reader.get_daily_bars(symbol, end - timedelta(days=7), end)
-        return bar_schema.last_close(bars) if bars is not None else None
+        open_positions = self.state.open_positions()
+        realized_cum = sum(
+            p.realized_pnl or 0.0 for p in self.state.positions if not p.is_open
+        )
+        deployed_cost = sum(p.size * p.entry_price + p.entry_fees_usd for p in open_positions)
+
+        unrealized = 0.0
+        for position in open_positions:
+            mark = self.market_model.mark_price(position)
+            if mark is not None:
+                unrealized += position.net_pnl_at(mark)
+
+        base.equity_usd = self.starting_equity + realized_cum + unrealized
+        base.available_cash_usd = max(self.starting_equity + realized_cum - deployed_cost, 0.0)
+        return base
+
+    def current_equity(self) -> float | None:
+        """Equity actual marcado a mercado. None en modo vivo (sin cuenta)."""
+        return self._build_portfolio_state().equity_usd
+
+    def reset_daily_pnl(self) -> None:
+        """Reinicia el PnL realizado del dia. El backtest lo llama al inicio de cada
+        dia simulado para que el limite de perdida diaria tenga semantica diaria real."""
+        self.state.daily_realized_pnl_usd = 0.0
 
     def _load_bars(self, symbol: str) -> pd.DataFrame | None:
         end = self.clock.now()
@@ -508,8 +540,15 @@ class TradingRunner:
             return AssetClass.PREDICTION
         return self.market_data_reader.detect_asset_class(symbol)
 
-    def _build_order_request(self, signal: Signal, size_usd: float) -> OrderRequest:
-        size_units = round(size_usd / signal.entry_price, 8)
+    def _build_order_request(
+        self,
+        signal: Signal,
+        size_usd: float,
+        reference_price: float,
+    ) -> OrderRequest:
+        # El tamano en unidades se calcula sobre el precio de entrada real (que en
+        # backtest es el open de hoy, no el cierre de la barra de decision).
+        size_units = round(size_usd / reference_price, 8)
 
         # Una estrategia puede declarar la identidad del instrumento (las de prediccion
         # lo hacen, porque necesitan el token id). Si no lo hace, la resuelve el
@@ -522,7 +561,7 @@ class TradingRunner:
             side=signal.side,
             size=size_units,
             order_type=self.config.order_type,
-            limit_price=signal.entry_price if self.config.order_type == OrderType.LIMIT else None,
+            limit_price=reference_price if self.config.order_type == OrderType.LIMIT else None,
             strategy_id=signal.strategy_id,
             signal_id=signal.signal_id,
             venue=venue,
@@ -569,7 +608,7 @@ class TradingRunner:
             daily_realized_pnl_usd=self.state.daily_realized_pnl_usd,
             is_paused=self.state.is_paused,
             limits=self.risk_engine.limits,
-            price_lookup=self._get_mark_price,
+            price_lookup=self.market_model.mark_price,
         )
 
     def get_status(self) -> str:

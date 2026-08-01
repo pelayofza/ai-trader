@@ -20,6 +20,22 @@ logger = logging.getLogger(__name__)
 DEFAULT_STATE_PATH = Path("data") / "runtime_state.json"
 
 
+class InMemoryStateStore:
+    """
+    Estado en RAM. Comparte interfaz con JsonStateStore pero no toca disco: el runner
+    lo usa en backtest para no ensuciar el estado real ni pagar E/S en cada ciclo.
+    """
+
+    def __init__(self) -> None:
+        self._payload: dict[str, Any] = {}
+
+    def load(self) -> dict[str, Any]:
+        return self._payload
+
+    def save(self, payload: dict[str, Any]) -> None:
+        self._payload = payload
+
+
 class JsonStateStore:
     def __init__(self, filepath: str | Path = DEFAULT_STATE_PATH) -> None:
         self.path = Path(filepath)

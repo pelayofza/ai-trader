@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from ai_trader.risk.engine import PortfolioState, RiskEngine
+from ai_trader.risk.engine import PortfolioState, RiskEngine, RiskLimits
 from ai_trader.shared.schemas import Side
 
 
@@ -106,3 +106,60 @@ class TestExitPolicy:
         # En un corto el stop esta por encima de la entrada y el objetivo por debajo.
         assert decision.stop_loss == pytest.approx(105.0)
         assert decision.take_profit == pytest.approx(90.0)
+
+
+class TestEquityAwareSizing:
+    """
+    Cuando el estado de cartera trae equity (backtest / cuenta), el tamano compone
+    con el capital en vez de usar el tope absoluto. Sin equity, comportamiento previo.
+    """
+
+    def test_sizes_as_a_fraction_of_equity(self, make_signal):
+        limits = RiskLimits(risk_fraction_per_trade=0.10, min_confidence_per_trade=0.5)
+        engine = RiskEngine(limits)
+        portfolio = PortfolioState(equity_usd=50_000.0, available_cash_usd=50_000.0)
+
+        decision = engine.evaluate(make_signal(confidence=0.80), portfolio)
+
+        # 50.000 * 0.10 * 0.80 = 4.000, muy por encima del cap absoluto de 1.000.
+        assert decision.approved
+        assert decision.size_usd == pytest.approx(4_000.0)
+
+    def test_compounding_grows_size_with_equity(self, make_signal):
+        engine = RiskEngine(RiskLimits(risk_fraction_per_trade=0.10))
+
+        small = engine.evaluate(
+            make_signal(confidence=1.0),
+            PortfolioState(equity_usd=10_000.0, available_cash_usd=10_000.0),
+        )
+        big = engine.evaluate(
+            make_signal(confidence=1.0),
+            PortfolioState(equity_usd=100_000.0, available_cash_usd=100_000.0),
+        )
+
+        assert big.size_usd == pytest.approx(10 * small.size_usd)
+
+    def test_capped_by_available_cash(self, make_signal):
+        engine = RiskEngine(RiskLimits(risk_fraction_per_trade=0.50))
+        portfolio = PortfolioState(equity_usd=50_000.0, available_cash_usd=1_500.0)
+
+        decision = engine.evaluate(make_signal(confidence=1.0), portfolio)
+
+        # La fraccion pedia 25.000, pero solo hay 1.500 de caja.
+        assert decision.size_usd == pytest.approx(1_500.0)
+
+    def test_rejected_when_no_cash(self, make_signal):
+        engine = RiskEngine(RiskLimits(risk_fraction_per_trade=0.10))
+        portfolio = PortfolioState(equity_usd=50_000.0, available_cash_usd=0.0)
+
+        decision = engine.evaluate(make_signal(confidence=1.0), portfolio)
+
+        assert not decision.approved
+        assert "cash" in decision.reason.lower()
+
+    def test_absolute_path_unchanged_without_equity(self, make_signal):
+        engine = RiskEngine(RiskLimits(max_position_size_usd=1_000.0))
+
+        decision = engine.evaluate(make_signal(confidence=0.80), PortfolioState())
+
+        assert decision.size_usd == pytest.approx(800.0)
