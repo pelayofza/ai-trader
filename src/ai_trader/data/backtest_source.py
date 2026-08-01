@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from typing import Protocol
 
 import pandas as pd
 
@@ -11,6 +12,26 @@ from ai_trader.shared.instruments import AssetClass, PredictionMarket
 logger = logging.getLogger(__name__)
 
 PREDICTION_PREFIX = "PM::"
+
+
+class BarProvider(Protocol):
+    """
+    Fuente de barras OHLCV para el backtest.
+
+    Es el unico contrato que el motor necesita de los datos, y lo cumplen por igual:
+    - MarketDataService (datos reales de Binance/Alpaca, con cache).
+    - El futuro generador de datos sinteticos (series simuladas para RL).
+
+    Devuelve un DataFrame normalizado o None si no hay datos para el simbolo.
+    """
+
+    def get_daily_bars(
+        self,
+        symbol: str,
+        start: datetime,
+        end: datetime,
+    ) -> pd.DataFrame | None:
+        ...
 
 
 class HistoricalDataSource:

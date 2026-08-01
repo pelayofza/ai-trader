@@ -10,7 +10,7 @@ from ai_trader.app.runner import TradingRunner
 from ai_trader.app.state_store import InMemoryStateStore
 from ai_trader.backtest.metrics import EquityPoint, PerformanceMetrics, compute_metrics
 from ai_trader.config import AppConfig
-from ai_trader.data.backtest_source import HistoricalDataSource
+from ai_trader.data.backtest_source import BarProvider, HistoricalDataSource
 from ai_trader.execution.market_model import IntrabarMarketModel
 from ai_trader.execution.paper import PaperExecutionEngine
 from ai_trader.execution.polymarket_paper import PolymarketPaperExecutionEngine
@@ -68,22 +68,45 @@ class BacktestResult:
 
 class BacktestEngine:
     """
-    Conduce el TradingRunner real sobre historico.
+    Conduce el TradingRunner real sobre datos historicos o simulados.
 
     No reimplementa nada del sistema: inyecta reloj simulado, datos con anti
     look-ahead, modelo de mercado intrabar y estado en memoria, y llama a run_cycle()
     un dia por vez. Lo que testeas es exactamente lo que opera en vivo.
+
+    Los datos entran por una de dos vias, sin que el motor distinga entre ellas:
+    - `data_provider`: cualquier BarProvider. En real es MarketDataService; el futuro
+      generador sintetico cumplira el mismo contrato y encaja aqui sin cambios.
+    - `bars`: series ya precargadas en memoria. Es la via directa para datos simulados
+      generados en bloque (deben incluir el calentamiento previo a `start`).
     """
 
     def __init__(
         self,
         config: AppConfig,
-        market_data_service,
+        data_provider: BarProvider | None = None,
         starting_equity: float = DEFAULT_STARTING_EQUITY,
+        *,
+        bars: dict | None = None,
     ) -> None:
+        if data_provider is None and bars is None:
+            raise ValueError("BacktestEngine requires either a data_provider or preloaded bars")
+
         self.config = config
-        self.market_data_service = market_data_service
+        self.data_provider = data_provider
         self.starting_equity = starting_equity
+        self._preloaded_bars = bars
+
+    @classmethod
+    def from_bars(
+        cls,
+        config: AppConfig,
+        bars: dict,
+        starting_equity: float = DEFAULT_STARTING_EQUITY,
+    ) -> BacktestEngine:
+        """Construye un motor sobre series ya generadas (datos simulados o cualquier
+        OHLCV en memoria), sin pasar por un proveedor."""
+        return cls(config, bars=bars, starting_equity=starting_equity)
 
     def run(
         self,
@@ -102,22 +125,31 @@ class BacktestEngine:
             start.date(), cutoff.date(), cutoff.date(), end.date(),
         )
 
-        # Se precarga una vez, con calentamiento suficiente para que el primer dia de
-        # train ya tenga lookback completo. Cada ventana usa una fuente con su reloj.
-        warmup = timedelta(days=self.config.runner.lookback_days + 30)
-        bars = HistoricalDataSource.fetch_bars(
-            self.market_data_service,
-            self.config.runner.symbols,
-            start - warmup,
-            end,
-        )
+        bars = self._load_bars(start, end)
         if not bars:
-            raise ValueError("No historical bars available for the requested universe/range")
+            raise ValueError("No bars available for the requested universe/range")
 
         train = self._run_window("train", bars, start, cutoff)
         test = self._run_window("test", bars, cutoff, end)
 
         return BacktestResult(train=train, test=test, starting_equity=self.starting_equity)
+
+    def _load_bars(self, start: datetime, end: datetime) -> dict:
+        # Datos simulados precargados: se usan tal cual. El generador es responsable de
+        # incluir el calentamiento previo a `start`; el anti look-ahead lo garantiza
+        # igualmente la fuente al recortar por el reloj.
+        if self._preloaded_bars is not None:
+            return self._preloaded_bars
+
+        # Datos por proveedor (real o sintetico bajo demanda): se precargan una vez, con
+        # calentamiento para que el primer dia de train ya tenga lookback completo.
+        warmup = timedelta(days=self.config.runner.lookback_days + 30)
+        return HistoricalDataSource.fetch_bars(
+            self.data_provider,
+            self.config.runner.symbols,
+            start - warmup,
+            end,
+        )
 
     def _resolve_cutoff(
         self,

@@ -77,6 +77,50 @@ def engine():
     return BacktestEngine(make_config(), FakeService(bars), starting_equity=10_000.0)
 
 
+class TestDataSources:
+    """El motor corre igual con datos por proveedor (real/sintetico bajo demanda) o
+    con series ya generadas en memoria (datos simulados en bloque)."""
+
+    def test_runs_from_a_bar_provider(self):
+        bars = {"BTC/USDT": trending_df(400)}
+        engine = BacktestEngine(make_config(), FakeService(bars), starting_equity=10_000.0)
+
+        result = engine.run(
+            start=datetime(2024, 6, 1, tzinfo=timezone.utc),
+            end=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        )
+        assert result.train.metrics.num_trades > 0
+
+    def test_runs_from_preloaded_simulated_bars(self):
+        # Via directa del futuro generador sintetico: series ya en memoria, sin proveedor.
+        simulated = {"BTC/USDT": trending_df(400)}
+        engine = BacktestEngine.from_bars(make_config(), simulated, starting_equity=10_000.0)
+
+        result = engine.run(
+            start=datetime(2024, 6, 1, tzinfo=timezone.utc),
+            end=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        )
+        assert result.train.metrics.num_trades > 0
+
+    def test_both_data_paths_give_the_same_result(self):
+        bars = {"BTC/USDT": trending_df(400)}
+        args = dict(
+            start=datetime(2024, 6, 1, tzinfo=timezone.utc),
+            end=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        )
+
+        via_provider = BacktestEngine(make_config(), FakeService(bars), 10_000.0).run(**args)
+        via_bars = BacktestEngine.from_bars(make_config(), bars, 10_000.0).run(**args)
+
+        c1 = [round(p.equity, 6) for p in via_provider.test.equity_curve]
+        c2 = [round(p.equity, 6) for p in via_bars.test.equity_curve]
+        assert c1 == c2
+
+    def test_requires_a_data_source(self):
+        with pytest.raises(ValueError, match="data_provider or preloaded bars"):
+            BacktestEngine(make_config())
+
+
 class TestSplit:
     def test_produces_train_and_test_windows(self, engine):
         result = engine.run(
