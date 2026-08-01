@@ -1,0 +1,58 @@
+# Configuracion de backtest sobre DATOS SINTETICOS.
+#
+# El universo coincide EXACTAMENTE con el universo del generador sintetico
+# (ai_trader.synthetic.universe.DEFAULT_UNIVERSE): 12 cripto + 20 stocks + 3 macro.
+# Asi el backtest ejercita los 35 activos sin desajustes (ningun simbolo se ignora
+# por falta de barras). Se usa con:
+#   ai-trader --config config/synthetic.toml backtest --synthetic <lib>:<escenario>:<path>
+#
+# Sizing por FRACCION DE EQUITY (el backtest inyecta starting_equity): los topes
+# absolutos en USD se dejan generosos porque en modo equity no aplican.
+
+universe = [
+  # --- Cripto (12) ---
+  "BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT", "ADA/USDT",
+  "AVAX/USDT", "LINK/USDT", "DOGE/USDT", "DOT/USDT", "MATIC/USDT", "LTC/USDT",
+  # --- Renta variable (20) ---
+  "SPY", "QQQ", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "AMD", "TSLA",
+  "JPM", "BAC", "GS", "XOM", "CVX", "KO", "PG", "JNJ", "UNH", "CAT",
+  # --- Macro / refugio (3) ---
+  "GLD", "TLT", "UUP",
+]
+
+[runner]
+lookback_days = 120
+max_holding_days = 15
+symbol_cooldown_hours = 0      # datos sinteticos: re-entrada libre
+max_trades_per_cycle = 10
+
+[risk]
+# Modo equity: manda la fraccion; los topes absolutos van generosos (no vinculan).
+risk_fraction_per_trade = 0.05
+max_open_positions = 12
+max_position_size_usd = 1000000.0
+max_symbol_exposure_usd = 1000000.0
+max_total_exposure_usd = 1000000.0
+max_daily_loss_usd = 1000000.0
+min_confidence_per_trade = 0.60
+default_stop_loss_pct = 5.0
+default_take_profit_pct = 10.0
+max_stop_distance_pct = 15.0
+
+[execution]
+fee_rate = 0.001
+slippage_bps = 5.0
+
+[[strategies]]
+type = "crypto_momentum"
+id = "momentum_v1"
+
+[strategies.params]
+fast_sma_window = 10
+slow_sma_window = 20
+atr_window = 14
+breakout_lookback = 5
+min_atr_pct = 0.2
+risk_atr_multiple = 2.0
+reward_atr_multiple = 3.0
+require_breakout = true
