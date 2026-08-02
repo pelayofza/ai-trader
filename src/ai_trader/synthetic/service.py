@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 
 from ai_trader.synthetic.designer import ScenarioDesigner
@@ -129,6 +130,49 @@ class SyntheticDataService:
         )
         self.store.save(new_manifest, specs, paths_by_scenario)
         return new_manifest
+
+    def derive_library(
+        self,
+        source_id: str,
+        target_id: str,
+        *,
+        enricher: Callable[[ScenarioSpec], ScenarioSpec],
+        n_paths: int | None = None,
+    ) -> LibraryManifest:
+        """
+        Deriva una nueva libreria a partir de otra existente aplicando `enricher` a cada
+        spec, SIN llamar a la IA. Es el camino del retrofit determinista: toma ai_v1,
+        enriquece cada escenario con microestructura y produce ai_v2 con las mismas
+        semillas/universo/anchor. La libreria fuente se conserva intacta.
+        """
+        source = self.store.load_manifest(source_id)
+        universe = self._universe_for(source)
+        total = n_paths or source.n_paths
+        anchor = datetime.fromisoformat(source.anchor)
+        specs = [enricher(spec) for spec in self.store.load_specs(source_id)]
+
+        logger.info(
+            "Deriving '%s' from '%s' (%s scenarios, %s paths) via %s",
+            target_id, source_id, len(specs), total, getattr(enricher, "__name__", "enricher"),
+        )
+        paths_by_scenario, scenario_meta = self._synthesize(
+            specs, universe, source.seed_base, total, anchor
+        )
+
+        manifest = LibraryManifest(
+            library_id=target_id,
+            created_at=source.created_at,
+            horizon_days=source.horizon_days,
+            anchor=source.anchor,
+            n_paths=total,
+            seed_base=source.seed_base,
+            designer=f"{source.designer}+{getattr(enricher, '__name__', 'enricher')}",
+            factors=list(universe.factors),
+            universe=universe_summary(universe),
+            scenarios=scenario_meta,
+        )
+        self.store.save(manifest, specs, paths_by_scenario)
+        return manifest
 
     def _synthesize(
         self,

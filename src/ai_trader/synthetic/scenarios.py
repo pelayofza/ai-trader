@@ -100,9 +100,16 @@ class FactorShock:
     day: int
     factor: str
     magnitude: float
+    # Dispersion del dia del shock ENTRE paths del ensemble: cada path lo recoloca en
+    # [day-jitter, day+jitter] de forma determinista por semilla. 0 = dia fijo (como
+    # antes). Evita que un crash caiga SIEMPRE el mismo dia en los 30 paths.
+    jitter_days: int = 0
 
     def to_dict(self) -> dict:
-        return {"day": self.day, "factor": self.factor, "magnitude": self.magnitude}
+        out = {"day": self.day, "factor": self.factor, "magnitude": self.magnitude}
+        if self.jitter_days:
+            out["jitter_days"] = self.jitter_days
+        return out
 
     @classmethod
     def from_dict(cls, data: dict) -> FactorShock:
@@ -110,6 +117,7 @@ class FactorShock:
             day=int(data["day"]),
             factor=str(data["factor"]),
             magnitude=float(data["magnitude"]),
+            jitter_days=int(data.get("jitter_days", 0)),
         )
 
 

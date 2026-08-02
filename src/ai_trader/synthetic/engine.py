@@ -58,14 +58,22 @@ class PathEngine:
         rng = np.random.default_rng(seed)
 
         drift, vol = self._factor_timelines(spec, horizon, factors)  # (horizon, n_factors)
-        self._apply_shocks(spec, drift, factors)
+        self._apply_shocks(spec, drift, factors, seed)
 
-        # Retornos de los factores: media de fase + ruido gaussiano escalado por su vol.
-        w = rng.standard_normal((horizon, len(factors)))
+        # Timelines por dia de la microestructura estadistica.
+        idio_ar_t = self._phase_scalar_timeline(spec, horizon, "idio_ar")          # B5
+        tail_dof_t = self._phase_scalar_timeline(spec, horizon, "tail_dof")        # B2
+        persistence_t = self._phase_scalar_timeline(spec, horizon, "vol_persistence")  # B3
+        jump_intensity_t = self._phase_scalar_timeline(spec, horizon, "jump_intensity")  # B4
+        jump_scale_t = self._phase_scalar_timeline(spec, horizon, "jump_scale")         # B4
+        # Si ninguna fase pide colas, se usa la via gaussiana EXACTA de siempre (mismo
+        # consumo de RNG), de modo que ai_v1 y los tests no cambian byte a byte.
+        dof_t = tail_dof_t if np.any(tail_dof_t > 2.0) else None
+
+        # Innovaciones de factor: colas (t-Student) + clustering (GARCH), luego escala vol.
+        w = _draw_innovations(rng, (horizon, len(factors)), dof_t)
+        w = _apply_garch(w, persistence_t)
         factor_returns = drift + vol * w  # (horizon, n_factors)
-
-        # Timeline por dia del coeficiente de autocorrelacion idiosincratica (B5).
-        idio_ar_t = self._phase_scalar_timeline(spec, horizon, "idio_ar")
 
         index = pd.DatetimeIndex(
             [self.anchor + timedelta(days=i) for i in range(horizon)], name="timestamp"
@@ -76,10 +84,11 @@ class PathEngine:
             beta = np.array([asset.loading(f) for f in factors])
             tilt = float(spec.asset_tilts.get(asset.symbol, 0.0))
 
-            eps = rng.standard_normal(horizon)
+            eps = _draw_innovations(rng, (horizon,), dof_t)
+            eps = _apply_garch(eps, persistence_t)
             # Componente idiosincratico con AR(1) por fase: >0 tiende, <0 revierte. Es lo
             # que rompe el mundo iid y da edge real a momentum vs mean-reversion segun el
-            # regimen. Variance-matched: con idio_ar=0 se reduce al ruido iid de siempre.
+            # regimen. Variance-matched: con idio_ar=0 se reduce al ruido de siempre.
             idio = _ar1_idio(eps, asset.idio_vol, idio_ar_t)
             asset_returns = tilt + factor_returns @ beta + idio
 
@@ -90,7 +99,8 @@ class PathEngine:
             daily_vol_t = np.sqrt(np.sum((vol * beta) ** 2, axis=1) + asset.idio_vol**2)
 
             bars[asset.symbol] = self._build_ohlcv(
-                asset_returns, asset.start_price, daily_vol_t, index, rng
+                asset_returns, asset.start_price, daily_vol_t,
+                jump_intensity_t, jump_scale_t, index, rng,
             )
 
         return bars
@@ -130,23 +140,35 @@ class PathEngine:
         return drift, vol
 
     def _apply_shocks(
-        self, spec: ScenarioSpec, drift: np.ndarray, factors: tuple[str, ...]
+        self, spec: ScenarioSpec, drift: np.ndarray, factors: tuple[str, ...], seed: int
     ) -> None:
-        """Suma los shocks discretos como deriva puntual en su dia y factor."""
+        """Suma los shocks discretos como deriva puntual en su dia y factor.
+
+        Si un shock declara jitter_days>0, su dia se recoloca por path de forma
+        determinista con un RNG DERIVADO (seed+salt), sin tocar la secuencia principal
+        del path: asi las velas sin shock quedan identicas y solo se mueve el evento."""
         index_of = {f: j for j, f in enumerate(factors)}
         horizon = drift.shape[0]
+        jitter_rng: np.random.Generator | None = None
         for shock in spec.shocks:
             if shock.factor not in index_of:
                 continue
-            if not 0 <= shock.day < horizon:
+            day = shock.day
+            if shock.jitter_days > 0:
+                if jitter_rng is None:
+                    jitter_rng = np.random.default_rng(seed + _JITTER_SALT)
+                day += int(jitter_rng.integers(-shock.jitter_days, shock.jitter_days + 1))
+            if not 0 <= day < horizon:
                 continue
-            drift[shock.day, index_of[shock.factor]] += shock.magnitude
+            drift[day, index_of[shock.factor]] += shock.magnitude
 
     def _build_ohlcv(
         self,
         returns: np.ndarray,
         start_price: float,
         daily_vol: np.ndarray,
+        jump_intensity: np.ndarray,
+        jump_scale: np.ndarray,
         index: pd.DatetimeIndex,
         rng: np.random.Generator,
     ) -> pd.DataFrame:
@@ -163,6 +185,16 @@ class PathEngine:
 
         # Apertura: cierre anterior con un hueco nocturno pequeno.
         gap = rng.standard_normal(horizon) * (self.overnight_gap_factor * daily_vol)
+
+        # Saltos en el hueco (B4): con prob jump_intensity el dia abre con un salto de
+        # tamano jump_scale*vol. Rompe la hipotesis de gaps gaussianos que hacia que los
+        # stops llenaran SIEMPRE cerca del nivel: ahora un gap puede saltarse el stop y la
+        # perdida de cola deja de estar subestimada. Sin saltos no se consume RNG extra.
+        if np.any(jump_intensity > 0.0):
+            occur = rng.random(horizon) < jump_intensity
+            jump = rng.standard_normal(horizon) * (jump_scale * daily_vol)
+            gap = gap + occur * jump
+
         open_ = prev_close * np.exp(gap)
 
         body_high = np.maximum(open_, close)
@@ -191,8 +223,64 @@ class PathEngine:
         )
 
 
+# Desplazamiento de semilla para el RNG del jitter de shocks: separado del RNG principal
+# del path para que recolocar el dia del shock no altere el resto de las velas.
+_JITTER_SALT = 987_654_321
+
 # Tope de |phi| para que el AR(1) sea estacionario y sigma_innov real.
 _MAX_AR = 0.98
+
+# dof que aproxima la normal en los dias sin colas de un path que SI usa la via t.
+_GAUSSIAN_DOF = 1e6
+
+
+def _draw_innovations(
+    rng: np.random.Generator, shape: tuple[int, ...], dof_t: np.ndarray | None
+) -> np.ndarray:
+    """
+    Innovaciones de varianza unidad (B2).
+
+    dof_t None => gaussianas EXACTAS (mismo consumo de RNG que antes: es la via neutra
+    que mantiene ai_v1 identico). Si alguna fase pide colas, t-Student POR DIA escalada
+    a varianza 1 con sqrt((dof-2)/dof); los dias neutros de ese path usan dof enorme
+    (~normal).
+    """
+    if dof_t is None:
+        return rng.standard_normal(shape)
+    dof = np.where(dof_t > 2.0, dof_t, _GAUSSIAN_DOF)
+    if dof.ndim == 1 and len(shape) == 2:
+        dof = dof[:, None]  # (horizon,1) -> broadcast a (horizon, n_factors)
+    scale = np.sqrt((dof - 2.0) / dof)
+    return rng.standard_t(dof, size=shape) * scale
+
+
+def _apply_garch(innov: np.ndarray, persistence_t: np.ndarray) -> np.ndarray:
+    """
+    Clustering de volatilidad tipo GARCH(1,1) sobre innovaciones YA dibujadas (B3), sin
+    consumir RNG extra. sigma2_t = (1-p) + 0.15*p*e_{t-1}^2 + 0.85*p*sigma2_{t-1}, con
+    p = vol_persistence de la fase. El reparto 0.15/0.85 (news impact / persistencia) da
+    una autocorrelacion de |retorno| realista. Varianza incondicional 1 (variance-matched).
+    p=0 => multiplica por 1 (no-op exacto). Actua a lo largo del tiempo (eje 0).
+    """
+    if not np.any(persistence_t > 0.0):
+        return innov
+
+    out = np.empty_like(innov)
+    is_2d = innov.ndim == 2
+    ncols = innov.shape[1] if is_2d else 1
+    for c in range(ncols):
+        col = innov[:, c] if is_2d else innov
+        res = out[:, c] if is_2d else out
+        sigma2 = 1.0
+        eps_prev = 0.0
+        for t in range(len(col)):
+            p = min(0.999, max(0.0, float(persistence_t[t])))
+            if t > 0:
+                sigma2 = (1.0 - p) + 0.15 * p * eps_prev * eps_prev + 0.85 * p * sigma2
+            e = col[t] * np.sqrt(sigma2)
+            res[t] = e
+            eps_prev = e
+    return out
 
 
 def _ar1_idio(eps: np.ndarray, idio_vol: float, phi_t: np.ndarray) -> np.ndarray:

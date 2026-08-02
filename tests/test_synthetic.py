@@ -12,6 +12,7 @@ from ai_trader.synthetic.designer import (
     parse_scenarios,
 )
 from ai_trader.synthetic.engine import PathEngine, generate_paths
+from ai_trader.synthetic.retrofit import enrich_phase, enrich_spec
 from ai_trader.synthetic.scenarios import FactorPhase, FactorShock, ScenarioSpec
 from ai_trader.synthetic.service import SyntheticDataService, sample_window
 from ai_trader.synthetic.store import SyntheticStore
@@ -127,6 +128,126 @@ class TestIdioAutocorrelation:
         assert np.isclose(rev, flat, rtol=0.2)
         assert np.isclose(mom, flat, rtol=0.2)
         assert 0.015 < flat < 0.026
+
+
+def _tail_spec(tail_dof, days=2000):
+    return _spec([FactorPhase(length_days=days, drift={}, vol={}, tail_dof=tail_dof)])
+
+
+def _garch_spec(persistence, days=2000):
+    return _spec([FactorPhase(length_days=days, drift={}, vol={}, vol_persistence=persistence)])
+
+
+def _tail_exceedances(returns, k=3.0):
+    z = (returns - returns.mean()) / returns.std()
+    return int(np.sum(np.abs(z) > k))
+
+
+def _abs_autocorr(returns):
+    a = np.abs(returns)
+    return float(np.corrcoef(a[:-1], a[1:])[0, 1])
+
+
+class TestFatTails:
+    def test_student_t_produces_more_tail_exceedances(self):
+        # B2: colas gruesas -> mas dias mas alla de 3 sigma que la gaussiana (que espera
+        # ~0.27% -> ~5 en 2000). Metrica robusta (la kurtosis muestral de una t es ruidosa).
+        engine = PathEngine(DEFAULT_UNIVERSE)
+        gauss = _tail_exceedances(_log_returns(engine.generate(_tail_spec(0.0), seed=0)["BTC/USDT"]))
+        fat = _tail_exceedances(_log_returns(engine.generate(_tail_spec(5.0), seed=0)["BTC/USDT"]))
+
+        assert fat > gauss
+        assert fat >= 15  # claramente leptocurtico vs ~5 gaussiano
+
+    def test_fat_tails_stay_variance_matched(self):
+        engine = PathEngine(DEFAULT_UNIVERSE)
+        gauss = _log_returns(engine.generate(_tail_spec(0.0), seed=0)["BTC/USDT"]).std()
+        fat = _log_returns(engine.generate(_tail_spec(5.0), seed=0)["BTC/USDT"]).std()
+
+        assert np.isclose(fat, gauss, rtol=0.25)
+
+
+class TestVolClustering:
+    def test_persistence_clusters_volatility(self):
+        # B3: la persistencia GARCH crea autocorrelacion en |retornos| (clustering),
+        # ausente en el mundo iid.
+        engine = PathEngine(DEFAULT_UNIVERSE)
+        flat = _abs_autocorr(_log_returns(engine.generate(_garch_spec(0.0), seed=0)["BTC/USDT"]))
+        clustered = _abs_autocorr(
+            _log_returns(engine.generate(_garch_spec(0.9), seed=0)["BTC/USDT"])
+        )
+
+        assert clustered > flat + 0.05
+        assert clustered > 0.1
+
+    def test_clustering_stays_variance_matched(self):
+        engine = PathEngine(DEFAULT_UNIVERSE)
+        flat = _log_returns(engine.generate(_garch_spec(0.0), seed=0)["BTC/USDT"]).std()
+        clustered = _log_returns(engine.generate(_garch_spec(0.9), seed=0)["BTC/USDT"]).std()
+
+        assert np.isclose(clustered, flat, rtol=0.3)
+
+
+def _overnight_gaps(df):
+    o = df["open"].to_numpy()
+    c = df["close"].to_numpy()
+    return o[1:] / c[:-1] - 1.0  # hueco de apertura vs cierre anterior
+
+
+class TestJumps:
+    def test_jumps_produce_large_overnight_gaps(self):
+        # B4: con saltos aparecen huecos de apertura mucho mayores que el gap gaussiano,
+        # que es lo que hace que un stop pueda saltarse (perdida de cola realista).
+        engine = PathEngine(DEFAULT_UNIVERSE)
+        calm = _spec([FactorPhase(length_days=1500, drift={}, vol={EQUITY: 0.01})])
+        jumpy = _spec([FactorPhase(
+            length_days=1500, drift={}, vol={EQUITY: 0.01},
+            jump_intensity=0.05, jump_scale=6.0,
+        )])
+
+        no_jump = np.abs(_overnight_gaps(engine.generate(calm, seed=0)["BTC/USDT"])).max()
+        with_jump = np.abs(_overnight_gaps(engine.generate(jumpy, seed=0)["BTC/USDT"])).max()
+
+        assert with_jump > 5 * no_jump
+
+    def test_no_jumps_keeps_bars_valid(self):
+        # Sanity: con saltos las velas siguen siendo OHLC validas.
+        jumpy = _spec([FactorPhase(
+            length_days=300, drift={}, vol={EQUITY: 0.02},
+            jump_intensity=0.1, jump_scale=8.0,
+        )])
+        df = PathEngine(DEFAULT_UNIVERSE).generate(jumpy, seed=1)["SPY"]
+        o, h, low, c = df["open"], df["high"], df["low"], df["close"]
+
+        assert (h >= np.maximum(o, c) - 1e-9).all()
+        assert (low <= np.minimum(o, c) + 1e-9).all()
+        assert (df[["open", "high", "low", "close"]] > 0).all().all()
+
+
+class TestShockJitter:
+    def _crash_day(self, df):
+        # El dia del crash = indice del retorno mas negativo.
+        return int(np.argmin(_log_returns(df)))
+
+    def test_jitter_moves_the_shock_day_across_paths(self):
+        engine = PathEngine(DEFAULT_UNIVERSE)
+        phase = FactorPhase(length_days=400, drift={}, vol={EQUITY: 1e-6})
+        jittered = _spec(
+            [phase], shocks=[FactorShock(day=200, factor=EQUITY, magnitude=-0.20, jitter_days=30)]
+        )
+
+        days = {self._crash_day(engine.generate(jittered, seed=1000 + i)["SPY"]) for i in range(5)}
+        assert len(days) > 1  # el crash NO cae siempre el mismo dia
+
+    def test_without_jitter_shock_day_is_fixed(self):
+        engine = PathEngine(DEFAULT_UNIVERSE)
+        phase = FactorPhase(length_days=400, drift={}, vol={EQUITY: 1e-6})
+        fixed = _spec(
+            [phase], shocks=[FactorShock(day=200, factor=EQUITY, magnitude=-0.20)]
+        )
+
+        days = {self._crash_day(engine.generate(fixed, seed=1000 + i)["SPY"]) for i in range(5)}
+        assert len(days) == 1  # sin jitter, mismo dia en todos los paths
 
 
 class TestFactorCorrelations:
@@ -390,6 +511,64 @@ class TestResynthesize:
 
         rebuilt = store.load_bars("lib", sc, 1)["ETH/USDT"]["close"].to_numpy()
         assert np.allclose(original, rebuilt)
+
+
+class TestRetrofit:
+    def test_directional_phase_gets_positive_autocorrelation(self):
+        trending = FactorPhase(length_days=100, drift={EQUITY: 0.002}, vol={EQUITY: 0.007})
+        assert enrich_phase(trending).idio_ar > 0
+
+    def test_flat_phase_gets_mean_reversion(self):
+        flat = FactorPhase(length_days=100, drift={}, vol={EQUITY: 0.012})
+        assert enrich_phase(flat).idio_ar < 0
+
+    def test_crisis_phase_gets_tails_and_jumps(self):
+        crisis = FactorPhase(length_days=100, drift={EQUITY: -0.004}, vol={EQUITY: 0.03})
+        ep = enrich_phase(crisis)
+
+        assert ep.tail_dof > 0
+        assert ep.jump_intensity > 0
+        assert ep.vol_persistence > 0
+
+    def test_enrich_spec_adds_shock_jitter(self):
+        spec = _spec(
+            [FactorPhase(length_days=100, drift={}, vol={EQUITY: 0.012})],
+            shocks=[FactorShock(day=50, factor=EQUITY, magnitude=-0.1)],
+        )
+        assert enrich_spec(spec).shocks[0].jitter_days > 0
+
+    def test_enrich_preserves_designed_drift_and_vol(self):
+        # El retrofit solo toca microestructura: drift/vol disenados por la IA no cambian.
+        phase = FactorPhase(length_days=100, drift={EQUITY: 0.001}, vol={EQUITY: 0.02})
+        enriched = enrich_phase(phase)
+
+        assert enriched.drift == phase.drift
+        assert enriched.vol == phase.vol
+
+
+class TestDeriveLibrary:
+    def test_derives_enriched_library_keeping_source_intact(self, tmp_path):
+        store = SyntheticStore(tmp_path)
+        service = SyntheticDataService(TemplateScenarioDesigner(), store=store)
+        service.generate(
+            "src", n_scenarios=3, n_paths=2, horizon_days=200, seed_base=1000,
+            created_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        )
+
+        manifest = service.derive_library("src", "dst", enricher=enrich_spec)
+
+        assert "dst" in store.list_libraries()
+        assert manifest.num_samples == 6
+
+        # El destino tiene microestructura; la fuente sigue neutra.
+        dst_phases = [p for s in store.load_specs("dst") for p in s.phases]
+        src_phases = [p for s in store.load_specs("src") for p in s.phases]
+        assert any(p.vol_persistence != 0 or p.idio_ar != 0 for p in dst_phases)
+        assert all(p.vol_persistence == 0 and p.idio_ar == 0 for p in src_phases)
+
+        # Barras validas y del tamano esperado.
+        bars = store.load_bars("dst", manifest.scenarios[0]["id"], 0)
+        assert len(bars["BTC/USDT"]) == 200
 
 
 class TestSampleWindow:
