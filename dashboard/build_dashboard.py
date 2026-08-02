@@ -484,105 +484,143 @@ def build() -> None:
 ROADMAP = [
     {
         "id": "wiring-ai-v2",
-        "title": "Cablear ai_v2 como sustrato por defecto del RL",
+        "title": "Cablear ai_v2 como sustrato por defecto",
         "line": "Wiring", "status": "pendiente", "impact": "alto", "effort": "bajo",
-        "why": "ai_v2 corrige los sesgos optimistas del generador (colas, clustering, "
-               "estructura serial). El harness de scoring aun optimiza sobre ai_v1 iid.",
+        "why": "ai_v2 corrige los sesgos optimistas del generador (colas gruesas, clustering "
+               "de volatilidad, estructura serial). El harness de scoring aun optimiza sobre "
+               "ai_v1, que es ruido iid.",
         "prompt": (
-            "En scoring/optimize.py cambia el library_id por defecto de 'ai_v1' a 'ai_v2' "
-            "en run_optimization. Revisa que scoring/sample_eval y cualquier CLI/documentacion "
-            "que referencie 'ai_v1' se actualicen o queden explicitos. Anade un test que "
-            "verifique que run_optimization usa ai_v2 por defecto. Corre la suite completa "
-            "con .venv\\Scripts\\python.exe -m pytest -q."
+            "Proyecto ai-trader (Python; motor de backtest que conduce el runner real sobre "
+            "librerias de datos sinteticos deterministas en data/synthetic/<lib>). El harness "
+            "de optimizacion en src/ai_trader/scoring/optimize.py (funcion run_optimization) "
+            "usa por defecto la libreria 'ai_v1'; ya existe 'ai_v2', generada por retrofit "
+            "determinista y mas realista (colas t-Student, clustering GARCH y autocorrelacion "
+            "serial que ai_v1 no tenia).\n"
+            "TAREA: cambia el library_id por defecto de 'ai_v1' a 'ai_v2' en run_optimization; "
+            "revisa que src/ai_trader/scoring/sample_eval.py y cualquier CLI o documentacion "
+            "que referencie 'ai_v1' se actualicen o queden explicitos; anade un test que "
+            "verifique el default. Regenera el dashboard (python -m dashboard.build_dashboard) "
+            "y la documentacion (python -m docs.build_docs). Corre la suite y ruff con "
+            ".venv\\Scripts\\python.exe -m pytest -q (poetry run esta roto en esta maquina: "
+            "invoca el python del venv directamente)."
         ),
     },
     {
         "id": "line-a-metric",
-        "title": "Linea A - Metrica y ranking honestos",
+        "title": "Metrica y ranking honestos",
         "line": "A", "status": "pendiente", "impact": "alto", "effort": "medio",
         "why": "El headline actual es Calmar OOS, que es toxico: el maxDD en el denominador "
                "es ruidoso (un extremo de un solo path), premia la inactividad y degenera a 0 "
                "sin drawdown. Un optimizador convergeria a 'no operar casi nunca'.",
         "prompt": (
-            "Implementa la Linea A del roadmap (metrica honesta) en ai-trader:\n"
-            "1) Sustituye el headline per-sample: en backtest/metrics.py y BacktestResult, deja "
-            "de usar Calmar como headline_score. Nuevo headline = Sharpe_OOS - lambda_turnover*"
-            "turnover - kappa*maxDD (maxDD como PENALIZACION SUAVE, no denominador ni descarte). "
-            "Anade turnover (nº trades / dia o rotacion de notional) a PerformanceMetrics.\n"
-            "2) En scoring/aggregate.py fija la recompensa/ranking como CVaR@25% (ya se computa) "
-            "en lugar de media-lambda*std. Manten mean/std/p25 como reportados.\n"
-            "3) Anade baselines como gate obligatorio en el informe: buy&hold BTC, equiponderado "
-            "del universo, y SPY. Una estrategia debe batir el mejor baseline para 'aprobar'.\n"
-            "4) Anade DSR (Deflated Sharpe Ratio) / PBO sobre la distribucion de scores del "
-            "ranking para descontar el overfitting por multiples pruebas.\n"
-            "Respeta los principios: determinismo, honestidad estadistica (distribucion, no un "
-            "path), tests para cada pieza. Usa .venv\\Scripts\\python.exe para pytest/ruff."
+            "Proyecto ai-trader (Python; backtest que conduce el runner real sobre datos "
+            "sinteticos). La puntuacion de cabecera de un backtest es hoy el Calmar "
+            "out-of-sample: en src/ai_trader/backtest/engine.py, BacktestResult.headline_score "
+            "devuelve test.metrics.calmar (CAGR/maxDD de la ventana test), y el harness de "
+            "scoring lo agrega sobre la distribucion de muestras. Esa metrica es mala: (a) el "
+            "maxDD es un extremo, el estadistico mas ruidoso de una curva de equity, y en el "
+            "denominador dispara la varianza del estimador; (b) premia la inactividad (pocas "
+            "operaciones -> maxDD minusculo -> Calmar altisimo), un optimo degenerado que el "
+            "optimizador encontraria; (c) degenera a 0 cuando no hay drawdown.\n"
+            "TAREA:\n"
+            "1) Nuevo headline per-sample = Sharpe_OOS - lambda_turnover*turnover - kappa*maxDD, "
+            "con el maxDD como PENALIZACION SUAVE (ni denominador ni descarte binario). Anade "
+            "'turnover' (rotacion: nº de trades por dia, o notional rotado) a PerformanceMetrics "
+            "en src/ai_trader/backtest/metrics.py.\n"
+            "2) En src/ai_trader/scoring/aggregate.py fija la recompensa/ranking como CVaR@25% "
+            "(ya se computa) en vez de media-lambda*std; manten mean/std/p25 como reportados.\n"
+            "3) Anade baselines como gate obligatorio: comprar-y-mantener BTC, cartera "
+            "equiponderada del universo y SPY; una estrategia debe batir al mejor baseline para "
+            "'aprobar'.\n"
+            "4) Anade DSR (Deflated Sharpe Ratio) o PBO sobre la distribucion de scores del "
+            "ranking para descontar el sobreajuste por multiples pruebas.\n"
+            "Respeta determinismo y evaluacion sobre la DISTRIBUCION (no un path); un test por "
+            "pieza. Regenera dashboard y docs. Usa .venv\\Scripts\\python.exe para pytest/ruff "
+            "(poetry run roto en esta maquina)."
         ),
     },
     {
         "id": "line-c-costs",
-        "title": "Linea C - Costes que muerden",
+        "title": "Costes de ejecucion realistas",
         "line": "C", "status": "pendiente", "impact": "alto", "effort": "medio",
         "why": "El slippage es plano (5 bps) y allow_partial_fills=False llena cualquier "
                "tamano entero: no hay techo de capacidad. 5 bps en un altcoin es ficcion.",
         "prompt": (
-            "Implementa la Linea C (costes realistas) en ai-trader:\n"
-            "1) En execution/paper.py, sustituye el slippage plano por un modelo funcion de "
-            "(spread base del simbolo, volatilidad reciente del activo, tamano/volumen de la "
-            "barra). El campo volume de las velas sinteticas hoy es decorativo: usalo como "
-            "proxy de liquidez para el impacto de mercado.\n"
-            "2) Activa fills parciales (allow_partial_fills) con un techo de capacidad por barra "
-            "(p.ej. una fraccion del volumen). Ordenes grandes se llenan parcialmente.\n"
-            "3) Anade tests que verifiquen que un altcoin iliquido paga mas slippage que BTC y "
-            "que una orden mayor que el techo se llena parcial. Corre la suite completa."
+            "Proyecto ai-trader (Python). El motor de ejecucion en papel "
+            "(src/ai_trader/execution/paper.py) aplica un slippage PLANO (5 bps) y, con "
+            "allow_partial_fills=False, llena cualquier tamano entero sin techo de capacidad; "
+            "es irreal, sobre todo en activos poco liquidos.\n"
+            "TAREA:\n"
+            "1) Sustituye el slippage plano por un modelo funcion de (spread base del simbolo, "
+            "volatilidad reciente del activo, tamano de la orden / volumen de la barra). El "
+            "campo 'volume' de las velas sinteticas hoy es decorativo (ninguna pieza lo "
+            "consulta): usalo como proxy de liquidez para el impacto de mercado.\n"
+            "2) Activa fills parciales con un techo de capacidad por barra (p.ej. una fraccion "
+            "del volumen); las ordenes grandes se llenan parcialmente.\n"
+            "3) Tests: un altcoin iliquido paga mas slippage que BTC; una orden mayor que el "
+            "techo se llena parcial. Regenera dashboard y docs. Determinismo + "
+            ".venv\\Scripts\\python.exe (poetry run roto) + ruff."
         ),
     },
     {
         "id": "line-d-validation",
-        "title": "Linea D - Validacion (CPCV / walk-forward)",
+        "title": "Validacion CPCV / walk-forward",
         "line": "D", "status": "pendiente", "impact": "medio", "effort": "medio",
         "why": "El split actual es un unico 70/30 (_resolve_cutoff). Sobre-estima la robustez "
                "y no purga ni embarga entre train y test.",
         "prompt": (
-            "Implementa validacion multiventana en ai-trader/backtest: sustituye o complementa "
-            "el split unico 70/30 con walk-forward multiventana y, si es viable, CPCV "
-            "(Combinatorial Purged Cross-Validation) con purga y embargo entre train y test. "
-            "Agrega los headline scores de todas las ventanas en una distribucion robusta. "
-            "Anade tests de que no hay fuga temporal entre folds. Determinismo + .venv python."
+            "Proyecto ai-trader (Python). El backtest (src/ai_trader/backtest/engine.py, metodo "
+            "_resolve_cutoff) parte cada muestra en train/test con un unico split temporal "
+            "70/30, sin purga ni embargo; sobre-estima la robustez.\n"
+            "TAREA: implementa validacion multiventana — sustituye o complementa ese split con "
+            "walk-forward multiventana y, si es viable, CPCV (Combinatorial Purged "
+            "Cross-Validation) con purga y embargo entre train y test. Agrega los headline "
+            "scores de todas las ventanas en una distribucion robusta. Anade tests de que no "
+            "hay fuga temporal entre folds. Regenera dashboard y docs. Determinismo + "
+            ".venv\\Scripts\\python.exe (poetry run roto) + ruff."
         ),
     },
     {
         "id": "line-b7-rankcorr",
-        "title": "Linea B7 - Validacion rank-corr sintetico vs real",
+        "title": "Validacion sintetico vs real (rank-corr)",
         "line": "B", "status": "pendiente", "impact": "medio", "effort": "medio",
         "why": "Falta medir que ai_v2 se parece al mercado real. Se difirio a sub-linea; los "
                "stylized-facts objetivo ya estan definidos (autocorr, clustering, colas).",
         "prompt": (
-            "Construye un harness de validacion que compare los stylized-facts de la libreria "
-            "sintetica ai_v2 contra el historico REAL de cripto (via CCXT, ya integrado en el "
-            "proyecto): autocorrelacion de retornos, clustering de volatilidad (autocorr de "
-            "|retorno|), indice de cola (exceedances / kurtosis) y correlaciones cruzadas. "
-            "Reporta la correlacion de rangos sintetico-vs-real por metrica. Cachea los datos "
-            "reales. Anade al dashboard una vista con la comparacion. Determinismo + tests."
+            "Proyecto ai-trader (Python). Existe una libreria sintetica realista 'ai_v2' "
+            "(data/synthetic/ai_v2) con colas gruesas, clustering de volatilidad y estructura "
+            "serial, pero falta comprobar que se parece al mercado REAL. El proyecto ya integra "
+            "CCXT para historicos de cripto.\n"
+            "TAREA: construye un harness que compare los stylized-facts de ai_v2 contra el "
+            "historico real de cripto via CCXT: autocorrelacion de retornos, clustering de "
+            "volatilidad (autocorrelacion de |retorno|), indice de cola (exceedances mas alla "
+            "de 3 sigma / kurtosis) y correlaciones cruzadas entre activos. Reporta la "
+            "correlacion de rangos sintetico-vs-real por metrica. Cachea los datos reales en "
+            "disco. Anade al dashboard (dashboard/build_dashboard.py) una vista con la "
+            "comparacion y regenera dashboard y docs. Determinismo + tests + "
+            ".venv\\Scripts\\python.exe (poetry run roto)."
         ),
     },
     {
         "id": "line-e-cleanup",
-        "title": "Linea E - Limpieza de consistencia",
+        "title": "Limpieza de consistencia",
         "line": "E", "status": "pendiente", "impact": "bajo", "effort": "bajo",
         "why": "MATIC/USDT sigue en el universo pese a estar deslistado en Binance; "
                "TRADING_DAYS_PER_YEAR=365 desanualiza mal la renta variable; el designer usa "
                "temperature=1.0 (diseño no reproducible, mitigado guardando spec.json).",
         "prompt": (
-            "Limpieza de consistencia en ai-trader (Linea E):\n"
-            "1) Resuelve MATIC/USDT: o se retira del universo sintetico y de config, o se "
-            "documenta explicitamente por que se mantiene. Consistencia entre default.toml y "
-            "synthetic.toml.\n"
-            "2) TRADING_DAYS_PER_YEAR: usa 252 para renta variable y 365 para cripto al "
-            "anualizar metricas por clase de activo (hoy es 365 global).\n"
-            "3) Verifica que DEFAULT_MODEL del designer resuelve contra la API actual y "
-            "documenta que con temperature=1.0 el diseño no es reproducible (se mitiga guardando "
-            "spec.json). Tests donde aplique."
+            "Proyecto ai-trader (Python). Tres inconsistencias de higiene a resolver:\n"
+            "1) MATIC/USDT sigue en el universo sintetico (src/ai_trader/synthetic/universe.py) "
+            "y en config/synthetic.toml pese a estar deslistado en Binance: o retiralo de ambos "
+            "sitios, o documenta explicitamente por que se mantiene; deja consistentes "
+            "config/default.toml y config/synthetic.toml.\n"
+            "2) TRADING_DAYS_PER_YEAR en src/ai_trader/backtest/metrics.py es 365 global, lo que "
+            "desanualiza mal la renta variable: usa 252 para acciones y 365 para cripto al "
+            "anualizar metricas por clase de activo.\n"
+            "3) Verifica que DEFAULT_MODEL del disenador (src/ai_trader/synthetic/designer.py) "
+            "resuelve contra la API actual y documenta que con temperature=1.0 el diseño no es "
+            "reproducible (se mitiga guardando el spec.json). Tests donde aplique. Regenera "
+            "dashboard y docs. .venv\\Scripts\\python.exe (poetry run roto) + ruff."
         ),
     },
     {
@@ -592,10 +630,17 @@ ROADMAP = [
         "why": "El runner ya opera en paper con estado persistido (JsonStateStore). Falta "
                "exponer equity, posiciones abiertas y PnL en el dashboard.",
         "prompt": (
-            "Anade al dashboard (dashboard/build_dashboard.py) una vista de paper trading que "
-            "lea el estado del TradingRunner (JsonStateStore): curva de equity, posiciones "
-            "abiertas y cerradas, PnL realizado/no-realizado y metricas de riesgo. Renderiza "
-            "equity como line chart y posiciones como tabla. Manten el HTML autocontenido."
+            "Proyecto ai-trader (Python). El orquestador (TradingRunner, "
+            "src/ai_trader/app/runner.py) ya opera en paper con estado persistido via "
+            "JsonStateStore (posiciones abiertas/cerradas, PnL realizado, pausa). El dashboard "
+            "(dashboard/) tiene una seccion 'Paper trading' que hoy es solo placeholder.\n"
+            "TAREA: anade al generador del dashboard (dashboard/build_dashboard.py + "
+            "dashboard/template.py) una vista de paper trading que lea el estado del runner "
+            "(JsonStateStore): curva de equity marcada a mercado, tabla de posiciones abiertas "
+            "y cerradas con PnL neto de comisiones, y metricas de riesgo (exposicion desplegada, "
+            "nº de posiciones vs maximo, drawdown de cuenta). Renderiza la equity como line "
+            "chart (reusa los helpers SVG del template) y las posiciones como tabla; manten el "
+            "HTML autocontenido. Regenera con python -m dashboard.build_dashboard."
         ),
     },
     {
@@ -605,12 +650,19 @@ ROADMAP = [
         "why": "El harness CEM (scoring/optimize.py) esta listo pero cada backtest cuesta ~60s "
                "con 35 activos; una corrida completa necesita subsampleo o paralelizacion.",
         "prompt": (
-            "Ejecuta y consolida la optimizacion CEM de las dos primitivas sobre ai_v2 "
-            "(scoring/optimize.py). Antes: (a) cablea ai_v2 como default, (b) aplica la metrica "
-            "de la Linea A si ya esta. Optimiza el rendimiento del backtest o paraleliza la "
-            "evaluacion de muestras para que una corrida con subsampleo razonable sea tratable. "
-            "Guarda los mejores params por primitiva y su distribucion train/validation, y "
-            "vuelca los resultados al dashboard (seccion ranking). Determinismo + tests."
+            "Proyecto ai-trader (Python). El harness de optimizacion por Cross-Entropy Method "
+            "(src/ai_trader/scoring/optimize.py, funcion run_optimization) esta listo, pero cada "
+            "backtest cuesta ~60s con los 35 activos, asi que una corrida completa sobre las 900 "
+            "muestras (30 escenarios x 30 paths) necesita subsampleo o paralelizacion.\n"
+            "TAREA: ejecuta y consolida la optimizacion CEM de las dos primitivas "
+            "(crypto_momentum y mean_reversion) sobre la libreria ai_v2. Recomendado hacerlo "
+            "DESPUES de que run_optimization use ai_v2 por defecto y de que la metrica de "
+            "cabecera honesta (Sharpe - turnover - kappa*maxDD, agregada por CVaR@25%) este "
+            "implementada. Optimiza el rendimiento del backtest o paraleliza la evaluacion de "
+            "muestras para que una corrida con subsampleo razonable sea tratable. Guarda los "
+            "mejores params por primitiva y su distribucion train/validation, y vuelca los "
+            "resultados al dashboard (seccion ranking, dashboard/build_dashboard.py). Regenera "
+            "dashboard y docs. Determinismo + tests + .venv\\Scripts\\python.exe (poetry run roto)."
         ),
     },
 ]
