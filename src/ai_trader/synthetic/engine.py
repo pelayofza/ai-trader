@@ -64,10 +64,12 @@ class PathEngine:
         w = rng.standard_normal((horizon, len(factors)))
         factor_returns = drift + vol * w  # (horizon, n_factors)
 
+        # Timeline por dia del coeficiente de autocorrelacion idiosincratica (B5).
+        idio_ar_t = self._phase_scalar_timeline(spec, horizon, "idio_ar")
+
         index = pd.DatetimeIndex(
             [self.anchor + timedelta(days=i) for i in range(horizon)], name="timestamp"
         )
-        mean_factor_vol = vol.mean(axis=0)  # para dimensionar huecos y mechas por activo
 
         bars: dict[str, pd.DataFrame] = {}
         for asset in self.universe.assets:
@@ -75,17 +77,35 @@ class PathEngine:
             tilt = float(spec.asset_tilts.get(asset.symbol, 0.0))
 
             eps = rng.standard_normal(horizon)
-            asset_returns = tilt + factor_returns @ beta + asset.idio_vol * eps
+            # Componente idiosincratico con AR(1) por fase: >0 tiende, <0 revierte. Es lo
+            # que rompe el mundo iid y da edge real a momentum vs mean-reversion segun el
+            # regimen. Variance-matched: con idio_ar=0 se reduce al ruido iid de siempre.
+            idio = _ar1_idio(eps, asset.idio_vol, idio_ar_t)
+            asset_returns = tilt + factor_returns @ beta + idio
 
-            # Vol diaria efectiva del activo: sirve de escala para huecos y mechas.
-            factor_var = float(np.sum((beta * mean_factor_vol) ** 2))
-            daily_vol = float(np.sqrt(factor_var + asset.idio_vol**2))
+            # Vol diaria efectiva del activo, POR DIA (no promediada al horizonte): la
+            # varianza de factor usa la vol de la FASE de cada dia, asi los huecos y las
+            # mechas se ensanchan en las fases de panico. Antes se promediaba y el rango
+            # intradia no reaccionaba al regimen, corrompiendo el ATR.
+            daily_vol_t = np.sqrt(np.sum((vol * beta) ** 2, axis=1) + asset.idio_vol**2)
 
             bars[asset.symbol] = self._build_ohlcv(
-                asset_returns, asset.start_price, daily_vol, index, rng
+                asset_returns, asset.start_price, daily_vol_t, index, rng
             )
 
         return bars
+
+    def _phase_scalar_timeline(self, spec: ScenarioSpec, horizon: int, attr: str) -> np.ndarray:
+        """Expande un campo escalar de fase (idio_ar, tail_dof, ...) a un array por dia."""
+        out = np.zeros(horizon)
+        cursor = 0
+        for phase in spec.phases:
+            end = min(cursor + phase.length_days, horizon)
+            out[cursor:end] = float(getattr(phase, attr))
+            cursor = end
+            if cursor >= horizon:
+                break
+        return out
 
     def _factor_timelines(
         self, spec: ScenarioSpec, horizon: int, factors: tuple[str, ...]
@@ -126,11 +146,14 @@ class PathEngine:
         self,
         returns: np.ndarray,
         start_price: float,
-        daily_vol: float,
+        daily_vol: np.ndarray,
         index: pd.DatetimeIndex,
         rng: np.random.Generator,
     ) -> pd.DataFrame:
-        """De log-retornos diarios a velas OHLCV validas (high>=cuerpo>=low, >0)."""
+        """De log-retornos diarios a velas OHLCV validas (high>=cuerpo>=low, >0).
+
+        `daily_vol` es un array POR DIA (misma longitud que returns): la escala de
+        huecos y mechas de cada vela usa la volatilidad de su propia fase."""
         horizon = len(returns)
 
         close = start_price * np.exp(np.cumsum(returns))
@@ -166,6 +189,30 @@ class PathEngine:
             },
             index=index,
         )
+
+
+# Tope de |phi| para que el AR(1) sea estacionario y sigma_innov real.
+_MAX_AR = 0.98
+
+
+def _ar1_idio(eps: np.ndarray, idio_vol: float, phi_t: np.ndarray) -> np.ndarray:
+    """
+    Componente idiosincratico como AR(1) con coeficiente phi por dia:
+        g_t = phi_t * g_{t-1} + idio_vol * sqrt(1 - phi_t^2) * eps_t
+
+    El factor sqrt(1 - phi^2) es VARIANCE-MATCHING: la varianza estacionaria de g es
+    idio_vol^2 para cualquier phi, asi que anadir autocorrelacion NO cambia la vol total
+    del activo, solo su estructura serial. phi=0 -> g_t = idio_vol * eps_t (iid de siempre).
+    """
+    horizon = len(eps)
+    g = np.empty(horizon)
+    prev = 0.0
+    for t in range(horizon):
+        phi = min(_MAX_AR, max(-_MAX_AR, float(phi_t[t])))
+        sigma = idio_vol * np.sqrt(1.0 - phi * phi)
+        prev = phi * prev + sigma * eps[t]
+        g[t] = prev
+    return g
 
 
 def generate_paths(

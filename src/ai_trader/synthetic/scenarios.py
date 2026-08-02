@@ -15,14 +15,43 @@ class FactorPhase:
     Encadenando fases se modela una narrativa (p.ej. calma -> panico -> recuperacion):
     cada factor tiene una deriva diaria (drift) y una volatilidad diaria (vol) durante
     la fase. Valores en unidades de LOG-RETORNO DIARIO del factor (0.01 = 1%/dia).
+
+    Ademas del regimen de factores, la fase declara su MICROESTRUCTURA ESTADISTICA
+    (campos opcionales, defaults neutros = mundo gaussiano iid de siempre). Son la
+    "fisica fina" que el motor implementa y que da caracter a cada regimen:
+
+    - `idio_ar`: autocorrelacion AR(1) del componente idiosincratico por activo.
+      >0 = tendencia (edge de momentum); <0 = reversion a la media (edge de mean-rev).
+      Es el mecanismo que hace que unas fases premien una primitiva y otras la otra.
+    - `tail_dof`: grados de libertad de la t-Student de las innovaciones (0 = gaussiano).
+      Bajo (3-6) = colas gruesas, tipico de crisis.
+    - `vol_persistence`: persistencia tipo GARCH de la volatilidad (0 = sin clustering).
+    - `jump_intensity`: probabilidad diaria de un salto en el hueco de apertura (0 = ninguno).
+    - `jump_scale`: tamano del salto en unidades de vol diaria del activo.
     """
 
     length_days: int
     drift: dict[str, float] = field(default_factory=dict)
     vol: dict[str, float] = field(default_factory=dict)
+    idio_ar: float = 0.0
+    tail_dof: float = 0.0
+    vol_persistence: float = 0.0
+    jump_intensity: float = 0.0
+    jump_scale: float = 0.0
 
     def to_dict(self) -> dict:
-        return {"length_days": self.length_days, "drift": dict(self.drift), "vol": dict(self.vol)}
+        out: dict = {
+            "length_days": self.length_days,
+            "drift": dict(self.drift),
+            "vol": dict(self.vol),
+        }
+        # Solo se serializan los campos de microestructura si son NO neutros, para que
+        # los spec.json existentes (ai_v1) no cambien y el diff sea legible.
+        for name in ("idio_ar", "tail_dof", "vol_persistence", "jump_intensity", "jump_scale"):
+            value = getattr(self, name)
+            if value:
+                out[name] = value
+        return out
 
     @classmethod
     def from_dict(cls, data: dict) -> FactorPhase:
@@ -30,6 +59,33 @@ class FactorPhase:
             length_days=int(data["length_days"]),
             drift={str(k): float(v) for k, v in (data.get("drift") or {}).items()},
             vol={str(k): float(v) for k, v in (data.get("vol") or {}).items()},
+            idio_ar=float(data.get("idio_ar", 0.0)),
+            tail_dof=float(data.get("tail_dof", 0.0)),
+            vol_persistence=float(data.get("vol_persistence", 0.0)),
+            jump_intensity=float(data.get("jump_intensity", 0.0)),
+            jump_scale=float(data.get("jump_scale", 0.0)),
+        )
+
+    def with_microstructure(
+        self,
+        *,
+        idio_ar: float | None = None,
+        tail_dof: float | None = None,
+        vol_persistence: float | None = None,
+        jump_intensity: float | None = None,
+        jump_scale: float | None = None,
+    ) -> FactorPhase:
+        """Copia la fase sustituyendo solo los campos de microestructura indicados.
+        Lo usa el retrofit determinista para enriquecer specs de ai_v1 sin tocar drift/vol."""
+        return FactorPhase(
+            length_days=self.length_days,
+            drift=dict(self.drift),
+            vol=dict(self.vol),
+            idio_ar=self.idio_ar if idio_ar is None else idio_ar,
+            tail_dof=self.tail_dof if tail_dof is None else tail_dof,
+            vol_persistence=self.vol_persistence if vol_persistence is None else vol_persistence,
+            jump_intensity=self.jump_intensity if jump_intensity is None else jump_intensity,
+            jump_scale=self.jump_scale if jump_scale is None else jump_scale,
         )
 
 

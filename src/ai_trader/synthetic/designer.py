@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+from dataclasses import replace
 from typing import Protocol
 
 from ai_trader.synthetic.scenarios import FactorPhase, ScenarioSpec
@@ -49,7 +50,10 @@ def normalize_spec(
     valid_symbols = {s.strip().upper() for s in universe.symbols}
 
     phases = [
-        FactorPhase(
+        # replace() arrastra los campos de microestructura (idio_ar, tail_dof, ...)
+        # que el retrofit pueda haber puesto; solo se filtran drift/vol y la longitud.
+        replace(
+            p,
             length_days=max(1, p.length_days),
             drift={f: v for f, v in p.drift.items() if f in valid_factors},
             vol={f: abs(v) for f, v in p.vol.items() if f in valid_factors},
@@ -97,14 +101,14 @@ def _fit_horizon(phases: list[FactorPhase], horizon_days: int) -> list[FactorPha
             length = max(1, round(p.length_days * horizon_days / total))
         length = max(1, length)
         running += length
-        scaled.append(FactorPhase(length_days=length, drift=p.drift, vol=p.vol))
+        scaled.append(replace(p, length_days=length))
 
     # Si el redondeo se paso, recorta desde el final.
     overflow = sum(p.length_days for p in scaled) - horizon_days
     while overflow > 0:
         last = scaled[-1]
         take = min(overflow, last.length_days - 1)
-        scaled[-1] = FactorPhase(last.length_days - take, last.drift, last.vol)
+        scaled[-1] = replace(last, length_days=last.length_days - take)
         overflow -= take
         if take == 0:
             break

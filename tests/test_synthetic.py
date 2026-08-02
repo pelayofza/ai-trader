@@ -76,6 +76,58 @@ class TestEngineOHLCV:
         # Con vol minima el primer cierre no se aleja mucho del precio inicial (450).
         assert 400 < df["close"].iloc[0] < 500
 
+    def test_intrabar_range_widens_in_high_vol_phases(self):
+        # B1: la vol diaria es POR FASE, asi que el rango intradia (mechas/gaps) debe
+        # ensancharse en la fase de panico. Antes se promediaba y el ATR no reaccionaba.
+        spec = _spec([
+            FactorPhase(length_days=100, drift={}, vol={EQUITY: 0.005}),  # calma
+            FactorPhase(length_days=100, drift={}, vol={EQUITY: 0.05}),   # panico
+        ])
+        spy = PathEngine(DEFAULT_UNIVERSE).generate(spec, seed=0)["SPY"]
+
+        rel_range = ((spy["high"] - spy["low"]) / spy["close"]).to_numpy()
+        calm = rel_range[:100].mean()
+        panic = rel_range[100:].mean()
+
+        assert panic > 3 * calm
+
+
+def _ar_spec(idio_ar, days=500):
+    """Escenario con factores en el suelo (vol~0): aisla el componente idiosincratico."""
+    return _spec([FactorPhase(length_days=days, drift={}, vol={}, idio_ar=idio_ar)])
+
+
+def _lag1_autocorr(returns):
+    return float(np.corrcoef(returns[:-1], returns[1:])[0, 1])
+
+
+class TestIdioAutocorrelation:
+    def test_negative_ar_makes_returns_mean_revert(self):
+        # B5: idio_ar<0 => autocorrelacion de lag-1 negativa (whipsaw / reversion),
+        # que es el edge que necesita la primitiva de mean-reversion.
+        btc = PathEngine(DEFAULT_UNIVERSE).generate(_ar_spec(-0.4), seed=0)["BTC/USDT"]
+        assert _lag1_autocorr(_log_returns(btc)) < -0.2
+
+    def test_positive_ar_makes_returns_trend(self):
+        btc = PathEngine(DEFAULT_UNIVERSE).generate(_ar_spec(0.4), seed=0)["BTC/USDT"]
+        assert _lag1_autocorr(_log_returns(btc)) > 0.2
+
+    def test_neutral_ar_is_uncorrelated(self):
+        btc = PathEngine(DEFAULT_UNIVERSE).generate(_ar_spec(0.0), seed=0)["BTC/USDT"]
+        assert abs(_lag1_autocorr(_log_returns(btc))) < 0.12
+
+    def test_autocorrelation_is_variance_matched(self):
+        # Anadir estructura serial NO debe cambiar la vol total: std similar para
+        # cualquier phi y cercana a idio_vol (0.02 para BTC).
+        engine = PathEngine(DEFAULT_UNIVERSE)
+        rev = _log_returns(engine.generate(_ar_spec(-0.4), seed=0)["BTC/USDT"]).std()
+        mom = _log_returns(engine.generate(_ar_spec(0.4), seed=0)["BTC/USDT"]).std()
+        flat = _log_returns(engine.generate(_ar_spec(0.0), seed=0)["BTC/USDT"]).std()
+
+        assert np.isclose(rev, flat, rtol=0.2)
+        assert np.isclose(mom, flat, rtol=0.2)
+        assert 0.015 < flat < 0.026
+
 
 class TestFactorCorrelations:
     def test_shared_factor_loading_creates_positive_correlation(self):
@@ -99,6 +151,47 @@ class TestFactorCorrelations:
         # SPY carga EQUITY 1.0: el retorno del dia del shock debe ser fuertemente negativo.
         ret = _log_returns(bars["SPY"])
         assert ret[19] < -0.05  # diff en indice 19 = close[20]/close[19]
+
+
+class TestMicrostructureSchema:
+    def test_round_trips_microstructure_fields(self):
+        phase = FactorPhase(
+            length_days=100,
+            vol={EQUITY: 0.01},
+            idio_ar=-0.2,
+            tail_dof=4.0,
+            vol_persistence=0.85,
+            jump_intensity=0.02,
+            jump_scale=3.0,
+        )
+        assert FactorPhase.from_dict(phase.to_dict()) == phase
+
+    def test_neutral_fields_are_not_serialized(self):
+        # Los spec.json de ai_v1 no deben cambiar: los campos neutros no se emiten.
+        neutral = FactorPhase(length_days=10, vol={EQUITY: 0.01})
+        payload = neutral.to_dict()
+
+        assert set(payload) == {"length_days", "drift", "vol"}
+
+    def test_normalize_preserves_microstructure(self):
+        phase = FactorPhase(length_days=100, vol={EQUITY: 0.01}, idio_ar=-0.3, tail_dof=5.0)
+        clean = normalize_spec(_spec([phase]), DEFAULT_UNIVERSE, horizon_days=100)
+
+        assert clean.phases[0].idio_ar == -0.3
+        assert clean.phases[0].tail_dof == 5.0
+
+    def test_normalize_carries_microstructure_through_horizon_refit(self):
+        # Dos fases con micro, horizonte distinto: _fit_horizon reescala longitudes
+        # pero debe arrastrar idio_ar/tail_dof (no resetearlos).
+        phases = [
+            FactorPhase(length_days=30, vol={EQUITY: 0.01}, idio_ar=0.2),
+            FactorPhase(length_days=30, vol={EQUITY: 0.03}, idio_ar=-0.2),
+        ]
+        clean = normalize_spec(_spec(phases), DEFAULT_UNIVERSE, horizon_days=200)
+
+        assert clean.horizon_days == 200
+        assert clean.phases[0].idio_ar == 0.2
+        assert clean.phases[1].idio_ar == -0.2
 
 
 class TestNormalizeSpec:
