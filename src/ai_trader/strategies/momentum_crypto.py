@@ -46,6 +46,11 @@ class CryptoMomentumConfig:
     # estrategia era en realidad un cruce de medias pese a llamarse "breakout".
     # Se restaura como puerta real y se deja configurable.
     require_breakout: bool = True
+    # Filtros de regimen cross-sectional (opcionales, los aplica solo si hay un
+    # MarketRegimeProvider inyectado). Con los defaults permisivos no filtran nada, asi
+    # que el comportamiento en vivo es identico. El CEM los optimiza como params.
+    min_breadth: float = 0.0  # 0 = sin filtro; exige fraccion minima del universo > SMA
+    min_relative_strength: float = -1.0  # -1 = sin filtro; exige fuerza vs mercado
 
     def __post_init__(self) -> None:
         if self.fast_sma_window <= 0:
@@ -64,6 +69,8 @@ class CryptoMomentumConfig:
             raise ValueError("reward_atr_multiple must be > 0")
         if self.min_bars < self.slow_sma_window:
             raise ValueError("min_bars must be >= slow_sma_window")
+        if not 0.0 <= self.min_breadth <= 1.0:
+            raise ValueError("min_breadth must be between 0 and 1")
 
 
 class CryptoMomentumStrategy:
@@ -71,6 +78,14 @@ class CryptoMomentumStrategy:
 
     def __init__(self, config: CryptoMomentumConfig | None = None) -> None:
         self.config = config or CryptoMomentumConfig()
+        # Colaborador cross-sectional opcional; lo inyecta el backtest. None en vivo.
+        self._regime = None
+
+    def attach_regime_provider(self, provider) -> None:
+        self._regime = provider
+
+    def _regime_active(self) -> bool:
+        return self.config.min_breadth > 0.0 or self.config.min_relative_strength > -1.0
 
     def supports_symbol(self, symbol: str) -> bool:
         # Opera cualquier simbolo con barras OHLCV; los de prediccion no las tienen.
@@ -138,6 +153,16 @@ class CryptoMomentumStrategy:
         if not (trend_ok and breakout_ok and volatility_ok):
             logger.info("Strategy produced no signal for symbol=%s", symbol)
             return None
+
+        # Puerta de regimen: momentum quiere activos fuertes en un mercado amplio.
+        if self._regime is not None and self._regime_active():
+            regime = self._regime.features(symbol)
+            if regime["breadth"] < self.config.min_breadth:
+                logger.info("Regime breadth gate blocked symbol=%s", symbol)
+                return None
+            if regime["relative_strength"] < self.config.min_relative_strength:
+                logger.info("Regime relative-strength gate blocked symbol=%s", symbol)
+                return None
 
         stop_loss = float(latest_close - (latest_atr * self.config.risk_atr_multiple))
         take_profit = float(latest_close + (latest_atr * self.config.reward_atr_multiple))

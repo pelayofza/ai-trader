@@ -157,6 +157,12 @@ class HistoricalDataSource:
     def symbols(self) -> list[str]:
         return list(self._bars)
 
+    @property
+    def raw_bars(self) -> dict[str, pd.DataFrame]:
+        """Series completas normalizadas por simbolo (sin recorte de reloj). Lo consume
+        el ensamblador cross-sectional, que aplica su propio anti look-ahead via reloj."""
+        return self._bars
+
 
 def _to_utc(value: datetime) -> pd.Timestamp:
     ts = pd.Timestamp(value)

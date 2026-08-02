@@ -16,6 +16,7 @@ from ai_trader.execution.paper import PaperExecutionEngine
 from ai_trader.execution.polymarket_paper import PolymarketPaperExecutionEngine
 from ai_trader.execution.router import ExecutionRouter
 from ai_trader.notifications.base import NullNotifier
+from ai_trader.observation.regime import MarketRegimeProvider
 from ai_trader.risk.engine import RiskEngine
 from ai_trader.shared.clock import HistoricalClock
 from ai_trader.shared.schemas import Position
@@ -225,6 +226,16 @@ class BacktestEngine:
             build_strategy(spec.type, spec.params, strategy_id=spec.id)
             for spec in self.config.strategies
         ]
+
+        # Ensamblador cross-sectional: mira el universo entero (con su propio anti
+        # look-ahead por reloj) y se inyecta en las estrategias que lo aceptan. Es la
+        # costura que el contrato de un-solo-simbolo no provee; las estrategias sin
+        # soporte (o con filtros de regimen desactivados) lo ignoran.
+        regime_provider = MarketRegimeProvider(source.raw_bars, clock)
+        for strategy in strategies:
+            attach = getattr(strategy, "attach_regime_provider", None)
+            if callable(attach):
+                attach(regime_provider)
         paper_engine = PaperExecutionEngine(self.config.execution)
         router = ExecutionRouter.paper(
             spot_engine=paper_engine,

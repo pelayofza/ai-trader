@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from ai_trader.strategies.mean_reversion import MeanReversionConfig, MeanReversionStrategy
 from ai_trader.strategies.momentum_crypto import CryptoMomentumConfig, CryptoMomentumStrategy
 from ai_trader.strategies.polymarket_threshold import (
     PolymarketThresholdConfig,
@@ -19,12 +20,17 @@ def _build_crypto_momentum(params: dict[str, Any]):
     return CryptoMomentumStrategy(CryptoMomentumConfig(**params))
 
 
+def _build_mean_reversion(params: dict[str, Any]):
+    return MeanReversionStrategy(MeanReversionConfig(**params))
+
+
 def _build_polymarket_threshold(params: dict[str, Any]):
     return PolymarketThresholdStrategy(PolymarketThresholdConfig(**params))
 
 
 STRATEGY_REGISTRY: dict[str, StrategyFactory] = {
     "crypto_momentum": _build_crypto_momentum,
+    "mean_reversion": _build_mean_reversion,
     "polymarket_threshold": _build_polymarket_threshold,
 }
 
