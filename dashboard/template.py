@@ -63,6 +63,8 @@ h3{font-size:15px;margin:0 0 8px}
 .chip.medio{background:color-mix(in srgb,var(--warn) 26%,transparent);color:var(--serious)}
 .chip.bajo{background:color-mix(in srgb,var(--muted) 22%,transparent);color:var(--ink2)}
 .chip.pendiente{background:color-mix(in srgb,var(--warn) 26%,transparent);color:var(--serious)}
+.chip.hecho{background:color-mix(in srgb,var(--good) 20%,transparent);color:var(--good)}
+.chip.pend{background:color-mix(in srgb,var(--crit) 18%,transparent);color:var(--crit)}
 .chip.placeholder{background:color-mix(in srgb,var(--muted) 22%,transparent);color:var(--ink2)}
 table{border-collapse:collapse;width:100%;font-size:13px}
 th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border)}
@@ -203,7 +205,7 @@ function dotStrip(host, groups, opts={}){
       const sorted=[...g.values].sort((a,b)=>a-b);
       const med=sorted[Math.floor(sorted.length/2)];
       g.values.forEach(v=>{const c=el('circle',{cx:X(v),cy,r:4,fill:g.color,opacity:.75,stroke:cssv('--surface'),'stroke-width':1});
-        c.addEventListener('mousemove',ev=>{tt.style.display='block';tt.style.left=(ev.clientX+12)+'px';tt.style.top=(ev.clientY-10)+'px';tt.innerHTML=`${g.label}<br>Calmar OOS: <b>${fmt(v,2)}</b>`;});
+        c.addEventListener('mousemove',ev=>{tt.style.display='block';tt.style.left=(ev.clientX+12)+'px';tt.style.top=(ev.clientY-10)+'px';tt.innerHTML=`${g.label}<br>Headline OOS: <b>${fmt(v,2)}</b>`;});
         c.addEventListener('mouseleave',()=>tt.style.display='none');svg.appendChild(c);});
       svg.appendChild(el('line',{x1:X(med),y1:cy-9,x2:X(med),y2:cy+9,stroke:cssv('--ink'),'stroke-width':2}));
     });
@@ -228,7 +230,7 @@ function renderOverview(){
   const roadmapStatus=[
     ['B','Generador (colas, clustering, serial)','hecho'],
     ['Wiring','ai_v2 como sustrato por defecto del scoring','hecho'],
-    ['A','Métrica y ranking honestos','pendiente'],
+    ['A','Métrica y ranking honestos (headline, CVaR, baselines, DSR/PBO)','hecho'],
     ['C','Costes que muerden','pendiente'],
     ['D','Validación (CPCV/walk-forward)','pendiente'],
     ['E','Limpieza de consistencia','pendiente'],
@@ -341,28 +343,64 @@ function renderStrategies(){
 }
 
 function renderRanking(){
-  const host=$('#ranking'),R=D.ranking,sc=R.scope||{};
+  const host=$('#ranking'),R=D.ranking,sc=R.scope||{},W=sc.weights||{},G=R.gate||{},OV=R.overfit||{};
+  const bl=R.baselines||[];
+  const statCols=`<th class="num">CVaR@25%</th><th class="num">media</th><th class="num">P25</th><th class="num">std</th><th class="num">peor</th><th class="num">mejor</th><th class="num">n</th>`;
+  const statCells=r=>`<td class="num"><b>${fmt(r.cvar25)}</b></td><td class="num">${fmt(r.mean)}</td><td class="num">${fmt(r.p25)}</td>
+      <td class="num">${fmt(r.std)}</td><td class="num">${fmt(r.worst)}</td><td class="num">${fmt(r.best)}</td><td class="num">${r.n}</td>`;
+  const pbo=OV.pbo||{},dsr=OV.dsr||{};
   host.innerHTML=`
     <h1>Ranking de estrategias</h1>
-    <p class="lead">La unidad de evaluación es la DISTRIBUCIÓN sobre muestras (no un path). Se rankea por <b>CVaR@25%</b> del Calmar out-of-sample (media del peor cuartil: robusto y consciente de la cola).</p>
+    <p class="lead">La unidad de evaluación es la DISTRIBUCIÓN sobre muestras (no un path). La puntuación por muestra es el
+      <b>headline out-of-sample</b> = <span class="mono">Sharpe − ${W.lambda_turnover ?? 'λ'}·turnover − ${W.kappa_maxdd ?? 'κ'}·maxDD</span>,
+      y el ranking es el <b>CVaR@25%</b> de esa distribución (media del peor cuartil: se compite por la cola mala, no por el centro).</p>
     <div class="note"><b>Muestra reducida.</b> ${sc.n_scenarios} escenarios × ${sc.n_paths} paths sobre <b>${esc(sc.library)}</b>,
       universo de ${sc.universe?sc.universe.length:'?'} activos, ventana ${sc.window_days} días. Para ampliar el scope,
-      edita las constantes <span class="mono">RANK_*</span> en <span class="mono">dashboard/build_dashboard.py</span> y regenera.
-      <br>Nota: el headline actual es Calmar OOS; sustituirlo por Sharpe−turnover−κ·maxDD es la Línea A (pendiente).</div>
+      edita las constantes <span class="mono">RANK_*</span> en <span class="mono">dashboard/build_dashboard.py</span> y regenera.</div>
     ${(R.rows&&R.rows.length)?`
-    <div class="card"><div class="tblwrap"><table><thead><tr><th>#</th><th>Estrategia</th><th class="num">CVaR@25%</th><th class="num">media</th><th class="num">P25</th><th class="num">std</th><th class="num">peor</th><th class="num">mejor</th><th class="num">n</th></tr></thead><tbody>
+    <h2>Estrategias</h2>
+    <p class="lead">La columna <b>gate</b> es el veredicto: una estrategia solo <i>aprueba</i> si su CVaR@25% supera al del
+      <b>mejor baseline pasivo</b> sobre las mismas muestras. <b>margen</b> es cuánto lo supera; <b>gana</b>, en qué porcentaje
+      de muestras bate al mejor rival de ese mundo concreto.</p>
+    <div class="card"><div class="tblwrap"><table><thead><tr><th>#</th><th>Estrategia</th><th>gate</th><th class="num">margen</th><th class="num">gana</th>${statCols}</tr></thead><tbody>
     ${R.rows.map((r,i)=>`<tr><td class="num">${i+1}</td><td><b>${esc(r.label)}</b> <span class="pill">${esc(r.type)}</span></td>
-      <td class="num"><b>${fmt(r.cvar25)}</b></td><td class="num">${fmt(r.mean)}</td><td class="num">${fmt(r.p25)}</td>
-      <td class="num">${fmt(r.std)}</td><td class="num">${fmt(r.worst)}</td><td class="num">${fmt(r.best)}</td><td class="num">${r.n}</td></tr>`).join('')}
+      <td><span class="chip ${r.approved?'hecho':'pend'}">${r.approved?'aprueba':'no aprueba'}</span></td>
+      <td class="num">${fmt(r.margin)}</td><td class="num">${fmt(r.win_rate_pct,0)}%</td>${statCells(r)}</tr>`).join('')}
     </tbody></table></div></div>
+    ${bl.length?`
+    <h2>Baselines: lo que consigue no hacer nada</h2>
+    <p class="lead">Mismas muestras, misma ventana out-of-sample y las mismas comisiones y slippage que paga la estrategia.
+      Comprar y mantener no es gratis, y por eso es un rival honesto.</p>
+    <div class="card"><div class="tblwrap"><table><thead><tr><th>Baseline</th><th class="num">activos</th>${statCols}</tr></thead><tbody>
+    ${bl.map(b=>`<tr><td><b>${esc(b.label)}</b> ${b.name===G.best_baseline?'<span class="pill">mejor</span>':''}</td>
+      <td class="num">${b.symbols}</td>${statCells(b)}</tr>`).join('')}
+    </tbody></table></div></div>
+    ${(G.missing&&G.missing.length)?`<div class="note"><b>Baselines no disponibles en este scope:</b>
+      <span class="mono">${G.missing.map(esc).join(', ')}</span>. No se sustituyen por nada: si un rival no se puede construir, se dice.</div>`:''}`:''}
+    ${pbo.computable||dsr.computable?`
+    <h2>Descuento por múltiples pruebas</h2>
+    <p class="lead">Probar muchas configuraciones garantiza encontrar una que brilla aunque no haya nada que encontrar.
+      Estas dos cifras ponen número a eso sobre la distribución de scores de este mismo ranking.</p>
+    <div class="grid cards">
+      <div class="card"><h3>PBO <span class="pill">${fmt((pbo.pbo??0)*100,0)}%</span></h3>
+        <p class="tag">Probability of Backtest Overfitting por CSCV: en qué fracción de las ${pbo.n_splits||0} particiones
+          train/test la ganadora in-sample cae por debajo de la mediana fuera de muestra. 50% es tirar una moneda;
+          cerca de 0% significa que elegir por backtest acierta. ${pbo.n_trials||0} configuraciones, ${pbo.n_blocks||0} bloques.</p></div>
+      <div class="card"><h3>DSR <span class="pill">${fmt((dsr.dsr??0)*100,0)}%</span></h3>
+        <p class="tag">Deflated Sharpe Ratio de <b>${esc(OV.winner||'-')}</b>: probabilidad de que su Sharpe verdadero sea &gt; 0
+          una vez descontado el máximo esperado por azar con ${dsr.n_trials||0} intentos
+          (umbral deflactado: ${fmt(dsr.expected_max_sharpe)}; Sharpe observado: ${fmt(dsr.observed_sharpe)}).</p></div>
+    </div>`:''}
     <h2>Distribución detrás del ranking</h2>
-    <p class="lead">Cada punto es el Calmar OOS de una muestra; la barra vertical es la mediana. La cola izquierda es lo que penaliza el CVaR.</p>
+    <p class="lead">Cada punto es el headline OOS de una muestra; la barra vertical es la mediana. La cola izquierda es lo que
+      mide el CVaR — y los baselines aparecen en la misma escala para que la comparación se vea, no se afirme.</p>
     <div class="card"><div id="distchart"></div></div>`
     :`<div class="card"><p class="tag">Ranking no disponible (¿falta ai_v2 en disco? corre <span class="mono">build_dashboard.py</span>).</p></div>`}`;
   if(R.rows&&R.rows.length){
     const pal=[cssv('--s1'),cssv('--s2'),cssv('--s4'),cssv('--s7'),cssv('--s6'),cssv('--s5')];
     const groups=R.rows.map((r,i)=>({label:r.label,values:(R.distributions[r.label]||[]),color:pal[i%pal.length]}));
-    dotStrip($('#distchart'),groups);
+    bl.forEach(b=>groups.push({label:b.label,values:(R.distributions[b.name]||[]),color:cssv('--muted')}));
+    dotStrip($('#distchart'),groups.filter(g=>g.values.length));
   }
 }
 

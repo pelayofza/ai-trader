@@ -416,16 +416,50 @@ que dependen de él están marcadas como tales y deben interpretarse con cuidado
 %%V2SAMPLES%% muestras (escenarios × caminos). Puntuar sobre un solo camino es medir ruido; se ha
 verificado que un único path no es informativo.</p>
 
-<h3>5.2 · El estadístico de recompensa: CVaR al 25%</h3>
-<p>Los resultados fuera de muestra de cada muestra se agregan con el <b>CVaR@25%</b> — la media del peor
-cuartil (<i>Expected Shortfall</i>).</p>
-<div class="why"><b>Por qué CVaR y no la media.</b> El CVaR premia la <b>robustez</b> y castiga
-explícitamente la <b>cola mala</b>: optimizar la media del peor 25% empuja hacia políticas que no se
-hunden en los escenarios adversos. Es más estable que un único cuantil (P25) y más honesto que la media,
-que esconde la cola. Se reportan además media, desviación y P25 para no ocultar la forma de la
-distribución.</div>
+<h3>5.2 · La métrica de cabecera: Sharpe penalizado</h3>
+<p>La puntuación de una muestra es su <b>headline score fuera de muestra</b>:</p>
+<p style="text-align:center"><span class="mono"><b>Sharpe<sub>OOS</sub> − λ·turnover − κ·maxDD</b></span>
+&nbsp;&nbsp;(λ = 0,5 sobre la rotación diaria; κ = 1,0 sobre el drawdown en fracción)</p>
+<p>El <b>turnover</b> es una métrica nueva del motor: el <i>notional</i> rotado por día en unidades del
+capital inicial, contando las dos patas de cada operación. Un turnover de 0,20 significa "cada día rota
+el 20% de la cartera", así que mide <i>churn</i> de verdad — tamaño por frecuencia — y no solo el número
+de operaciones.</p>
+<div class="why"><b>Por qué no el Calmar (la métrica que esto sustituye).</b> Durante una fase la
+cabecera fue el Calmar out-of-sample (retorno anualizado dividido por el máximo drawdown). Era una mala
+elección por tres razones, y se documentan porque explican el diseño del sustituto:
+<ul>
+<li><b>El máximo drawdown es un extremo, no un momento.</b> Es el estadístico más ruidoso de una curva de
+equity: depende de un único par de puntos de un único camino. Ponerlo en el <b>denominador</b> multiplica
+la varianza del estimador.</li>
+<li><b>Premiaba la inactividad.</b> Una estrategia que opera dos veces en dos años tiene un drawdown
+minúsculo y un Calmar altísimo, imbatible por cualquier estrategia real. Un optimizador convergería a "no
+operar casi nunca" — un óptimo degenerado y perfectamente alcanzable.</li>
+<li><b>Degeneraba sin drawdown.</b> Una estrategia sin caída alguna recibía, por convención, la peor
+puntuación posible: cero.</li>
+</ul>
+El headline actual cierra las tres puertas. El drawdown entra como <b>penalización suave y aditiva</b>
+(ni denominador ni descarte binario), el Sharpe no se puede inflar dejando de operar (una curva plana
+puntúa 0, no infinito) y la rotación tiene un precio explícito, de modo que el óptimo degenerado
+desaparece <i>por construcción</i>, no por vigilancia.</div>
+<div class="note"><b>Limitación declarada.</b> λ = 0,5 y κ = 1,0 son una calibración <b>razonada por
+orden de magnitud</b>, no medida: con un turnover diario típico de 0,1–0,3 la rotación cuesta 0,05–0,15
+puntos de Sharpe, y un drawdown del 30% cuesta 0,30. Las comisiones ya muerden dentro de la curva de
+equity, así que la penalización por rotación es <i>además</i> un regularizador contra sobreajustar el
+modelo de costes. Medir los pesos con evidencia es una evolución pendiente.</div>
 
-<h3>5.3 · Hold-out de escenarios enteros</h3>
+<h3>5.3 · El estadístico de recompensa: CVaR al 25%</h3>
+<p>Los headline scores de todas las muestras se agregan con el <b>CVaR@25%</b> — la media del peor
+cuartil (<i>Expected Shortfall</i>). Ese número <b>es</b> la recompensa que optimiza el buscador y el
+criterio con el que se ordena el ranking.</p>
+<div class="why"><b>Por qué CVaR y no la media, ni «media − λ·desviación».</b> El CVaR premia la
+<b>robustez</b> y castiga explícitamente la <b>cola mala</b>: optimizar la media del peor 25% empuja
+hacia políticas que no se hunden en los escenarios adversos. Frente a «media − λ·desviación», que fue el
+criterio anterior, tiene dos ventajas concretas: no castiga la varianza <b>al alza</b> (una política que
+a veces sorprende bien no compra con eso su cola mala) y no depende de un λ arbitrario. Es además más
+estable que un único cuantil (P25). Se reportan igualmente media, desviación y P25 para no ocultar la
+forma de la distribución.</div>
+
+<h3>5.4 · Hold-out de escenarios enteros</h3>
 <p>Los escenarios se reparten en entrenamiento y validación de forma determinista, reservando
 <b>arquetipos macro completos</b> como hold-out (aproximadamente 22 train / 8 validación).</p>
 <div class="why"><b>Por qué escenarios enteros y no caminos sueltos.</b> Si un camino de validación
@@ -433,7 +467,7 @@ perteneciera a un escenario que también está en entrenamiento, sería <b>fuga 
 ya habría visto esa "física" y el hueco de sobreajuste quedaría enmascarado. Partir por escenario lo
 impide.</div>
 
-<h3>5.4 · El optimizador: Cross-Entropy Method</h3>
+<h3>5.5 · El optimizador: Cross-Entropy Method</h3>
 <p>La mejora de las primitivas se plantea, en esta fase, como <b>optimización de caja negra</b> de sus
 parámetros mediante el método de entropía cruzada (CEM): se muestrean parámetros de una gaussiana, se
 conserva el cuartil élite y se reajusta la gaussiana hacia él, iterando. Es determinista con semilla.</p>
@@ -446,26 +480,45 @@ gradiente por-paso si se decide extender el contrato de la estrategia.</div>
 <h4>Reversión a la media</h4>
 %%SPACE_MR%%
 
-<h3>5.5 · La métrica de cabecera: una autocrítica deliberada</h3>
-<p>Hoy la puntuación de cabecera por muestra es el <b>Calmar out-of-sample</b> (retorno anualizado
-dividido por el máximo drawdown). Se documenta aquí, de forma explícita, por qué es una <b>mala
-elección</b> y cuál es el plan de sustitución — porque un auditor debe ver que la herramienta conoce su
-punto más débil.</p>
-<ul>
-<li><b>El máximo drawdown es un extremo, no un momento.</b> Es el estadístico más ruidoso de una curva de
-equity: depende de un único par de puntos de un único camino. Ponerlo en el denominador multiplica la
-varianza del estimador.</li>
-<li><b>Premia la inactividad.</b> Una estrategia que opera dos veces en dos años tiene un drawdown
-minúsculo y un Calmar altísimo, imbatible por cualquier estrategia real. Un optimizador convergería a
-"no operar casi nunca" — un óptimo degenerado y alcanzable.</li>
-<li><b>Degenera sin drawdown.</b> Una estrategia sin caída alguna recibe, por convención, la peor
-puntuación posible.</li>
-</ul>
-<div class="why"><b>Sustituto planificado (línea A).</b> Sharpe fuera de muestra − penalización por
-rotación (turnover) − κ·drawdown (el drawdown como <b>penalización suave</b>, no como denominador ni como
-descarte binario), con <b>baselines</b> obligatorios como filtro (comprar y mantener BTC, cartera
-equiponderada, SPY) y un Sharpe deflactado / probabilidad de sobreajuste (DSR/PBO) para descontar el
-efecto de probar muchas configuraciones.</div>
+<h3>5.6 · Baselines: el listón que hay que superar para «aprobar»</h3>
+<p>Una estrategia no funciona porque su puntuación sea positiva: funciona si bate a lo que consigue
+cualquiera <b>sin hacer nada</b>. Sobre cada muestra se construyen tres alternativas pasivas:</p>
+<table><thead><tr><th>Baseline</th><th>Qué hace</th></tr></thead><tbody>
+<tr><td>Comprar y mantener BTC</td><td>Compra BTC el primer día de la ventana y liquida el último.</td></tr>
+<tr><td>Cartera equiponderada</td><td>Reparte el capital a partes iguales entre todo el universo, sin rebalancear.</td></tr>
+<tr><td>Comprar y mantener SPY</td><td>Lo mismo con el índice de renta variable.</td></tr>
+</tbody></table>
+<p>Los tres se puntúan con el <b>mismo headline score</b>, sobre la <b>misma ventana out-of-sample</b>
+(la frontera train/test sale de una única función compartida con el motor de backtest) y pagando las
+<b>mismas comisiones y slippage</b> en ambas patas. El veredicto <b>aprueba / no aprueba</b> compara
+recompensas agregadas: el CVaR@25% de la estrategia contra el del <b>mejor</b> baseline, sobre las
+muestras de validación — batir baselines en escenarios que el optimizador ya vio no probaría nada.</p>
+<div class="why"><b>Por qué en la cola y no en la media.</b> El gate se juega con el mismo estadístico
+con el que se optimiza. Una estrategia con mejor media pero peor cuartil malo <b>no</b> aprueba: si la
+recompensa es la cola, el listón también tiene que serlo. El porcentaje de muestras en las que gana se
+reporta como información, pero no decide.</div>
+<div class="note"><b>Sin rival no hay aprobado.</b> Si un baseline no se puede construir (por ejemplo,
+SPY en un universo solo cripto), no se sustituye ni se rellena: se declara como ausente. Y si no hay
+ningún baseline disponible, el veredicto es <b>no aprueba</b> — un filtro que no se puede evaluar no es
+un filtro superado.</div>
+
+<h3>5.7 · Descuento del sobreajuste por múltiples pruebas</h3>
+<p>Buscar sobre un espacio de parámetros garantiza encontrar algo que brilla <i>aunque no haya nada que
+encontrar</i>: con suficientes intentos sobre puro ruido, el mejor Sharpe esperado crece solo. La
+herramienta pone número a ese efecto por dos vías independientes.</p>
+<p><b>PBO (<i>Probability of Backtest Overfitting</i>, por CSCV).</b> Con la matriz muestras ×
+configuraciones que el propio buscador genera, las muestras se parten en bloques; en cada combinación de
+mitades se elige la configuración ganadora <i>dentro</i> de muestra y se mira su rango <i>fuera</i> de
+muestra. El PBO es la fracción de particiones en las que la ganadora cae por debajo de la mediana. Un
+50% significa que elegir por backtest equivale a tirar una moneda.</p>
+<p><b>DSR (<i>Deflated Sharpe Ratio</i>).</b> Dado el Sharpe del ganador y la dispersión de los Sharpe de
+<b>todos</b> los intentos, se calcula el máximo esperado bajo la hipótesis nula (no hay señal) y se
+devuelve la probabilidad de que el Sharpe verdadero sea mayor que cero una vez descontado ese umbral,
+corrigiendo además por asimetría y colas gruesas de los retornos.</p>
+<div class="why"><b>Por qué las dos.</b> Responden a preguntas distintas. El DSR pregunta "¿es creíble
+<i>este</i> Sharpe habiendo probado N configuraciones?"; el PBO pregunta "¿el procedimiento de
+<i>elegir</i> por backtest acierta?". La segunda es la que importa cuando lo que se publica no es un
+número sino un método.</div>
 
 <h2 id="s6">6 · Tests y garantías</h2>
 <p>La base cuenta con <b>%%NTESTS%% tests</b> automatizados y <i>linting</i> (ruff) sobre todo el
@@ -487,6 +540,15 @@ reproduce exactamente el mundo previo.</li>
 backtest, y el ciclo completo (estrategia → riesgo → ejecución) funciona sobre datos sintéticos.</li>
 <li><b>Contabilidad honesta:</b> el PnL es neto de comisiones; las salidas (stop/take-profit/tiempo)
 pasan por el motor de ejecución para pagar costes reales.</li>
+<li><b>La métrica de cabecera no tiene óptimo degenerado:</b> hay tests que fijan que una curva plana
+puntúa 0 (no infinito), que el drawdown penaliza de forma aditiva y no en el denominador, y que rotar
+más con la misma curva de equity puntúa peor.</li>
+<li><b>El ranking compite por la cola:</b> una distribución con mejor media pero peor cuartil malo pierde,
+y la varianza al alza no se castiga.</li>
+<li><b>El filtro de baselines no se puede esquivar:</b> sin ningún baseline disponible el veredicto es
+"no aprueba", y los baselines pagan las mismas comisiones que la estrategia.</li>
+<li><b>El descuento por múltiples pruebas discrimina:</b> un caso de habilidad genuina da PBO ≈ 0 y uno
+de sobreajuste puro da PBO ≈ 1; probar más configuraciones sube el listón del DSR.</li>
 </ul>
 
 <h2 id="s7">7 · Limitaciones conocidas y hoja de ruta</h2>
@@ -494,7 +556,8 @@ pasan por el motor de ejecución para pagar costes reales.</li>
 <table><thead><tr><th>Área</th><th>Estado</th><th>Por qué importa</th></tr></thead><tbody>
 <tr><td>Realismo del generador (colas, agrupamiento, estructura serial, saltos)</td><td class="ok">Hecho</td><td>El sustrato dejó de mentir en la dirección optimista.</td></tr>
 <tr><td>Cableado del sustrato realista en el scoring (<span class="mono">ai_v2</span> por defecto)</td><td class="ok">Hecho</td><td>Lo que se optimiza se mide contra el mundo realista, no contra ruido iid.</td></tr>
-<tr><td>Métrica y ranking honestos (sustituir Calmar; baselines; DSR/PBO)</td><td class="pend">Pendiente</td><td>Un optimizador explotaría los defectos de la métrica actual.</td></tr>
+<tr><td>Métrica y ranking honestos (headline penalizado, CVaR@25%, baselines, DSR/PBO)</td><td class="ok">Hecho</td><td>El óptimo degenerado del Calmar desapareció, y ganar exige batir a no hacer nada.</td></tr>
+<tr><td>Calibración con evidencia de los pesos λ (turnover) y κ (drawdown)</td><td class="pend">Pendiente</td><td>Hoy son un orden de magnitud razonado, no una medición.</td></tr>
 <tr><td>Costes que muerden (slippage por símbolo/vol/tamaño; fills parciales)</td><td class="pend">Pendiente</td><td>Los costes planos subestiman la fricción real, sobre todo en activos ilíquidos.</td></tr>
 <tr><td>Validación (CPCV / walk-forward multiventana)</td><td class="pend">Pendiente</td><td>El split único sobre-estima la robustez.</td></tr>
 <tr><td>Validación sintético-vs-real (correlación de rangos con CCXT)</td><td class="pend">Pendiente</td><td>Cierra la pregunta "¿se parece este mundo al real?".</td></tr>
@@ -514,8 +577,9 @@ ensemble Monte Carlo, guardando el manifiesto autocontenido y los <i>spec.json</
 <li><b>Derivar la librería realista</b> (<span class="mono">ai_v2</span>): el retrofit determinista
 enriquece los escenarios con microestructura y regenera, conservando la librería anterior.</li>
 <li><b>Evaluar y optimizar:</b> el backtest corre sobre las muestras de la librería realista
-(<span class="mono">ai_v2</span>, el valor por defecto); el CEM optimiza los parámetros sobre el conjunto
-de entrenamiento y reporta también la validación.</li>
+(<span class="mono">ai_v2</span>, el valor por defecto); el CEM optimiza el CVaR@25% del headline sobre el
+conjunto de entrenamiento y reporta la validación, el veredicto frente a los baselines y el descuento
+por múltiples pruebas.</li>
 <li><b>Artefactos vivos:</b> el dashboard y esta documentación se regeneran desde los datos del repo
 (<span class="mono">python -m dashboard.build_dashboard</span> y
 <span class="mono">python -m docs.build_docs</span>).</li>
@@ -534,6 +598,14 @@ parte del retorno no explicada por los factores.</li>
 <li><b>Calmar / Sharpe / Sortino:</b> ratios de rentabilidad ajustada por, respectivamente, máximo
 drawdown, volatilidad total y volatilidad a la baja.</li>
 <li><b>CVaR@25% (Expected Shortfall):</b> media del peor 25% de los resultados; mide la cola.</li>
+<li><b>Turnover (rotación):</b> <i>notional</i> negociado por día en unidades del capital inicial,
+contando entrada y salida; 0,20 significa que cada día rota el 20% de la cartera.</li>
+<li><b>Baseline:</b> alternativa pasiva de referencia (comprar y mantener) que una estrategia debe batir
+para justificar su existencia.</li>
+<li><b>DSR (Deflated Sharpe Ratio):</b> Sharpe descontado por el número de configuraciones probadas;
+responde a "¿es creíble este resultado habiendo buscado tanto?".</li>
+<li><b>PBO (Probability of Backtest Overfitting):</b> con qué frecuencia la configuración ganadora dentro
+de muestra queda por debajo de la mediana fuera de muestra.</li>
 <li><b>Hold-out:</b> datos reservados que el modelo no ve durante el ajuste, para medir sobreajuste.</li>
 <li><b>CEM:</b> método de entropía cruzada — optimización de caja negra por muestreo y élite.</li>
 <li><b>Stylized facts:</b> propiedades estadísticas robustas de los mercados reales (colas gruesas,

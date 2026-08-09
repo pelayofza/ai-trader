@@ -66,7 +66,11 @@ def cmd_backtest(args: argparse.Namespace) -> int:
     _print_window("TRAIN (in-sample)", result.train)
     _print_window("TEST (out-of-sample)", result.test)
     print("=" * 48)
-    print(f"HEADLINE SCORE (Calmar, out-of-sample): {result.headline_score:.3f}")
+    w = result.headline_weights
+    print(
+        f"HEADLINE SCORE (out-of-sample): {result.headline_score:+.4f}"
+        f"   [Sharpe - {w.lambda_turnover}*turnover - {w.kappa_maxdd}*maxDD]"
+    )
     return 0
 
 
@@ -165,6 +169,7 @@ def _print_window(title, window) -> None:
     print(f"  Sharpe/Sortino:{m.sharpe:.2f} / {m.sortino:.2f}   Calmar: {m.calmar:.3f}")
     pf = f"{m.profit_factor:.2f}" if m.profit_factor is not None else "n/a"
     print(f"  Trades: {m.num_trades}   Win rate: {m.win_rate_pct:.1f}%   Profit factor: {pf}")
+    print(f"  Turnover: {m.turnover:.4f} (notional rotado/dia, en equity inicial)")
     print(f"  Fees paid: {m.total_fees_usd:,.2f} USD")
     print()
 

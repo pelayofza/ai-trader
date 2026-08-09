@@ -8,7 +8,14 @@ import pandas as pd
 
 from ai_trader.app.runner import TradingRunner
 from ai_trader.app.state_store import InMemoryStateStore
-from ai_trader.backtest.metrics import EquityPoint, PerformanceMetrics, compute_metrics
+from ai_trader.backtest.metrics import (
+    DEFAULT_HEADLINE_WEIGHTS,
+    EquityPoint,
+    HeadlineWeights,
+    PerformanceMetrics,
+    compute_metrics,
+    headline_score,
+)
 from ai_trader.config import AppConfig
 from ai_trader.data.backtest_source import BarProvider, HistoricalDataSource
 from ai_trader.execution.market_model import IntrabarMarketModel
@@ -51,17 +58,20 @@ class BacktestResult:
     train: WindowResult
     test: WindowResult
     starting_equity: float
+    headline_weights: HeadlineWeights = DEFAULT_HEADLINE_WEIGHTS
 
     @property
     def headline_score(self) -> float:
-        """Metrica con la que se puntua la estrategia: Calmar OUT-OF-SAMPLE (test).
+        """Metrica con la que se puntua la estrategia, OUT-OF-SAMPLE (ventana test):
+        `Sharpe - lambda*turnover - kappa*maxDD` (ver metrics.headline_score).
         Es lo que el RL debe optimizar; el train solo sirve de referencia de ajuste."""
-        return self.test.metrics.calmar
+        return headline_score(self.test.metrics, self.headline_weights)
 
     def as_dict(self) -> dict:
         return {
             "starting_equity": self.starting_equity,
-            "headline_score_calmar_test": round(self.headline_score, 3),
+            "headline_score_test": round(self.headline_score, 4),
+            "headline_weights": self.headline_weights.as_dict(),
             "train": self.train.as_dict(),
             "test": self.test.as_dict(),
         }
@@ -89,6 +99,7 @@ class BacktestEngine:
         starting_equity: float = DEFAULT_STARTING_EQUITY,
         *,
         bars: dict | None = None,
+        headline_weights: HeadlineWeights = DEFAULT_HEADLINE_WEIGHTS,
     ) -> None:
         if data_provider is None and bars is None:
             raise ValueError("BacktestEngine requires either a data_provider or preloaded bars")
@@ -96,6 +107,7 @@ class BacktestEngine:
         self.config = config
         self.data_provider = data_provider
         self.starting_equity = starting_equity
+        self.headline_weights = headline_weights
         self._preloaded_bars = bars
 
     @classmethod
@@ -104,10 +116,17 @@ class BacktestEngine:
         config: AppConfig,
         bars: dict,
         starting_equity: float = DEFAULT_STARTING_EQUITY,
+        *,
+        headline_weights: HeadlineWeights = DEFAULT_HEADLINE_WEIGHTS,
     ) -> BacktestEngine:
         """Construye un motor sobre series ya generadas (datos simulados o cualquier
         OHLCV en memoria), sin pasar por un proveedor."""
-        return cls(config, bars=bars, starting_equity=starting_equity)
+        return cls(
+            config,
+            bars=bars,
+            starting_equity=starting_equity,
+            headline_weights=headline_weights,
+        )
 
     def run(
         self,
@@ -120,7 +139,7 @@ class BacktestEngine:
         if end <= start:
             raise ValueError("end must be after start")
 
-        cutoff = self._resolve_cutoff(start, end, split_ratio, split_date)
+        cutoff = resolve_split_cutoff(start, end, split_ratio=split_ratio, split_date=split_date)
         logger.info(
             "Backtest | train=[%s, %s) | test=[%s, %s]",
             start.date(), cutoff.date(), cutoff.date(), end.date(),
@@ -133,7 +152,12 @@ class BacktestEngine:
         train = self._run_window("train", bars, start, cutoff)
         test = self._run_window("test", bars, cutoff, end)
 
-        return BacktestResult(train=train, test=test, starting_equity=self.starting_equity)
+        return BacktestResult(
+            train=train,
+            test=test,
+            starting_equity=self.starting_equity,
+            headline_weights=self.headline_weights,
+        )
 
     def _load_bars(self, start: datetime, end: datetime) -> dict:
         # Datos simulados precargados: se usan tal cual. El generador es responsable de
@@ -151,24 +175,6 @@ class BacktestEngine:
             start - warmup,
             end,
         )
-
-    def _resolve_cutoff(
-        self,
-        start: datetime,
-        end: datetime,
-        split_ratio: float,
-        split_date: datetime | None,
-    ) -> datetime:
-        if split_date is not None:
-            if not start < split_date < end:
-                raise ValueError("split_date must fall strictly between start and end")
-            return split_date
-
-        if not 0.0 < split_ratio < 1.0:
-            raise ValueError("split_ratio must be between 0 and 1")
-
-        span = end - start
-        return start + timedelta(days=int(span.days * split_ratio))
 
     def _run_window(
         self,
@@ -207,9 +213,11 @@ class BacktestEngine:
         metrics = compute_metrics(curve, closed)
 
         logger.info(
-            "Window '%s' done | trades=%s | return=%.2f%% | maxDD=%.2f%% | calmar=%.3f",
+            "Window '%s' done | trades=%s | return=%.2f%% | maxDD=%.2f%% | sharpe=%.3f "
+            "| turnover=%.3f | headline=%.4f",
             label, metrics.num_trades, metrics.total_return_pct,
-            metrics.max_drawdown_pct, metrics.calmar,
+            metrics.max_drawdown_pct, metrics.sharpe, metrics.turnover,
+            headline_score(metrics, self.headline_weights),
         )
 
         return WindowResult(
@@ -254,6 +262,32 @@ class BacktestEngine:
             market_model=IntrabarMarketModel(source, clock),
             starting_equity=self.starting_equity,
         )
+
+
+def resolve_split_cutoff(
+    start: datetime,
+    end: datetime,
+    *,
+    split_ratio: float = DEFAULT_SPLIT_RATIO,
+    split_date: datetime | None = None,
+) -> datetime:
+    """
+    Frontera train/test de una ventana de backtest.
+
+    Es funcion de modulo (no metodo) a proposito: los baselines tienen que puntuarse en
+    EXACTAMENTE la misma ventana out-of-sample que la estrategia, y la unica forma de
+    garantizarlo es que ambos deriven el corte de aqui.
+    """
+    if split_date is not None:
+        if not start < split_date < end:
+            raise ValueError("split_date must fall strictly between start and end")
+        return split_date
+
+    if not 0.0 < split_ratio < 1.0:
+        raise ValueError("split_ratio must be between 0 and 1")
+
+    span = end - start
+    return start + timedelta(days=int(span.days * split_ratio))
 
 
 def parse_date(value: str) -> datetime:

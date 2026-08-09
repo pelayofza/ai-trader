@@ -5,10 +5,16 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from ai_trader.backtest.metrics import (
+    DEFAULT_HEADLINE_WEIGHTS,
     EquityPoint,
+    HeadlineWeights,
     compute_metrics,
+    headline_score,
+    kurtosis,
     max_drawdown_pct,
     sharpe_ratio,
+    skewness,
+    turnover_ratio,
 )
 
 
@@ -40,8 +46,96 @@ class TestSharpe:
         assert sharpe_ratio([0.0, 0.0, 0.0]) == 0.0
 
 
+def closed(make_position, *, size, entry, exit_price, days=1):
+    p = make_position(size=size, entry_price=entry)
+    p.exit_price = exit_price
+    p.closed_at = p.opened_at + timedelta(days=days)
+    p.realized_pnl = size * (exit_price - entry)
+    return p
+
+
+class TestTurnover:
+    def test_counts_both_legs_of_every_trade_per_day(self, make_position):
+        # 10 dias de ventana, equity inicial 1000. Un round trip de 100 de entrada
+        # y 100 de salida = 200 rotados -> 200 / (1000 * 10) = 0.02 al dia.
+        c = curve([1000.0] * 11)
+        trade = closed(make_position, size=1.0, entry=100.0, exit_price=100.0)
+
+        assert turnover_ratio(c, [trade]) == pytest.approx(0.02)
+
+    def test_is_zero_without_trades(self):
+        assert turnover_ratio(curve([100, 110, 120]), []) == 0.0
+
+    def test_scales_with_size_not_just_trade_count(self, make_position):
+        c = curve([1000.0] * 11)
+        small = closed(make_position, size=1.0, entry=100.0, exit_price=100.0)
+        big = closed(make_position, size=4.0, entry=100.0, exit_price=100.0)
+
+        assert turnover_ratio(c, [big]) == pytest.approx(4 * turnover_ratio(c, [small]))
+
+    def test_appears_in_compute_metrics(self, make_position):
+        c = curve([1000.0] * 11)
+        trade = closed(make_position, size=1.0, entry=100.0, exit_price=100.0)
+
+        assert compute_metrics(c, [trade]).turnover == pytest.approx(0.02)
+
+
+class TestHeadlineScore:
+    def test_is_sharpe_minus_turnover_and_drawdown_penalties(self, make_position):
+        m = compute_metrics(curve([100, 120, 90, 130]), [])
+        w = HeadlineWeights(lambda_turnover=0.5, kappa_maxdd=1.0)
+
+        # maxDD 25% -> 0.25 de penalizacion; sin trades el turnover no resta.
+        assert headline_score(m, w) == pytest.approx(m.sharpe - 0.25)
+
+    def test_drawdown_is_a_soft_penalty_not_a_denominator(self):
+        """El Calmar explota cuando el maxDD tiende a 0; el headline no: es aditivo."""
+        flat = compute_metrics(curve([100, 101, 102, 103]), [])
+
+        assert flat.max_drawdown_pct == pytest.approx(0.0)
+        assert flat.calmar == 0.0  # el Calmar degenera justo cuando mejor va todo
+        assert headline_score(flat) == pytest.approx(flat.sharpe)  # el headline no
+
+    def test_does_not_reward_inactivity(self):
+        """El optimo degenerado del Calmar (casi no operar -> maxDD minusculo ->
+        Calmar altisimo) desaparece: una curva plana puntua 0, no infinito."""
+        idle = compute_metrics(curve([100.0] * 30), [])
+        working = compute_metrics(curve([100 + i for i in range(30)]), [])
+
+        assert headline_score(idle) == pytest.approx(0.0)
+        assert headline_score(working) > headline_score(idle)
+
+    def test_churn_costs_score(self, make_position):
+        c = curve([1000.0] * 11)
+        quiet = compute_metrics(c, [])
+        churner = compute_metrics(
+            c, [closed(make_position, size=5.0, entry=100.0, exit_price=100.0) for _ in range(6)]
+        )
+
+        # Misma curva de equity: la unica diferencia es la rotacion, y resta.
+        assert churner.sharpe == pytest.approx(quiet.sharpe)
+        assert headline_score(churner) < headline_score(quiet)
+
+    def test_default_weights_are_the_documented_ones(self):
+        assert DEFAULT_HEADLINE_WEIGHTS.lambda_turnover == 0.5
+        assert DEFAULT_HEADLINE_WEIGHTS.kappa_maxdd == 1.0
+
+
+class TestReturnMoments:
+    def test_symmetric_returns_have_no_skew(self):
+        assert skewness([-0.02, -0.01, 0.0, 0.01, 0.02]) == pytest.approx(0.0, abs=1e-12)
+
+    def test_a_fat_left_tail_is_negatively_skewed(self):
+        assert skewness([0.01, 0.01, 0.01, 0.01, -0.20]) < 0
+
+    def test_kurtosis_is_not_in_excess(self):
+        # Fallback declarado para series demasiado cortas: normal (3.0), no 0.
+        assert kurtosis([0.01]) == pytest.approx(3.0)
+        assert kurtosis([0.01, 0.01, 0.01, 0.01, -0.20]) > 3.0
+
+
 class TestComputeMetrics:
-    def test_headline_calmar_rewards_return_and_penalizes_drawdown(self, make_position):
+    def test_calmar_is_still_reported_even_though_it_is_not_the_headline(self):
         # Curva que sube a 130 con un valle intermedio.
         c = curve([100, 120, 90, 130])
         m = compute_metrics(c, [])

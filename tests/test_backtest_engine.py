@@ -7,7 +7,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from ai_trader.backtest.engine import BacktestEngine
+from ai_trader.backtest.engine import BacktestEngine, resolve_split_cutoff
+from ai_trader.backtest.metrics import HeadlineWeights
 from ai_trader.config import AppConfig, StrategySpec
 from ai_trader.execution.paper import PaperExecutionConfig
 from ai_trader.risk.engine import RiskLimits
@@ -174,13 +175,61 @@ class TestExecution:
         days = [p.day for p in result.test.equity_curve]
         assert days == sorted(days)
 
-    def test_headline_score_is_out_of_sample_calmar(self, engine):
+    def test_headline_score_is_the_penalized_out_of_sample_sharpe(self, engine):
         result = engine.run(
             start=datetime(2024, 6, 1, tzinfo=timezone.utc),
             end=datetime(2025, 1, 1, tzinfo=timezone.utc),
         )
 
-        assert result.headline_score == result.test.metrics.calmar
+        m = result.test.metrics
+        w = result.headline_weights
+        expected = (
+            m.sharpe - w.lambda_turnover * m.turnover - w.kappa_maxdd * m.max_drawdown_pct / 100.0
+        )
+        assert result.headline_score == pytest.approx(expected)
+        # Es OUT-OF-SAMPLE: el train no entra en la cabecera.
+        assert result.headline_score != pytest.approx(result.train.metrics.sharpe)
+
+    def test_headline_weights_are_configurable(self):
+        bars = {"BTC/USDT": trending_df(400)}
+        args = dict(
+            start=datetime(2024, 6, 1, tzinfo=timezone.utc),
+            end=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        )
+
+        neutral = BacktestEngine(
+            make_config(), FakeService(bars), 10_000.0,
+            headline_weights=HeadlineWeights(lambda_turnover=0.0, kappa_maxdd=0.0),
+        ).run(**args)
+        strict = BacktestEngine(
+            make_config(), FakeService(bars), 10_000.0,
+            headline_weights=HeadlineWeights(lambda_turnover=10.0, kappa_maxdd=10.0),
+        ).run(**args)
+
+        # Sin penalizaciones el headline es el Sharpe puro; penalizar solo puede restar.
+        assert neutral.headline_score == pytest.approx(neutral.test.metrics.sharpe)
+        assert strict.headline_score <= neutral.headline_score
+
+
+class TestSplitCutoff:
+    """La frontera train/test es una funcion de modulo compartida: los baselines la
+    reutilizan para puntuarse en la MISMA ventana out-of-sample que la estrategia."""
+
+    def test_engine_windows_respect_the_shared_cutoff(self, engine):
+        start = datetime(2024, 6, 1, tzinfo=timezone.utc)
+        end = datetime(2025, 1, 1, tzinfo=timezone.utc)
+
+        result = engine.run(start=start, end=end, split_ratio=0.7)
+        cutoff = resolve_split_cutoff(start, end, split_ratio=0.7)
+
+        assert result.train.end <= cutoff <= result.test.start
+
+    def test_explicit_split_date_must_fall_inside_the_range(self):
+        start = datetime(2024, 6, 1, tzinfo=timezone.utc)
+        end = datetime(2025, 1, 1, tzinfo=timezone.utc)
+
+        with pytest.raises(ValueError):
+            resolve_split_cutoff(start, end, split_date=datetime(2025, 6, 1, tzinfo=timezone.utc))
 
 
 class TestDeterminism:

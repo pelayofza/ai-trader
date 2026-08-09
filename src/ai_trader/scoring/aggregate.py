@@ -6,19 +6,21 @@ from dataclasses import dataclass
 
 import numpy as np
 
-DEFAULT_LAMBDA = 0.5  # penalizacion de dispersion en la recompensa media - lambda*std
+DEFAULT_CVAR_ALPHA = 0.25  # fraccion de cola (peor cuartil) que define la recompensa
 
 
 @dataclass(slots=True, frozen=True)
 class RewardStats:
     """
-    Agregacion robusta del Calmar out-of-sample sobre una DISTRIBUCION de muestras
-    (900 = 30 escenarios x 30 paths, o el subconjunto evaluado).
+    Agregacion robusta del headline score out-of-sample sobre una DISTRIBUCION de
+    muestras (900 = 30 escenarios x 30 paths, o el subconjunto evaluado).
 
-    La recompensa es `mean - lambda*std`: premia el centro y castiga la dispersion,
-    empujando hacia politicas robustas y no a picos de un solo arquetipo. Se reportan
-    ADEMAS percentil 25 y CVaR@25% para no esconder la cola: la unidad de evaluacion
-    es la distribucion, nunca un path.
+    La recompensa ES el CVaR@25% (media del peor cuartil, Expected Shortfall): se
+    optimiza y se rankea por la COLA MALA, no por el centro. Frente a `media -
+    lambda*std`, el CVaR no premia la varianza al alza (una politica que a veces
+    explota hacia arriba no compra con eso su cola mala) y no depende de un lambda
+    arbitrario. Media, std y p25 se siguen reportando para no esconder la forma de la
+    distribucion: la unidad de evaluacion es la distribucion, nunca un path.
     """
 
     reward: float
@@ -29,7 +31,7 @@ class RewardStats:
     best: float
     worst: float
     n: int
-    lam: float
+    alpha: float
 
     def as_dict(self) -> dict:
         return {
@@ -41,33 +43,41 @@ class RewardStats:
             "best": round(self.best, 4),
             "worst": round(self.worst, 4),
             "n": self.n,
-            "lam": self.lam,
+            "alpha": self.alpha,
         }
 
 
-def aggregate_reward(scores: Sequence[float], *, lam: float = DEFAULT_LAMBDA) -> RewardStats:
-    """Agrega los Calmar por muestra en la recompensa robusta y sus estadisticos de cola."""
+def aggregate_reward(
+    scores: Sequence[float],
+    *,
+    alpha: float = DEFAULT_CVAR_ALPHA,
+) -> RewardStats:
+    """Agrega los headline scores por muestra en la recompensa (CVaR@alpha) y sus
+    estadisticos de forma. `alpha` es la fraccion de cola promediada (0.25 = peor
+    cuartil)."""
+    if not 0.0 < alpha <= 1.0:
+        raise ValueError("alpha must be in (0, 1]")
+
     arr = np.asarray(list(scores), dtype=float)
     if arr.size == 0:
-        return RewardStats(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, lam)
+        return RewardStats(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, alpha)
 
     mean = float(arr.mean())
     std = float(arr.std(ddof=1)) if arr.size > 1 else 0.0
     p25 = float(np.percentile(arr, 25))
 
-    # CVaR@25%: media del peor cuartil (Expected Shortfall). Consciente de la cola mala.
-    k = max(1, math.ceil(0.25 * arr.size))
-    cvar25 = float(np.sort(arr)[:k].mean())
+    # CVaR@alpha: media del peor alpha-cuantil (Expected Shortfall). Es la recompensa.
+    k = max(1, math.ceil(alpha * arr.size))
+    cvar = float(np.sort(arr)[:k].mean())
 
-    reward = mean - lam * std
     return RewardStats(
-        reward=reward,
+        reward=cvar,
         mean=mean,
         std=std,
         p25=p25,
-        cvar25=cvar25,
+        cvar25=cvar,
         best=float(arr.max()),
         worst=float(arr.min()),
         n=int(arr.size),
-        lam=lam,
+        alpha=alpha,
     )

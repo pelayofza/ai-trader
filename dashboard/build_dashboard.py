@@ -21,11 +21,17 @@ from pathlib import Path
 
 import numpy as np
 
+from ai_trader.backtest.metrics import DEFAULT_HEADLINE_WEIGHTS
 from ai_trader.config import StrategySpec, load_config
 from ai_trader.observation.features import OWN_ASSET_FEATURES
 from ai_trader.observation.regime import REGIME_FEATURES
 from ai_trader.scoring.aggregate import aggregate_reward
-from ai_trader.scoring.sample_eval import evaluate_sample
+from ai_trader.scoring.baselines import BASELINE_LABELS, gate
+from ai_trader.scoring.overfit import (
+    deflated_sharpe_ratio,
+    probability_of_backtest_overfitting,
+)
+from ai_trader.scoring.sample_eval import evaluate_baselines, evaluate_sample_detailed
 from ai_trader.shared import bars as bar_schema
 from ai_trader.strategies import build_strategy
 from ai_trader.strategies.mean_reversion import MeanReversionStrategy
@@ -346,7 +352,14 @@ def _safe_signal(strat, sym, window) -> bool:
 
 
 def run_ranking(store: SyntheticStore) -> dict:
-    """Ranking real sobre una muestra reducida de ai_v2. Rankea por CVaR@25% del Calmar OOS."""
+    """
+    Ranking real sobre una muestra reducida de ai_v2.
+
+    Rankea por CVaR@25% del HEADLINE score out-of-sample (Sharpe - lambda*turnover -
+    kappa*maxDD). Ademas de las estrategias corre los BASELINES pasivos sobre las mismas
+    muestras (el gate que hay que batir para 'aprobar') y descuenta el sobreajuste por
+    multiples pruebas con PBO y DSR sobre la distribucion de scores del propio ranking.
+    """
     result: dict = {
         "scope": {
             "library": RANK_LIB,
@@ -354,9 +367,12 @@ def run_ranking(store: SyntheticStore) -> dict:
             "n_scenarios": RANK_N_SCENARIOS,
             "n_paths": RANK_N_PATHS,
             "window_days": RANK_WINDOW_DAYS,
+            "weights": DEFAULT_HEADLINE_WEIGHTS.as_dict(),
         },
         "rows": [],
+        "baselines": [],
         "distributions": {},
+        "overfit": {},
     }
     try:
         base_config = load_config(ROOT / "config" / "synthetic.toml")
@@ -380,40 +396,127 @@ def run_ranking(store: SyntheticStore) -> dict:
     chosen = _spread_pick(scen_ids, RANK_N_SCENARIOS)
     result["scope"]["scenarios"] = chosen
 
-    for label, stype, params in RANK_CONFIGS:
-        spec = StrategySpec(type=stype, id=label, params=params)
-        scores: list[float] = []
-        for sid in chosen:
-            for p in range(RANK_N_PATHS):
+    specs = [(label, stype, StrategySpec(type=stype, id=label, params=params))
+             for label, stype, params in RANK_CONFIGS]
+
+    # Una sola pasada por muestra: el parquet se lee una vez y sobre esas mismas barras
+    # se puntuan todas las configuraciones Y los baselines. Asi la comparacion es
+    # pareada (mismo mundo para todos), que es lo que el gate necesita.
+    scores: dict[str, list[float]] = {label: [] for label, _, _ in specs}
+    sharpes: dict[str, list[float]] = {label: [] for label, _, _ in specs}
+    baseline_scores: dict[str, list[float]] = {}
+    baseline_stats: dict[str, list] = {}
+    oos_obs: list[int] = []
+
+    for sid in chosen:
+        for p in range(RANK_N_PATHS):
+            try:
+                allbars = store.load_bars(RANK_LIB, sid, p)
+                bars = {s: allbars[s] for s in RANK_UNIVERSE if s in allbars}
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("barras no disponibles %s/%s: %s", sid, p, exc)
+                continue
+
+            for label, _, spec in specs:
                 try:
-                    allbars = store.load_bars(RANK_LIB, sid, p)  # una sola lectura del parquet
-                    bars = {s: allbars[s] for s in RANK_UNIVERSE if s in allbars}
-                    val = evaluate_sample(base_config, spec, bars, start, end, split_ratio=0.7)
+                    ev = evaluate_sample_detailed(
+                        base_config, spec, bars, start, end, split_ratio=0.7
+                    )
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("eval fallo %s/%s: %s", label, sid, exc)
                     continue
-                scores.append(val)
-        if not scores:
+                scores[label].append(ev.score)
+                sharpes[label].append(ev.sharpe)
+                oos_obs.append(ev.oos_observations)
+
+            try:
+                for name, baseline in evaluate_baselines(
+                    base_config, bars, start, end, split_ratio=0.7
+                ).items():
+                    baseline_scores.setdefault(name, []).append(baseline.score)
+                    baseline_stats.setdefault(name, []).append(baseline)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("baselines fallaron %s/%s: %s", sid, p, exc)
+
+    n_samples = max((len(v) for v in scores.values()), default=0)
+    usable_baselines = {k: v for k, v in baseline_scores.items() if len(v) == n_samples}
+
+    for name, values in sorted(usable_baselines.items()):
+        stats = aggregate_reward(values)
+        result["baselines"].append(
+            {
+                "name": name,
+                "label": BASELINE_LABELS.get(name, name),
+                "symbols": len(baseline_stats[name][0].symbols),
+                **_stats_row(stats),
+            }
+        )
+        result["distributions"][name] = [round(s, 3) for s in values]
+
+    for label, stype, _ in specs:
+        if not scores[label]:
             continue
-        stats = aggregate_reward(scores, lam=0.5)
+        stats = aggregate_reward(scores[label])
+        verdict = gate(scores[label], usable_baselines)
         result["rows"].append(
             {
                 "label": label,
                 "type": stype,
-                "cvar25": round(stats.cvar25, 3),
-                "mean": round(stats.mean, 3),
-                "p25": round(stats.p25, 3),
-                "std": round(stats.std, 3),
-                "worst": round(stats.worst, 3),
-                "best": round(stats.best, 3),
-                "reward": round(stats.reward, 3),
-                "n": stats.n,
+                "approved": verdict.approved,
+                "margin": round(verdict.margin, 3),
+                "win_rate_pct": round(verdict.win_rate_pct, 1),
+                **_stats_row(stats),
             }
         )
-        result["distributions"][label] = [round(s, 3) for s in scores]
+        result["distributions"][label] = [round(s, 3) for s in scores[label]]
 
     result["rows"].sort(key=lambda r: r["cvar25"], reverse=True)
+    result["gate"] = {
+        "best_baseline": (
+            max(usable_baselines, key=lambda n: aggregate_reward(usable_baselines[n]).reward)
+            if usable_baselines else None
+        ),
+        "missing": [n for n in sorted(BASELINE_LABELS) if n not in usable_baselines],
+    }
+    result["overfit"] = _overfit_report(scores, sharpes, oos_obs)
     return result
+
+
+def _stats_row(stats) -> dict:
+    return {
+        "cvar25": round(stats.cvar25, 3),
+        "mean": round(stats.mean, 3),
+        "p25": round(stats.p25, 3),
+        "std": round(stats.std, 3),
+        "worst": round(stats.worst, 3),
+        "best": round(stats.best, 3),
+        "reward": round(stats.reward, 3),
+        "n": stats.n,
+    }
+
+
+def _overfit_report(
+    scores: dict[str, list[float]],
+    sharpes: dict[str, list[float]],
+    oos_obs: list[int],
+) -> dict:
+    """PBO y DSR sobre la distribucion de scores del propio ranking: cuantas
+    configuraciones se probaron y si el ganador sobrevive al descuento."""
+    columns = [v for v in scores.values() if v]
+    if not columns:
+        return {}
+
+    width = min(len(c) for c in columns)
+    matrix = [[c[i] for c in columns] for i in range(width)]
+    pbo = probability_of_backtest_overfitting(matrix)
+
+    trial_sharpes = [sum(v) / len(v) for v in sharpes.values() if v]
+    winner = max(scores, key=lambda k: aggregate_reward(scores[k]).reward)
+    observed = sum(sharpes[winner]) / len(sharpes[winner])
+    n_obs = sorted(oos_obs)[len(oos_obs) // 2] if oos_obs else 0
+    dsr = deflated_sharpe_ratio(observed, trial_sharpes, n_obs)
+
+    return {"pbo": pbo.as_dict(), "dsr": dsr.as_dict(), "winner": winner}
 
 
 def _spread_pick(items: list, k: int) -> list:
@@ -483,37 +586,28 @@ def build() -> None:
 
 ROADMAP = [
     {
-        "id": "line-a-metric",
-        "title": "Metrica y ranking honestos",
-        "line": "A", "status": "pendiente", "impact": "alto", "effort": "medio",
-        "why": "El headline actual es Calmar OOS, que es toxico: el maxDD en el denominador "
-               "es ruidoso (un extremo de un solo path), premia la inactividad y degenera a 0 "
-               "sin drawdown. Un optimizador convergeria a 'no operar casi nunca'.",
+        "id": "line-a-calibration",
+        "title": "Calibrar los pesos del headline con evidencia",
+        "line": "A", "status": "pendiente", "impact": "medio", "effort": "bajo",
+        "why": "El headline honesto ya existe (Sharpe - lambda*turnover - kappa*maxDD, agregado "
+               "por CVaR@25%, con gate de baselines y descuento DSR/PBO), pero lambda=0.5 y "
+               "kappa=1.0 son una calibracion razonada A OJO, no medida.",
         "prompt": (
-            "Proyecto ai-trader (Python; backtest que conduce el runner real sobre datos "
-            "sinteticos). La puntuacion de cabecera de un backtest es hoy el Calmar "
-            "out-of-sample: en src/ai_trader/backtest/engine.py, BacktestResult.headline_score "
-            "devuelve test.metrics.calmar (CAGR/maxDD de la ventana test), y el harness de "
-            "scoring lo agrega sobre la distribucion de muestras. Esa metrica es mala: (a) el "
-            "maxDD es un extremo, el estadistico mas ruidoso de una curva de equity, y en el "
-            "denominador dispara la varianza del estimador; (b) premia la inactividad (pocas "
-            "operaciones -> maxDD minusculo -> Calmar altisimo), un optimo degenerado que el "
-            "optimizador encontraria; (c) degenera a 0 cuando no hay drawdown.\n"
-            "TAREA:\n"
-            "1) Nuevo headline per-sample = Sharpe_OOS - lambda_turnover*turnover - kappa*maxDD, "
-            "con el maxDD como PENALIZACION SUAVE (ni denominador ni descarte binario). Anade "
-            "'turnover' (rotacion: nº de trades por dia, o notional rotado) a PerformanceMetrics "
-            "en src/ai_trader/backtest/metrics.py.\n"
-            "2) En src/ai_trader/scoring/aggregate.py fija la recompensa/ranking como CVaR@25% "
-            "(ya se computa) en vez de media-lambda*std; manten mean/std/p25 como reportados.\n"
-            "3) Anade baselines como gate obligatorio: comprar-y-mantener BTC, cartera "
-            "equiponderada del universo y SPY; una estrategia debe batir al mejor baseline para "
-            "'aprobar'.\n"
-            "4) Anade DSR (Deflated Sharpe Ratio) o PBO sobre la distribucion de scores del "
-            "ranking para descontar el sobreajuste por multiples pruebas.\n"
-            "Respeta determinismo y evaluacion sobre la DISTRIBUCION (no un path); un test por "
-            "pieza. Regenera dashboard y docs. Usa .venv\\Scripts\\python.exe para pytest/ruff "
-            "(poetry run roto en esta maquina)."
+            "Proyecto ai-trader (Python). La metrica de cabecera de un backtest es "
+            "`Sharpe_OOS - lambda_turnover*turnover - kappa*maxDD` "
+            "(src/ai_trader/backtest/metrics.py, funcion headline_score y dataclass "
+            "HeadlineWeights). Los pesos por defecto (lambda_turnover=0.5, kappa_maxdd=1.0) "
+            "estan razonados en el docstring pero NO medidos: se eligieron por orden de "
+            "magnitud.\n"
+            "TAREA: calibra los pesos con evidencia sobre la libreria ai_v2. (1) Barre "
+            "lambda_turnover y kappa_maxdd en una rejilla y mide, para cada combinacion, la "
+            "correlacion de rangos entre el ranking in-sample y el out-of-sample de un conjunto "
+            "de configuraciones (estabilidad de la eleccion) y el gap train-validation. (2) "
+            "Comprueba que la penalizacion de turnover es del mismo orden que los costes que ya "
+            "paga la curva de equity (fee_rate + slippage por rotacion), para no cobrar dos "
+            "veces lo mismo sin saberlo. (3) Fija los pesos elegidos como DEFAULT_HEADLINE_WEIGHTS "
+            "documentando la evidencia, y anade un test que los congele. Determinismo + "
+            ".venv\\Scripts\\python.exe (poetry run roto) + ruff. Regenera dashboard y docs."
         ),
     },
     {
@@ -633,10 +727,11 @@ ROADMAP = [
             "muestras (30 escenarios x 30 paths) necesita subsampleo o paralelizacion.\n"
             "TAREA: ejecuta y consolida la optimizacion CEM de las dos primitivas "
             "(crypto_momentum y mean_reversion) sobre la libreria ai_v2 (ya es el sustrato por "
-            "defecto: DEFAULT_LIBRARY_ID en scoring/optimize.py). Recomendado hacerlo DESPUES "
-            "de que la metrica de cabecera honesta (Sharpe - turnover - kappa*maxDD, agregada "
-            "por CVaR@25%) este implementada. "
-            "Optimiza el rendimiento del backtest o paraleliza la evaluacion de "
+            "defecto: DEFAULT_LIBRARY_ID en scoring/optimize.py). La metrica de cabecera honesta "
+            "(Sharpe - lambda*turnover - kappa*maxDD, agregada por CVaR@25%, con gate de "
+            "baselines y descuento DSR/PBO) YA esta implementada, asi que run_optimization "
+            "devuelve tambien el veredicto del gate y el sobreajuste por multiples pruebas: "
+            "reportalos. Optimiza el rendimiento del backtest o paraleliza la evaluacion de "
             "muestras para que una corrida con subsampleo razonable sea tratable. Guarda los "
             "mejores params por primitiva y su distribucion train/validation, y vuelca los "
             "resultados al dashboard (seccion ranking, dashboard/build_dashboard.py). Regenera "
