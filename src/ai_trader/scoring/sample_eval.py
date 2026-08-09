@@ -35,6 +35,10 @@ def evaluate_sample(
     riesgo, ejecucion, fees, slippage) es el del sistema en vivo. Lo que se puntua es
     lo que operaria de verdad. Un fallo de backtest puntua FAILURE_PENALTY, no rompe
     el barrido.
+
+    Esta funcion es AGNOSTICA de la libreria sintetica: recibe barras ya cargadas y no
+    conoce ningun 'ai_v1'/'ai_v2'. Quien elige el sustrato es quien la llama (por
+    defecto, run_optimization con DEFAULT_LIBRARY_ID = 'ai_v2').
     """
     config = dataclasses.replace(base_config, strategies=[spec])
     try:

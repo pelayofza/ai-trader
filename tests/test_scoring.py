@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from datetime import datetime, timezone
 
 import numpy as np
@@ -12,7 +13,7 @@ from ai_trader.execution.paper import PaperExecutionConfig
 from ai_trader.risk.engine import RiskLimits
 from ai_trader.scoring.aggregate import aggregate_reward
 from ai_trader.scoring.cem import CEMConfig, maximize
-from ai_trader.scoring.optimize import run_optimization
+from ai_trader.scoring.optimize import DEFAULT_LIBRARY_ID, run_optimization
 from ai_trader.scoring.scenario_split import split_scenarios
 from ai_trader.scoring.search_space import SPACES, get_space
 from ai_trader.strategies import build_strategy
@@ -144,7 +145,7 @@ class TestCEM:
         assert a.best_score == b.best_score
 
 
-# --- end-to-end sobre un store falso (sin depender de la libreria ai_v1 en disco) ---
+# --- end-to-end sobre un store falso (sin depender de ninguna libreria en disco) ---
 
 
 def _trending_df(n_days: int, slope: float, anchor: datetime) -> pd.DataFrame:
@@ -177,11 +178,14 @@ class _FakeStore:
     def __init__(self, scenario_slopes: dict[str, float]):
         self._slopes = scenario_slopes
         self._anchor = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        self.requested_libraries: list[str] = []  # que sustrato pidio el optimizador
 
     def load_manifest(self, library_id):
+        self.requested_libraries.append(library_id)
         return _FakeManifest(list(self._slopes))
 
     def load_bars(self, library_id, scenario_id, path_index):
+        self.requested_libraries.append(library_id)
         # Cada path perturba levemente la pendiente para que la distribucion no sea trivial.
         slope = self._slopes[scenario_id] + path_index * 0.05
         return {"BTC/USDT": _trending_df(200, slope, self._anchor)}
@@ -206,6 +210,46 @@ def _fake_base_config() -> AppConfig:
         execution=PaperExecutionConfig(fee_rate=0.001, slippage_bps=5.0),
         strategies=[],  # lo rellena el optimizador con la candidata
     )
+
+
+class TestDefaultLibrary:
+    """El sustrato por defecto del scoring debe ser la libreria realista (ai_v2), no el
+    ruido iid de ai_v1: optimizar sobre iid premia sesgos optimistas."""
+
+    def test_constant_points_to_the_realistic_library(self):
+        assert DEFAULT_LIBRARY_ID == "ai_v2"
+
+    def test_signature_default_is_the_constant(self):
+        default = inspect.signature(run_optimization).parameters["library_id"].default
+        assert default == DEFAULT_LIBRARY_ID
+
+    def test_optimizer_reads_ai_v2_when_no_library_is_given(self):
+        store = _FakeStore({"up": 1.0, "flat": 0.05, "down": -0.5})
+
+        run_optimization(
+            "crypto_momentum",
+            store=store,
+            base_config=_fake_base_config(),
+            cem_config=CEMConfig(population=2, iterations=1, seed=0),
+            n_paths=1,
+        )
+
+        assert store.requested_libraries  # se toco el store
+        assert set(store.requested_libraries) == {"ai_v2"}
+
+    def test_explicit_library_still_wins(self):
+        store = _FakeStore({"up": 1.0, "flat": 0.05, "down": -0.5})
+
+        run_optimization(
+            "crypto_momentum",
+            library_id="ai_v1",
+            store=store,
+            base_config=_fake_base_config(),
+            cem_config=CEMConfig(population=2, iterations=1, seed=0),
+            n_paths=1,
+        )
+
+        assert set(store.requested_libraries) == {"ai_v1"}
 
 
 class TestRunOptimizationEndToEnd:

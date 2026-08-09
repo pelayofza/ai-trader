@@ -25,6 +25,11 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_SYNTHETIC_CONFIG = Path("config") / "synthetic.toml"
 
+# Sustrato por defecto del scoring. 'ai_v2' es la libreria realista (colas t-Student,
+# clustering de volatilidad y autocorrelacion serial); 'ai_v1' es ruido iid y se conserva
+# solo como referencia comparativa: optimizar sobre ella premia sesgos optimistas.
+DEFAULT_LIBRARY_ID = "ai_v2"
+
 
 @dataclass(slots=True)
 class OptimizationResult:
@@ -122,7 +127,7 @@ class _SampleEvaluator:
 def run_optimization(
     strategy_type: str,
     *,
-    library_id: str = "ai_v1",
+    library_id: str = DEFAULT_LIBRARY_ID,
     store: SyntheticStore | None = None,
     base_config: AppConfig | None = None,
     cem_config: CEMConfig | None = None,
@@ -137,6 +142,8 @@ def run_optimization(
     """
     Optimiza por CEM los parametros de una primitiva sobre la libreria sintetica.
 
+    - Sustrato: `library_id`, por defecto DEFAULT_LIBRARY_ID ('ai_v2', la libreria
+      realista). Pasa el id explicitamente para optimizar sobre otra libreria.
     - Recompensa: media - lam*std del Calmar OOS sobre las muestras de TRAIN.
     - Hold-out: escenarios enteros reservados como validation (nunca vistos por el CEM).
     - Subsampling: `n_paths` limita paths por escenario para acotar el coste; si es

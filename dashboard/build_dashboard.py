@@ -483,29 +483,6 @@ def build() -> None:
 
 ROADMAP = [
     {
-        "id": "wiring-ai-v2",
-        "title": "Cablear ai_v2 como sustrato por defecto",
-        "line": "Wiring", "status": "pendiente", "impact": "alto", "effort": "bajo",
-        "why": "ai_v2 corrige los sesgos optimistas del generador (colas gruesas, clustering "
-               "de volatilidad, estructura serial). El harness de scoring aun optimiza sobre "
-               "ai_v1, que es ruido iid.",
-        "prompt": (
-            "Proyecto ai-trader (Python; motor de backtest que conduce el runner real sobre "
-            "librerias de datos sinteticos deterministas en data/synthetic/<lib>). El harness "
-            "de optimizacion en src/ai_trader/scoring/optimize.py (funcion run_optimization) "
-            "usa por defecto la libreria 'ai_v1'; ya existe 'ai_v2', generada por retrofit "
-            "determinista y mas realista (colas t-Student, clustering GARCH y autocorrelacion "
-            "serial que ai_v1 no tenia).\n"
-            "TAREA: cambia el library_id por defecto de 'ai_v1' a 'ai_v2' en run_optimization; "
-            "revisa que src/ai_trader/scoring/sample_eval.py y cualquier CLI o documentacion "
-            "que referencie 'ai_v1' se actualicen o queden explicitos; anade un test que "
-            "verifique el default. Regenera el dashboard (python -m dashboard.build_dashboard) "
-            "y la documentacion (python -m docs.build_docs). Corre la suite y ruff con "
-            ".venv\\Scripts\\python.exe -m pytest -q (poetry run esta roto en esta maquina: "
-            "invoca el python del venv directamente)."
-        ),
-    },
-    {
         "id": "line-a-metric",
         "title": "Metrica y ranking honestos",
         "line": "A", "status": "pendiente", "impact": "alto", "effort": "medio",
@@ -655,10 +632,11 @@ ROADMAP = [
             "backtest cuesta ~60s con los 35 activos, asi que una corrida completa sobre las 900 "
             "muestras (30 escenarios x 30 paths) necesita subsampleo o paralelizacion.\n"
             "TAREA: ejecuta y consolida la optimizacion CEM de las dos primitivas "
-            "(crypto_momentum y mean_reversion) sobre la libreria ai_v2. Recomendado hacerlo "
-            "DESPUES de que run_optimization use ai_v2 por defecto y de que la metrica de "
-            "cabecera honesta (Sharpe - turnover - kappa*maxDD, agregada por CVaR@25%) este "
-            "implementada. Optimiza el rendimiento del backtest o paraleliza la evaluacion de "
+            "(crypto_momentum y mean_reversion) sobre la libreria ai_v2 (ya es el sustrato por "
+            "defecto: DEFAULT_LIBRARY_ID en scoring/optimize.py). Recomendado hacerlo DESPUES "
+            "de que la metrica de cabecera honesta (Sharpe - turnover - kappa*maxDD, agregada "
+            "por CVaR@25%) este implementada. "
+            "Optimiza el rendimiento del backtest o paraleliza la evaluacion de "
             "muestras para que una corrida con subsampleo razonable sea tratable. Guarda los "
             "mejores params por primitiva y su distribucion train/validation, y vuelca los "
             "resultados al dashboard (seccion ranking, dashboard/build_dashboard.py). Regenera "

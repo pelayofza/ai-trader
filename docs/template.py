@@ -315,6 +315,12 @@ caminos = %%V2SAMPLES%% muestras</b>, con horizonte de %%V2HORIZON%% días. La t
 <p>Interpretación: el mundo dejó de mentir en la dirección optimista. En <span class="mono">ai_v1</span>
 todos los escenarios eran indistinguibles del ruido; en <span class="mono">ai_v2</span> hay regímenes
 que tienden y regímenes que revierten, la volatilidad se agrupa y las colas engordan.</p>
+<div class="why"><b>Sustrato por defecto de la evaluación.</b> El harness de puntuación y optimización
+(§5) corre sobre <span class="mono">ai_v2</span> por defecto — es una constante única
+(<span class="mono">DEFAULT_LIBRARY_ID</span>) y hay un test que la fija. La librería anterior
+(<span class="mono">ai_v1</span>) se conserva únicamente como referencia comparativa: para evaluar sobre
+ella hay que pedirla <b>explícitamente</b>. Importa porque optimizar contra ruido independiente premia
+justo los sesgos optimistas que el retrofit vino a corregir.</div>
 <div class="note"><b>Limitación.</b> Falta comparar estos <i>stylized facts</i> contra el histórico real
 de criptomonedas (correlación de rangos sintético-vs-real). Los objetivos ya están definidos; el harness
 de comparación queda pendiente (§7).</div>
@@ -487,6 +493,7 @@ pasan por el motor de ejecución para pagar costes reales.</li>
 <p>Declarar los huecos es parte de la honestidad de la herramienta. Estado actual:</p>
 <table><thead><tr><th>Área</th><th>Estado</th><th>Por qué importa</th></tr></thead><tbody>
 <tr><td>Realismo del generador (colas, agrupamiento, estructura serial, saltos)</td><td class="ok">Hecho</td><td>El sustrato dejó de mentir en la dirección optimista.</td></tr>
+<tr><td>Cableado del sustrato realista en el scoring (<span class="mono">ai_v2</span> por defecto)</td><td class="ok">Hecho</td><td>Lo que se optimiza se mide contra el mundo realista, no contra ruido iid.</td></tr>
 <tr><td>Métrica y ranking honestos (sustituir Calmar; baselines; DSR/PBO)</td><td class="pend">Pendiente</td><td>Un optimizador explotaría los defectos de la métrica actual.</td></tr>
 <tr><td>Costes que muerden (slippage por símbolo/vol/tamaño; fills parciales)</td><td class="pend">Pendiente</td><td>Los costes planos subestiman la fricción real, sobre todo en activos ilíquidos.</td></tr>
 <tr><td>Validación (CPCV / walk-forward multiventana)</td><td class="pend">Pendiente</td><td>El split único sobre-estima la robustez.</td></tr>
@@ -506,8 +513,9 @@ ensemble Monte Carlo, guardando el manifiesto autocontenido y los <i>spec.json</
 <i>spec.json</i> guardados con las mismas semillas.</li>
 <li><b>Derivar la librería realista</b> (<span class="mono">ai_v2</span>): el retrofit determinista
 enriquece los escenarios con microestructura y regenera, conservando la librería anterior.</li>
-<li><b>Evaluar y optimizar:</b> el backtest corre sobre las muestras; el CEM optimiza los parámetros
-sobre el conjunto de entrenamiento y reporta también la validación.</li>
+<li><b>Evaluar y optimizar:</b> el backtest corre sobre las muestras de la librería realista
+(<span class="mono">ai_v2</span>, el valor por defecto); el CEM optimiza los parámetros sobre el conjunto
+de entrenamiento y reporta también la validación.</li>
 <li><b>Artefactos vivos:</b> el dashboard y esta documentación se regeneran desde los datos del repo
 (<span class="mono">python -m dashboard.build_dashboard</span> y
 <span class="mono">python -m docs.build_docs</span>).</li>

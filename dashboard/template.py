@@ -227,6 +227,7 @@ function renderOverview(){
   ];
   const roadmapStatus=[
     ['B','Generador (colas, clustering, serial)','hecho'],
+    ['Wiring','ai_v2 como sustrato por defecto del scoring','hecho'],
     ['A','Métrica y ranking honestos','pendiente'],
     ['C','Costes que muerden','pendiente'],
     ['D','Validación (CPCV/walk-forward)','pendiente'],
@@ -270,6 +271,9 @@ function renderSynthetic(){
       <td class="num">${fmt(v2,r[2])} ${miniBar(v2,mx)}</td>
       <td class="tag">${r[3]}</td></tr>`;}).join('')}
     </tbody></table></div></div>
+    <div class="note"><b>Sustrato por defecto.</b> El harness de scoring optimiza sobre <span class="mono">ai_v2</span>
+      (<span class="mono">DEFAULT_LIBRARY_ID</span> en <span class="mono">src/ai_trader/scoring/optimize.py</span>);
+      <span class="mono">ai_v1</span> se conserva solo como referencia comparativa y hay que pedirla explícitamente.</div>
     <h2>Explorador de escenarios</h2>
     <div class="split">
       <div class="scenlist" id="scenlist"></div>
