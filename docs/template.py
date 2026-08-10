@@ -1055,16 +1055,32 @@ de sobreajuste puro da PBO ≈ 1; probar más configuraciones sube el listón de
 <tr><td>Métrica y ranking honestos (headline penalizado, CVaR@25%, baselines, DSR/PBO)</td><td class="ok">Hecho</td><td>El óptimo degenerado del Calmar desapareció, y ganar exige batir a no hacer nada.</td></tr>
 <tr><td>Calibración con evidencia de los pesos λ (turnover) y κ (drawdown)</td><td class="ok">Hecho</td><td>Medidos por barrido en rejilla (§5.2b): la superficie es plana y λ no duplica los costes ya pagados.</td></tr>
 <tr><td>Costes que muerden (slippage por símbolo/vol/tamaño; fills parciales)</td><td class="ok">Hecho</td><td>La fricción dejó de ser una constante: el coste distingue BTC de un altcoin ilíquido y el tamaño tiene techo (§3.4-3.6).</td></tr>
-<tr><td>Re-medición de λ y κ con el modelo de costes nuevo</td><td class="pend">Pendiente</td><td>La calibración publicada se midió con deslizamiento plano; la conclusión se refuerza, pero los decimales no están re-medidos.</td></tr>
 <tr><td>Validación temporal multiventana (walk-forward y CPCV con purga y embargo)</td><td class="ok">Hecho</td><td>Implementada, auditada contra fuga temporal y <b>medida</b>: el corte único no estaba sesgado al alza, pero degradaba el CVaR a un solo número y escondía una dispersión entre ventanas capaz de cambiar qué configuración gana (§3.7).</td></tr>
-<tr><td>Cablear la validación multiventana en el scoring y el CEM</td><td class="pend">Pendiente</td><td>El optimizador aún puntúa cada muestra con el corte único, así que optimiza la cifra optimista; falta decidir cómo se componen el CVaR entre ventanas y el CVaR entre muestras.</td></tr>
 <tr><td>Validación sintético-vs-real (correlación de rangos con CCXT)</td><td class="ok">Hecho</td><td>Medida contra ocho años de histórico real: el nivel de riesgo y el orden de las correlaciones cruzadas se sostienen (§2.8).</td></tr>
-<tr><td>Colas y agrupamiento por debajo del mercado real</td><td class="pend">Pendiente</td><td>Lo que destapó esa validación: el sustrato subestima la pérdida de cola, así que las cifras absolutas de riesgo son optimistas.</td></tr>
 <tr><td>Limpieza de consistencia (universo, anualización, reproducibilidad del diseñador)</td><td class="ok">Hecho</td><td>La anualización distingue clase de activo (252 sesiones / 365 días naturales) y se reporta; la no-reproducibilidad del diseñador está documentada y su petición ya no envía parámetros de muestreo retirados; MATIC/USDT queda fuera del universo operado y dentro del sintético, con el motivo escrito.</td></tr>
-<tr><td>Optimización CEM completa sobre el sustrato realista</td><td class="pend">Pendiente</td><td>El harness está listo; falta correrlo a escala (coste de cómputo).</td></tr>
 </tbody></table>
-<p class="tag">El dashboard de la herramienta mantiene el detalle accionable de cada mejora, con un
-prompt reproducible para abordarla.</p>
+
+<h3>7.1 · Lo que queda abierto, por criticidad</h3>
+<p>El orden no es de gusto: responde a una asimetría de coste. Una estrategia añadida hoy se re-evalúa
+gratis cuando el juez mejore; un juez malo contamina todo lo que puntúe mientras siga malo. Por eso el
+sustrato y el juez van delante de la cosecha. El paper trading en vivo se lanza en paralelo porque es lo
+único que compra tiempo de calendario, que no se puede comprimir después.</p>
+<table><thead><tr><th>#</th><th>Trabajo pendiente</th><th>Por qué está donde está</th></tr></thead><tbody>
+<tr><td>1</td><td>Cerrar el hueco de fidelidad: colas, agrupamiento y correlación bajo estrés (<span class="mono">ai_v3</span>)</td><td>Es la raíz. La cobertura del intervalo p10–p90 es del 35%: el mercado real cae fuera de lo que el ensemble considera plausible dos de cada tres veces, y la causa está localizada — las fases de calma no tienen colas en absoluto (§2.8).</td></tr>
+<tr><td>2</td><td>Transferencia de ranking real-vs-sintético</td><td>El único bucle sin cerrar. La fidelidad mide hechos estilizados; no mide si el mundo sintético <i>ordena</i> las estrategias como el real, que es lo único que el producto necesita del generador. Decide la arquitectura: real como sustrato primario y sintético como capa de estrés, o ninguna de las dos.</td></tr>
+<tr><td>3</td><td>Cablear el CPCV en el optimizador, en dos etapas</td><td>El CEM sigue puntuando con el corte único que el propio estudio desacredita. No está sesgado, está arbitrario — y arbitrario es letal para un optimizador que escala el relieve del paisaje. Criba barata + finalistas con CPCV completo, agregando por <i>pooling</i> de todos los folds, no CVaR de CVaR.</td></tr>
+<tr><td>4</td><td>Paper trading corriendo en vivo, con diario de ciclos</td><td>Cero desarrollo pendiente y en paralelo a todo lo demás: la divergencia live-vs-backtest necesita meses para ser medible, así que cada semana sin correr es una semana perdida al final.</td></tr>
+<tr><td>5–8</td><td>Rigor del juez: re-correr la validación con el ensemble completo; alinear los bloques del PBO con fronteras de escenario; reportar el recuento de muestras fallidas junto al reward; declarar que el DSR asume intentos independientes</td><td>Cuatro arreglos baratos sobre cifras que se publican como garantía. El estudio de validación corrió con un camino por escenario; los bloques del PBO pueden partir un escenario en dos (la misma fuga de arquetipo que el hold-out evita); la penalización por fallo domina la cola del CVaR; y el CEM no produce los intentos independientes que el DSR supone.</td></tr>
+<tr><td>9</td><td>Optimización CEM completa sobre el sustrato corregido</td><td>Bloqueada a propósito: correrla antes de arreglar sustrato y juez es gastar cómputo caro en un ganador que habría que descartar.</td></tr>
+<tr><td>10</td><td>Nuevas estrategias cripto</td><td><b>No priorizada, deliberadamente.</b> Solo 6 de 32 filas aprueban el gate bajo CPCV, y eso admite dos lecturas — estrategias flojas o juez ruidoso. Hasta saber cuál, cada candidato nuevo multiplica el problema de múltiples pruebas y sube el listón del DSR de todos los demás.</td></tr>
+<tr><td>11–12</td><td>Re-medición de λ y κ con los costes nuevos; modelo de IA anotado en el manifiesto</td><td>Impacto bajo con evidencia detrás: la superficie de pesos ya salió plana sobre 480 backtests y el modelo de costes nuevo solo refuerza la conclusión.</td></tr>
+<tr><td>13–14</td><td>Renta variable y mercados de predicción</td><td><b>Segundo plano explícito.</b> Toda la evidencia empírica del repo es cripto; la pata de renta variable del generador no tiene ni un dato real detrás, no existe estrategia de acciones, y el universo de megacaps arrastra sesgo de supervivencia estructural. Polymarket no tiene histórico que backtestear: el paper trading en vivo es lo que empezará a generarlo.</td></tr>
+</tbody></table>
+<div class="note"><b>Foco: cripto.</b> Los <i>stocks</i> no salen del universo <b>sintético</b> — GLD, TLT y UUP
+son lo que hace que los escenarios de tipos y de dólar signifiquen algo para cripto vía los factores
+compartidos. La regla es: se genera con los 35 activos, se puntúa y se opera solo cripto.</div>
+<p class="tag">El dashboard de la herramienta mantiene el detalle accionable de cada mejora, con su
+evidencia medida y un prompt reproducible para abordarla.</p>
 
 <h2 id="s8">8 · Reproducibilidad</h2>
 <p>Toda la cadena es determinista y regenerable. Notas operativas:</p>

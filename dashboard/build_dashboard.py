@@ -807,9 +807,16 @@ def collect_validation() -> dict | None:
 
 
 def collect_roadmap() -> list[dict]:
-    """Evoluciones pendientes, cada una con un prompt copiable para Claude Code."""
+    """Evoluciones pendientes, ordenadas por criticidad, con prompt para Claude Code."""
     from ai_trader.synthetic import retrofit  # noqa: F401  (asegura que el modulo existe)
-    return ROADMAP
+    ranks = [r["rank"] for r in ROADMAP]
+    if sorted(ranks) != list(range(1, len(ROADMAP) + 1)):
+        raise ValueError(f"Los rangos del roadmap deben ser 1..N sin huecos: {sorted(ranks)}")
+    groups = {r["group"] for r in ROADMAP}
+    unknown = groups - {g["key"] for g in ROADMAP_GROUPS}
+    if unknown:
+        raise ValueError(f"Grupos de roadmap desconocidos: {sorted(unknown)}")
+    return sorted(ROADMAP, key=lambda r: r["rank"])
 
 
 def build() -> None:
@@ -842,6 +849,7 @@ def build() -> None:
         "calibration": collect_calibration(),
         "validation": collect_validation(),
         "roadmap": collect_roadmap(),
+        "roadmap_groups": ROADMAP_GROUPS,
     }
 
     from dashboard.template import render_html  # import tardio: template en modulo aparte
@@ -851,204 +859,731 @@ def build() -> None:
 
 
 # --- catalogo de evoluciones pendientes (con prompts detallados para Claude Code) ---
+#
+# ORDEN: `rank` 1..N de mayor a menor criticidad. No es una lista de deseos ordenada por
+# gusto: el criterio es el de la revision externa de 2026-08-10, y su asimetria de coste
+# es la que manda -- una estrategia anadida hoy se re-evalua gratis cuando el juez mejore,
+# pero un juez malo contamina TODO lo que puntue mientras siga malo. Por eso el sustrato
+# (fidelidad) y el juez (validacion multiventana) van delante de la cosecha (estrategias),
+# y por eso el paper trading en vivo se lanza en paralelo: es lo unico que compra tiempo
+# de calendario, que no se puede comprimir despues.
+#
+# FOCO: cripto. Renta variable y mercados de prediccion quedan en segundo plano de forma
+# EXPLICITA (grupo 'segundo-plano'), no por olvido: toda la evidencia empirica del repo
+# -fidelidad contra Binance, calibracion de pesos, estudio de validacion- es cripto, y la
+# pata de renta variable no tiene ni un solo dato real detras.
+
+ROADMAP_GROUPS = [
+    {
+        "key": "ahora",
+        "title": "Ahora",
+        "subtitle": "El bucle abierto: un sustrato fiel, un juez honesto y el reloj corriendo. "
+                    "Nada de lo que se puntue mientras tanto vale mas que el juez que lo puntua.",
+    },
+    {
+        "key": "despues",
+        "title": "Despues",
+        "subtitle": "Rigor del juez: potencia estadistica, fugas menores y transparencia de los "
+                    "descuentos. Barato, y necesario antes de creerse un ranking.",
+    },
+    {
+        "key": "no-prioritario",
+        "title": "No prioritario",
+        "subtitle": "Trabajo legitimo que NO se aborda todavia. Anadir candidatos a un juez en el "
+                    "que aun no se confia solo multiplica el problema de multiples pruebas.",
+    },
+    {
+        "key": "segundo-plano",
+        "title": "Segundo plano (no cripto)",
+        "subtitle": "Renta variable y mercados de prediccion. Aparcados a proposito hasta que el "
+                    "bucle cripto -sintetico, real, paper- este cerrado y medido.",
+    },
+]
 
 ROADMAP = [
     {
-        "id": "line-a-calibration-multiwindow",
-        "title": "Calibracion de pesos con validacion multiventana",
-        "line": "A", "status": "pendiente", "impact": "bajo", "effort": "medio",
-        "why": "El barrido de lambda/kappa ya esta hecho y publicado (data/calibration): la "
-               "superficie resulto PLANA y lambda no duplica los costes ya pagados. Pero se midio "
-               "con un unico split temporal 70/30, un camino por escenario y 16 configuraciones: "
-               "sirve para descartar que los pesos importen mucho, no para afinar decimales. La "
-               "validacion multiventana que faltaba ya existe (scoring/multiwindow.py), asi que "
-               "el barrido se puede repetir sobre ventanas honestas sin construir nada nuevo.",
+        "id": "line-b-fidelity-gap-ai-v3",
+        "rank": 1,
+        "group": "ahora",
+        "priority": "critica",
+        "title": "Cerrar el hueco de fidelidad: colas, clustering y correlacion bajo estres (ai_v3)",
+        "line": "B", "status": "pendiente", "impact": "alto", "effort": "medio",
+        "evidence": "Curtosis en exceso 0,31-0,46 sintetica frente a 3,3-17,8 real (~10x). "
+                    "Exceedances >3 sigma 0,41-0,55% frente a 1,1-1,8% (~3x; una gaussiana pura "
+                    "daria 0,27%). Clustering 0,08-0,10 frente a 0,13-0,31. Correlacion cruzada "
+                    "0,49 frente a 0,65. Cobertura p10-p90 = 35%, y rank_corr de colas = 0,18.",
+        "why": "El mundo sintetico es demasiado manso por un orden de magnitud, y no lo dice una "
+               "opinion: lo dice el informe que genera el propio repo (data/fidelity). Una "
+               "cobertura del 35% significa que el mercado real cae FUERA del rango que el "
+               "ensemble considera plausible dos de cada tres veces. Todo lo que se puntue sobre "
+               "este sustrato subestima la perdida de cola, asi que las estrategias parecen mas "
+               "seguras de lo que serian. Es la raiz: va primero porque contamina cualquier otra "
+               "medicion que se haga mientras siga abierto. Y la causa esta identificada, no hay "
+               "que buscarla: _tail_cluster_jump_for devuelve tail_dof=0.0 (gaussiana exacta) "
+               "para toda fase con vol de EQUITY < 1,5%, es decir para los dias de calma, que son "
+               "la mayoria del horizonte. Pero el cripto real tiene curtosis 4+ tambien en "
+               "ventanas tranquilas: las colas gruesas no son una propiedad de las crisis, son "
+               "una propiedad del proceso.",
         "prompt": (
-            "Proyecto ai-trader (Python). Los pesos del headline score "
-            "(src/ai_trader/backtest/metrics.py: DEFAULT_HEADLINE_WEIGHTS) ya estan calibrados "
-            "con evidencia: el estudio vive en src/ai_trader/scoring/weight_study.py y su "
-            "informe publicado en data/calibration/report_ai_v2.json. El resultado fue que la "
-            "superficie (lambda, kappa) es PLANA en rank IC y en gap train-validation.\n"
-            "TAREA: subir la potencia estadistica del estudio para saber si la planitud es real "
-            "o falta de resolucion. (1) Repite el barrido con varios splits temporales por "
-            "muestra usando la validacion multiventana ya disponible "
-            "(src/ai_trader/scoring/multiwindow.py: validate_multiwindow, walk-forward o CPCV "
-            "con purga y embargo) y con mas de un camino por escenario, "
-            "reutilizando el cacheo de componentes crudos que ya existe (los componentes no "
-            "dependen de los pesos). (2) Anade intervalos de confianza por bootstrap sobre "
-            "escenarios al rank IC y al gap, para poder afirmar o descartar diferencias entre "
-            "puntos de la rejilla. (3) Si y solo si la evidencia nueva mueve el optimo fuera del "
-            "error, actualiza DEFAULT_HEADLINE_WEIGHTS y el test que los congela "
-            "(tests/test_backtest_metrics.py::TestDefaultWeightsAreCalibrated). Determinismo + "
-            ".venv\\Scripts\\python.exe (poetry run roto) + ruff. Regenera dashboard y docs."
+            "Proyecto ai-trader (Python). El estudio de fidelidad ya midio el hueco entre la "
+            "libreria sintetica ai_v2 y el historico real de cripto de Binance 2017-2026: codigo "
+            "en src/ai_trader/synthetic/fidelity_study.py y src/ai_trader/synthetic/fidelity.py, "
+            "informe publicado en data/fidelity/report_ai_v2.json, vista 'Fidelidad' del "
+            "dashboard. Medianas medidas (real vs sintetico ai_v2):\n"
+            "  - curtosis en exceso: 3,3-17,8 vs 0,31-0,46 (~10x de diferencia)\n"
+            "  - exceedances >3 sigma: 1,1-1,8% vs 0,41-0,55% (~3x; gaussiana pura = 0,27%)\n"
+            "  - clustering (autocorr de |r| en lag 1): 0,13-0,31 vs 0,08-0,10 (~2x)\n"
+            "  - correlacion cruzada media: 0,65 vs 0,49 (ratio 0,75)\n"
+            "  - COBERTURA del intervalo p10-p90 del ensemble sintetico: 35% (deberia rondar 80%)\n"
+            "El NIVEL de volatilidad y la ORDENACION de las correlaciones cruzadas ya son "
+            "razonables; lo que falla son colas, agrupamiento y co-movimiento en estres.\n"
+            "\n"
+            "CAUSA RAIZ IDENTIFICADA (no hace falta buscarla): en "
+            "src/ai_trader/synthetic/retrofit.py, `_tail_cluster_jump_for` devuelve "
+            "tail_dof=0.0 -es decir, gaussiana EXACTA- para toda fase con vol de EQUITY por "
+            "debajo de _ELEVATED_EQUITY_VOL (0.015). Esas son las fases de calma, que ocupan la "
+            "mayor parte del horizonte de 730 dias. El cripto real tiene curtosis 4+ tambien en "
+            "ventanas tranquilas.\n"
+            "\n"
+            "TAREA: tres arreglos concretos, en este orden de impacto.\n"
+            "(1) COLAS EN CALMA. En `_tail_cluster_jump_for`, da tail_dof base ~6-8 tambien a las "
+            "fases tranquilas y baja el de crisis a ~4-5 (hoy: 5.0 en crisis, 8.0 en elevada, 0.0 "
+            "en calma). Son tres lineas. Ojo al efecto lateral: hoy "
+            "synthetic/engine.py usa `dof_t = tail_dof_t if np.any(tail_dof_t > 2.0) else None` "
+            "para conservar la via gaussiana EXACTA (mismo consumo de RNG) cuando ninguna fase "
+            "pide colas; con el cambio esa via dejara de usarse en ai_v3, pero DEBE seguir "
+            "existiendo y siendo la ruta por defecto cuando la microestructura esta desactivada "
+            "(ai_v1 y los tests de neutralidad no pueden moverse ni un byte).\n"
+            "(2) COEFICIENTE DE NEWS DEL GARCH. En synthetic/engine.py, `_apply_garch` reparte "
+            "sigma2_t = (1-p) + 0.15*p*e_{t-1}^2 + 0.85*p*sigma2_{t-1}. Ese 0,15/0,85 fijo es lo "
+            "que produce el clustering ~0,09 que se mide; el real pide mas reaccion a la noticia "
+            "(del orden de 0,20/0,78). Hazlo un parametro con el valor por defecto calibrado "
+            "contra el propio informe, manteniendo varianza incondicional 1 (variance-matched) y "
+            "el no-op exacto con p=0.\n"
+            "(3) CARGAS DEPENDIENTES DEL ESTRES. Hoy los `loadings` de cada activo "
+            "(synthetic/universe.py) estan congelados: en synthetic/engine.py::generate se lee "
+            "`beta = np.array([asset.loading(f) for f in factors])` una sola vez y se aplica igual "
+            "a todos los dias (`asset_returns = tilt + factor_returns @ beta + idio`). Con betas "
+            "constantes es MATEMATICAMENTE IMPOSIBLE que la correlacion se dispare hacia 1 en las "
+            "caidas, que es el hecho de mercado mas caro de ignorar. Anade un escalar de fase "
+            "nuevo (p.ej. `beta_stress`, expandido con `_phase_scalar_timeline` como los demas) y "
+            "aplica beta_eff_t = beta * (1 + s * stress_t) por dia. Dos condiciones: (a) el "
+            "`daily_vol_t` de la linea que calcula sqrt(sum((vol*beta)^2)+idio_vol^2) tiene que "
+            "usar la beta EFECTIVA del dia, o las mechas y los huecos dejarian de casar con la "
+            "vol real de ese dia; (b) neutralidad exacta con s=0. La definida-positividad se "
+            "conserva sola: la covarianza sigue siendo B_t Sigma B_t' + D con D diagonal "
+            "positiva. Asigna el estres desde retrofit.py con la misma semantica de fase que ya "
+            "usa (_CRISIS_EQUITY_VOL / _ELEVATED_EQUITY_VOL).\n"
+            "\n"
+            "BUCLE DE ACEPTACION (esto es lo que convierte el ajuste en evidencia): usa el propio "
+            "harness como funcion objetivo. Itera regenerando y re-midiendo con "
+            "'.venv\\Scripts\\python.exe -m ai_trader.synthetic.fidelity_study --library ai_v3 "
+            "--offline' (los datos reales ya estan cacheados; --offline no toca el exchange). "
+            "Fija UMBRALES EXPLICITOS en el codigo del estudio y hazlos fallar si no se cumplen: "
+            "cobertura p10-p90 >= 60-70% y medianas reales dentro del [p10, p90] sintetico en "
+            "curtosis, clustering y exceedances. Es un test de aceptacion, no un vistazo.\n"
+            "\n"
+            "GENERACION DE ai_v3: no toques ai_v2 ni ai_v1. La libreria realista se deriva de los "
+            "specs de ai_v1 con el retrofit determinista: "
+            "`SyntheticDataService.derive_library('ai_v1', 'ai_v3', enricher=enrich_spec)` (ver "
+            "src/ai_trader/synthetic/service.py y tests/test_synthetic.py). No hay llamada a la "
+            "IA. Publica el informe de fidelidad de ai_v3 junto al de ai_v2 y comparalos en el "
+            "dashboard.\n"
+            "\n"
+            "LIMITE DECLARADO, no perseguir: la curtosis real de cripto tiene p90 de 30-90 (DOGE, "
+            "XRP en anos de mania). Ni con dof=4 se reproduce eso. Documenta explicitamente que "
+            "el generador cubre la MEDIANA del mercado, no los anos de mania, y deja el umbral de "
+            "aceptacion sobre la mediana.\n"
+            "\n"
+            "INVARIANTES que siguen testeados y no pueden romperse: ajuste en varianza (anadir "
+            "cola o AR(1) idiosincratico no cambia la volatilidad total), velas OHLCV validas "
+            "(low <= open/close <= high, volumen > 0), neutralidad exacta de los valores por "
+            "defecto y determinismo dado (spec, semilla). Tests + "
+            ".venv\\Scripts\\python.exe (poetry run esta roto) + ruff. Regenera dashboard y docs."
         ),
     },
     {
-        "id": "line-c-recalibrate",
-        "title": "Re-medir lambda y kappa con los costes nuevos",
-        "line": "A/C", "status": "pendiente", "impact": "bajo", "effort": "medio",
-        "why": "La calibracion publicada (data/calibration) se midio con el slippage PLANO "
-               "que ya no existe. El modelo actual cobra mas friccion y la reparte por "
-               "simbolo y tamano: refuerza la conclusion (lambda es un margen pequeno sobre "
-               "costes ya pagados), pero los decimales no estan re-medidos.",
+        "id": "rank-transfer-real-vs-synthetic",
+        "rank": 2,
+        "group": "ahora",
+        "priority": "critica",
+        "title": "Estudio de transferencia: ¿ordena el mundo sintetico las estrategias como el real?",
+        "line": "B/D", "status": "pendiente", "impact": "alto", "effort": "alto",
+        "depends": 1,
+        "evidence": "Sin medir. La fidelidad mide hechos estilizados (curtosis, clustering, "
+                    "correlacion); NO mide transferencia de ranking, que es lo unico que el "
+                    "producto necesita de verdad del generador.",
+        "why": "Es el unico bucle que sigue completamente abierto, y es barato porque las dos "
+               "mitades ya existen: fidelity_study ya descarga y cachea 8 anos de Binance, y "
+               "multiwindow ya sabe correr CPCV purgado sobre cualquier bars_dict. La pregunta "
+               "que responde es la que decide la arquitectura del producto: si el Spearman entre "
+               "el ranking real y el sintetico sale 0,3-0,5, el generador es una maquina de "
+               "pre-cribado legitima y el flujo definitivo queda 'real como sustrato primario del "
+               "ranking, sintetico como capa de estres y veto'. Si sale ~0, es mucho mejor "
+               "saberlo ahora que despues de disenar diez estrategias contra el.",
         "prompt": (
-            "Proyecto ai-trader (Python). El estudio que fija los pesos del headline score "
-            "(src/ai_trader/scoring/weight_study.py, informe en data/calibration/"
-            "report_ai_v2.json) se midio cuando el motor cobraba un slippage PLANO de 5 bps. "
-            "Hoy la ejecucion usa un modelo de microestructura "
-            "(src/ai_trader/execution/microstructure.py: medio spread por simbolo + "
-            "volatilidad reciente + impacto por raiz cuadrada de la participacion) y un techo "
-            "de capacidad por barra.\n"
-            "TAREA: (1) Repite el barrido de (lambda, kappa) con los costes actuales sobre "
-            "ai_v2 y publica el informe nuevo sin borrar el anterior, para poder comparar. "
-            "(2) Revisa turnover_cost_audit en src/ai_trader/scoring/weight_calibration.py: "
-            "hoy deriva el lambda implicito de un cost_rate PLANO (fee_rate + slippage_bps); "
-            "hazlo a partir del slippage REALMENTE cobrado por operacion (ExecutionResult."
-            "slippage_bps), que ya no es una constante. (3) Decide con la evidencia nueva si "
-            "DEFAULT_HEADLINE_WEIGHTS se mueve, y actualiza el test que los congela. "
-            "Determinismo + .venv\\Scripts\\python.exe (poetry run roto) + ruff. Regenera "
-            "dashboard y docs."
+            "Proyecto ai-trader (Python). Hay un bucle sin cerrar: se ha medido la FIDELIDAD del "
+            "generador sintetico (hechos estilizados: colas, clustering, correlacion, en "
+            "src/ai_trader/synthetic/fidelity_study.py) pero NO se ha medido lo unico que el "
+            "producto necesita de el: si el mundo sintetico ORDENA las estrategias igual que el "
+            "mundo real. Un generador puede tener colas perfectas y ordenar al reves.\n"
+            "\n"
+            "TAREA: crear src/ai_trader/scoring/transfer_study.py, un estudio de transferencia de "
+            "ranking real-vs-sintetico, y publicar su informe en data/transfer/.\n"
+            "\n"
+            "(a) REJILLA DE CONFIGURACIONES. Reusa exactamente la que ya existe: "
+            "`candidate_specs` de src/ai_trader/scoring/weight_calibration.py con el hipercubo "
+            "latino de semilla STUDY_SEED = 20260809 y 8 configuraciones por familia sobre "
+            "('crypto_momentum', 'mean_reversion') -> 16 specs. Usar la MISMA rejilla que el "
+            "estudio de pesos hace los dos estudios comparables sin coste extra.\n"
+            "(b) LADO REAL. Barras diarias reales de los simbolos cripto del universo operable "
+            "(config/default.toml, 24 pares USDT), reusando `fetch_real_bars` y "
+            "`CachedBarsProvider` de synthetic/fidelity_study.py con --offline (ya hay cache de "
+            "2017-09-01 a 2026-01-01). Evalua cada config con "
+            "`validate_multiwindow` (src/ai_trader/scoring/multiwindow.py) en esquema CPCV, purga "
+            "= max_holding_days del runner y embargo por defecto, con los baselines y el gate "
+            "activados. Cuida dos cosas: el config base tiene que ser el de universo CRIPTO (para "
+            "que `periods_per_year_for_symbols` de 365 y no 252), y los simbolos sin historico "
+            "suficiente se declaran y se omiten, no se rellenan.\n"
+            "(c) LADO SINTETICO. La MISMA rejilla sobre ai_v3 (la libreria corregida; si aun no "
+            "existe, sobre ai_v2 dejandolo escrito en el informe), con el mismo esquema CPCV y "
+            "los mismos parametros de purga/embargo. Agrega por configuracion poniendo en comun "
+            "TODOS los scores fold x muestra en una sola distribucion y tomando su CVaR -no CVaR "
+            "de CVaR, que compone dos conservadurismos y dispara la varianza del estimador.\n"
+            "(d) TRANSFERENCIA. Spearman entre los dos rankings de 16 configuraciones, con "
+            "intervalo de confianza por bootstrap. Anade dos lecturas mas: solape del top-k (¿las "
+            "4 mejores del sintetico caen en la mitad buena del real?) y el signo de las "
+            "discrepancias grandes. REGLA DE DECISION, escrita en el informe y en el dashboard: "
+            "rho >= 0,3 -> el generador es un pre-cribado legitimo y el flujo definitivo es 'real "
+            "como sustrato primario del ranking, sintetico como capa de estres y veto'; rho ~ 0 "
+            "-> no se disenan estrategias contra el sintetico, y hay que decirlo en la "
+            "metodologia.\n"
+            "\n"
+            "HONESTIDAD ESTADISTICA (declarala en el informe, no la escondas): el historico real "
+            "es UN solo camino, asi que ese lado no tiene ensemble y su unica fuente de "
+            "dispersion son los folds del CPCV -usa bootstrap por bloques sobre folds para el "
+            "intervalo, no bootstrap iid-. Ademas los 24 simbolos son los que cotizan HOY: hay "
+            "sesgo de supervivencia en el lado real, y conviene dejarlo por escrito porque juega "
+            "a favor del real y por tanto en contra de la hipotesis que se quiere validar.\n"
+            "\n"
+            "Salida: data/transfer/report_<lib>.json con el plan completo (rejilla, ventana, "
+            "esquema, purga/embargo, simbolos usados y omitidos), los dos rankings, el rho con su "
+            "IC y el veredicto. Vista nueva en el dashboard (o ampliacion de 'Fidelidad') que "
+            "muestre el scatter de rangos real-vs-sintetico y el veredicto. Determinismo + tests "
+            "+ .venv\\Scripts\\python.exe (poetry run esta roto) + ruff. Regenera dashboard y docs."
         ),
     },
     {
-        "id": "line-d-scoring-multiwindow",
-        "title": "Cablear la validacion multiventana en el scoring y el CEM",
+        "id": "line-d-cpcv-two-stage-cem",
+        "rank": 3,
+        "group": "ahora",
+        "priority": "critica",
+        "title": "CPCV en dos etapas dentro del optimizador (que el CEM deje de puntuar con el corte unico)",
         "line": "D", "status": "pendiente", "impact": "alto", "effort": "medio",
-        "why": "La validacion multiventana ya existe, esta testeada y esta MEDIDA (vista "
-               "'Validacion'): el corte unico no esta sesgado al alza, pero degrada el CVaR a "
-               "un solo numero (+1.35 frente a la cola) y esconde una dispersion entre ventanas "
-               "que cambia que configuracion gana. Y el harness de optimizacion "
-               "(evaluate_sample_detailed -> CEM) sigue puntuando cada muestra con el corte "
-               "unico 70/30, asi que el CEM aun elige con el criterio arbitrario. Cerrar el "
-               "circulo es lo que convierte la medicion en decision.",
+        "evidence": "mom_default en crypto_winter: +2,63 con el corte unico y -2,20 con CPCV. En "
+                    "crypto_bull_supercycle: -0,18 vs -0,60, con dispersion entre folds de "
+                    "sigma ~ 2-3 unidades de Sharpe.",
+        "why": "El optimizador sigue puntuando con el corte que su propio estudio desacredita: "
+               "run_optimization -> evaluate_sample_detailed -> BacktestEngine.run(split_ratio=0.7). "
+               "El corte unico no esta SESGADO, esta ARBITRARIO -y arbitrario es letal para un "
+               "optimizador: el CEM escala un paisaje cuyo relieve depende de que tramo de "
+               "historia cayo en el 30% de test. La objecion obvia es el coste (CPCV multiplica "
+               "x15), y la solucion no es elegir sino separar cribado de decision: dos etapas.",
         "prompt": (
-            "Proyecto ai-trader (Python). La validacion multiventana ya esta implementada y "
-            "medida: src/ai_trader/backtest/validation.py (geometria de folds con purga y "
+            "Proyecto ai-trader (Python). La validacion multiventana esta implementada, testeada "
+            "y MEDIDA: src/ai_trader/backtest/validation.py (geometria de folds con purga y "
             "embargo), BacktestEngine.run_folds, src/ai_trader/scoring/multiwindow.py "
             "(validate_multiwindow -> distribucion robusta) y el estudio publicado en "
-            "data/validation/report_ai_v2.json. Pero el camino que usa el optimizador sigue "
+            "data/validation/report_ai_v2.json. Pero el camino que usa el OPTIMIZADOR sigue "
             "siendo el corte unico: scoring/sample_eval.py::evaluate_sample_detailed llama a "
-            "BacktestEngine.run(split_ratio=0.7) y scoring/optimize.py::run_optimization "
-            "agrega un score por muestra.\n"
-            "TAREA: haz que el scoring puntue cada muestra por su DISTRIBUCION multiventana en "
-            "vez de por un unico corte. (1) Anade a evaluate_sample_detailed un modo "
-            "multiventana (esquema, n_folds/n_groups, purga, embargo) que devuelva la "
-            "recompensa agregada y conserve los campos que necesitan DSR y PBO "
-            "(oos_observations, momentos) sumando las ventanas. (2) Decide y documenta como se "
-            "componen las dos agregaciones que ahora existen: CVaR entre VENTANAS de una "
-            "muestra y CVaR entre MUESTRAS. Agregar dos veces por la cola puede ser "
-            "excesivamente conservador; mide las dos opciones (cola-de-colas vs pooling de "
-            "todas las ventanas de todas las muestras) antes de fijar una. (3) Revisa el coste: "
-            "una muestra pasa de 2 ventanas a ~10, asi que el CEM necesitara subsampleo o "
-            "paralelizacion. (4) Re-corre el ranking del dashboard con el esquema nuevo y "
-            "compara con el publicado. Tests + determinismo + .venv\\Scripts\\python.exe "
-            "(poetry run roto) + ruff. Regenera dashboard y docs."
+            "BacktestEngine.run(split_ratio=0.7), y scoring/optimize.py::run_optimization agrega "
+            "un score por muestra. El objetivo del CEM es, literalmente, el score del split "
+            "70/30. El propio informe muestra por que eso es un problema: mom_default puntua "
+            "+2,63 con el corte unico y -2,20 con CPCV en crypto_winter, y -0,18 vs -0,60 en "
+            "crypto_bull_supercycle, con dispersion entre folds de sigma ~ 2-3 unidades de "
+            "Sharpe.\n"
+            "\n"
+            "TAREA: arquitectura en DOS ETAPAS dentro de run_optimization.\n"
+            "(1) CRIBADO (barato): el CEM sigue explorando con el corte unico o con un "
+            "walk-forward corto (2-3 folds). Es el paisaje que se escala, y basta con que sea "
+            "informativo, no con que sea la verdad.\n"
+            "(2) FINALISTAS (caro y decisivo): los top-k del CEM (5-10 configuraciones, "
+            "parametrizable) se RE-EVALUAN con CPCV completo, y es esa evaluacion la que decide "
+            "el ranking final y la que alimenta el gate de baselines, el DSR y el PBO. El "
+            "resultado de la etapa 1 no debe aparecer como si fuera el veredicto en ningun sitio.\n"
+            "\n"
+            "AGREGACION -- este matiz es el que hay que hacer bien: agrega poniendo en comun "
+            "TODOS los scores fold x muestra en UNA sola distribucion y toma el CVaR de eso. NO "
+            "hagas CVaR-de-CVaR (cola de la cola): compone dos conservadurismos y deja un "
+            "estimador con varianza enorme sobre 5 folds. Documenta la eleccion en el docstring "
+            "de la funcion, con esa razon.\n"
+            "\n"
+            "CONSERVAR PARA EL DESCUENTO: la evaluacion multiventana tiene que seguir devolviendo "
+            "lo que DSR y PBO necesitan (oos_observations y los momentos de los retornos), "
+            "sumando/encadenando las ventanas en vez de reportar las de un unico corte; hoy esos "
+            "campos salen de SampleEvaluation en scoring/sample_eval.py.\n"
+            "\n"
+            "COSTE: CPCV multiplica por ~15 el numero de backtests por muestra, y por eso solo lo "
+            "pagan los finalistas. Aun asi, mide y reporta el coste real, y ofrece subsampleo de "
+            "paths (ya existe `n_paths` con aviso por log) y paralelizacion por muestra "
+            "(multiprocessing, como hacen weight_study y validation_study).\n"
+            "\n"
+            "EVIDENCIA DEL CAMBIO: re-corre el ranking del dashboard con el esquema nuevo, y "
+            "reporta explicitamente cuantos finalistas CAMBIAN de posicion entre la etapa 1 y la "
+            "etapa 2, y cuantos aprueban el gate en cada una. Ese numero es el valor del cambio; "
+            "si es cero, tambien hay que publicarlo. Tests + determinismo + "
+            ".venv\\Scripts\\python.exe (poetry run esta roto) + ruff. Regenera dashboard y docs."
         ),
     },
     {
-        "id": "line-b8-tail-calibration",
-        "title": "Subir colas y clustering de ai_v2 al nivel medido",
-        "line": "B", "status": "pendiente", "impact": "alto", "effort": "medio",
-        "why": "El harness de fidelidad ya midio el hueco contra el mercado real "
-               "(data/fidelity): la curtosis sintetica es una fraccion de la real y el "
-               "clustering, la mitad. Mientras siga asi, los backtests subestiman la perdida "
-               "de cola y las estrategias parecen mas seguras de lo que serian.",
+        "id": "paper-trading-live",
+        "rank": 4,
+        "group": "ahora",
+        "priority": "alta",
+        "title": "Poner el paper trading a correr en vivo (y la vista del dashboard que lo lea)",
+        "line": "Live", "status": "pendiente", "impact": "alto", "effort": "bajo",
+        "evidence": "Cero desarrollo pendiente para arrancar: runner, motor de riesgo, ejecucion "
+                    "en papel con microestructura y bot de Telegram existen y funcionan (ciclo "
+                    "automatico cada 900 s, estado persistido en data/runtime_state.json).",
+        "why": "No compite con lo demas: se lanza YA, en paralelo, porque compra la unica cosa "
+               "que no se puede comprimir despues -tiempo de calendario. La divergencia "
+               "live-vs-backtest necesita meses para ser medible, asi que cada semana que el bot "
+               "no corre es una semana perdida al final del proyecto. Ademas, corriendo en vivo "
+               "es cuando Polymarket empieza a generar el historico de midpoints que hoy no "
+               "existe, que es la unica via barata hacia un backtest de mercados de prediccion. "
+               "Con el universo actual y sin tocar tickers.",
         "prompt": (
-            "Proyecto ai-trader (Python). El estudio de fidelidad "
-            "(src/ai_trader/synthetic/fidelity_study.py, informe en data/fidelity/"
-            "report_ai_v2.json, vista 'Fidelidad' del dashboard) ya midio los stylized-facts de "
-            "la libreria sintetica ai_v2 contra el historico real de cripto de Binance. "
-            "Resultado: el NIVEL de volatilidad y la ORDENACION de las correlaciones cruzadas "
-            "son razonables, pero las COLAS (curtosis en exceso y exceedances mas alla de 3 "
-            "sigma) y el CLUSTERING de volatilidad se quedan muy por debajo del mercado real, "
-            "con cobertura casi nula: el ensemble sintetico no llega a producir el valor real "
-            "ni en su percentil 90.\n"
-            "TAREA: cierra ese hueco en el generador. (1) En src/ai_trader/synthetic/"
-            "retrofit.py y synthetic/engine.py, recalibra los parametros de microestructura "
-            "(tail_dof, vol_persistence, jump_intensity/jump_scale y su asignacion por fase) "
-            "para que las metricas medidas se acerquen a las reales; hoy las colas solo se "
-            "activan en fases de crisis y el clustering base es 0,85 plano. (2) Usa el propio "
-            "harness como funcion objetivo: itera regenerando y re-midiendo con "
-            "'python -m ai_trader.synthetic.fidelity_study --offline' (los datos reales ya "
-            "estan cacheados) hasta que la cobertura de curtosis y clustering deje de ser "
-            "cero. (3) Conserva los invariantes que ya estan testeados: ajuste en varianza "
-            "(anadir cola no cambia la volatilidad total), velas validas y neutralidad de los "
-            "valores por defecto. (4) Regenera la libreria a una nueva version (ai_v3) sin "
-            "borrar ai_v2, publica el informe de fidelidad de ambas y compara. Determinismo + "
-            "tests + .venv\\Scripts\\python.exe (poetry run roto) + ruff. Regenera dashboard y "
-            "docs."
+            "Proyecto ai-trader (Python). El sistema ya opera en paper y no le falta desarrollo "
+            "para arrancar: TradingRunner (src/ai_trader/app/runner.py), RiskEngine, "
+            "PaperExecutionEngine con el modelo de microestructura "
+            "(src/ai_trader/execution/microstructure.py), ExecutionRouter, estado persistido en "
+            "JsonStateStore (data/runtime_state.json) y bot de Telegram con ciclo automatico cada "
+            "AUTO_CYCLE_INTERVAL_SECONDS = 900 (src/ai_trader/bots/telegram_bot.py). El arranque "
+            "es src/ai_trader/main.py con TELEGRAM_BOT_TOKEN y TELEGRAM_ALLOWED_CHAT_IDS.\n"
+            "\n"
+            "OBJETIVO: dejarlo corriendo de forma continua y que cada ciclo deje HUELLA "
+            "auditable, porque hoy el estado guarda la foto (posiciones, PnL) pero no la pelicula "
+            "(que se decidio, con que precio, cuanto deslizamiento se cobro), y la pelicula es "
+            "exactamente el material con el que dentro de unos meses se medira la divergencia "
+            "live-vs-backtest.\n"
+            "\n"
+            "(1) DIARIO DE CICLOS. Anade un registro append-only en JSONL (p.ej. "
+            "data/live/cycles.jsonl) que escriba, por ciclo: marca de tiempo, simbolos "
+            "evaluados, senales generadas con su confianza, decisiones del motor de riesgo "
+            "(aprobada/rechazada y motivo), ordenes enviadas, fills con precio, comision y "
+            "slippage_bps REALMENTE cobrado (viene en ExecutionResult), equity marcada a mercado "
+            "y exposicion desplegada. Rotacion por tamano o por mes, y escritura resistente a "
+            "reinicio (append + fsync, nunca reescribir el fichero entero). Este fichero es un "
+            "activo del proyecto: no lo metas en data/ sin decidir si va a git (recomendado: "
+            "ignorado en git, pero con su ruta documentada).\n"
+            "(2) DURABILIDAD DEL ESTADO. Copia de seguridad rotatoria de runtime_state.json antes "
+            "de cada escritura y arranque tolerante a fichero corrupto (si no parsea, avisa por "
+            "Telegram y arranca del backup, no de cero silenciosamente).\n"
+            "(3) PROCEDIMIENTO DE ARRANQUE documentado en el README: variables de entorno, "
+            "AI_TRADER_CONFIG=config/default.toml (universo de 24 pares cripto), como se lanza "
+            "para que sobreviva a un reinicio de la maquina (servicio/tarea programada en "
+            "Windows), como se pausa desde Telegram y como se comprueba que sigue vivo.\n"
+            "(4) VISTA DE PAPER TRADING EN EL DASHBOARD. La seccion 'Paper trading' hoy es un "
+            "placeholder. Conectala a las dos fuentes reales (JsonStateStore + el JSONL de "
+            "ciclos): curva de equity marcada a mercado, tabla de posiciones abiertas y cerradas "
+            "con PnL neto de comisiones, y metricas de riesgo (exposicion desplegada, nº de "
+            "posiciones frente al maximo, drawdown de cuenta). Reusa los helpers SVG del template "
+            "(dashboard/template.py) y manten el HTML autocontenido. Si no hay datos todavia, la "
+            "vista debe decir 'sin ciclos registrados' en vez de romperse.\n"
+            "(5) OPCIONAL, y explicitamente de segunda prioridad: registrar en el mismo diario el "
+            "midpoint de una watchlist de mercados de Polymarket aunque no se opere ninguno. Es "
+            "solo lectura y coste casi nulo, y es lo unico que puede construir el historico que "
+            "hoy hace imposible backtestear mercados de prediccion.\n"
+            "\n"
+            "NO amplies el universo ni anadas tickers: el valor de esta tarea es empezar a contar "
+            "el tiempo, no cambiar el sistema. Tests de lo que anadas (serializacion del diario, "
+            "rotacion, arranque con estado corrupto) + .venv\\Scripts\\python.exe (poetry run esta "
+            "roto) + ruff. Regenera dashboard y docs."
+        ),
+    },
+    {
+        "id": "validation-study-full-ensemble",
+        "rank": 5,
+        "group": "despues",
+        "priority": "media",
+        "title": "Re-correr el estudio de validacion con el ensemble completo",
+        "line": "D", "status": "pendiente", "impact": "medio", "effort": "bajo",
+        "evidence": "El informe publicado corrio con n_paths=1: 8 escenarios x 4 configuraciones "
+                    "= 32 muestras.",
+        "why": "Las conclusiones sobre el corte unico -que es arbitrario y no optimista, y que la "
+               "brecha real esta contra la cola- son direccionales pero descansan en poca "
+               "muestra. Al integrar CPCV en el pipeline (evolucion #3) conviene re-correrlo con "
+               "varios caminos por escenario para que la dispersion medida tenga detras "
+               "observaciones suficientes.",
+        "prompt": (
+            "Proyecto ai-trader (Python). El estudio de validacion "
+            "(src/ai_trader/scoring/validation_study.py, informe en "
+            "data/validation/report_ai_v2.json, vista 'Validacion' del dashboard) se corrio con "
+            "--paths 1: 8 escenarios x 4 configuraciones = 32 muestras. Sus conclusiones "
+            "(el corte unico es arbitrario y no optimista; la brecha sistematica esta contra la "
+            "COLA, no contra la mediana; la dispersion entre ventanas cambia que configuracion "
+            "gana) son direccionales pero tienen poca muestra detras.\n"
+            "TAREA: (1) Re-corre el estudio con el ensemble completo -mas escenarios y varios "
+            "caminos por escenario- sobre la libreria vigente (ai_v3 si ya existe; si no, ai_v2, "
+            "dejandolo dicho en el informe), paralelizando con --workers. Publica el informe "
+            "nuevo SIN borrar el anterior, para poder comparar. (2) Anade intervalos de confianza "
+            "por bootstrap sobre ESCENARIOS (no sobre muestras: los caminos de un mismo escenario "
+            "no son independientes) a las cifras de optimismo, dispersion, acuerdo de rangos y "
+            "cambios de decision. (3) Deja escrito en el informe y en el dashboard si alguna "
+            "conclusion cambia de signo con la muestra grande. Determinismo + "
+            ".venv\\Scripts\\python.exe (poetry run esta roto) + ruff. Regenera dashboard y docs."
+        ),
+    },
+    {
+        "id": "pbo-blocks-scenario-aligned",
+        "rank": 6,
+        "group": "despues",
+        "priority": "media",
+        "title": "Alinear los bloques del PBO con las fronteras de escenario",
+        "line": "A", "status": "pendiente", "impact": "medio", "effort": "bajo",
+        "evidence": "La matriz muestras x configuraciones se trocea en bloques CONTIGUOS y las "
+                    "muestras van en orden escenario-mayor: los 30 caminos de un escenario pueden "
+                    "quedar mitad en train y mitad en test de la CSCV.",
+        "why": "Es la misma fuga de arquetipo que `scenario_split` evita cuidadosamente en el "
+               "hold-out, colandose dentro del PBO: si el mismo escenario esta a los dos lados, "
+               "el PBO sale mas benigno de lo que deberia, porque elegir por train ya sabe algo "
+               "del test. Arreglo pequeno, y afecta a una cifra que se publica como garantia.",
+        "prompt": (
+            "Proyecto ai-trader (Python). `probability_of_backtest_overfitting` "
+            "(src/ai_trader/scoring/overfit.py) implementa PBO por CSCV: recibe una matriz "
+            "muestras x configuraciones y la parte en `n_blocks` bloques CONTIGUOS "
+            "(partition = [range(b*block_size, (b+1)*block_size) ...]). El problema: quien la "
+            "llama es run_optimization (scoring/optimize.py), y sus muestras vienen en orden "
+            "ESCENARIO-MAYOR (por cada escenario, sus paths). Con 30 caminos por escenario, los "
+            "caminos de un mismo escenario pueden quedar mitad en train y mitad en test de la "
+            "CSCV: fuga de ARQUETIPO dentro del PBO, exactamente la que "
+            "scoring/scenario_split.py evita en el hold-out.\n"
+            "TAREA: (1) Anade a `probability_of_backtest_overfitting` un parametro opcional "
+            "`groups` (una etiqueta por FILA de la matriz, p.ej. el scenario_id) y construye los "
+            "bloques respetando fronteras de grupo -reparto codicioso equilibrado de grupos "
+            "enteros entre bloques-, en lugar de trocear por indice. Con groups=None, el "
+            "comportamiento actual se conserva bit a bit. (2) Haz que run_optimization pase el "
+            "scenario_id de cada muestra (ya lo conoce: _SampleEvaluator._samples genera los "
+            "pares (scenario_id, path_index)). (3) Declara en el resultado cuantos grupos y "
+            "cuantas filas se usaron y cuantas se descartaron por no encajar en bloques iguales "
+            "-nada de recortes silenciosos. (4) Tests: una matriz con estructura de grupo "
+            "conocida donde se compruebe que ningun grupo se parte, y el caso degenerado "
+            "(menos grupos que bloques). (5) Reporta el PBO antes y despues del cambio sobre la "
+            "misma corrida, para que se vea cuanto benigno era. .venv\\Scripts\\python.exe "
+            "(poetry run esta roto) + ruff. Regenera dashboard y docs."
+        ),
+    },
+    {
+        "id": "report-n-failed-with-reward",
+        "rank": 7,
+        "group": "despues",
+        "priority": "media",
+        "title": "Reportar n_failed junto al reward (la penalizacion domina la cola)",
+        "line": "A", "status": "pendiente", "impact": "medio", "effort": "bajo",
+        "evidence": "FAILURE_PENALTY = -5 frente a un headline que vive en el rango -2..2: una "
+                    "configuracion que falla en 2-3 muestras de 100 tiene el CVaR@25% "
+                    "practicamente capturado por los -5.",
+        "why": "Que fallar duela es correcto y no se discute; lo que no puede ser es que el "
+               "numero final no distinga 'esta config tiene mala cola' de 'esta config es "
+               "fragil'. Son dos diagnosticos distintos con dos acciones distintas, y hoy "
+               "colapsan en el mismo -5. No hay que cambiar la penalizacion, hay que publicar el "
+               "recuento al lado.",
+        "prompt": (
+            "Proyecto ai-trader (Python). `FAILURE_PENALTY = -5.0` "
+            "(src/ai_trader/scoring/sample_eval.py) puntua las muestras cuyo backtest falla. El "
+            "headline score vive en unidades de Sharpe (tipicamente -2..2), asi que en el "
+            "CVaR@25% que agrega las muestras (scoring/aggregate.py::aggregate_reward) unas pocas "
+            "muestras fallidas COPAN la cola: una config que falla en 2-3 de 100 tiene su reward "
+            "determinado por los -5, no por su comportamiento. La eleccion es defendible -fallar "
+            "debe doler- pero el numero resultante no distingue 'cola mala' de 'config fragil'.\n"
+            "TAREA: (1) Anade a RewardStats (scoring/aggregate.py) el recuento y la fraccion de "
+            "muestras fallidas, propagando el flag `failed` que SampleEvaluation ya lleva; "
+            "aggregate_reward debe poder recibir esa informacion sin cambiar su firma escalar "
+            "actual para quien no la tenga. (2) Reporta n_failed / failure_rate junto al reward "
+            "en run_optimization, en el ranking del dashboard y en el estudio de validacion. "
+            "(3) Emite un aviso explicito cuando failure_rate >= alpha del CVaR: en ese caso la "
+            "cola esta hecha SOLO de fallos y el reward no esta midiendo rendimiento. (4) NO "
+            "cambies el valor de la penalizacion ni el estadistico de agregacion. Tests + "
+            ".venv\\Scripts\\python.exe (poetry run esta roto) + ruff. Regenera dashboard y docs."
+        ),
+    },
+    {
+        "id": "dsr-independent-trials-caveat",
+        "rank": 8,
+        "group": "despues",
+        "priority": "baja",
+        "title": "Declarar que el DSR asume intentos independientes y el CEM no los produce",
+        "line": "A", "status": "pendiente", "impact": "bajo", "effort": "bajo",
+        "evidence": "n_trials = 192 configuraciones evaluadas por el CEM, tratadas como intentos "
+                    "independientes en el maximo esperado bajo la nula.",
+        "why": "Las generaciones tardias del CEM se concentran alrededor de la elite, asi que los "
+               "intentos efectivos son menos que los contados y el DSR SOBRE-deflacta. El sentido "
+               "del error es el prudente, pero mientras no este escrito alguien puede leer el DSR "
+               "como una probabilidad calibrada, que no lo es. Una linea de docstring y una nota "
+               "en la metodologia.",
+        "prompt": (
+            "Proyecto ai-trader (Python). `deflated_sharpe_ratio` "
+            "(src/ai_trader/scoring/overfit.py) deflacta el Sharpe del ganador usando "
+            "`_expected_max_sharpe(std_trials, n_trials)`, que es el maximo esperado bajo la nula "
+            "asumiendo n_trials intentos INDEPENDIENTES. Quien lo llama es run_optimization con "
+            "n_trials = numero de configuraciones que el CEM evaluo (del orden de 192). Pero el "
+            "CEM no produce intentos independientes: las generaciones tardias se concentran "
+            "alrededor de la elite, asi que los intentos EFECTIVOS son bastantes menos y el DSR "
+            "sobre-deflacta.\n"
+            "TAREA: (1) Documenta el supuesto y su direccion en el docstring de "
+            "deflated_sharpe_ratio: el error va del lado prudente (el DSR sale mas bajo de lo que "
+            "corresponderia), pero por eso mismo el DSR NO debe leerse como una probabilidad "
+            "calibrada. (2) Refleja la misma advertencia en la vista del dashboard donde se "
+            "publica el DSR y en docs/ (metodologia). (3) OPCIONAL y solo si sale limpio: reporta "
+            "junto al DSR una estimacion INFORMATIVA de intentos efectivos (p.ej. a partir de la "
+            "correlacion media entre las series de scores de las configuraciones probadas, "
+            "n_eff = n / (1 + (n-1)*rho_medio)), etiquetada claramente como informativa y sin "
+            "usarla para deflactar. .venv\\Scripts\\python.exe (poetry run esta roto) + ruff. "
+            "Regenera dashboard y docs."
+        ),
+    },
+    {
+        "id": "rl-full-run",
+        "rank": 9,
+        "group": "despues",
+        "priority": "alta",
+        "title": "Optimizacion CEM completa, ya con el juez validado",
+        "line": "RL", "status": "bloqueada", "impact": "alto", "effort": "medio",
+        "depends": 3,
+        "evidence": "El harness CEM esta listo, pero cada backtest cuesta ~60 s con 35 activos y "
+                    "hoy apuntaria al juez del corte unico.",
+        "why": "Correr la optimizacion a escala solo tiene sentido cuando el objetivo que escala "
+               "el CEM es el bueno: primero el sustrato (#1) y el juez en dos etapas (#3), "
+               "despues esto. Hacerlo antes es gastar computo caro produciendo un ganador que "
+               "habria que tirar.",
+        "prompt": (
+            "Proyecto ai-trader (Python). El harness de optimizacion por Cross-Entropy Method "
+            "(src/ai_trader/scoring/optimize.py, run_optimization) esta listo, pero cada backtest "
+            "cuesta ~60 s con los 35 activos, asi que una corrida completa sobre 900 muestras "
+            "(30 escenarios x 30 paths) necesita subsampleo o paralelizacion.\n"
+            "REQUISITO PREVIO: esta tarea solo debe ejecutarse cuando esten hechas (a) la "
+            "correccion de fidelidad del generador con su libreria ai_v3 y (b) el juez en dos "
+            "etapas con CPCV dentro de run_optimization. Si alguna falta, paralo y dilo: "
+            "optimizar contra el juez viejo produce un ganador que habria que descartar.\n"
+            "TAREA: ejecuta y consolida la optimizacion CEM de las primitivas disponibles "
+            "(crypto_momentum y mean_reversion) sobre la libreria vigente (ai_v3). La metrica de "
+            "cabecera honesta (Sharpe - lambda*turnover - kappa*maxDD, agregada por CVaR@25%, con "
+            "gate de baselines y descuento DSR/PBO) ya esta implementada, asi que "
+            "run_optimization devuelve tambien el veredicto del gate y el sobreajuste por "
+            "multiples pruebas: reportalos junto al recuento de muestras fallidas. Optimiza el "
+            "rendimiento del backtest o paraleliza la evaluacion de muestras para que la corrida "
+            "sea tratable, y declara por log cualquier subsampleo. Guarda los mejores parametros "
+            "por primitiva con su distribucion train/validation y vuelca los resultados al "
+            "dashboard (seccion Ranking). Determinismo + tests + .venv\\Scripts\\python.exe "
+            "(poetry run esta roto) + ruff. Regenera dashboard y docs."
+        ),
+    },
+    {
+        "id": "new-crypto-strategies",
+        "rank": 10,
+        "group": "no-prioritario",
+        "priority": "baja",
+        "title": "Nuevas estrategias cripto (deliberadamente NO priorizada)",
+        "line": "Estrategias", "status": "pendiente", "impact": "medio", "effort": "alto",
+        "depends": 3,
+        "evidence": "Solo 6 de 32 filas aprueban el gate bajo CPCV. Eso admite dos lecturas -las "
+                    "estrategias son flojas, o el juez es ruidoso- y hasta saber cual, anadir "
+                    "candidatos multiplica el problema de multiples pruebas.",
+        "why": "Aparece en la lista porque es trabajo real y acordado, pero NO se aborda todavia, "
+               "y la razon es una asimetria de coste, no una preferencia: una estrategia anadida "
+               "hoy se re-evalua GRATIS cuando el juez mejore; un juez malo contamina todo lo que "
+               "puntue hoy. Las estrategias son la cosecha; el juez es el suelo. Ademas cada "
+               "candidato nuevo sube el n_trials del DSR, o sea que anadir sin ganar edge "
+               "empeora activamente el veredicto de todo lo demas.",
+        "prompt": (
+            "Proyecto ai-trader (Python). ANTES DE EMPEZAR: comprueba que el juez esta arreglado "
+            "-CPCV en dos etapas dentro de run_optimization y libreria ai_v3 con la fidelidad "
+            "aceptada. Si no lo esta, no anadas estrategias: solo 6 de 32 filas aprueban el gate "
+            "bajo CPCV, y hasta saber si eso es culpa de las estrategias o del juez, cada "
+            "candidato nuevo multiplica el problema de multiples pruebas sobre un juez en el que "
+            "aun no se confia (y sube el n_trials que deflacta el DSR de todos los demas).\n"
+            "\n"
+            "TAREA (cuando toque): amplia el catalogo de primitivas CRIPTO. Hoy hay dos "
+            "operables (src/ai_trader/strategies/: crypto_momentum y mean_reversion; "
+            "polymarket_threshold no entra en el backtest). Candidatas con edge plausible en el "
+            "timescale diario de pares cripto de segunda fila, que es donde el sistema tiene "
+            "alguna probabilidad: (a) momentum TRANSVERSAL (rankear el universo y operar los "
+            "extremos, no cada simbolo contra si mismo -es la unica que aprovecha de verdad las "
+            "features cross-sectional de observation/); (b) breakout con filtro de regimen, "
+            "usando las features de regimen ya existentes; (c) volatility targeting sobre una "
+            "senal existente, que cambia el perfil de riesgo sin cambiar la senal; (d) pares "
+            "cointegrados dentro del universo.\n"
+            "\n"
+            "REQUISITOS por estrategia: clase con config tipada en src/ai_trader/strategies/, "
+            "registro en strategies/registry.py::STRATEGY_REGISTRY, ParamSpace en el modulo de "
+            "espacios del scoring para que el CEM pueda optimizarla, tests unitarios de la senal "
+            "sobre casos construidos a mano (no solo 'no revienta'), y coste de ejecucion "
+            "pagado por el modelo de microestructura real -nada de suponer fills gratis. "
+            "Evaluacion OBLIGATORIA con el juez validado: CPCV en dos etapas, gate contra los "
+            "tres baselines pasivos con los mismos costes, y DSR/PBO reportados con el n_trials "
+            "actualizado. Una estrategia que no bate el gate no entra en el catalogo operable: "
+            "se publica su resultado negativo y se archiva. Determinismo + "
+            ".venv\\Scripts\\python.exe (poetry run esta roto) + ruff. Regenera dashboard y docs."
+        ),
+    },
+    {
+        "id": "weights-recalibrate-power",
+        "rank": 11,
+        "group": "no-prioritario",
+        "priority": "baja",
+        "title": "Re-medir lambda y kappa con los costes nuevos y mas potencia estadistica",
+        "line": "A/C", "status": "pendiente", "impact": "bajo", "effort": "medio",
+        "evidence": "480 backtests ya medidos: la superficie (lambda, kappa) sale PLANA y la "
+                    "eleccion de configuracion no cambia. Pero se midio con un unico corte 70/30, "
+                    "un camino por escenario y el slippage PLANO de 5 bps que ya no existe.",
+        "why": "La conclusion publicada -penalizar no estabiliza, y los costes ya dentro del "
+               "Sharpe equivalen a un lambda ~ 6,3, muy por encima del 0,25 elegido- se refuerza "
+               "con el modelo de costes nuevo, que cobra mas friccion. Es decir: re-medirlo casi "
+               "seguro no mueve nada. Por eso es de impacto bajo y va aqui, no arriba.",
+        "prompt": (
+            "Proyecto ai-trader (Python). Los pesos del headline score "
+            "(src/ai_trader/backtest/metrics.py::DEFAULT_HEADLINE_WEIGHTS, hoy lambda=0.25, "
+            "kappa=0.0) estan calibrados con evidencia: estudio en "
+            "src/ai_trader/scoring/weight_study.py, informe en "
+            "data/calibration/report_ai_v2.json, 480 backtests. Resultado: la superficie "
+            "(lambda, kappa) es PLANA en rank IC y en gap train-validation, y la auditoria de "
+            "costes dice que el slippage ya cobrado dentro del Sharpe equivale a un lambda "
+            "implicito ~ 6,3. Dos motivos para repetirlo, ninguno urgente:\n"
+            "  (a) se midio con UN corte temporal 70/30, un camino por escenario y 16 "
+            "configuraciones: sirve para descartar que los pesos importen mucho, no para afinar "
+            "decimales;\n"
+            "  (b) se midio cuando el motor cobraba un slippage PLANO de 5 bps, y hoy la "
+            "ejecucion usa el modelo de microestructura (medio spread por simbolo + volatilidad "
+            "reciente + impacto por raiz cuadrada de la participacion, con techo de capacidad).\n"
+            "TAREA: (1) Repite el barrido con los costes actuales y con validacion multiventana "
+            "(scoring/multiwindow.py, walk-forward o CPCV con purga y embargo) y varios caminos "
+            "por escenario, reutilizando el cacheo de componentes crudos que ya existe (los "
+            "componentes no dependen de los pesos, asi que la rejilla sale gratis). (2) Anade "
+            "intervalos de confianza por bootstrap sobre ESCENARIOS al rank IC y al gap, para "
+            "poder afirmar o descartar diferencias entre puntos de la rejilla en vez de leer "
+            "ruido. (3) Corrige turnover_cost_audit en scoring/weight_calibration.py: hoy deriva "
+            "el lambda implicito de un cost_rate PLANO (fee_rate + slippage_bps); hazlo con el "
+            "slippage REALMENTE cobrado por operacion (ExecutionResult.slippage_bps), que ya no "
+            "es una constante. (4) Publica el informe nuevo sin borrar el anterior. (5) Solo si "
+            "la evidencia nueva mueve el optimo FUERA del error, actualiza "
+            "DEFAULT_HEADLINE_WEIGHTS y el test que los congela "
+            "(tests/test_backtest_metrics.py::TestDefaultWeightsAreCalibrated). Determinismo + "
+            ".venv\\Scripts\\python.exe (poetry run esta roto) + ruff. Regenera dashboard y docs."
         ),
     },
     {
         "id": "designer-model-in-manifest",
+        "rank": 12,
+        "group": "no-prioritario",
+        "priority": "baja",
         "title": "Anotar el modelo de IA en el manifiesto de cada libreria",
         "line": "E", "status": "pendiente", "impact": "bajo", "effort": "bajo",
+        "evidence": "El manifiesto guarda la CLASE del disenador ('ClaudeScenarioDesigner'), no "
+                    "el identificador del modelo ni la fecha del diseno.",
         "why": "El diseno con IA no es reproducible y ya no puede serlo (los modelos actuales "
                "retiraron los parametros de muestreo), asi que la unica trazabilidad posible es "
-               "registrar CON QUE se genero. Hoy el manifiesto guarda la clase del disenador "
-               "('ClaudeScenarioDesigner'), no el identificador del modelo: dos librerias "
-               "generadas con modelos distintos son indistinguibles.",
+               "registrar CON QUE se genero. Hoy dos librerias disenadas con modelos distintos "
+               "son indistinguibles en disco.",
         "prompt": (
             "Proyecto ai-trader (Python). El disenador con IA "
             "(src/ai_trader/synthetic/designer.py, ClaudeScenarioDesigner) produce escenarios NO "
-            "reproducibles por diseno: los modelos Opus 4.7+ retiraron temperature/top_p/top_k, "
+            "reproducibles por diseno: los modelos actuales retiraron temperature/top_p/top_k, "
             "asi que no hay ninguna palanca de determinismo. La mitigacion vigente es guardar el "
             "spec.json. Falta la trazabilidad: SyntheticDataService "
             "(src/ai_trader/synthetic/service.py) escribe en el manifiesto "
             "`designer=type(self.designer).__name__`, es decir solo la clase.\n"
             "TAREA: haz que el manifiesto registre tambien el identificador del modelo y la fecha "
-            "de generacion del diseno, sin romper las librerias ya publicadas (ai_v1, ai_v2): "
-            "manifiestos antiguos sin ese campo deben seguir cargando. Sugerencia: un metodo/"
-            "propiedad opcional en el protocolo ScenarioDesigner (p.ej. `describe()`) que el "
-            "servicio consulte con getattr y que TemplateScenarioDesigner tambien implemente, y "
-            "un campo nuevo en SyntheticManifest con valor por defecto. Expon el dato en la vista "
-            "'Datos sinteticos' del dashboard. Tests de compatibilidad hacia atras (cargar un "
-            "manifiesto sin el campo) + .venv\\Scripts\\python.exe (poetry run roto) + ruff. "
-            "Regenera dashboard y docs."
+            "de generacion del diseno, sin romper las librerias ya publicadas (ai_v1, ai_v2, "
+            "ai_v3): los manifiestos antiguos sin ese campo deben seguir cargando. Sugerencia: un "
+            "metodo/propiedad opcional en el protocolo ScenarioDesigner (p.ej. `describe()`) que "
+            "el servicio consulte con getattr y que TemplateScenarioDesigner tambien implemente, "
+            "y un campo nuevo en SyntheticManifest con valor por defecto. Expon el dato en la "
+            "vista 'Datos sinteticos' del dashboard. Tests de compatibilidad hacia atras (cargar "
+            "un manifiesto sin el campo) + .venv\\Scripts\\python.exe (poetry run esta roto) + "
+            "ruff. Regenera dashboard y docs."
         ),
     },
     {
-        "id": "paper-trading-view",
-        "title": "Vista de paper trading en el dashboard",
-        "line": "Dashboard", "status": "placeholder", "impact": "medio", "effort": "bajo",
-        "why": "El runner ya opera en paper con estado persistido (JsonStateStore). Falta "
-               "exponer equity, posiciones abiertas y PnL en el dashboard.",
+        "id": "equities-parked",
+        "rank": 13,
+        "group": "segundo-plano",
+        "priority": "aparcada",
+        "title": "Renta variable: aparcada a proposito (no se activa la clase de activo)",
+        "line": "Universo", "status": "aparcada", "impact": "bajo", "effort": "alto",
+        "evidence": "Cero estrategias de renta variable en el repo (hay proveedor, no estrategia). "
+                    "Cero datos reales detras de la pata de equity del generador. Y el universo "
+                    "de 20 megacaps esta elegido en 2024-26 entre las que sobrevivieron.",
+        "why": "La decision es SOLO CRIPTO, y no por poco. Toda la evidencia empirica del repo es "
+               "cripto: la fidelidad se midio contra Binance y la calibracion y la validacion "
+               "corrieron sobre universos con calendario 365. Activar renta variable seria "
+               "construir estrategia + validar el proveedor Alpaca (¿ajusta splits y "
+               "dividendos?) + verificar el calendario 252 de punta a punta + resolver un sesgo "
+               "de supervivencia estructural (constituyentes point-in-time), todo antes de la "
+               "primera senal. Y el edge plausible no esta ahi: momentum diario sobre AAPL o SPY "
+               "compite contra el segmento mas eficiente del planeta. Lo que NO se hace es quitar "
+               "los stocks del universo SINTETICO: alli GLD, TLT y UUP son lo que hace que los "
+               "escenarios de tipos y de dolar signifiquen algo para cripto via los factores "
+               "compartidos. Se genera con los 35, se puntua y se opera solo cripto.",
         "prompt": (
-            "Proyecto ai-trader (Python). El orquestador (TradingRunner, "
-            "src/ai_trader/app/runner.py) ya opera en paper con estado persistido via "
-            "JsonStateStore (posiciones abiertas/cerradas, PnL realizado, pausa). El dashboard "
-            "(dashboard/) tiene una seccion 'Paper trading' que hoy es solo placeholder.\n"
-            "TAREA: anade al generador del dashboard (dashboard/build_dashboard.py + "
-            "dashboard/template.py) una vista de paper trading que lea el estado del runner "
-            "(JsonStateStore): curva de equity marcada a mercado, tabla de posiciones abiertas "
-            "y cerradas con PnL neto de comisiones, y metricas de riesgo (exposicion desplegada, "
-            "nº de posiciones vs maximo, drawdown de cuenta). Renderiza la equity como line "
-            "chart (reusa los helpers SVG del template) y las posiciones como tabla; manten el "
-            "HTML autocontenido. Regenera con python -m dashboard.build_dashboard."
+            "Proyecto ai-trader (Python). NO EJECUTAR TODAVIA: esta tarea esta aparcada a "
+            "proposito hasta que el bucle cripto (sintetico fiel -> transferencia contra el real "
+            "-> paper trading con meses de historico) este cerrado y medido. Se deja escrita para "
+            "que el dia que se retome no haya que redescubrir el alcance.\n"
+            "CONTEXTO: el repo tiene proveedor de renta variable (Alpaca) pero NINGUNA estrategia "
+            "de renta variable; el universo operable (config/default.toml) es de 24 pares cripto; "
+            "el universo SINTETICO si incluye acciones y ETFs (GLD, TLT, UUP y 20 megacaps) y eso "
+            "se mantiene, porque son la estructura de correlacion que da sentido a los escenarios "
+            "de tipos y de dolar. La regla vigente: se genera con los 35 activos, se puntua y se "
+            "opera solo cripto.\n"
+            "ALCANCE cuando se retome, en este orden: (1) validar el proveedor Alpaca con datos "
+            "reales -¿los precios vienen ajustados por splits y dividendos?, ¿que pasa con los "
+            "dias sin sesion?- porque un backtest sobre precios no ajustados es basura silenciosa; "
+            "(2) verificar el calendario 252 de punta a punta (periods_per_year_for_symbols, "
+            "anualizacion del Sharpe, ventanas de los folds y de los baselines) en un universo "
+            "MIXTO, que es el caso que hoy no se ejercita; (3) resolver el sesgo de supervivencia "
+            "de la lista de 20 megacaps -elegidas en 2024-26 precisamente porque sobrevivieron y "
+            "ganaron- con constituyentes point-in-time, que es un proyecto en si mismo y sin el "
+            "cual cualquier backtest nace inflado; (4) solo entonces, una estrategia de renta "
+            "variable y su evaluacion con el mismo juez que las cripto. Antes de nada de esto, "
+            "re-lee la evidencia de fidelidad: la pata de equity del generador no tiene ni un "
+            "dato real detras, asi que sus betas, su idio_vol y sus spreads son plausibles pero "
+            "NO contrastados, y contrastarlos es parte del trabajo."
         ),
     },
     {
-        "id": "rl-full-run",
-        "title": "Optimizacion CEM completa sobre ai_v2",
-        "line": "RL", "status": "pendiente", "impact": "alto", "effort": "medio",
-        "why": "El harness CEM (scoring/optimize.py) esta listo pero cada backtest cuesta ~60s "
-               "con 35 activos; una corrida completa necesita subsampleo o paralelizacion.",
+        "id": "polymarket-parked",
+        "rank": 14,
+        "group": "segundo-plano",
+        "priority": "aparcada",
+        "title": "Polymarket en el backtest: aparcado hasta tener historico propio",
+        "line": "Universo", "status": "aparcada", "impact": "bajo", "effort": "alto",
+        "evidence": "Sin OHLCV historico de mercados de prediccion. La estrategia "
+                    "polymarket_threshold existe y opera en papel, pero no entra en ningun "
+                    "backtest.",
+        "why": "No es un olvido ni una limitacion del codigo: no hay historico que backtestear, y "
+               "comprarlo no es barato. La via realista es la que abre la evolucion #4: con el "
+               "paper trading corriendo, el sistema empieza a guardar midpoints por ciclo, y en "
+               "unos meses habra una serie propia. Retomar esto antes de tener esa serie es "
+               "construir sobre nada.",
         "prompt": (
-            "Proyecto ai-trader (Python). El harness de optimizacion por Cross-Entropy Method "
-            "(src/ai_trader/scoring/optimize.py, funcion run_optimization) esta listo, pero cada "
-            "backtest cuesta ~60s con los 35 activos, asi que una corrida completa sobre las 900 "
-            "muestras (30 escenarios x 30 paths) necesita subsampleo o paralelizacion.\n"
-            "TAREA: ejecuta y consolida la optimizacion CEM de las dos primitivas "
-            "(crypto_momentum y mean_reversion) sobre la libreria ai_v2 (ya es el sustrato por "
-            "defecto: DEFAULT_LIBRARY_ID en scoring/optimize.py). La metrica de cabecera honesta "
-            "(Sharpe - lambda*turnover - kappa*maxDD, agregada por CVaR@25%, con gate de "
-            "baselines y descuento DSR/PBO) YA esta implementada, asi que run_optimization "
-            "devuelve tambien el veredicto del gate y el sobreajuste por multiples pruebas: "
-            "reportalos. Optimiza el rendimiento del backtest o paraleliza la evaluacion de "
-            "muestras para que una corrida con subsampleo razonable sea tratable. Guarda los "
-            "mejores params por primitiva y su distribucion train/validation, y vuelca los "
-            "resultados al dashboard (seccion ranking, dashboard/build_dashboard.py). Regenera "
-            "dashboard y docs. Determinismo + tests + .venv\\Scripts\\python.exe (poetry run roto)."
+            "Proyecto ai-trader (Python). NO EJECUTAR TODAVIA: depende de tener meses de "
+            "midpoints registrados por el paper trading en vivo (evolucion 'Poner el paper "
+            "trading a correr en vivo'). Se deja escrita para no perder el alcance.\n"
+            "CONTEXTO: existe la estrategia polymarket_threshold "
+            "(src/ai_trader/strategies/polymarket_threshold.py) y su ejecucion en papel "
+            "(execution/polymarket_paper.py), pero los mercados de prediccion NO entran en el "
+            "backtest porque no hay OHLCV historico: un mercado de Polymarket no publica velas "
+            "diarias comparables, y su vida util es corta y con final absorbente (resuelve a 0 o "
+            "a 1).\n"
+            "ALCANCE cuando se retome: (1) construir un almacen de series de midpoint por mercado "
+            "a partir del diario de ciclos del paper trading, con su resolucion final cuando la "
+            "haya; (2) decidir la semantica de 'barra' para un mercado que resuelve -no es un "
+            "precio que sigue, es una probabilidad que colapsa- y como se anualiza cualquier "
+            "metrica sobre eso (el Sharpe anualizado no significa lo mismo en un instrumento con "
+            "vencimiento); (3) definir sus costes reales (spread del libro, no el fee plano) y su "
+            "capacidad; (4) solo entonces, un motor de backtest para esta clase de activo y su "
+            "evaluacion con el mismo juez. Mientras tanto, lo unico que hay que hacer es "
+            "REGISTRAR: sin serie propia, no hay nada que medir."
         ),
     },
 ]

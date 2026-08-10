@@ -97,7 +97,43 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
   border-radius:7px;padding:6px 9px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.18);z-index:9;display:none}
 svg{max-width:100%;display:block}
 .pill{font-size:11px;color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:1px 6px;margin-right:4px}
-@media(max-width:820px){.app{grid-template-columns:1fr}.side{position:static;height:auto}.split{grid-template-columns:1fr}}
+/* --- evoluciones: lista ordenada por criticidad --- */
+.rmgroup{margin:30px 0 0;padding-top:16px;border-top:1px solid var(--border)}
+.rmgroup:first-of-type{border-top:0;padding-top:0;margin-top:18px}
+.rmgroup h2{margin:0 0 2px}
+.rmgroup .sub{color:var(--ink2);font-size:13px;margin:0 0 14px;max-width:82ch}
+.rmlist{display:flex;flex-direction:column;gap:12px}
+.rmitem{--pc:var(--muted);display:grid;grid-template-columns:52px 1fr;gap:14px;
+  background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--pc);
+  border-radius:12px;padding:14px 16px}
+.rmitem.critica{--pc:var(--crit)}
+.rmitem.alta{--pc:var(--serious)}
+.rmitem.media{--pc:var(--warn)}
+.rmitem.baja{--pc:var(--s1)}
+.rmitem.aparcada{--pc:var(--muted)}
+.rmrank{text-align:center;line-height:1.05;padding-top:2px}
+.rmrank b{font-size:24px;font-weight:700;color:var(--pc);font-variant-numeric:tabular-nums}
+.rmrank small{display:block;margin-top:3px;font-size:10px;font-weight:600;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.04em}
+.rmhead{display:flex;gap:10px;align-items:baseline;justify-content:space-between;flex-wrap:wrap}
+.rmhead h3{margin:0;font-size:15.5px}
+.rmev{border-left:3px solid var(--pc);padding:3px 0 3px 11px;margin:9px 0;color:var(--ink2);font-size:12.5px}
+.rmwhy{color:var(--ink2);margin:4px 0 0;max-width:82ch}
+details.pr{margin:10px 0 0}
+details.pr summary{cursor:pointer;font-size:12.5px;font-weight:600;color:var(--s1);list-style:none;padding:3px 0}
+details.pr summary::-webkit-details-marker{display:none}
+details.pr summary:before{content:'▸ '}
+details.pr[open] summary:before{content:'▾ '}
+details.pr .prompt{max-height:340px}
+.chip.critica{background:color-mix(in srgb,var(--crit) 20%,transparent);color:var(--crit)}
+.chip.alta{background:color-mix(in srgb,var(--serious) 30%,transparent);color:var(--serious)}
+.chip.media{background:color-mix(in srgb,var(--warn) 26%,transparent);color:var(--serious)}
+.chip.baja{background:color-mix(in srgb,var(--s1) 16%,transparent);color:var(--s1)}
+.chip.bloqueada{background:color-mix(in srgb,var(--s7) 20%,transparent);color:var(--s7)}
+.chip.aparcada{background:color-mix(in srgb,var(--muted) 22%,transparent);color:var(--ink2)}
+@media(max-width:820px){.app{grid-template-columns:1fr}.side{position:static;height:auto}.split{grid-template-columns:1fr}
+  .rmitem{grid-template-columns:1fr}.rmrank{text-align:left;display:flex;gap:8px;align-items:baseline}
+  .rmrank small{margin:0}}
 """
 
 APP_JS = r"""
@@ -326,8 +362,12 @@ function renderOverview(){
     ['A','Calibración medida de λ y κ (rejilla + auditoría de costes)','hecho'],
     ['C','Costes que muerden (spread por símbolo, impacto, capacidad)','hecho'],
     ['B','Fidelidad sintético-vs-real medida contra CCXT (rank-corr)','hecho'],
-    ['D','Validación (CPCV/walk-forward)','pendiente'],
+    ['D','Validación multiventana (CPCV/walk-forward): construida y medida','hecho'],
     ['E','Limpieza de consistencia (universo, anualización, diseñador)','hecho'],
+    ['B','Cerrar el hueco de fidelidad medido (colas, clustering, correlación) → ai_v3','pendiente'],
+    ['B/D','Transferencia de ranking real-vs-sintético (el bucle que sigue abierto)','pendiente'],
+    ['D','Cablear el CPCV en el optimizador (juez en dos etapas)','pendiente'],
+    ['Live','Paper trading corriendo en vivo (compra tiempo de calendario)','pendiente'],
   ];
   host.innerHTML=`
     <h1>AI-Trader · Dashboard</h1>
@@ -340,7 +380,9 @@ function renderOverview(){
     ${roadmapStatus.map(r=>`<tr><td><span class="pill">${r[0]}</span></td><td>${r[1]}</td>
       <td>${r[2]==='hecho'?'<span class="chip" style="background:color-mix(in srgb,var(--good) 20%,transparent);color:var(--good)">✓ hecho</span>':'<span class="chip pendiente">pendiente</span>'}</td></tr>`).join('')}
     </tbody></table></div>
-    <p class="tag" style="margin-top:14px">Ve a <b>Evoluciones</b> para el detalle y los prompts copiables de cada mejora.</p>`;
+    <p class="tag" style="margin-top:14px">Ve a <b>Evoluciones</b>: las pendientes están ordenadas de mayor a menor
+      criticidad, con su evidencia medida y su prompt copiable. Foco en cripto; renta variable y mercados de
+      predicción están aparcados a propósito.</p>`;
 }
 
 function renderSynthetic(){
@@ -882,27 +924,61 @@ function renderPaper(){
       <div class="card"><h3>Posiciones <span class="chip placeholder">próximamente</span></h3><p class="tag">Tabla de posiciones abiertas y cerradas con PnL neto de comisiones.</p></div>
       <div class="card"><h3>Riesgo <span class="chip placeholder">próximamente</span></h3><p class="tag">Exposición desplegada, nº de posiciones vs máximo, drawdown de cuenta.</p></div>
     </div>
-    <div class="note">Para implementarla, usa el prompt "Vista de paper trading" en la sección <b>Evoluciones</b>.</div>`;
+    <div class="note">Conectarla es parte de la evolución <b>#4 · "Poner el paper trading a correr en vivo"</b>
+      (sección <b>Evoluciones</b>), que incluye además el diario de ciclos en JSONL del que esta vista se alimentará:
+      hoy el estado guarda la foto —posiciones y PnL— pero no la película, y la película es el material con el que
+      dentro de unos meses se medirá la divergencia live-vs-backtest.</div>`;
+}
+
+const PRIORITY_LABEL={critica:'crítica',alta:'alta',media:'media',baja:'baja',aparcada:'aparcada'};
+
+function roadmapItem(r,i){
+  const dep=r.depends?`<span class="tag">depende de #${r.depends}</span>`:'';
+  return `<div class="rmitem ${r.priority}">
+    <div class="rmrank"><b>${r.rank}</b><small>${PRIORITY_LABEL[r.priority]||r.priority}</small></div>
+    <div>
+      <div class="rmhead"><h3>${esc(r.title)}</h3>
+        <span class="tag"><span class="pill">línea ${esc(r.line)}</span>esfuerzo ${esc(r.effort)}</span></div>
+      <div class="rowbtns" style="margin:9px 0 0">
+        <span class="chip ${r.priority}">prioridad ${PRIORITY_LABEL[r.priority]||r.priority}</span>
+        <span class="chip ${r.status}">${esc(r.status)}</span>
+        <span class="chip ${r.impact}">impacto ${esc(r.impact)}</span>${dep}</div>
+      ${r.evidence?`<div class="rmev"><b>Evidencia medida:</b> ${esc(r.evidence)}</div>`:''}
+      <p class="rmwhy">${esc(r.why)}</p>
+      <details class="pr"><summary>Prompt para Claude Code</summary>
+        <div class="prompt" id="pr_${i}">${esc(r.prompt)}</div>
+        <div class="rowbtns"><button class="btn" onclick="copyPrompt(${i},this)">Copiar prompt</button></div>
+      </details>
+    </div>
+  </div>`;
 }
 
 function renderRoadmap(){
   const host=$('#roadmap');
+  const items=[...D.roadmap].sort((a,b)=>a.rank-b.rank);
+  const groups=(D.roadmap_groups||[]).map(g=>{
+    const rows=items.filter(r=>r.group===g.key);
+    if(!rows.length) return '';
+    return `<div class="rmgroup">
+      <h2>${esc(g.title)} <span class="tag">· ${rows.length}</span></h2>
+      <p class="sub">${esc(g.subtitle)}</p>
+      <div class="rmlist">${rows.map(r=>roadmapItem(r,D.roadmap.indexOf(r))).join('')}</div>
+    </div>`;
+  }).join('');
   host.innerHTML=`
     <h1>Evoluciones pendientes</h1>
-    <p class="lead">Cada mejora acordada, con su prompt detallado para Claude Code. Copia el prompt y pégaselo cuando quieras abordarla, en el orden que decidas.</p>
-    <div class="grid cards">
-    ${D.roadmap.map((r,i)=>`<div class="card">
-      <div class="rowbtns" style="justify-content:space-between">
-        <h3 style="margin:0">${esc(r.title)}</h3><span class="pill">${esc(r.line)}</span></div>
-      <div class="rowbtns" style="margin:8px 0">
-        <span class="chip ${r.status}">${esc(r.status)}</span>
-        <span class="chip ${r.impact}">impacto ${esc(r.impact)}</span>
-        <span class="tag">esfuerzo ${esc(r.effort)}</span></div>
-      <p class="lead" style="margin:2px 0 4px">${esc(r.why)}</p>
-      <div class="prompt" id="pr_${i}">${esc(r.prompt)}</div>
-      <div class="rowbtns"><button class="btn" onclick="copyPrompt(${i},this)">Copiar prompt</button></div>
-    </div>`).join('')}
-    </div>`;
+    <p class="lead">Ordenadas <b>de mayor a menor criticidad</b>, no por gusto. El criterio es una asimetría de coste:
+      una estrategia añadida hoy se re-evalúa gratis cuando el juez mejore, pero un juez malo contamina todo lo que
+      puntúe mientras siga malo. Por eso el sustrato (fidelidad) y el juez (validación multiventana) van delante de la
+      cosecha (estrategias), y el paper trading en vivo se lanza en paralelo: es lo único que compra tiempo de
+      calendario. Cada ficha lleva su prompt detallado para Claude Code.</p>
+    <div class="note"><b>Foco: cripto.</b> Toda la evidencia empírica del repo —fidelidad contra Binance, calibración
+      de pesos, estudio de validación— es cripto, y la pata de renta variable del generador no tiene ni un solo dato
+      real detrás. Renta variable y mercados de predicción quedan en <b>segundo plano de forma explícita</b>, no por
+      olvido. Los stocks <i>sí</i> siguen en el universo sintético: GLD, TLT y UUP son lo que hace que los escenarios
+      de tipos y de dólar signifiquen algo para cripto vía los factores compartidos. Se genera con los 35, se puntúa y
+      se opera solo cripto.</div>
+    ${groups}`;
 }
 function copyPrompt(i,btn){const t=D.roadmap[i].prompt;navigator.clipboard.writeText(t).then(()=>{const o=btn.textContent;btn.textContent='✓ Copiado';setTimeout(()=>btn.textContent=o,1500);});}
 window.copyPrompt=copyPrompt;
