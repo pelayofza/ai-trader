@@ -31,8 +31,15 @@ universe = [
   "SEI/USDT",
   "TIA/USDT",
 ]
-# Nota: MATIC/USDT se ha retirado del universo. Binance lo deslisto (ahora es POL),
+# Nota: MATIC/USDT se ha retirado de ESTE universo. Binance lo deslisto (ahora es POL),
 # asi que fallaba en silencio en cada ciclo.
+#
+# Sigue presente, a proposito, en config/synthetic.toml y en el universo del generador
+# (src/ai_trader/synthetic/universe.py): alli nada cotiza contra un exchange -el simbolo
+# es solo la etiqueta de un perfil de cargas factoriales- y retirarlo desincronizaria la
+# evidencia ya publicada sobre 35 activos. La nota completa esta en universe.py. La
+# regla que hace consistentes los dos ficheros: este universo tiene que ser operable hoy;
+# el sintetico tiene que coincidir con DEFAULT_UNIVERSE.
 
 [runner]
 lookback_days = 180

@@ -7,11 +7,14 @@ from typing import Protocol
 import pandas as pd
 
 from ai_trader.shared.bars import Bar, bar_from_row, normalize_bars
-from ai_trader.shared.instruments import AssetClass, PredictionMarket
+from ai_trader.shared.instruments import (
+    PREDICTION_PREFIX,
+    AssetClass,
+    PredictionMarket,
+    detect_asset_class,
+)
 
 logger = logging.getLogger(__name__)
-
-PREDICTION_PREFIX = "PM::"
 
 
 class BarProvider(Protocol):
@@ -116,12 +119,7 @@ class HistoricalDataSource:
         return None
 
     def detect_asset_class(self, symbol: str) -> AssetClass:
-        normalized = symbol.strip().upper()
-        if normalized.startswith(PREDICTION_PREFIX):
-            return AssetClass.PREDICTION
-        if "/" in normalized:
-            return AssetClass.CRYPTO
-        return AssetClass.STOCK
+        return detect_asset_class(symbol)
 
     # --- acceso para el modelo de mercado ---
 

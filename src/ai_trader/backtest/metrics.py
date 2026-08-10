@@ -1,13 +1,69 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
+from ai_trader.shared.instruments import AssetClass, detect_asset_class
 from ai_trader.shared.schemas import Position
 
-TRADING_DAYS_PER_YEAR = 365  # cripto opera 24/7; para renta variable se ajustaria a 252
+# --- factores de anualizacion ------------------------------------------------
+#
+# Hay DOS unidades distintas y confundirlas es el error clasico:
+#
+# 1. TIEMPO DE CALENDARIO. El CAGR mide cuanto renta un ano NATURAL, y el ano natural
+#    tiene 365 dias para todo el mundo: una accion que sube un 10% entre enero y julio
+#    ha subido un 10% en medio ano de calendario, aunque solo haya cotizado 126 sesiones.
+#    Por eso `cagr_pct` divide SIEMPRE por CALENDAR_DAYS_PER_YEAR, sea cual sea el activo.
+#
+# 2. NUMERO DE OBSERVACIONES. Sharpe, Sortino y volatilidad se anualizan por sqrt(N),
+#    donde N es cuantos retornos entran en un ano. Y ahi si depende del mercado: cripto
+#    cotiza 24/7 (una barra por dia natural, N=365) y la renta variable solo en sesion
+#    (N=252). Anualizar una curva bursatil por sqrt(365) infla el Sharpe un 20%
+#    (sqrt(365/252) = 1.204) y la volatilidad otro tanto. Ese era el bug: una constante
+#    global de 365 aplicada tambien a las acciones.
+CALENDAR_DAYS_PER_YEAR = 365  # dias naturales por ano: la unidad del CAGR
+CRYPTO_PERIODS_PER_YEAR = 365  # cripto cotiza 24/7 -> una observacion por dia natural
+STOCK_PERIODS_PER_YEAR = 252  # renta variable -> solo sesiones bursatiles
+
+# Default historico y unidad de las magnitudes 24/7. Se conserva con este nombre porque
+# lo consumen los modulos de observacion (features, regime) y de scoring (overfit,
+# weight_calibration), todos calibrados sobre librerias sinteticas 24/7. Para elegir el
+# factor de una cartera concreta usa `periods_per_year_for` / `periods_per_year_for_symbols`.
+TRADING_DAYS_PER_YEAR = CRYPTO_PERIODS_PER_YEAR
+
+_PERIODS_BY_ASSET_CLASS: dict[AssetClass, int] = {
+    AssetClass.CRYPTO: CRYPTO_PERIODS_PER_YEAR,
+    AssetClass.STOCK: STOCK_PERIODS_PER_YEAR,
+    # Los mercados de prediccion tampoco cierran: mismo calendario que cripto.
+    AssetClass.PREDICTION: CRYPTO_PERIODS_PER_YEAR,
+}
+
+
+def periods_per_year_for(asset_classes: Iterable[AssetClass]) -> int:
+    """
+    Observaciones por ano de una curva de equity construida sobre esas clases de activo.
+
+    Es una propiedad del CALENDARIO de la curva, no de cada activo por separado: el
+    backtest (y los baselines) recorren la UNION de dias con barra, asi que basta un
+    activo 24/7 para que haya un punto cada dia natural y el factor sea 365 aunque la
+    cartera sea mayoritariamente bursatil. Solo una cartera exclusivamente de renta
+    variable vive en el calendario de sesiones, y esa es la que usa 252.
+
+    Sin clases de activo (curva sintetica de test, universo vacio) se devuelve el default
+    24/7: es el que reproduce el comportamiento historico y no cambia ninguna cifra ya
+    publicada.
+    """
+    classes = {c for c in asset_classes}
+    if not classes:
+        return TRADING_DAYS_PER_YEAR
+    return max(_PERIODS_BY_ASSET_CLASS.get(c, CRYPTO_PERIODS_PER_YEAR) for c in classes)
+
+
+def periods_per_year_for_symbols(symbols: Iterable[str]) -> int:
+    """`periods_per_year_for` a partir de los simbolos, deduciendo la clase por nombre."""
+    return periods_per_year_for(detect_asset_class(s) for s in symbols)
 
 
 @dataclass(slots=True)
@@ -92,6 +148,10 @@ class PerformanceMetrics:
     avg_loss_usd: float
     avg_holding_days: float
     total_fees_usd: float
+    # Observaciones/ano con las que se anualizaron sharpe, sortino y volatility_pct.
+    # Se reporta porque sin el esas tres cifras no son interpretables ni comparables
+    # entre ventanas de universos distintos (365 cripto vs 252 renta variable).
+    periods_per_year: int = TRADING_DAYS_PER_YEAR
 
     def as_dict(self) -> dict[str, float | int | None]:
         return {
@@ -114,6 +174,7 @@ class PerformanceMetrics:
             "avg_loss_usd": round(self.avg_loss_usd, 2),
             "avg_holding_days": round(self.avg_holding_days, 2),
             "total_fees_usd": round(self.total_fees_usd, 2),
+            "periods_per_year": self.periods_per_year,
         }
 
 
@@ -225,7 +286,11 @@ def _standardized_moment(returns: Sequence[float], *, order: int, fallback: floa
     return sum(((r - mean) / std) ** order for r in returns) / len(returns)
 
 
-def _annualized(returns: Sequence[float], downside_only: bool) -> float:
+def _annualized(
+    returns: Sequence[float],
+    downside_only: bool,
+    periods_per_year: int = TRADING_DAYS_PER_YEAR,
+) -> float:
     if len(returns) < 2:
         return 0.0
 
@@ -243,19 +308,26 @@ def _annualized(returns: Sequence[float], downside_only: bool) -> float:
     if std == 0:
         return 0.0
 
-    # Ratio diario anualizado por sqrt(dias); se asume tasa libre de riesgo 0.
-    return (mean / std) * math.sqrt(TRADING_DAYS_PER_YEAR)
+    # Ratio por observacion anualizado por sqrt(observaciones/ano); tasa libre de riesgo 0.
+    return (mean / std) * math.sqrt(periods_per_year)
 
 
-def sharpe_ratio(returns: Sequence[float]) -> float:
-    return _annualized(returns, downside_only=False)
+def sharpe_ratio(
+    returns: Sequence[float], periods_per_year: int = TRADING_DAYS_PER_YEAR
+) -> float:
+    return _annualized(returns, downside_only=False, periods_per_year=periods_per_year)
 
 
-def sortino_ratio(returns: Sequence[float]) -> float:
-    return _annualized(returns, downside_only=True)
+def sortino_ratio(
+    returns: Sequence[float], periods_per_year: int = TRADING_DAYS_PER_YEAR
+) -> float:
+    return _annualized(returns, downside_only=True, periods_per_year=periods_per_year)
 
 
 def cagr_pct(curve: Sequence[EquityPoint]) -> float:
+    """Retorno anualizado en TIEMPO DE CALENDARIO. No lleva `periods_per_year`: el ano
+    natural tiene 365 dias para cripto y para renta variable por igual (ver la nota de
+    los factores de anualizacion arriba)."""
     if len(curve) < 2:
         return 0.0
 
@@ -268,22 +340,33 @@ def cagr_pct(curve: Sequence[EquityPoint]) -> float:
     if days <= 0:
         return 0.0
 
-    years = days / TRADING_DAYS_PER_YEAR
+    years = days / CALENDAR_DAYS_PER_YEAR
     return ((end_equity / start_equity) ** (1.0 / years) - 1.0) * 100.0
 
 
-def volatility_pct(returns: Sequence[float]) -> float:
+def volatility_pct(
+    returns: Sequence[float], periods_per_year: int = TRADING_DAYS_PER_YEAR
+) -> float:
     if len(returns) < 2:
         return 0.0
     mean = sum(returns) / len(returns)
     variance = sum((r - mean) ** 2 for r in returns) / (len(returns) - 1)
-    return math.sqrt(variance) * math.sqrt(TRADING_DAYS_PER_YEAR) * 100.0
+    return math.sqrt(variance) * math.sqrt(periods_per_year) * 100.0
 
 
 def compute_metrics(
     curve: Sequence[EquityPoint],
     closed_positions: Sequence[Position],
+    *,
+    periods_per_year: int = TRADING_DAYS_PER_YEAR,
 ) -> PerformanceMetrics:
+    """
+    Metricas de una ventana. `periods_per_year` es el factor de anualizacion de las
+    magnitudes por observacion (Sharpe, Sortino, volatilidad): 365 para carteras 24/7 y
+    252 para carteras exclusivamente de renta variable. Resuelvelo con
+    `periods_per_year_for_symbols(universo)` y pasalo IGUAL a la estrategia y a sus
+    baselines: comparar dos Sharpe anualizados con factores distintos no significa nada.
+    """
     if not curve:
         raise ValueError("equity curve cannot be empty")
 
@@ -324,10 +407,10 @@ def compute_metrics(
         total_return_pct=total_return,
         cagr_pct=cagr,
         max_drawdown_pct=max_dd,
-        sharpe=sharpe_ratio(returns),
-        sortino=sortino_ratio(returns),
+        sharpe=sharpe_ratio(returns, periods_per_year),
+        sortino=sortino_ratio(returns, periods_per_year),
         calmar=calmar,
-        volatility_pct=volatility_pct(returns),
+        volatility_pct=volatility_pct(returns, periods_per_year),
         turnover=turnover_ratio(curve, closed_positions),
         num_trades=len(closed_positions),
         win_rate_pct=win_rate,
@@ -336,4 +419,5 @@ def compute_metrics(
         avg_loss_usd=avg_loss,
         avg_holding_days=avg_holding,
         total_fees_usd=sum(p.total_fees_usd for p in closed_positions),
+        periods_per_year=periods_per_year,
     )

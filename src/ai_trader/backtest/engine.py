@@ -15,6 +15,7 @@ from ai_trader.backtest.metrics import (
     PerformanceMetrics,
     compute_metrics,
     headline_score,
+    periods_per_year_for_symbols,
 )
 from ai_trader.config import AppConfig
 from ai_trader.data.backtest_source import BarProvider, HistoricalDataSource
@@ -110,6 +111,9 @@ class BacktestEngine:
         self.starting_equity = starting_equity
         self.headline_weights = headline_weights
         self._preloaded_bars = bars
+        # 365 si el universo incluye algun activo 24/7 (cripto o prediccion), 252 si es
+        # solo renta variable. Ver metrics.periods_per_year_for.
+        self.periods_per_year = periods_per_year_for_symbols(config.runner.symbols)
 
     @classmethod
     def from_bars(
@@ -211,7 +215,9 @@ class BacktestEngine:
             curve.append(EquityPoint(day=day.to_pydatetime(), equity=float(equity)))
 
         closed = [p for p in runner.state.positions if not p.is_open]
-        metrics = compute_metrics(curve, closed)
+        # El factor de anualizacion lo fija el UNIVERSO, no cada ventana: asi train y
+        # test (y los baselines, que reciben el mismo universo) son comparables entre si.
+        metrics = compute_metrics(curve, closed, periods_per_year=self.periods_per_year)
 
         logger.info(
             "Window '%s' done | trades=%s | return=%.2f%% | maxDD=%.2f%% | sharpe=%.3f "

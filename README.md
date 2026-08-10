@@ -76,6 +76,16 @@ equity ya paga. La evidencia se publica en `data/calibration/` y se reproduce co
 .venv\Scripts\python.exe -m ai_trader.scoring.weight_study --analyze-only  # re-analiza
 ```
 
+**Anualización por clase de activo.** Sharpe, Sortino y volatilidad se anualizan por
+`√N`, donde `N` es el número de observaciones al año, y eso depende del mercado: cripto
+cotiza 24/7 (365 barras) y la renta variable solo en sesión (252). El factor lo fija el
+**universo del config** —252 si la cartera es exclusivamente bursátil, 365 en cuanto hay
+un activo 24/7, porque el backtest recorre la unión de días con barra— y se aplica igual
+a la estrategia y a sus baselines: comparar dos Sharpe anualizados con escalas distintas
+no significaría nada. Las métricas lo reportan como `periods_per_year`. El **CAGR** es
+aparte: vive en tiempo de calendario y divide siempre por 365 días naturales, sea cual
+sea el activo.
+
 Los mercados de predicción (Polymarket) quedan fuera del backtest: no hay histórico
 OHLCV, solo midpoint vivo.
 
@@ -149,6 +159,16 @@ poetry run ruff check .  # linter
 - `.cache/bars/` es caché de barras en parquet; se puede borrar sin consecuencias, se regenera.
 - `data/calibration/` y `data/fidelity/` **sí** se versionan: son la evidencia publicada de los
   estudios (pesos del headline y fidelidad sintético-vs-real) que consumen dashboard y documentación.
+- **El universo sintético y el operado no son el mismo, a propósito.** `config/default.toml` es lo
+  que se opera en vivo y solo lleva símbolos vivos; `config/synthetic.toml` tiene que coincidir
+  símbolo a símbolo con `DEFAULT_UNIVERSE` del generador o habría activos sin barras. De ahí que
+  `MATIC/USDT` esté fuera del primero (Binance lo deslistó, ahora es POL) y dentro del segundo,
+  donde no cotiza contra ningún exchange y retirarlo desincronizaría la evidencia ya publicada
+  sobre 35 activos. El motivo completo está en `src/ai_trader/synthetic/universe.py`.
+- **El diseño de escenarios con IA no es reproducible y no puede serlo:** los modelos actuales
+  retiraron los parámetros de muestreo, así que no hay palanca de determinismo. Se mitiga guardando
+  el `spec.json` de cada escenario, que es la única salida cara; todo lo posterior se regenera
+  determinísticamente desde él.
 
 ## Mover la herramienta a otro ordenador
 

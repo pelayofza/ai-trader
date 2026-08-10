@@ -14,7 +14,12 @@ from ai_trader.execution.router import ExecutionRouter
 from ai_trader.notifications.base import NullNotifier, Notifier
 from ai_trader.risk.engine import PortfolioState, RiskEngine
 from ai_trader.shared.clock import Clock, LiveClock
-from ai_trader.shared.instruments import AssetClass, PredictionMarket, Venue
+from ai_trader.shared.instruments import (
+    PREDICTION_PREFIX,
+    AssetClass,
+    PredictionMarket,
+    Venue,
+)
 from ai_trader.shared.schemas import (
     ExecutionResult,
     OrderRequest,
@@ -27,8 +32,6 @@ from ai_trader.shared.schemas import (
 )
 
 logger = logging.getLogger(__name__)
-
-PREDICTION_PREFIX = "PM::"
 
 
 class MarketDataReader(Protocol):

@@ -292,7 +292,7 @@ function renderOverview(){
     ['C','Costes que muerden (spread por símbolo, impacto, capacidad)','hecho'],
     ['B','Fidelidad sintético-vs-real medida contra CCXT (rank-corr)','hecho'],
     ['D','Validación (CPCV/walk-forward)','pendiente'],
-    ['E','Limpieza de consistencia','pendiente'],
+    ['E','Limpieza de consistencia (universo, anualización, diseñador)','hecho'],
   ];
   host.innerHTML=`
     <h1>AI-Trader · Dashboard</h1>
@@ -323,6 +323,15 @@ function renderSynthetic(){
     <h1>Datos sintéticos</h1>
     <p class="lead">Librería <b>${esc(D.synthetic.library)}</b>: ${sc.length} escenarios macro × ${D.synthetic.n_paths} paths Monte Carlo,
       horizonte ${D.synthetic.horizon_days} días, 35 activos. Deterministas y reproducibles. Diseñador: <span class="mono">${esc(D.synthetic.designer||'')}</span>.</p>
+    <div class="note"><b>Qué es reproducible aquí, y qué no.</b> Todo lo que va del <i>spec.json</i> hacia abajo
+      —caminos, velas, backtests, métricas— es determinista dado el spec y la semilla. El <b>diseño</b> en sí no lo es
+      ni puede serlo: los modelos actuales retiraron los parámetros de muestreo (<span class="mono">temperature</span>
+      y compañía devuelven error), así que no existe palanca de determinismo y rehacer una librería con IA produce
+      siempre una librería nueva. Por eso el <i>spec.json</i> se guarda: es la única salida cara e insustituible.
+      <br><br><b>MATIC/USDT.</b> Está deslistado en Binance (migró a POL) y por eso salió del universo que se opera en
+      vivo, pero se mantiene <i>a propósito</i> en el sintético: aquí el símbolo es la etiqueta de un perfil de cargas
+      factoriales, no un par que se pida a un exchange, y retirarlo cambiaría el universo a 34 activos, desincronizando
+      la calibración de pesos y el estudio de fidelidad, ambos medidos sobre 35.</div>
     <h2>El mundo dejó de mentir: ai_v1 (iid) → ai_v2 (retrofit)</h2>
     <p class="lead">El generador ganó colas gruesas, clustering de volatilidad y estructura serial. Sin esto, la reversión a la media era inganable por construcción.</p>
     <div class="card"><div class="tblwrap"><table><thead><tr><th>Stylized fact</th><th class="num">ai_v1 (iid)</th><th class="num">ai_v2</th><th>Qué significa</th></tr></thead><tbody>
@@ -605,6 +614,14 @@ function renderRanking(){
     <div class="note"><b>Muestra reducida.</b> ${sc.n_scenarios} escenarios × ${sc.n_paths} paths sobre <b>${esc(sc.library)}</b>,
       universo de ${sc.universe?sc.universe.length:'?'} activos, ventana ${sc.window_days} días. Para ampliar el scope,
       edita las constantes <span class="mono">RANK_*</span> en <span class="mono">dashboard/build_dashboard.py</span> y regenera.</div>
+    <div class="note"><b>Cómo se anualiza el Sharpe.</b> Por número de observaciones al año, y eso depende del mercado:
+      cripto cotiza 24/7 (365 barras) y la renta variable solo en sesión (252). Anualizar acciones por 365 inflaba su
+      Sharpe y su volatilidad un 20% (<span class="mono">√(365/252)=1,204</span>). El factor lo fija el <b>universo</b>
+      —365 en cuanto hay un activo 24/7, porque el backtest recorre la unión de días con barra— y se aplica igual a la
+      estrategia y a sus baselines: comparar dos Sharpe con escalas distintas no significaría nada. Este universo mezcla
+      cripto y renta variable, así que todo lo de esta vista está anualizado por <b>365</b>; las métricas lo reportan en
+      <span class="mono">periods_per_year</span>. El CAGR es aparte: vive en tiempo de calendario (365 días naturales
+      para toda clase de activo).</div>
     ${(R.rows&&R.rows.length)?`
     <h2>Estrategias</h2>
     <p class="lead">La columna <b>gate</b> es el veredicto: una estrategia solo <i>aprueba</i> si su CVaR@25% supera al del

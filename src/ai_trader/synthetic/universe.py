@@ -95,6 +95,23 @@ class SyntheticUniverse:
 # sentido y no se malinterpreten (requisito del diseno: cada escenario cubre TODOS
 # los tipos). Las cargas son cualitativas pero plausibles; la IA no las toca, solo
 # mueve los factores y aplica tilts por escenario.
+#
+# POR QUE SIGUE MATIC/USDT AQUI (y no en config/default.toml). Binance deslisto el par
+# (el token migro a POL), asi que se retiro del universo EN VIVO: alli un simbolo muerto
+# falla en silencio en cada ciclo. Aqui no opera nada: los simbolos del universo
+# sintetico son ETIQUETAS de un perfil de cargas factoriales, y las barras las genera el
+# motor, no un exchange. Se mantiene por tres razones concretas:
+#   1. Tiene contraparte real en la ventana con la que se mide la fidelidad (2017-2026):
+#      el estudio publicado en data/fidelity/report_ai_v2.json lo compara con datos
+#      reales de Binance y lo lista en `symbols` con `missing_symbols` vacio.
+#   2. Quitarlo cambiaria el universo de 35 a 34 activos y desincronizaria toda la
+#      evidencia ya publicada sobre 35: la calibracion de pesos (data/calibration,
+#      480 backtests) y el propio estudio de fidelidad (12 cripto) habria que recorrerlos.
+#   3. Las librerias ya generadas (ai_v1, ai_v2) guardan su universo en el manifiesto y
+#      se reconstruyen con `universe_from_summary`, asi que seguirian trayendolo igual.
+# Limite declarado: si algun dia se vuelve a correr el estudio de fidelidad sobre una
+# ventana reciente, MATIC/USDT no tendra datos reales y saldra en `missing_symbols`. Ese
+# es el momento de renombrarlo a POL/USDT y republicar las mediciones, no antes.
 
 def _crypto(symbol, price, equity, usd, crypto, idio, adv):
     return SyntheticAsset(
@@ -139,6 +156,7 @@ DEFAULT_UNIVERSE = SyntheticUniverse(
         _crypto("LINK/USDT", 15.0, equity=0.38, usd=-0.24, crypto=1.30, idio=0.040, adv=500 * _M),
         _crypto("DOGE/USDT", 0.12, equity=0.30, usd=-0.18, crypto=1.25, idio=0.055, adv=1.2 * _B),
         _crypto("DOT/USDT", 6.50, equity=0.36, usd=-0.22, crypto=1.25, idio=0.038, adv=250 * _M),
+        # Deslistado en Binance (-> POL); se mantiene a proposito, ver la nota de arriba.
         _crypto("MATIC/USDT", 0.80, equity=0.38, usd=-0.22, crypto=1.30, idio=0.044, adv=300 * _M),
         _crypto("LTC/USDT", 90.0, equity=0.28, usd=-0.20, crypto=1.00, idio=0.032, adv=400 * _M),
         # --- Renta variable (20): indices amplios + nombres por sector ---

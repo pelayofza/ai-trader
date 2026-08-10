@@ -11,11 +11,9 @@ from ai_trader.data.providers.ccxt_crypto import CCXTCrypto
 from ai_trader.data.providers.polymarket_clob import PolymarketClobProvider
 from ai_trader.data.providers.polymarket_gamma import PolymarketGammaProvider
 from ai_trader.shared.bars import normalize_bars
-from ai_trader.shared.instruments import AssetClass, PredictionMarket
+from ai_trader.shared.instruments import AssetClass, PredictionMarket, detect_asset_class
 
 logger = logging.getLogger(__name__)
-
-PREDICTION_PREFIX = "PM::"
 
 
 class MarketDataService:
@@ -126,16 +124,13 @@ class MarketDataService:
     # --- enrutado ---
 
     def detect_asset_class(self, symbol: str) -> AssetClass:
+        # Regla canonica por nombre (shared.instruments) + lo que solo sabe el proveedor:
+        # un simbolo sin barra puede seguir siendo cripto si CCXT sabe servirlo.
         normalized = symbol.strip().upper()
-
-        if normalized.startswith(PREDICTION_PREFIX):
-            return AssetClass.PREDICTION
-        if "/" in normalized:
+        base = detect_asset_class(normalized)
+        if base == AssetClass.STOCK and self.crypto_provider.can_handle_symbol(normalized):
             return AssetClass.CRYPTO
-        if self.crypto_provider.can_handle_symbol(normalized):
-            return AssetClass.CRYPTO
-
-        return AssetClass.STOCK
+        return base
 
     def _fetch_daily_bars(
         self,

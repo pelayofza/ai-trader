@@ -16,6 +16,16 @@ from ai_trader.synthetic.universe import (
 
 logger = logging.getLogger(__name__)
 
+# Modelo del disenador con IA. VERIFICADO contra el catalogo vigente de la API de
+# Anthropic: `claude-opus-4-8` es un alias activo (Claude Opus 4.8, ventana de 1M,
+# 128K de salida maxima), no un identificador retirado ni con sufijo de fecha. El
+# sucesor `claude-opus-5` tambien esta disponible y en la misma banda de precio; se
+# deja en 4.8 porque es con lo que se generaron las librerias existentes y cambiarlo
+# cambia los escenarios, no una constante.
+#
+# Lo que SI estaba roto y se ha corregido: esta familia (Opus 4.7 en adelante) retiro
+# los parametros de muestreo. Enviar `temperature`, `top_p` o `top_k` devuelve un 400,
+# asi que la peticion tal y como estaba construida no podia completarse nunca.
 DEFAULT_MODEL = "claude-opus-4-8"
 
 
@@ -201,8 +211,32 @@ Return ONLY a JSON object: {{"scenarios": [ ... ]}}."""
 
 
 class ClaudeScenarioDesigner:
-    """Disena escenarios llamando a Claude. Import de `anthropic` perezoso: el modulo
-    se importa sin la dependencia; solo hace falta al generar de verdad."""
+    """
+    Disena escenarios llamando a Claude. Import de `anthropic` perezoso: el modulo
+    se importa sin la dependencia; solo hace falta al generar de verdad.
+
+    EL DISENO NO ES REPRODUCIBLE, Y NO PUEDE SERLO.
+    ------------------------------------------------
+    Dos llamadas con el mismo prompt y el mismo modelo devuelven escenarios distintos.
+    Antes esto se atribuia a `temperature=1.0`; la realidad es mas fuerte: los modelos
+    Opus 4.7+ RETIRARON los parametros de muestreo (`temperature`, `top_p`, `top_k`
+    devuelven 400), asi que ya no existe ninguna palanca -ni siquiera `temperature=0`,
+    que tampoco garantizaba salidas identicas en los modelos que la aceptaban- con la
+    que forzar determinismo. Rehacer una libreria con IA produce SIEMPRE una libreria
+    nueva, nunca la misma otra vez.
+
+    MITIGACION: no se re-deriva, se GUARDA. El `spec.json` de cada escenario se persiste
+    en disco (`SyntheticStore`, <lib>/scenarios/<id>/spec.json) y es la unica salida cara
+    e insustituible del sistema. Todo lo que va detras -caminos, barras, backtests,
+    metricas- es determinista dado el spec y la semilla, asi que se puede borrar y
+    regenerar bit a bit. La reproducibilidad del proyecto descansa en el artefacto
+    guardado, no en la llamada a la IA.
+
+    LIMITE DECLARADO: el manifiesto registra la CLASE del disenador
+    (`ClaudeScenarioDesigner`), no el identificador del modelo. Dos librerias generadas
+    con modelos distintos son indistinguibles por el manifiesto; si eso llega a importar,
+    hay que anotar el modelo junto a la libreria.
+    """
 
     def __init__(
         self,
@@ -210,12 +244,10 @@ class ClaudeScenarioDesigner:
         api_key: str | None = None,
         *,
         max_tokens: int = 32_000,
-        temperature: float = 1.0,
     ) -> None:
         self.model = model
         self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
         self.max_tokens = max_tokens
-        self.temperature = temperature
 
     def design(
         self, universe: SyntheticUniverse, n_scenarios: int, horizon_days: int
@@ -238,11 +270,13 @@ class ClaudeScenarioDesigner:
         logger.info("Requesting %s scenarios from %s", n_scenarios, self.model)
         # Streaming obligatorio: con max_tokens alto el SDK rechaza las peticiones
         # no-streaming que podrian superar los 10 min. Ademas evita timeouts.
+        # Sin parametros de muestreo: los modelos actuales los rechazan con un 400 (ver
+        # la nota de DEFAULT_MODEL). La diversidad de los escenarios la pide el prompt,
+        # no un temperature.
         parts: list[str] = []
         with client.messages.stream(
             model=self.model,
             max_tokens=self.max_tokens,
-            temperature=self.temperature,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}],
         ) as stream:

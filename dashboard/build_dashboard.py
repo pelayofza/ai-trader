@@ -850,25 +850,31 @@ ROADMAP = [
         ),
     },
     {
-        "id": "line-e-cleanup",
-        "title": "Limpieza de consistencia",
+        "id": "designer-model-in-manifest",
+        "title": "Anotar el modelo de IA en el manifiesto de cada libreria",
         "line": "E", "status": "pendiente", "impact": "bajo", "effort": "bajo",
-        "why": "MATIC/USDT sigue en el universo pese a estar deslistado en Binance; "
-               "TRADING_DAYS_PER_YEAR=365 desanualiza mal la renta variable; el designer usa "
-               "temperature=1.0 (diseño no reproducible, mitigado guardando spec.json).",
+        "why": "El diseno con IA no es reproducible y ya no puede serlo (los modelos actuales "
+               "retiraron los parametros de muestreo), asi que la unica trazabilidad posible es "
+               "registrar CON QUE se genero. Hoy el manifiesto guarda la clase del disenador "
+               "('ClaudeScenarioDesigner'), no el identificador del modelo: dos librerias "
+               "generadas con modelos distintos son indistinguibles.",
         "prompt": (
-            "Proyecto ai-trader (Python). Tres inconsistencias de higiene a resolver:\n"
-            "1) MATIC/USDT sigue en el universo sintetico (src/ai_trader/synthetic/universe.py) "
-            "y en config/synthetic.toml pese a estar deslistado en Binance: o retiralo de ambos "
-            "sitios, o documenta explicitamente por que se mantiene; deja consistentes "
-            "config/default.toml y config/synthetic.toml.\n"
-            "2) TRADING_DAYS_PER_YEAR en src/ai_trader/backtest/metrics.py es 365 global, lo que "
-            "desanualiza mal la renta variable: usa 252 para acciones y 365 para cripto al "
-            "anualizar metricas por clase de activo.\n"
-            "3) Verifica que DEFAULT_MODEL del disenador (src/ai_trader/synthetic/designer.py) "
-            "resuelve contra la API actual y documenta que con temperature=1.0 el diseño no es "
-            "reproducible (se mitiga guardando el spec.json). Tests donde aplique. Regenera "
-            "dashboard y docs. .venv\\Scripts\\python.exe (poetry run roto) + ruff."
+            "Proyecto ai-trader (Python). El disenador con IA "
+            "(src/ai_trader/synthetic/designer.py, ClaudeScenarioDesigner) produce escenarios NO "
+            "reproducibles por diseno: los modelos Opus 4.7+ retiraron temperature/top_p/top_k, "
+            "asi que no hay ninguna palanca de determinismo. La mitigacion vigente es guardar el "
+            "spec.json. Falta la trazabilidad: SyntheticDataService "
+            "(src/ai_trader/synthetic/service.py) escribe en el manifiesto "
+            "`designer=type(self.designer).__name__`, es decir solo la clase.\n"
+            "TAREA: haz que el manifiesto registre tambien el identificador del modelo y la fecha "
+            "de generacion del diseno, sin romper las librerias ya publicadas (ai_v1, ai_v2): "
+            "manifiestos antiguos sin ese campo deben seguir cargando. Sugerencia: un metodo/"
+            "propiedad opcional en el protocolo ScenarioDesigner (p.ej. `describe()`) que el "
+            "servicio consulte con getattr y que TemplateScenarioDesigner tambien implemente, y "
+            "un campo nuevo en SyntheticManifest con valor por defecto. Expon el dato en la vista "
+            "'Datos sinteticos' del dashboard. Tests de compatibilidad hacia atras (cargar un "
+            "manifiesto sin el campo) + .venv\\Scripts\\python.exe (poetry run roto) + ruff. "
+            "Regenera dashboard y docs."
         ),
     },
     {

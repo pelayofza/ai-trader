@@ -30,6 +30,7 @@ from ai_trader.backtest.metrics import (
     PerformanceMetrics,
     compute_metrics,
     headline_score,
+    periods_per_year_for_symbols,
 )
 from ai_trader.scoring.aggregate import DEFAULT_CVAR_ALPHA, RewardStats, aggregate_reward
 from ai_trader.shared import bars as bar_schema
@@ -110,11 +111,18 @@ def compute_baselines(
     fee_rate: float = 0.0,
     slippage_bps: float = 0.0,
     weights: HeadlineWeights = DEFAULT_HEADLINE_WEIGHTS,
+    periods_per_year: int | None = None,
 ) -> dict[str, Baseline]:
     """Puntua los tres baselines pasivos sobre la ventana [start, end] de una muestra.
 
     Los baselines que no tengan barras (p.ej. SPY en un universo solo cripto) se omiten
-    del resultado; no se sustituyen ni se rellenan con ceros."""
+    del resultado; no se sustituyen ni se rellenan con ceros.
+
+    `periods_per_year` se resuelve UNA VEZ para todo el universo de la muestra y se aplica
+    a los tres baselines por igual, aunque `spy_hold` sea puramente bursatil: los tres
+    recorren el mismo calendario union que la estrategia, y un Sharpe anualizado con un
+    factor distinto no seria comparable con el que tiene que batir. Pasalo desde el
+    llamante si la estrategia usa uno propio."""
     cost_rate = fee_rate + slippage_bps / 10_000.0
     calendar = _calendar(bars, start, end)
     if len(calendar) < 2:
@@ -122,6 +130,8 @@ def compute_baselines(
 
     out: dict[str, Baseline] = {}
     universe = tuple(sorted(bars))
+    if periods_per_year is None:
+        periods_per_year = periods_per_year_for_symbols(universe)
 
     for name, symbols in (
         (BASELINE_BTC, (BTC_SYMBOL,)),
@@ -134,6 +144,7 @@ def compute_baselines(
         baseline = _hold_portfolio(
             name, bars, available, calendar,
             starting_equity=starting_equity, cost_rate=cost_rate, weights=weights,
+            periods_per_year=periods_per_year,
         )
         if baseline is not None:
             out[name] = baseline
@@ -241,6 +252,7 @@ def _hold_portfolio(
     starting_equity: float,
     cost_rate: float,
     weights: HeadlineWeights,
+    periods_per_year: int,
 ) -> Baseline | None:
     """Compra equiponderada el primer dia y liquida el ultimo, pagando coste en ambas
     patas. Es el mismo trato que recibe la estrategia (que tambien liquida al cierre de
@@ -295,7 +307,7 @@ def _hold_portfolio(
             )
         )
 
-    metrics = compute_metrics(curve, positions)
+    metrics = compute_metrics(curve, positions, periods_per_year=periods_per_year)
     return Baseline(
         name=name,
         label=BASELINE_LABELS[name],

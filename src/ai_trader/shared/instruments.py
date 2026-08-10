@@ -17,6 +17,30 @@ class AssetClass(str, Enum):
     PREDICTION = "prediction"
 
 
+# Prefijo de los mercados de prediccion en el universo ("PM::<slug>"). Vive aqui, junto
+# a AssetClass, porque es parte de la convencion de nombres de simbolo, no de un
+# proveedor concreto: los tres modulos que enrutan por simbolo lo importan de aqui.
+PREDICTION_PREFIX = "PM::"
+
+
+def detect_asset_class(symbol: str) -> AssetClass:
+    """
+    Clase de activo DEDUCIDA DEL NOMBRE del simbolo, sin tocar red ni proveedores.
+
+    Es la regla canonica del proyecto y la unica fuente de verdad de la convencion:
+      "PM::<slug>" -> prediccion, "BTC/USDT" (con barra) -> cripto, "AAPL" -> accion.
+
+    Los proveedores pueden AFINARLA con lo que saben (MarketDataService pregunta ademas
+    a CCXT si sabe servir un simbolo sin barra), pero nadie debe reimplementarla.
+    """
+    normalized = symbol.strip().upper()
+    if normalized.startswith(PREDICTION_PREFIX):
+        return AssetClass.PREDICTION
+    if "/" in normalized:
+        return AssetClass.CRYPTO
+    return AssetClass.STOCK
+
+
 @dataclass(slots=True)
 class OutcomeToken:
     outcome: str

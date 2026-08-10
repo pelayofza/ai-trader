@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import math
 from datetime import datetime, timezone
 
@@ -8,7 +9,11 @@ import pandas as pd
 import pytest
 
 from ai_trader.backtest.engine import BacktestEngine, resolve_split_cutoff
-from ai_trader.backtest.metrics import HeadlineWeights
+from ai_trader.backtest.metrics import (
+    CRYPTO_PERIODS_PER_YEAR,
+    STOCK_PERIODS_PER_YEAR,
+    HeadlineWeights,
+)
 from ai_trader.config import AppConfig, StrategySpec
 from ai_trader.execution.paper import PaperExecutionConfig
 from ai_trader.risk.engine import RiskLimits
@@ -120,6 +125,39 @@ class TestDataSources:
     def test_requires_a_data_source(self):
         with pytest.raises(ValueError, match="data_provider or preloaded bars"):
             BacktestEngine(make_config())
+
+
+class TestAnnualizationFactor:
+    """El motor fija el factor de anualizacion desde el UNIVERSO del config, una sola
+    vez: asi train y test (y los baselines, que reciben ese mismo universo) hablan la
+    misma escala. Antes se anualizaba todo por 365, tambien la renta variable."""
+
+    def _engine_for(self, symbols: list[str], bars: dict) -> BacktestEngine:
+        config = dataclasses.replace(
+            make_config(), runner=dataclasses.replace(make_config().runner, symbols=symbols)
+        )
+        return BacktestEngine.from_bars(config, bars, starting_equity=10_000.0)
+
+    def test_a_stock_only_universe_annualises_by_sessions(self):
+        engine = self._engine_for(["SPY"], {"SPY": trending_df(400)})
+
+        assert engine.periods_per_year == STOCK_PERIODS_PER_YEAR
+
+    def test_a_universe_with_crypto_annualises_by_calendar_days(self):
+        engine = self._engine_for(["SPY", "BTC/USDT"], {"BTC/USDT": trending_df(400)})
+
+        assert engine.periods_per_year == CRYPTO_PERIODS_PER_YEAR
+
+    def test_the_factor_reaches_both_windows_of_the_result(self):
+        engine = self._engine_for(["SPY"], {"SPY": trending_df(400)})
+
+        result = engine.run(
+            start=datetime(2024, 6, 1, tzinfo=timezone.utc),
+            end=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        )
+
+        assert result.train.metrics.periods_per_year == STOCK_PERIODS_PER_YEAR
+        assert result.test.metrics.periods_per_year == STOCK_PERIODS_PER_YEAR
 
 
 class TestSplit:

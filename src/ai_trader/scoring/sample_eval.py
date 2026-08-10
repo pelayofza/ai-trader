@@ -17,6 +17,7 @@ from ai_trader.backtest.metrics import (
     HeadlineWeights,
     daily_returns,
     kurtosis,
+    periods_per_year_for_symbols,
     skewness,
 )
 from ai_trader.config import AppConfig, StrategySpec
@@ -153,6 +154,10 @@ def evaluate_baselines(
     paga la estrategia: un baseline hace dos operaciones sobre los activos mas liquidos
     del universo, y darle el coste barato solo puede ENDURECER el liston que la
     estrategia tiene que superar. La direccion prudente del error.
+
+    El factor de anualizacion sale del MISMO universo que usa el motor de backtest (el
+    del config, no el de las barras de la muestra): si la estrategia anualiza su Sharpe
+    por sqrt(252) y su baseline por sqrt(365), el gate estaria comparando dos escalas.
     """
     cutoff = resolve_split_cutoff(start, end, split_ratio=split_ratio)
     return compute_baselines(
@@ -163,4 +168,5 @@ def evaluate_baselines(
         fee_rate=base_config.execution.fee_rate,
         slippage_bps=base_config.execution.slippage_bps,
         weights=headline_weights,
+        periods_per_year=periods_per_year_for_symbols(base_config.runner.symbols),
     )

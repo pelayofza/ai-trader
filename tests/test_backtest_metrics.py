@@ -1,21 +1,28 @@
 from __future__ import annotations
 
+import math
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
 from ai_trader.backtest.metrics import (
+    CRYPTO_PERIODS_PER_YEAR,
     DEFAULT_HEADLINE_WEIGHTS,
+    STOCK_PERIODS_PER_YEAR,
     EquityPoint,
     HeadlineWeights,
+    cagr_pct,
     compute_metrics,
     headline_score,
     kurtosis,
     max_drawdown_pct,
+    periods_per_year_for_symbols,
     sharpe_ratio,
     skewness,
+    sortino_ratio,
     turnover_ratio,
+    volatility_pct,
 )
 from ai_trader.scoring.weight_calibration import (
     CALIBRATION_REPORT,
@@ -214,6 +221,75 @@ class TestDefaultWeightsAreCalibrated:
         audit = report["cost_audit_active"]
 
         assert audit["measured_fee_rate"] == pytest.approx(audit["fee_rate"], rel=0.02)
+
+
+class TestAnnualizationByAssetClass:
+    """
+    Anualizar es elegir una unidad, y hay DOS distintas: el CAGR vive en tiempo de
+    calendario (365 dias naturales para todos) y el Sharpe/Sortino/volatilidad viven en
+    numero de observaciones (365 para cripto 24/7, 252 sesiones para renta variable).
+    Una constante global de 365 aplicada a la renta variable inflaba el Sharpe un 20%.
+    """
+
+    RETURNS = [0.01, -0.004, 0.007, -0.002, 0.011, 0.003]
+
+    def test_stock_only_universe_uses_trading_sessions(self):
+        assert periods_per_year_for_symbols(["SPY", "AAPL", "TLT"]) == STOCK_PERIODS_PER_YEAR
+
+    def test_crypto_only_universe_uses_calendar_days(self):
+        assert periods_per_year_for_symbols(["BTC/USDT", "ETH/USDT"]) == CRYPTO_PERIODS_PER_YEAR
+
+    def test_a_single_247_asset_sets_the_calendar_for_the_whole_portfolio(self):
+        """La curva recorre la UNION de dias con barra: basta un activo 24/7 para que
+        haya un punto cada dia natural, aunque la cartera sea casi toda bursatil."""
+        mixed = periods_per_year_for_symbols(["SPY", "AAPL", "TLT", "BTC/USDT"])
+
+        assert mixed == CRYPTO_PERIODS_PER_YEAR
+
+    def test_prediction_markets_do_not_close_either(self):
+        assert periods_per_year_for_symbols(["PM::some-market"]) == CRYPTO_PERIODS_PER_YEAR
+
+    def test_empty_universe_falls_back_to_the_247_default(self):
+        assert periods_per_year_for_symbols([]) == CRYPTO_PERIODS_PER_YEAR
+
+    def test_the_stock_factor_is_exactly_the_20_pct_the_old_constant_inflated(self):
+        crypto = sharpe_ratio(self.RETURNS, CRYPTO_PERIODS_PER_YEAR)
+        stock = sharpe_ratio(self.RETURNS, STOCK_PERIODS_PER_YEAR)
+
+        assert stock == pytest.approx(crypto * math.sqrt(252 / 365))
+        assert stock < crypto  # el bug inflaba la renta variable, no la desinflaba
+
+    def test_sortino_and_volatility_scale_with_the_same_factor(self):
+        ratio = math.sqrt(252 / 365)
+
+        assert sortino_ratio(self.RETURNS, STOCK_PERIODS_PER_YEAR) == pytest.approx(
+            sortino_ratio(self.RETURNS, CRYPTO_PERIODS_PER_YEAR) * ratio
+        )
+        assert volatility_pct(self.RETURNS, STOCK_PERIODS_PER_YEAR) == pytest.approx(
+            volatility_pct(self.RETURNS, CRYPTO_PERIODS_PER_YEAR) * ratio
+        )
+
+    def test_cagr_stays_in_calendar_time_for_every_asset_class(self):
+        """El CAGR NO lleva factor por clase: una accion que renta un 10% en 365 dias
+        naturales ha rentado un 10% anual, haya cotizado 252 sesiones o 365."""
+        c = curve([100.0 * (1.10 ** (i / 365)) for i in range(366)])
+
+        assert cagr_pct(c) == pytest.approx(10.0, abs=0.05)
+
+    def test_compute_metrics_applies_and_reports_the_factor(self):
+        c = curve([100, 103, 101, 105, 104, 108])
+
+        crypto = compute_metrics(c, [], periods_per_year=CRYPTO_PERIODS_PER_YEAR)
+        stock = compute_metrics(c, [], periods_per_year=STOCK_PERIODS_PER_YEAR)
+
+        # Se reporta: sin el, las tres cifras anualizadas no son interpretables.
+        assert stock.periods_per_year == STOCK_PERIODS_PER_YEAR
+        assert stock.as_dict()["periods_per_year"] == STOCK_PERIODS_PER_YEAR
+        assert stock.sharpe == pytest.approx(crypto.sharpe * math.sqrt(252 / 365))
+        # Lo que NO depende del factor: la curva es la misma.
+        assert stock.cagr_pct == pytest.approx(crypto.cagr_pct)
+        assert stock.max_drawdown_pct == pytest.approx(crypto.max_drawdown_pct)
+        assert stock.total_return_pct == pytest.approx(crypto.total_return_pct)
 
 
 class TestReturnMoments:

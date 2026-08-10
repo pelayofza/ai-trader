@@ -8,6 +8,19 @@
 #
 # Sizing por FRACCION DE EQUITY (el backtest inyecta starting_equity): los topes
 # absolutos en USD se dejan generosos porque en modo equity no aplican.
+#
+# DIFERENCIA DELIBERADA CON config/default.toml: alli el universo es el que se OPERA
+# (Binance/Alpaca en vivo) y MATIC/USDT esta retirado por deslistado; aqui el universo
+# no se opera, tiene que coincidir simbolo a simbolo con DEFAULT_UNIVERSE del generador,
+# y MATIC/USDT se mantiene a proposito. El motivo completo esta en
+# src/ai_trader/synthetic/universe.py (nota "POR QUE SIGUE MATIC/USDT AQUI"); en corto:
+# es una etiqueta de un perfil de cargas factoriales, tiene contraparte real en la
+# ventana del estudio de fidelidad, y retirarlo desincronizaria la evidencia publicada
+# sobre 35 activos (calibracion de pesos y fidelidad).
+#
+# ANUALIZACION: el universo mezcla cripto (24/7) y renta variable, asi que el backtest
+# recorre el calendario union y anualiza por 365 observaciones/ano. Un config solo de
+# renta variable anualizaria por 252 (ver backtest/metrics.periods_per_year_for).
 
 universe = [
   # --- Cripto (12) ---

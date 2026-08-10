@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 import json
+import re
+import sys
+import tomllib
+import types
 from datetime import datetime, timezone
+from pathlib import Path
 
 import numpy as np
 import pytest
 
 from ai_trader.synthetic.designer import (
+    DEFAULT_MODEL,
+    ClaudeScenarioDesigner,
     TemplateScenarioDesigner,
     normalize_spec,
     parse_scenarios,
@@ -376,6 +383,57 @@ class TestParseScenarios:
             parse_scenarios('{"foo": 1}', DEFAULT_UNIVERSE, horizon_days=50)
 
 
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _config_universe(name: str) -> list[str]:
+    with open(ROOT / "config" / name, "rb") as fh:
+        return list(tomllib.load(fh)["universe"])
+
+
+class TestUniverseConsistency:
+    """
+    Congela la DECISION sobre MATIC/USDT, que es lo unico que impide que vuelva a
+    quedarse a medias: retirado del universo que se opera (Binance lo deslisto, ahora es
+    POL) y mantenido a proposito en el universo sintetico, donde el simbolo es solo la
+    etiqueta de un perfil de cargas factoriales y retirarlo desincronizaria la evidencia
+    ya publicada sobre 35 activos. El razonamiento completo esta en universe.py.
+    """
+
+    DELISTED = "MATIC/USDT"
+
+    def test_the_live_universe_has_no_delisted_symbol(self):
+        assert self.DELISTED not in _config_universe("default.toml")
+
+    def test_the_synthetic_config_matches_the_generator_universe_symbol_by_symbol(self):
+        """Es la razon por la que los dos ficheros NO pueden ser iguales: este tiene que
+        cubrir los 35 activos que genera el motor, o habria simbolos sin barras."""
+        assert _config_universe("synthetic.toml") == DEFAULT_UNIVERSE.symbols
+
+    def test_the_delisted_symbol_is_kept_on_purpose_in_the_synthetic_side(self):
+        assert self.DELISTED in DEFAULT_UNIVERSE.symbols
+        assert self.DELISTED in _config_universe("synthetic.toml")
+
+    def test_the_reason_is_written_down_where_the_symbol_lives(self):
+        """Mantener un simbolo muerto solo es defendible si el motivo esta escrito: sin
+        esta nota, el siguiente que lo lea lo borra o lo deja por inercia."""
+        source = (ROOT / "src" / "ai_trader" / "synthetic" / "universe.py").read_text(
+            encoding="utf-8"
+        )
+        config = (ROOT / "config" / "synthetic.toml").read_text(encoding="utf-8")
+
+        assert "POR QUE SIGUE MATIC/USDT AQUI" in source
+        assert "MATIC/USDT" in config and "default.toml" in config
+
+    def test_the_synthetic_universe_is_still_the_documented_35_asset_mix(self):
+        """Las cifras publicadas (calibracion de pesos, estudio de fidelidad) se midieron
+        sobre este universo: 12 cripto + 23 no-cripto. Cambiarlo obliga a re-correrlas."""
+        crypto = [s for s in DEFAULT_UNIVERSE.symbols if "/" in s]
+
+        assert len(DEFAULT_UNIVERSE.symbols) == 35
+        assert len(crypto) == 12
+
+
 class TestTemplateDesigner:
     def test_produces_requested_count_with_fitted_horizon(self):
         specs = TemplateScenarioDesigner().design(DEFAULT_UNIVERSE, n_scenarios=10, horizon_days=300)
@@ -387,6 +445,108 @@ class TestTemplateDesigner:
         specs = TemplateScenarioDesigner().design(DEFAULT_UNIVERSE, n_scenarios=20, horizon_days=200)
 
         assert len({s.id for s in specs}) == 20
+
+
+class _FakeStream:
+    """Contexto minimo con el contrato que consume el disenador: `text_stream`."""
+
+    def __init__(self, payload: str) -> None:
+        self.text_stream = iter([payload])
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+class _FakeAnthropic:
+    """Cliente falso que CAPTURA los kwargs de la peticion en vez de llamar a la API."""
+
+    calls: list[dict] = []
+
+    def __init__(self, api_key=None, **_):
+        self.api_key = api_key
+        self.messages = self
+
+    def stream(self, **kwargs):
+        _FakeAnthropic.calls.append(kwargs)
+        return _FakeStream(
+            json.dumps(
+                {
+                    "scenarios": [
+                        {
+                            "id": "fake",
+                            "name": "Escenario falso",
+                            "narrative": "capturado en test",
+                            "phases": [{"length_days": 50, "drift": {}, "vol": {EQUITY: 0.01}}],
+                        }
+                    ]
+                }
+            )
+        )
+
+
+class TestClaudeDesignerRequest:
+    """
+    El disenador con IA no se puede testear contra la API real, pero SI se puede fijar
+    la forma de la peticion, que es donde estaba el fallo: enviaba `temperature=1.0` y
+    los modelos Opus 4.7+ retiraron los parametros de muestreo (400 en cada llamada).
+    """
+
+    # Alias vigentes de la API (sin sufijo de fecha). Si DEFAULT_MODEL sale de aqui, o
+    # es un identificador retirado o alguien invento uno: en ambos casos, 404.
+    CURRENT_ALIASES = {
+        "claude-fable-5",
+        "claude-opus-5",
+        "claude-opus-4-8",
+        "claude-opus-4-7",
+        "claude-opus-4-6",
+        "claude-sonnet-5",
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5",
+    }
+
+    @pytest.fixture
+    def designer(self, monkeypatch):
+        _FakeAnthropic.calls = []
+        module = types.ModuleType("anthropic")
+        module.Anthropic = _FakeAnthropic
+        monkeypatch.setitem(sys.modules, "anthropic", module)
+        return ClaudeScenarioDesigner(api_key="test-key")
+
+    def test_default_model_is_a_current_api_alias(self):
+        assert DEFAULT_MODEL in self.CURRENT_ALIASES
+        # Los alias no llevan sufijo de fecha; construir uno a mano da un 404.
+        assert not re.search(r"-\d{8}$", DEFAULT_MODEL)
+
+    def test_the_request_carries_no_sampling_parameters(self, designer):
+        designer.design(DEFAULT_UNIVERSE, n_scenarios=1, horizon_days=50)
+
+        sent = _FakeAnthropic.calls[-1]
+        assert sent["model"] == DEFAULT_MODEL
+        # El bug: cualquiera de las tres devuelve 400 en esta familia de modelos.
+        assert not {"temperature", "top_p", "top_k"} & set(sent)
+
+    def test_it_still_parses_the_scenarios_it_gets_back(self, designer):
+        specs = designer.design(DEFAULT_UNIVERSE, n_scenarios=1, horizon_days=50)
+
+        assert [s.id for s in specs] == ["fake"]
+        assert specs[0].horizon_days == 50
+
+    def test_it_refuses_to_run_without_credentials(self, monkeypatch):
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+        with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
+            ClaudeScenarioDesigner().design(DEFAULT_UNIVERSE, n_scenarios=1, horizon_days=50)
+
+    def test_the_designer_documents_that_its_output_is_not_reproducible(self):
+        """El diseno con IA no se puede re-derivar (ya no existe ni `temperature`), asi
+        que la mitigacion -guardar el spec.json- tiene que estar escrita donde se lee."""
+        doc = ClaudeScenarioDesigner.__doc__ or ""
+
+        assert "NO ES REPRODUCIBLE" in doc
+        assert "spec.json" in doc
 
 
 class TestGeneratePaths:

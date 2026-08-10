@@ -340,6 +340,7 @@ def render_html(f: dict) -> str:
         "DATE": f.get("date", ""),
         "NTESTS": f.get("n_tests", "—"),
         "NASSETS": f.get("n_assets", 35),
+        "NASSETS_MINUS_ONE": int(f.get("n_assets", 35)) - 1,
         "NCRYPTO": f.get("n_crypto", 12),
         "NEQUITY": f.get("n_equity", 20),
         "NMACRO": f.get("n_macro", 3),
@@ -487,6 +488,18 @@ entre un índice amplio y un altcoin: es el eje que hace que ejecutar cueste dis
 (§3.4). El universo se guarda de forma autocontenida en el manifiesto de cada librería (precio inicial,
 betas, volatilidad idiosincrática y liquidez), de modo que se pueda reconstruir el universo exacto y
 regenerar datos idénticos aunque el código cambie.</p>
+<div class="note"><b>Por qué el universo sintético y el operado no son el mismo (el caso MATIC/USDT).</b>
+Binance deslistó ese par (el token migró a POL), así que está <b>retirado</b> del universo que se opera
+en vivo (<span class="mono">config/default.toml</span>): allí un símbolo muerto falla en silencio en cada
+ciclo. En el universo sintético se <b>mantiene a propósito</b>, y esa asimetría es la decisión, no un
+descuido: aquí no cotiza nada contra un exchange — el símbolo es solo la etiqueta de un perfil de cargas
+factoriales y las velas las genera el motor —, tiene contraparte real en la ventana con la que se mide
+la fidelidad (2017-2026, y el informe publicado lo lista sin símbolos ausentes), y retirarlo cambiaría el
+universo de %%NASSETS%% a %%NASSETS_MINUS_ONE%% activos, desincronizando toda la evidencia ya publicada
+sobre %%NASSETS%%: la calibración de pesos y el propio estudio de fidelidad habría que re-medirlos.
+<b>Límite declarado:</b> si el estudio de fidelidad se vuelve a correr sobre una ventana reciente,
+MATIC/USDT no tendrá datos reales y aparecerá como ausente; ese es el momento de renombrarlo a POL/USDT
+y republicar las mediciones, no antes.</div>
 
 <h3>2.4 · El diseñador de escenarios (la única pieza con IA)</h3>
 <p>Un modelo de lenguaje (Claude) diseña la "física" de cada escenario macro y la emite como
@@ -500,10 +513,19 @@ que se puede leer y auditar sin ejecutar la IA.</div>
 caminos Monte Carlo se regeneran a partir de él sin volver a llamar a la IA (operación
 "resynthesize"), lo que permite ampliar el número de caminos o reconstruir los datos borrados de forma
 determinista.</p>
-<div class="note"><b>Reproducibilidad de la IA.</b> El diseñador usa <span class="mono">temperature=1.0
-</span>, así que el <i>diseño</i> en sí no es reproducible entre llamadas; se mitiga guardando el
-<i>spec.json</i> (la salida cara). Verificar el identificador del modelo y documentar esto es parte de
-la limpieza pendiente (§7).</div>
+<div class="note"><b>Reproducibilidad de la IA: no la hay, y no puede haberla.</b> Dos llamadas con el
+mismo prompt y el mismo modelo devuelven escenarios distintos. Antes esto se atribuía a
+<span class="mono">temperature=1.0</span>; la realidad es más fuerte: los modelos actuales
+(<span class="mono">claude-opus-4-8</span>, familia Opus&nbsp;4.7+) <b>retiraron los parámetros de
+muestreo</b> — enviar <span class="mono">temperature</span>, <span class="mono">top_p</span> o
+<span class="mono">top_k</span> devuelve un error 400 —, así que ya no existe ninguna palanca con la que
+forzar determinismo. Rehacer una librería con IA produce <i>siempre</i> una librería nueva.
+<br><br><b>Mitigación: no se re-deriva, se guarda.</b> El <i>spec.json</i> es la salida cara e
+insustituible y se persiste en disco; todo lo que va detrás (caminos, velas, backtests, métricas) es
+determinista dado el spec y la semilla. La reproducibilidad del proyecto descansa en el artefacto
+guardado, no en la llamada a la IA. <b>Límite declarado:</b> el manifiesto registra la <i>clase</i> del
+diseñador, no el identificador del modelo; dos librerías generadas con modelos distintos son
+indistinguibles por el manifiesto.</div>
 
 <h3>2.5 · Del spec a las velas (el motor numérico)</h3>
 <p>El motor convierte un spec en velas OHLCV multi-activo de forma <b>determinista</b> (vía
@@ -740,6 +762,26 @@ plana puntúa 0, no infinito) y la rotación tiene un precio explícito, de modo
 desaparece <i>por construcción</i>, no por vigilancia. Nótese que las dos puertas que de verdad cerraban el
 óptimo degenerado son el Sharpe y el precio de la rotación, <b>no</b> el término de drawdown: por eso la
 calibración de §5.2b puede dejarlo en cero sin reabrir ninguna de ellas.</div>
+<div class="note"><b>Anualizar: dos unidades que no son la misma.</b> El Sharpe de la cabecera está
+anualizado, y anualizar mal lo desplaza sistemáticamente. Hay que separar dos casos:
+<ul>
+<li><b>Tiempo de calendario (el CAGR).</b> Un año natural tiene 365 días para todo el mundo: una acción
+que renta un 10% entre enero y diciembre ha rentado un 10% anual, haya cotizado 252 sesiones o 365. El
+CAGR divide <i>siempre</i> por días naturales, sin distinguir clase de activo.</li>
+<li><b>Número de observaciones (Sharpe, Sortino, volatilidad).</b> Se anualizan por
+<span class="mono">√N</span>, donde N es cuántos retornos entran en un año — y ahí sí depende del
+mercado: cripto cotiza 24/7 (una barra por día natural, N&nbsp;=&nbsp;365) y la renta variable solo en
+sesión (N&nbsp;=&nbsp;252).</li>
+</ul>
+Una constante global de 365 aplicada también a la renta variable <b>inflaba su Sharpe y su volatilidad
+un 20%</b> (<span class="mono">√(365/252) = 1,204</span>). Ahora el factor lo fija el <i>universo</i>:
+252 si la cartera es exclusivamente bursátil, 365 en cuanto hay un activo 24/7 — porque el backtest
+recorre la <b>unión</b> de días con barra, así que basta un cripto para que haya un punto cada día
+natural. El factor se resuelve una sola vez, se aplica por igual a la estrategia y a sus baselines
+(comparar dos Sharpe anualizados con escalas distintas no significaría nada) y se <b>reporta</b> en las
+métricas como <span class="mono">periods_per_year</span>, para que las cifras publicadas sean
+interpretables sin mirar el código. El universo sintético mezcla cripto y renta variable, así que todas
+las cifras de este documento están anualizadas por 365.</div>
 %%CALIBRATION%%
 
 <h3>5.3 · El estadístico de recompensa: CVaR al 25%</h3>
@@ -867,7 +909,7 @@ de sobreajuste puro da PBO ≈ 1; probar más configuraciones sube el listón de
 <tr><td>Validación (CPCV / walk-forward multiventana)</td><td class="pend">Pendiente</td><td>El split único sobre-estima la robustez.</td></tr>
 <tr><td>Validación sintético-vs-real (correlación de rangos con CCXT)</td><td class="ok">Hecho</td><td>Medida contra ocho años de histórico real: el nivel de riesgo y el orden de las correlaciones cruzadas se sostienen (§2.8).</td></tr>
 <tr><td>Colas y agrupamiento por debajo del mercado real</td><td class="pend">Pendiente</td><td>Lo que destapó esa validación: el sustrato subestima la pérdida de cola, así que las cifras absolutas de riesgo son optimistas.</td></tr>
-<tr><td>Limpieza de consistencia (universo, anualización, reproducibilidad del diseñador)</td><td class="pend">Pendiente</td><td>Higiene para comparaciones y auditoría.</td></tr>
+<tr><td>Limpieza de consistencia (universo, anualización, reproducibilidad del diseñador)</td><td class="ok">Hecho</td><td>La anualización distingue clase de activo (252 sesiones / 365 días naturales) y se reporta; la no-reproducibilidad del diseñador está documentada y su petición ya no envía parámetros de muestreo retirados; MATIC/USDT queda fuera del universo operado y dentro del sintético, con el motivo escrito.</td></tr>
 <tr><td>Optimización CEM completa sobre el sustrato realista</td><td class="pend">Pendiente</td><td>El harness está listo; falta correrlo a escala (coste de cómputo).</td></tr>
 </tbody></table>
 <p class="tag">El dashboard de la herramienta mantiene el detalle accionable de cada mejora, con un

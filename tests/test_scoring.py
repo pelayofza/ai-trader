@@ -11,6 +11,7 @@ from ai_trader.app.runner import RunnerConfig
 from ai_trader.config import AppConfig
 from ai_trader.execution.paper import PaperExecutionConfig
 from ai_trader.risk.engine import RiskLimits
+from ai_trader.backtest.metrics import CRYPTO_PERIODS_PER_YEAR, STOCK_PERIODS_PER_YEAR
 from ai_trader.scoring.aggregate import aggregate_reward
 from ai_trader.scoring.baselines import (
     BASELINE_BTC,
@@ -207,6 +208,35 @@ class TestBaselines:
         ew = out[BASELINE_EQUAL_WEIGHT].metrics.total_return_pct
         btc = out[BASELINE_BTC].metrics.total_return_pct
         assert btc > ew  # GLD, que cae, arrastra a la equiponderada hacia abajo
+
+    def test_every_baseline_is_annualised_on_the_same_scale(self):
+        """
+        El gate compara el Sharpe de la estrategia con el del mejor baseline. Si
+        `spy_hold` -puramente bursatil- se anualizara por 252 y la estrategia por 365,
+        la comparacion seria entre dos escalas y el baseline saldria artificialmente
+        peor. El factor lo fija el universo de la muestra, no los simbolos de cada
+        baseline: los tres recorren el mismo calendario union.
+        """
+        out = self._compute(self._bars())  # universo mixto: cripto + SPY + GLD
+
+        factors = {name: b.metrics.periods_per_year for name, b in out.items()}
+        assert set(factors.values()) == {CRYPTO_PERIODS_PER_YEAR}
+
+    def test_a_stock_only_sample_annualises_by_sessions(self):
+        bars = self._bars()
+        del bars["BTC/USDT"]
+
+        out = self._compute(bars)
+
+        assert out[BASELINE_SPY].metrics.periods_per_year == STOCK_PERIODS_PER_YEAR
+
+    def test_the_caller_can_impose_the_strategy_factor(self):
+        """`evaluate_baselines` lo pasa desde el universo del config para que baselines
+        y estrategia usen exactamente el mismo, aunque las barras de la muestra no
+        traigan todos los simbolos del universo."""
+        out = self._compute(self._bars(), periods_per_year=STOCK_PERIODS_PER_YEAR)
+
+        assert out[BASELINE_BTC].metrics.periods_per_year == STOCK_PERIODS_PER_YEAR
 
     def test_baselines_pay_the_same_frictions_as_the_strategy(self):
         free = self._compute(self._bars())[BASELINE_BTC].metrics
