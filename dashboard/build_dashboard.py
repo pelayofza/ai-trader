@@ -34,6 +34,10 @@ from ai_trader.scoring.overfit import (
     probability_of_backtest_overfitting,
 )
 from ai_trader.scoring.sample_eval import evaluate_baselines, evaluate_sample_detailed
+from ai_trader.scoring.validation_study import (
+    VALIDATION_REPORT,
+    load_validation_report,
+)
 from ai_trader.scoring.weight_calibration import (
     CALIBRATION_REPORT,
     grid_point,
@@ -698,6 +702,110 @@ def collect_fidelity() -> dict | None:
     }
 
 
+def _fold_geometry(plan: dict) -> dict:
+    """La geometria REAL de los folds del estudio, en fracciones del rango, para dibujar
+    el diagrama de bandas. No corre backtests: reconstruye los mismos folds que se
+    corrieron, asi que lo que se dibuja es lo que se ejecuto, no una ilustracion."""
+    from ai_trader.backtest.validation import build_folds
+
+    start = datetime.fromisoformat(plan["start"])
+    end = datetime.fromisoformat(plan["end"])
+    span = (end - start).days or 1
+
+    def bands(folds) -> list[dict]:
+        return [
+            {
+                "label": f.label,
+                "train": [
+                    {"a": (b.start - start).days / span, "b": (b.end - start).days / span}
+                    for b in f.train
+                ],
+                "test": [
+                    {"a": (b.start - start).days / span, "b": (b.end - start).days / span}
+                    for b in f.test
+                ],
+            }
+            for f in folds
+        ]
+
+    common = dict(purge_days=plan["purge_days"])
+    wf = build_folds(start, end, scheme="walk_forward", n_folds=plan["n_folds"], **common)
+    cpcv = build_folds(
+        start, end, scheme="cpcv",
+        n_groups=plan["n_groups"], n_test_groups=plan["n_test_groups"], **common,
+    )
+    single = build_folds(start, end, scheme="single_split", **common)
+    return {
+        "span_days": span,
+        "start": start.date().isoformat(),
+        "end": end.date().isoformat(),
+        "single_split": bands(single),
+        "walk_forward": bands(wf),
+        "cpcv": bands(cpcv),
+    }
+
+
+def collect_validation() -> dict | None:
+    """Comparacion medida entre el corte unico 70/30 y la validacion multiventana
+    (data/validation).
+
+    Se LEE del informe publicado; no se recalcula. Cada unidad del estudio son ~20
+    ventanas de backtest real y el dashboard tiene que seguir siendo regenerable en
+    minutos."""
+    report = load_validation_report(ROOT / VALIDATION_REPORT)
+    if not report:
+        logger.warning("Sin informe de validacion: el panel multiventana saldra vacio")
+        return None
+
+    plan = report["plan"]
+    rows = report["rows"]
+
+    # Una muestra representativa para dibujar la distribucion de ventanas: la que tenga
+    # el optimismo mas cercano a la mediana, para no elegir el caso mas favorable.
+    pairs = [r for r in rows if r["single_score"] is not None]
+    example = None
+    if pairs:
+        target = report["optimism"]["walk_forward"]["median"]
+        pick = min(pairs, key=lambda r: abs((r["single_score"] - r["walk_forward"]["median"]) - target))
+        example = {
+            "config_id": pick["config_id"],
+            "scenario_id": pick["scenario_id"],
+            "single": round(pick["single_score"], 3),
+            "walk_forward": [round(s, 3) for s in pick["walk_forward"]["scores"]],
+            "cpcv": [round(s, 3) for s in pick["cpcv"]["scores"]],
+        }
+
+    return {
+        "geometry": _fold_geometry(plan),
+        "library": plan["library_id"],
+        "n_samples": len(plan["scenario_ids"]) * plan["n_paths"],
+        "n_configs": len(plan["config_ids"]),
+        "n_units": len(rows),
+        "n_folds_wf": plan["n_folds"],
+        "n_folds_cpcv": rows[0]["cpcv"]["n_folds"] if rows else 0,
+        "n_groups": plan["n_groups"],
+        "n_test_groups": plan["n_test_groups"],
+        "purge_days": plan["purge_days"],
+        "embargo_days": rows[0]["walk_forward"]["embargo_days"] if rows else None,
+        "optimism": report["optimism"],
+        "dispersion": report["dispersion"],
+        "svn": report["signal_vs_noise"],
+        "rank_agreement": report["rank_agreement"],
+        "flips": report["decision_flips"],
+        "leakage": report["leakage"],
+        "gate": report["gate"],
+        # Las tres series pareadas sobre las MISMAS unidades: es la comparacion que
+        # justifica la palabra "optimismo".
+        "paired": {
+            "single": [round(r["single_score"], 3) for r in pairs],
+            "walk_forward": [round(r["walk_forward"]["median"], 3) for r in pairs],
+            "cpcv": [round(r["cpcv"]["median"], 3) for r in pairs],
+        },
+        "example": example,
+        "generated_at": report["generated_at"][:10],
+    }
+
+
 def collect_roadmap() -> list[dict]:
     """Evoluciones pendientes, cada una con un prompt copiable para Claude Code."""
     from ai_trader.synthetic import retrofit  # noqa: F401  (asegura que el modulo existe)
@@ -732,6 +840,7 @@ def build() -> None:
         "costs": costs,
         "ranking": ranking,
         "calibration": collect_calibration(),
+        "validation": collect_validation(),
         "roadmap": collect_roadmap(),
     }
 
@@ -751,7 +860,9 @@ ROADMAP = [
         "why": "El barrido de lambda/kappa ya esta hecho y publicado (data/calibration): la "
                "superficie resulto PLANA y lambda no duplica los costes ya pagados. Pero se midio "
                "con un unico split temporal 70/30, un camino por escenario y 16 configuraciones: "
-               "sirve para descartar que los pesos importen mucho, no para afinar decimales.",
+               "sirve para descartar que los pesos importen mucho, no para afinar decimales. La "
+               "validacion multiventana que faltaba ya existe (scoring/multiwindow.py), asi que "
+               "el barrido se puede repetir sobre ventanas honestas sin construir nada nuevo.",
         "prompt": (
             "Proyecto ai-trader (Python). Los pesos del headline score "
             "(src/ai_trader/backtest/metrics.py: DEFAULT_HEADLINE_WEIGHTS) ya estan calibrados "
@@ -760,7 +871,9 @@ ROADMAP = [
             "superficie (lambda, kappa) es PLANA en rank IC y en gap train-validation.\n"
             "TAREA: subir la potencia estadistica del estudio para saber si la planitud es real "
             "o falta de resolucion. (1) Repite el barrido con varios splits temporales por "
-            "muestra (walk-forward, no un unico 70/30) y con mas de un camino por escenario, "
+            "muestra usando la validacion multiventana ya disponible "
+            "(src/ai_trader/scoring/multiwindow.py: validate_multiwindow, walk-forward o CPCV "
+            "con purga y embargo) y con mas de un camino por escenario, "
             "reutilizando el cacheo de componentes crudos que ya existe (los componentes no "
             "dependen de los pesos). (2) Anade intervalos de confianza por bootstrap sobre "
             "escenarios al rank IC y al gap, para poder afirmar o descartar diferencias entre "
@@ -798,21 +911,38 @@ ROADMAP = [
         ),
     },
     {
-        "id": "line-d-validation",
-        "title": "Validacion CPCV / walk-forward",
-        "line": "D", "status": "pendiente", "impact": "medio", "effort": "medio",
-        "why": "El split actual es un unico 70/30 (_resolve_cutoff). Sobre-estima la robustez "
-               "y no purga ni embarga entre train y test.",
+        "id": "line-d-scoring-multiwindow",
+        "title": "Cablear la validacion multiventana en el scoring y el CEM",
+        "line": "D", "status": "pendiente", "impact": "alto", "effort": "medio",
+        "why": "La validacion multiventana ya existe, esta testeada y esta MEDIDA (vista "
+               "'Validacion'): el corte unico no esta sesgado al alza, pero degrada el CVaR a "
+               "un solo numero (+1.35 frente a la cola) y esconde una dispersion entre ventanas "
+               "que cambia que configuracion gana. Y el harness de optimizacion "
+               "(evaluate_sample_detailed -> CEM) sigue puntuando cada muestra con el corte "
+               "unico 70/30, asi que el CEM aun elige con el criterio arbitrario. Cerrar el "
+               "circulo es lo que convierte la medicion en decision.",
         "prompt": (
-            "Proyecto ai-trader (Python). El backtest (src/ai_trader/backtest/engine.py, metodo "
-            "_resolve_cutoff) parte cada muestra en train/test con un unico split temporal "
-            "70/30, sin purga ni embargo; sobre-estima la robustez.\n"
-            "TAREA: implementa validacion multiventana — sustituye o complementa ese split con "
-            "walk-forward multiventana y, si es viable, CPCV (Combinatorial Purged "
-            "Cross-Validation) con purga y embargo entre train y test. Agrega los headline "
-            "scores de todas las ventanas en una distribucion robusta. Anade tests de que no "
-            "hay fuga temporal entre folds. Regenera dashboard y docs. Determinismo + "
-            ".venv\\Scripts\\python.exe (poetry run roto) + ruff."
+            "Proyecto ai-trader (Python). La validacion multiventana ya esta implementada y "
+            "medida: src/ai_trader/backtest/validation.py (geometria de folds con purga y "
+            "embargo), BacktestEngine.run_folds, src/ai_trader/scoring/multiwindow.py "
+            "(validate_multiwindow -> distribucion robusta) y el estudio publicado en "
+            "data/validation/report_ai_v2.json. Pero el camino que usa el optimizador sigue "
+            "siendo el corte unico: scoring/sample_eval.py::evaluate_sample_detailed llama a "
+            "BacktestEngine.run(split_ratio=0.7) y scoring/optimize.py::run_optimization "
+            "agrega un score por muestra.\n"
+            "TAREA: haz que el scoring puntue cada muestra por su DISTRIBUCION multiventana en "
+            "vez de por un unico corte. (1) Anade a evaluate_sample_detailed un modo "
+            "multiventana (esquema, n_folds/n_groups, purga, embargo) que devuelva la "
+            "recompensa agregada y conserve los campos que necesitan DSR y PBO "
+            "(oos_observations, momentos) sumando las ventanas. (2) Decide y documenta como se "
+            "componen las dos agregaciones que ahora existen: CVaR entre VENTANAS de una "
+            "muestra y CVaR entre MUESTRAS. Agregar dos veces por la cola puede ser "
+            "excesivamente conservador; mide las dos opciones (cola-de-colas vs pooling de "
+            "todas las ventanas de todas las muestras) antes de fijar una. (3) Revisa el coste: "
+            "una muestra pasa de 2 ventanas a ~10, asi que el CEM necesitara subsampleo o "
+            "paralelizacion. (4) Re-corre el ranking del dashboard con el esquema nuevo y "
+            "compara con el publicado. Tests + determinismo + .venv\\Scripts\\python.exe "
+            "(poetry run roto) + ruff. Regenera dashboard y docs."
         ),
     },
     {

@@ -217,6 +217,43 @@ def daily_returns(curve: Sequence[EquityPoint]) -> list[float]:
     return returns
 
 
+@dataclass(slots=True, frozen=True)
+class ChainedCurve:
+    """Curva compuesta a partir de varios tramos DISJUNTOS, mas los dias realmente
+    operados (`active_days`), que es lo que hay que pasarle a `compute_metrics`."""
+
+    points: list[EquityPoint]
+    active_days: int
+
+
+def chain_equity_curves(curves: Sequence[Sequence[EquityPoint]]) -> ChainedCurve:
+    """
+    Encadena curvas de bloques disjuntos COMPONIENDO sus retornos, no pegandolas.
+
+    Es la operacion que convierte los varios tramos de test de un fold (CPCV puede
+    darte dos tramos separados por meses) en una sola serie puntuable. Cada tramo se
+    corrio por separado partiendo del mismo capital inicial, asi que lo unico
+    comparable entre tramos son sus RETORNOS: se multiplican en orden y el nivel se
+    arrastra. El salto entre el final de un bloque y el principio del siguiente no
+    genera retorno —no hubo posicion viva ahi—, de modo que el hueco no aporta ni
+    ganancia ni perdida. Los dias del hueco tampoco cuentan como tiempo operado.
+    """
+    usable = [list(c) for c in curves if c]
+    if not usable:
+        raise ValueError("no equity curves to chain")
+
+    level = usable[0][0].equity
+    points = [EquityPoint(day=usable[0][0].day, equity=level)]
+    active = 0
+    for curve in usable:
+        active += window_days(curve)
+        for prev, curr in zip(curve, curve[1:]):
+            if prev.equity > 0:
+                level *= curr.equity / prev.equity
+            points.append(EquityPoint(day=curr.day, equity=level))
+    return ChainedCurve(points=points, active_days=active)
+
+
 def max_drawdown_pct(curve: Sequence[EquityPoint]) -> float:
     """Maxima caida desde un pico, en %. Positivo (p.ej. 20.0 = -20%)."""
     peak = -math.inf
@@ -229,9 +266,16 @@ def max_drawdown_pct(curve: Sequence[EquityPoint]) -> float:
     return worst * 100.0
 
 
-def window_days(curve: Sequence[EquityPoint]) -> int:
+def window_days(curve: Sequence[EquityPoint], active_days: int | None = None) -> int:
     """Dias calendario cubiertos por la curva. Cae al numero de puntos si las marcas de
-    tiempo no avanzan (curvas de test construidas sin fechas reales)."""
+    tiempo no avanzan (curvas de test construidas sin fechas reales).
+
+    `active_days` lo sobreescribe. Hace falta para las curvas ENCADENADAS de la
+    validacion multiventana: sus puntos abarcan bloques disjuntos, asi que el hueco
+    entre bloques esta dentro del primer y ultimo dia pero NO es tiempo en el que la
+    estrategia estuviera viva. Contarlo diluiria la rotacion y falsearia el CAGR."""
+    if active_days is not None:
+        return max(0, active_days)
     if len(curve) < 2:
         return 0
     spanned = (curve[-1].day - curve[0].day).days
@@ -241,6 +285,7 @@ def window_days(curve: Sequence[EquityPoint]) -> int:
 def turnover_ratio(
     curve: Sequence[EquityPoint],
     closed_positions: Sequence[Position],
+    active_days: int | None = None,
 ) -> float:
     """
     Rotacion: notional negociado por dia, en unidades del equity INICIAL.
@@ -249,7 +294,7 @@ def turnover_ratio(
     0.2 significa "cada dia rota el 20% de la cartera". Es la magnitud que penaliza el
     headline score: mide churn de verdad (tamano x frecuencia), no solo nº de trades.
     """
-    days = window_days(curve)
+    days = window_days(curve, active_days)
     if days <= 0 or not curve:
         return 0.0
 
@@ -324,10 +369,11 @@ def sortino_ratio(
     return _annualized(returns, downside_only=True, periods_per_year=periods_per_year)
 
 
-def cagr_pct(curve: Sequence[EquityPoint]) -> float:
+def cagr_pct(curve: Sequence[EquityPoint], active_days: int | None = None) -> float:
     """Retorno anualizado en TIEMPO DE CALENDARIO. No lleva `periods_per_year`: el ano
     natural tiene 365 dias para cripto y para renta variable por igual (ver la nota de
-    los factores de anualizacion arriba)."""
+    los factores de anualizacion arriba). `active_days` sustituye al span de la curva
+    para las curvas encadenadas (ver `window_days`)."""
     if len(curve) < 2:
         return 0.0
 
@@ -336,7 +382,7 @@ def cagr_pct(curve: Sequence[EquityPoint]) -> float:
     if start_equity <= 0 or end_equity <= 0:
         return 0.0
 
-    days = (curve[-1].day - curve[0].day).days
+    days = active_days if active_days is not None else (curve[-1].day - curve[0].day).days
     if days <= 0:
         return 0.0
 
@@ -359,6 +405,7 @@ def compute_metrics(
     closed_positions: Sequence[Position],
     *,
     periods_per_year: int = TRADING_DAYS_PER_YEAR,
+    active_days: int | None = None,
 ) -> PerformanceMetrics:
     """
     Metricas de una ventana. `periods_per_year` es el factor de anualizacion de las
@@ -366,6 +413,11 @@ def compute_metrics(
     252 para carteras exclusivamente de renta variable. Resuelvelo con
     `periods_per_year_for_symbols(universo)` y pasalo IGUAL a la estrategia y a sus
     baselines: comparar dos Sharpe anualizados con factores distintos no significa nada.
+
+    `active_days` son los dias en los que la estrategia estuvo REALMENTE viva. Solo hace
+    falta para curvas encadenadas de bloques disjuntos (validacion multiventana), donde
+    el span de la curva incluye huecos que no se operaron: ahi corrige la rotacion y el
+    CAGR. En una ventana contigua se deja en None y no cambia nada.
     """
     if not curve:
         raise ValueError("equity curve cannot be empty")
@@ -375,7 +427,7 @@ def compute_metrics(
     returns = daily_returns(curve)
 
     total_return = (end_equity / start_equity - 1.0) * 100.0 if start_equity > 0 else 0.0
-    cagr = cagr_pct(curve)
+    cagr = cagr_pct(curve, active_days)
     max_dd = max_drawdown_pct(curve)
 
     # Calmar: retorno anualizado por unidad de caida maxima. Se REPORTA por costumbre,
@@ -411,7 +463,7 @@ def compute_metrics(
         sortino=sortino_ratio(returns, periods_per_year),
         calmar=calmar,
         volatility_pct=volatility_pct(returns, periods_per_year),
-        turnover=turnover_ratio(curve, closed_positions),
+        turnover=turnover_ratio(curve, closed_positions, active_days),
         num_trades=len(closed_positions),
         win_rate_pct=win_rate,
         profit_factor=profit_factor,

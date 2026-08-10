@@ -39,19 +39,23 @@ def cmd_backtest(args: argparse.Namespace) -> int:
     import json
 
     from ai_trader.backtest.engine import BacktestEngine, parse_date
+    from ai_trader.backtest.validation import SCHEME_SINGLE
 
     config = load_config(args.config)
 
     if args.synthetic:
-        engine, start, end = _synthetic_backtest(config, args)
+        bars, start, end = _synthetic_bars(config, args)
     else:
-        service = MarketDataService()
-        engine = BacktestEngine(config, service, starting_equity=args.capital)
         if not (args.start and args.end):
             print("--start and --end are required unless --synthetic is given.")
             return 2
         start, end = parse_date(args.start), parse_date(args.end)
+        bars = _real_bars(config, start, end)
 
+    if args.validation != SCHEME_SINGLE:
+        return _run_multiwindow(config, bars, start, end, args)
+
+    engine = BacktestEngine.from_bars(config, bars, starting_equity=args.capital)
     result = engine.run(
         start=start,
         end=end,
@@ -71,15 +75,32 @@ def cmd_backtest(args: argparse.Namespace) -> int:
         f"HEADLINE SCORE (out-of-sample): {result.headline_score:+.4f}"
         f"   [Sharpe - {w.lambda_turnover}*turnover - {w.kappa_maxdd}*maxDD]"
     )
+    print(
+        "Aviso: corte unico, una sola ventana OOS. Para la distribucion multiventana "
+        "con purga y embargo usa --validation walk_forward|cpcv."
+    )
     return 0
 
 
-def _synthetic_backtest(config, args):
-    """Backtest sobre una muestra sintetica almacenada: LIBRERIA:ESCENARIO:PATH.
+def _real_bars(config, start, end) -> dict:
+    """Historico real precargado UNA vez, con calentamiento para que el primer dia de la
+    primera ventana ya tenga lookback completo. Es la misma precarga que hacia el motor
+    por dentro; se sube aqui para que el backtest de corte unico y la validacion
+    multiventana partan de EXACTAMENTE las mismas barras."""
+    from datetime import timedelta
 
-    La ventana se deriva del manifiesto dejando calentamiento para el lookback, y las
-    barras se pasan por from_bars (misma via que usara el generador en produccion)."""
-    from ai_trader.backtest.engine import BacktestEngine
+    from ai_trader.data.backtest_source import HistoricalDataSource
+
+    warmup = timedelta(days=config.runner.lookback_days + 30)
+    return HistoricalDataSource.fetch_bars(
+        MarketDataService(), config.runner.symbols, start - warmup, end
+    )
+
+
+def _synthetic_bars(config, args):
+    """Muestra sintetica almacenada: LIBRERIA:ESCENARIO:PATH.
+
+    La ventana se deriva del manifiesto dejando calentamiento para el lookback."""
     from ai_trader.synthetic.service import sample_window
     from ai_trader.synthetic.store import SyntheticStore
 
@@ -93,9 +114,59 @@ def _synthetic_backtest(config, args):
     bars = store.load_bars(library_id, scenario_id, path_index)
 
     start, end = sample_window(manifest, warmup_days=config.runner.lookback_days + 30)
-    engine = BacktestEngine.from_bars(config, bars, starting_equity=args.capital)
     logger.info("Synthetic backtest | %s / %s / path %s", library_id, scenario_id, path_index)
-    return engine, start, end
+    return bars, start, end
+
+
+def _run_multiwindow(config, bars, start, end, args: argparse.Namespace) -> int:
+    """Validacion multiventana: varias ventanas OOS con purga y embargo, agregadas en
+    una distribucion robusta en vez de en un unico numero."""
+    import json
+
+    from ai_trader.scoring.multiwindow import validate_multiwindow
+
+    result = validate_multiwindow(
+        config, None, bars, start, end,
+        scheme=args.validation,
+        n_folds=args.folds,
+        n_groups=args.groups,
+        n_test_groups=args.test_groups,
+        purge_days=args.purge,
+        embargo_days=args.embargo,
+        starting_equity=args.capital,
+        run_train=args.with_train,
+    )
+
+    if args.json:
+        print(json.dumps(result.as_dict(), indent=2))
+        return 0
+
+    s = result.stats
+    print(f"=== VALIDACION {result.scheme.upper()} | {len(result.folds)} ventanas "
+          f"| purga {result.purge_days}d | embargo {result.embargo_days}d ===")
+    print(f"  Fuga temporal auditada: {'sin fuga' if result.leakage_ok else 'CON FUGA'}")
+    print(f"  Calendario cubierto: {result.coverage['calendar_days_covered']} dias "
+          f"(reuso x{result.coverage['reuse_factor']})")
+    print()
+    print(f"  {'ventana':<12} {'desde':<11} {'hasta':<11} {'tramos':>6} {'trades':>7} "
+          f"{'sharpe':>8} {'headline':>10}")
+    for fold in result.folds:
+        print(f"  {fold.label:<12} {fold.test_start.date()!s:<11} {fold.test_end.date()!s:<11} "
+              f"{fold.n_test_blocks:>6} {fold.num_trades:>7} {fold.sharpe:>8.2f} "
+              f"{fold.score:>+10.4f}")
+    print()
+    print("=" * 72)
+    print(f"  RECOMPENSA (CVaR@{s.alpha:.0%} de las ventanas): {s.reward:+.4f}")
+    print(f"  mediana {result.median:+.4f} | media {s.mean:+.4f} | std {s.std:.4f} "
+          f"| peor {s.worst:+.4f} | mejor {s.best:+.4f}")
+    if result.single_split_score is not None:
+        print(f"  Corte unico 70/30 de referencia: {result.single_split_score:+.4f} "
+              f"-> optimismo {result.optimism:+.4f}")
+    if result.baseline_gate is not None:
+        g = result.baseline_gate
+        print(f"  Gate: {'APROBADO' if g.approved else 'RECHAZADO'} "
+              f"(mejor baseline {g.best_name} {g.best_reward:+.4f}, margen {g.margin:+.4f})")
+    return 0
 
 
 def cmd_synth_generate(args: argparse.Namespace) -> int:
@@ -223,8 +294,43 @@ def main(argv: list[str] | None = None) -> int:
         "--capital", type=float, default=10_000.0, help="Starting equity (default 10000)."
     )
     bt.add_argument(
+        "--validation", default="single_split",
+        choices=["single_split", "walk_forward", "cpcv"],
+        help="Validation scheme. 'single_split' is the legacy 70/30 (one OOS window); "
+             "'walk_forward' and 'cpcv' run several purged/embargoed OOS windows and "
+             "aggregate them into a distribution.",
+    )
+    bt.add_argument(
+        "--folds", type=int, default=4,
+        help="Walk-forward: number of OOS windows (default 4).",
+    )
+    bt.add_argument(
+        "--groups", type=int, default=6,
+        help="CPCV: number of groups the range is split into (default 6).",
+    )
+    bt.add_argument(
+        "--test-groups", type=int, default=2,
+        help="CPCV: groups used as test per combination (default 2 -> C(6,2)=15 folds).",
+    )
+    bt.add_argument(
+        "--purge", type=int, default=None,
+        help="Days of train purged right before each test block. Defaults to the "
+             "runner's max_holding_days (how long a position can stay alive).",
+    )
+    bt.add_argument(
+        "--embargo", type=int, default=None,
+        help="Days of train embargoed right after each test block. Defaults to 1%% of "
+             "the range (minimum 1 day).",
+    )
+    bt.add_argument(
+        "--with-train", action="store_true",
+        help="Also run the train window of every fold (slower; only a reference, since "
+             "nothing is fitted inside a backtest).",
+    )
+    bt.add_argument(
         "--split", type=float, default=0.7,
-        help="Train/test ratio (default 0.7). Ignored if --split-date is given.",
+        help="Train/test ratio of the legacy single split (default 0.7). "
+             "Ignored if --split-date or --validation is given.",
     )
     bt.add_argument(
         "--split-date", default=None,

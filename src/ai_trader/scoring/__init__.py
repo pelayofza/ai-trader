@@ -8,6 +8,15 @@ from ai_trader.scoring.baselines import (
     gate,
 )
 from ai_trader.scoring.cem import CEMConfig, CEMResult, maximize
+from ai_trader.scoring.multiwindow import (
+    SCHEME_CPCV,
+    SCHEME_SINGLE,
+    SCHEME_WALK_FORWARD,
+    FoldScore,
+    MultiWindowValidation,
+    resolve_purge_days,
+    validate_multiwindow,
+)
 from ai_trader.scoring.overfit import (
     DeflatedSharpe,
     PBOResult,
@@ -50,6 +59,13 @@ __all__ = [
     "CEMConfig",
     "CEMResult",
     "maximize",
+    "SCHEME_CPCV",
+    "SCHEME_SINGLE",
+    "SCHEME_WALK_FORWARD",
+    "FoldScore",
+    "MultiWindowValidation",
+    "resolve_purge_days",
+    "validate_multiwindow",
     "DeflatedSharpe",
     "PBOResult",
     "deflated_sharpe_ratio",

@@ -271,6 +271,41 @@ function scatterChart(host, points, opts={}){
   draw();RECHART.push(draw);
 }
 
+function foldStrip(host, folds, opts={}){
+  // Geometría real de la validación: una fila por fold, con las bandas de train y test
+  // sobre el mismo eje temporal. El hueco visible entre una banda azul y la verde ES la
+  // purga; el que queda a la derecha del test, el embargo. Nada de esto es ilustrativo:
+  // son los intervalos que se ejecutaron.
+  opts=Object.assign({rowH:17,pad:{t:14,r:14,b:22,l:74}},opts);
+  const draw=()=>{
+    host.innerHTML='';
+    const W=host.clientWidth||680,p=opts.pad,H=p.t+p.b+opts.rowH*folds.length;
+    const X=f=>p.l+(W-p.l-p.r)*f;
+    const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,width:'100%',height:H});
+    for(let g=0;g<=4;g++){const x=X(g/4);
+      svg.appendChild(el('line',{x1:x,y1:p.t-4,x2:x,y2:H-p.b+2,stroke:cssv('--grid'),'stroke-width':1}));
+      const t=el('text',{x,y:H-p.b+15,'text-anchor':'middle',fill:cssv('--muted'),'font-size':10});
+      t.textContent=(g*25)+'%';svg.appendChild(t);}
+    const tt=tip();
+    folds.forEach((f,i)=>{
+      const y=p.t+opts.rowH*i, h=opts.rowH-6;
+      const lab=el('text',{x:p.l-8,y:y+h-1,'text-anchor':'end',fill:cssv('--ink2'),'font-size':10.5});
+      lab.textContent=f.label;svg.appendChild(lab);
+      const band=(b,color,kind)=>{
+        const r=el('rect',{x:X(b.a),y,width:Math.max(1.5,X(b.b)-X(b.a)),height:h,rx:2,fill:color});
+        r.addEventListener('mousemove',ev=>{tt.style.display='block';tt.style.left=(ev.clientX+12)+'px';
+          tt.style.top=(ev.clientY-10)+'px';
+          tt.innerHTML=`<b>${esc(f.label)}</b><br>${kind}: ${(b.a*100).toFixed(1)}% – ${(b.b*100).toFixed(1)}% del rango`;});
+        r.addEventListener('mouseleave',()=>tt.style.display='none');
+        svg.appendChild(r);};
+      f.train.forEach(b=>band(b,cssv('--s1'),'train'));
+      f.test.forEach(b=>band(b,cssv('--s2'),'test (OOS)'));
+    });
+    host.appendChild(svg);
+  };
+  draw();RECHART.push(draw);
+}
+
 function miniBar(v,max,cls=''){const w=Math.max(2,Math.round(100*Math.abs(v)/(max||1)));return `<span class="mbar ${cls}" style="width:${w}px"></span>`;}
 function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
@@ -703,6 +738,141 @@ function costPanel(C){
       no llega a morder — es justo lo que hace que un resultado deje de escalar cuando el capital crece.</div>`;
 }
 
+function renderValidation(){
+  const host=$('#validation'),V=D.validation;
+  if(!V){
+    host.innerHTML=`<h1>Validación temporal</h1>
+      <p class="lead">El estudio comparativo aún no está publicado.</p>
+      <div class="note">Genéralo con <span class="mono">python -m ai_trader.scoring.validation_study</span>.</div>`;
+    return;
+  }
+  const o=V.optimism,dsp=V.dispersion,ra=V.rank_agreement,fl=V.flips,g=V.geometry,svn=V.svn;
+  const ex=V.example;
+
+  host.innerHTML=`
+    <h1>Validación temporal</h1>
+    <p class="lead">Un backtest se puede partir en train y test de muchas formas, y la forma elegida
+      <b>cambia la respuesta</b>. Hasta ahora cada muestra se partía con un único corte 70/30: un solo
+      número out-of-sample, sin cola, sin dispersión y con el día del corte cayendo en las dos ventanas.
+      Aquí ese corte convive con dos esquemas que evalúan <b>varias ventanas</b> con purga y embargo, y
+      se mide qué diferencia hay — sobre ${V.n_units} unidades (${V.n_configs} configuraciones ×
+      ${V.n_samples} muestras) de <span class="mono">${esc(V.library)}</span>.</p>
+
+    <div class="grid tiles">
+      <div class="card tile"><div class="k">sesgo de nivel</div>
+        <div class="v">${o.walk_forward.median>=0?'+':''}${fmt(o.walk_forward.median,2)}</div>
+        <div class="s">vs mediana walk-forward: ninguno</div></div>
+      <div class="card tile"><div class="k">vs la cola (CVaR)</div>
+        <div class="v">${o.vs_tail.median>=0?'+':''}${fmt(o.vs_tail.median,2)}</div>
+        <div class="s">el estadístico que rankea</div></div>
+      <div class="card tile"><div class="k">ruido temporal / señal</div>
+        <div class="v">×${fmt(svn.ratio,1)}</div>
+        <div class="s">mover la ventana pesa más que cambiar de estrategia</div></div>
+      <div class="card tile"><div class="k">cambia la elección</div>
+        <div class="v">${fl.walk_forward}/${fl.n_samples}</div>
+        <div class="s">muestras donde gana otra config</div></div>
+    </div>
+    <div class="note"><b>El resultado no es el que se esperaba, y se reporta como salió.</b> La hipótesis
+      de partida —"el corte único sobre-estima la robustez"— era que puntuaría <i>sistemáticamente</i> más
+      alto. <b>No es así:</b> frente a la mediana de las ventanas honestas el sesgo es
+      ${fmt(o.walk_forward.median,3)}, indistinguible de cero, y el rango va de ${fmt(o.walk_forward.min,2)}
+      a +${fmt(o.walk_forward.max,2)}: el corte único es tan capaz de regalar como de castigar, según dónde
+      caiga. Lo que sí sostiene la medición son las otras tres columnas de abajo, y la tercera es la que
+      importa para decidir.</div>
+
+    <h2>La geometría, dibujada</h2>
+    <p class="lead">Cada fila es un fold; el eje es el rango completo de la muestra
+      (${esc(g.start)} → ${esc(g.end)}, ${g.span_days} días). <span class="swatch" style="background:var(--s1)"></span>
+      train · <span class="swatch" style="background:var(--s2)"></span> test out-of-sample. El hueco
+      <b>entre</b> el azul y el verde es la <b>purga</b> (${V.purge_days} días, exactamente lo que puede
+      seguir viva una posición abierta el último día de train); el hueco a la derecha del verde es el
+      <b>embargo</b> (${V.embargo_days} días, el eco serial de los retornos).</p>
+    <div class="grid cards">
+      <div class="card"><h3>Corte único 70/30 <span class="chip pend">1 ventana</span></h3>
+        <div id="geo_single"></div>
+        <p class="tag">Una sola ventana OOS, al final. Todo lo que se sepa del sistema sale del último 30% del rango.</p></div>
+      <div class="card"><h3>Walk-forward <span class="chip hecho">${V.n_folds_wf} ventanas</span></h3>
+        <div id="geo_wf"></div>
+        <p class="tag">Entrena con el pasado y se puntúa en el tramo siguiente, avanzando. Es lo que hace un operador real: no tira historia.</p></div>
+      <div class="card"><h3>CPCV <span class="chip hecho">${V.n_folds_cpcv} ventanas</span></h3>
+        <div id="geo_cpcv"></div>
+        <p class="tag">Todas las combinaciones de ${V.n_test_groups} de ${V.n_groups} grupos como test. Cada tramo se evalúa acompañado de contextos distintos.</p></div>
+    </div>
+
+    <h2>La misma evidencia, tres lecturas</h2>
+    <p class="lead">Cada punto es una de las ${V.n_units} unidades (una configuración sobre una muestra), y las tres filas
+      son <b>los mismos</b> backtests leídos con los tres esquemas. La marca vertical es la mediana de cada fila: lo que
+      separa la fila roja de las otras dos es el optimismo del corte único.</p>
+    <div class="card"><div id="paireddist"></div></div>
+
+    ${ex?`<h2>Una muestra, tres respuestas</h2>
+    <p class="lead">La misma configuración (<span class="mono">${esc(ex.config_id)}</span>) sobre la misma muestra
+      (<span class="mono">${esc(ex.scenario_id)}</span>), la de optimismo más cercano a la mediana del estudio —no el caso
+      más favorable—. Cada punto es una ventana; la marca vertical es la mediana.</p>
+    <div class="card"><div id="exdist"></div></div>
+    <p class="tag">El corte único entrega el punto único de arriba. Los otros dos entregan una distribución: de ahí salen la cola y la dispersión.</p>`:''}
+
+    <h2>Qué cambia, en orden de importancia</h2>
+    <div class="grid cards">
+      <div class="card"><h3>1 · La cola no existía</h3>
+        <p class="lead">El corte único puntúa <b>+${fmt(o.vs_tail.median,3)}</b> por encima del CVaR@25% de las ventanas
+          (IQR ${fmt(o.vs_tail.p25,2)} … ${fmt(o.vs_tail.p75,2)}), y es positivo en más de tres de cada cuatro unidades.
+          No es un sesgo del corte: es que <b>el CVaR de un solo número es ese número</b>. El sistema rankea por la cola
+          mala y, con una ventana, no había cola mala que promediar. Ésta es la brecha estructural.</p></div>
+      <div class="card"><h3>2 · El ruido temporal supera a la señal</h3>
+        <p class="lead">Entre ventanas de una misma muestra el headline se mueve una desviación típica de
+          <b>${fmt(dsp.walk_forward_std.median,3)}</b>, con un rango mediano de <b>${fmt(dsp.walk_forward_range.median,2)}</b> puntos
+          entre la mejor y la peor. En la misma muestra, lo que separa a la mejor de la peor <b>configuración</b> es
+          <b>${fmt(svn.config_spread_walk_forward.median,2)}</b>: mover la ventana mueve el resultado <b>${fmt(svn.ratio,1)} veces más</b>
+          que cambiar de estrategia. Ése es el argumento entero — no hace falta que el corte único esté sesgado para que sea
+          una mala regla de decisión, basta con que sea arbitrario.</p></div>
+      <div class="card"><h3>3 · La elección cambia</h3>
+        <p class="lead">Lo que decide no es el nivel, sino el orden. El acuerdo de rangos entre ordenar configuraciones por el
+          corte único y ordenarlas por la recompensa multiventana tiene mediana <b>${fmt(ra.walk_forward.median,2)}</b> pero
+          media <b>${fmt(ra.walk_forward.mean,2)}</b> y llega a <b>${fmt(ra.walk_forward.min,1)}</b> (orden invertido). La
+          configuración ganadora cambia en <b>${fl.walk_forward}/${fl.n_samples}</b> muestras (${fmt(fl.walk_forward_pct,0)}%)
+          con walk-forward y <b>${fl.cpcv}/${fl.n_samples}</b> (${fmt(fl.cpcv_pct,0)}%) con CPCV.</p></div>
+    </div>
+
+    <div class="note"><b>Lo que la purga NO hace, dicho claro.</b> Dentro de un backtest no se ajusta nada: la configuración
+      entra fija y el motor construye reloj, estado y estrategias nuevos por ventana, así que el train de un fold no influye en su
+      test. Purgar y embargar no mejoran —ni empeoran— ninguna cifra out-of-sample de las de arriba, y hay un test que lo fija como
+      invariante. Sirven para otra cosa: que la referencia in-sample no esté contaminada por operaciones que siguen vivas dentro del
+      test, y que la geometría ya sea correcta cuando algo <b>sí</b> se ajuste sobre el train (el CEM, o una política aprendida).
+      Lo que aporta valor <i>hoy</i> es tener varias ventanas OOS en vez de una.</div>
+
+    <div class="note"><b>Límites declarados, y son serios.</b> ${V.n_units} unidades sobre ${V.n_configs} configuraciones y
+      ${V.n_samples} muestras de una sola librería, un camino por escenario. El acuerdo de rangos y los cambios de elección se miden
+      sobre <b>${fl.n_samples} muestras</b>: "4 de 8" es una señal, no una tasa — el intervalo de confianza de esa proporción cubre
+      medio rango. Las ventanas de un mismo esquema comparten historia (en CPCV cada tramo entra en ${fmt(V.n_folds_cpcv/V.n_groups*V.n_test_groups,0)}
+      folds), así que la dispersión medida <b>no</b> son observaciones independientes y no debe leerse como un error estándar. Y el
+      scoring que usa el optimizador sigue puntuando con el corte único: cablearlo es la evolución pendiente de la línea D.</div>
+    <div class="note"><b>Auditoría de fuga.</b> Los ${V.leakage.folds_audited} folds ejecutados en este estudio pasaron la
+      comprobación de fuga temporal (${V.leakage.clean?'ninguno con solape ni con purga o embargo insuficientes':'⚠ alguno falló'}).
+      No es una comprobación de adorno: el motor la corre <b>antes</b> de gastar cómputo y aborta el plan entero si falla.</div>
+
+    <p class="tag">Evidencia completa: <span class="mono">data/validation/report_${esc(V.library)}.json</span> ·
+      reproducible con <span class="mono">python -m ai_trader.scoring.validation_study</span> (${esc(V.generated_at)}) ·
+      un backtest suelto: <span class="mono">ai-trader backtest --validation cpcv</span>.</p>`;
+
+  foldStrip($('#geo_single'),g.single_split);
+  foldStrip($('#geo_wf'),g.walk_forward);
+  foldStrip($('#geo_cpcv'),g.cpcv);
+  const pd=V.paired||{};
+  dotStrip($('#paireddist'),[
+    {label:'corte único 70/30',values:pd.single||[],color:cssv('--s8')},
+    {label:'walk-forward (mediana)',values:pd.walk_forward||[],color:cssv('--s1')},
+    {label:'CPCV (mediana)',values:pd.cpcv||[],color:cssv('--s5')},
+  ],{pad:{t:10,r:16,b:24,l:170}});
+  if(ex){
+    dotStrip($('#exdist'),[
+      {label:'corte único 70/30',values:[ex.single],color:cssv('--s8')},
+      {label:`walk-forward (${ex.walk_forward.length})`,values:ex.walk_forward,color:cssv('--s1')},
+      {label:`CPCV (${ex.cpcv.length})`,values:ex.cpcv,color:cssv('--s5')},
+    ],{pad:{t:10,r:16,b:24,l:170}});
+  }
+}
+
 function renderPaper(){
   $('#paper').innerHTML=`
     <h1>Paper trading</h1>
@@ -740,7 +910,7 @@ window.copyPrompt=copyPrompt;
 function main(){
   initTheme();initNav();
   renderOverview();renderSynthetic();renderFidelity();renderStrategies();
-  renderRanking();renderPaper();renderRoadmap();
+  renderRanking();renderValidation();renderPaper();renderRoadmap();
   addEventListener('resize',()=>{clearTimeout(window._rt);window._rt=setTimeout(rerenderCharts,150);});
 }
 main();
@@ -756,6 +926,7 @@ SHELL = """
       <li><button data-sec="fidelity">Fidelidad</button></li>
       <li><button data-sec="strategies">Estrategias</button></li>
       <li><button data-sec="ranking">Ranking</button></li>
+      <li><button data-sec="validation">Validación</button></li>
       <li><button data-sec="paper">Paper trading</button></li>
       <li><button data-sec="roadmap">Evoluciones</button></li>
     </ul>
@@ -767,6 +938,7 @@ SHELL = """
     <section id="fidelity" class="section"></section>
     <section id="strategies" class="section"></section>
     <section id="ranking" class="section"></section>
+    <section id="validation" class="section"></section>
     <section id="paper" class="section"></section>
     <section id="roadmap" class="section"></section>
   </main>

@@ -52,13 +52,20 @@ BASELINE_LABELS = {
 
 @dataclass(slots=True, frozen=True)
 class Baseline:
-    """Un baseline evaluado sobre UNA muestra."""
+    """Un baseline evaluado sobre UNA muestra.
+
+    `curve` y `trades` son la materia prima con la que se construyo `metrics`. Se
+    exponen porque la validacion multiventana necesita ENCADENAR varios tramos de un
+    mismo baseline antes de puntuarlo (un fold de CPCV puede tener dos tramos de test
+    separados por meses), y encadenar Sharpes ya calculados no significa nada."""
 
     name: str
     label: str
     symbols: tuple[str, ...]
     score: float
     metrics: PerformanceMetrics
+    curve: tuple[EquityPoint, ...] = ()
+    trades: tuple[Position, ...] = ()
 
     def as_dict(self) -> dict:
         return {
@@ -314,6 +321,8 @@ def _hold_portfolio(
         symbols=tuple(sorted(tracked)),
         score=headline_score(metrics, weights),
         metrics=metrics,
+        curve=tuple(curve),
+        trades=tuple(positions),
     )
 
 

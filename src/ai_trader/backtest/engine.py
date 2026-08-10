@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -13,9 +14,19 @@ from ai_trader.backtest.metrics import (
     EquityPoint,
     HeadlineWeights,
     PerformanceMetrics,
+    chain_equity_curves,
     compute_metrics,
     headline_score,
     periods_per_year_for_symbols,
+)
+from ai_trader.backtest.validation import (
+    DEFAULT_SPLIT_RATIO,
+    SCHEME_WALK_FORWARD,
+    Block,
+    Fold,
+    assert_no_leakage,
+    build_folds,
+    resolve_split_cutoff,
 )
 from ai_trader.config import AppConfig
 from ai_trader.data.backtest_source import BarProvider, HistoricalDataSource
@@ -34,7 +45,21 @@ from ai_trader.strategies.registry import build_strategy
 logger = logging.getLogger(__name__)
 
 DEFAULT_STARTING_EQUITY = 10_000.0
-DEFAULT_SPLIT_RATIO = 0.7
+
+# `DEFAULT_SPLIT_RATIO`, `resolve_split_cutoff`, `Block`, `Fold` y `build_folds` viven en
+# `backtest.validation` (toda la geometria temporal en un sitio) y se re-exportan aqui
+# para no romper a quien ya los importaba del motor.
+__all__ = [
+    "DEFAULT_SPLIT_RATIO",
+    "DEFAULT_STARTING_EQUITY",
+    "BacktestEngine",
+    "BacktestResult",
+    "FoldResult",
+    "WindowResult",
+    "build_folds",
+    "parse_date",
+    "resolve_split_cutoff",
+]
 
 
 @dataclass(slots=True)
@@ -77,6 +102,38 @@ class BacktestResult:
             "train": self.train.as_dict(),
             "test": self.test.as_dict(),
         }
+
+
+@dataclass(slots=True)
+class FoldResult:
+    """Resultado de UN fold de validacion: su ventana OOS (posiblemente varios tramos
+    encadenados) y, opcionalmente, la de train."""
+
+    fold: Fold
+    test: WindowResult
+    train: WindowResult | None = None
+    headline_weights: HeadlineWeights = DEFAULT_HEADLINE_WEIGHTS
+
+    @property
+    def headline_score(self) -> float:
+        return headline_score(self.test.metrics, self.headline_weights)
+
+    @property
+    def train_headline_score(self) -> float | None:
+        return None if self.train is None else headline_score(
+            self.train.metrics, self.headline_weights
+        )
+
+    def as_dict(self) -> dict:
+        out = {
+            "fold": self.fold.as_dict(),
+            "headline_score": round(self.headline_score, 4),
+            "test": self.test.as_dict(),
+        }
+        if self.train is not None:
+            out["train"] = self.train.as_dict()
+            out["train_headline_score"] = round(self.train_headline_score, 4)
+        return out
 
 
 class BacktestEngine:
@@ -162,6 +219,121 @@ class BacktestEngine:
             test=test,
             starting_equity=self.starting_equity,
             headline_weights=self.headline_weights,
+        )
+
+    # ------------------------------------------------ validacion multiventana -------
+
+    def run_folds(
+        self,
+        folds: Sequence[Fold],
+        *,
+        run_train: bool = False,
+        block_cache: dict[Block, WindowResult] | None = None,
+    ) -> list[FoldResult]:
+        """
+        Corre un plan de validacion ya construido (ver `backtest.validation`).
+
+        Dos garantias, en este orden:
+
+        1. **Se audita antes de gastar computo.** `assert_no_leakage` revienta si algun
+           fold tiene solape train/test o purga/embargo insuficientes. Correr un plan
+           con fuga y reportar el numero seria peor que no correrlo.
+        2. **Los bloques se cachean.** El resultado de un tramo depende SOLO del tramo:
+           cada ventana construye reloj, fuente, estado y estrategias nuevos y arranca
+           del mismo capital (ver `_run_window`), asi que dos folds que compartan tramo
+           comparten resultado exacto. Es lo que hace tratable el CPCV, que reevalua los
+           mismos tramos en 15 combinaciones distintas.
+
+        `run_train=False` por defecto, y no es un atajo perezoso: dentro de UN backtest
+        no se ajusta nada —la configuracion de la estrategia entra fija—, de modo que la
+        ventana de train no influye en la de test y solo sirve como referencia in-sample.
+        El sobreajuste de este sistema vive en el bucle EXTERIOR (el CEM eligiendo
+        configuracion), y contra eso lo que protege es tener varias ventanas OOS
+        independientes, que es justo lo que devuelve este metodo. Pon `run_train=True`
+        cuando quieras medir el gap in-sample/out-of-sample y aceptes su coste.
+
+        `block_cache` permite compartir tramos ya corridos entre varias llamadas (p.ej.
+        evaluar walk-forward y CPCV sobre la misma muestra). SOLO es valido si las
+        llamadas comparten motor, configuracion y barras: la clave es el tramo, no lo
+        que se corrio en el.
+        """
+        if not folds:
+            raise ValueError("run_folds needs at least one fold")
+        assert_no_leakage(folds)
+
+        blocks = [b for f in folds for b in (*f.train, *f.test)]
+        bars = self._load_bars(min(b.start for b in blocks), max(b.end for b in blocks))
+        if not bars:
+            raise ValueError("No bars available for the requested universe/range")
+
+        cache: dict[Block, WindowResult] = {} if block_cache is None else block_cache
+        results: list[FoldResult] = []
+        for fold in folds:
+            test = self._run_blocks(f"{fold.label}/test", bars, fold.test, cache)
+            train = (
+                self._run_blocks(f"{fold.label}/train", bars, fold.train, cache)
+                if run_train and fold.train
+                else None
+            )
+            logger.info(
+                "Fold %-10s | test=%s..%s (%dd, %d tramo/s) | headline=%+.4f",
+                fold.label, test.start.date(), test.end.date(), fold.test_days,
+                len(fold.test), headline_score(test.metrics, self.headline_weights),
+            )
+            results.append(
+                FoldResult(
+                    fold=fold, test=test, train=train, headline_weights=self.headline_weights
+                )
+            )
+        return results
+
+    def run_validation(
+        self,
+        start: datetime,
+        end: datetime,
+        *,
+        scheme: str = SCHEME_WALK_FORWARD,
+        run_train: bool = False,
+        **fold_kwargs,
+    ) -> list[FoldResult]:
+        """Atajo: construye el plan de folds del esquema pedido y lo corre."""
+        return self.run_folds(
+            build_folds(start, end, scheme=scheme, **fold_kwargs), run_train=run_train
+        )
+
+    def _run_blocks(
+        self,
+        label: str,
+        bars: dict,
+        blocks: Sequence[Block],
+        cache: dict[Block, WindowResult],
+    ) -> WindowResult:
+        """Corre cada tramo por separado (reusando cache) y encadena sus retornos."""
+        if not blocks:
+            raise ValueError(f"'{label}' has no blocks to run")
+
+        parts: list[WindowResult] = []
+        for block in blocks:
+            cached = cache.get(block)
+            if cached is None:
+                cached = self._run_window(str(block), bars, block.start, block.last_day)
+                cache[block] = cached
+            parts.append(cached)
+
+        chained = chain_equity_curves([p.equity_curve for p in parts])
+        trades = [t for p in parts for t in p.trades]
+        return WindowResult(
+            label=label,
+            start=parts[0].start,
+            end=parts[-1].end,
+            metrics=compute_metrics(
+                chained.points,
+                trades,
+                periods_per_year=self.periods_per_year,
+                active_days=chained.active_days,
+            ),
+            equity_curve=chained.points,
+            trades=trades,
         )
 
     def _load_bars(self, start: datetime, end: datetime) -> dict:
@@ -275,32 +447,6 @@ class BacktestEngine:
             market_model=IntrabarMarketModel(source, clock),
             starting_equity=self.starting_equity,
         )
-
-
-def resolve_split_cutoff(
-    start: datetime,
-    end: datetime,
-    *,
-    split_ratio: float = DEFAULT_SPLIT_RATIO,
-    split_date: datetime | None = None,
-) -> datetime:
-    """
-    Frontera train/test de una ventana de backtest.
-
-    Es funcion de modulo (no metodo) a proposito: los baselines tienen que puntuarse en
-    EXACTAMENTE la misma ventana out-of-sample que la estrategia, y la unica forma de
-    garantizarlo es que ambos deriven el corte de aqui.
-    """
-    if split_date is not None:
-        if not start < split_date < end:
-            raise ValueError("split_date must fall strictly between start and end")
-        return split_date
-
-    if not 0.0 < split_ratio < 1.0:
-        raise ValueError("split_ratio must be between 0 and 1")
-
-    span = end - start
-    return start + timedelta(days=int(span.days * split_ratio))
 
 
 def parse_date(value: str) -> datetime:

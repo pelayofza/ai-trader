@@ -64,8 +64,8 @@ figure{margin:14px 0}
 <h1>AI-Trader — Documentación funcional</h1>
 <div class="sub">Cómo funciona la herramienta, con el detalle necesario para replicarla y auditarla.
 Cada decisión de diseño va justificada.</div>
-<div class="meta">Documento vivo · generado desde el commit <span class="mono">a5e2dd2</span>
-(73 commits)2026-08-10 · se regenera con <span class="mono">python -m docs.build_docs</span>.
+<div class="meta">Documento vivo · generado desde el commit <span class="mono">8beaef5</span>
+(74 commits)2026-08-10 · se regenera con <span class="mono">python -m docs.build_docs</span>.
 Las cifras marcadas son extraídas del repositorio en el momento de generar este documento.</div>
 
 <div class="toc noprint">
@@ -429,11 +429,123 @@ techo de capacidad no llega a morder. Los términos de impacto y capacidad son l
 resultado <b>deje de escalar</b> cuando el capital crece, que es exactamente la pregunta que un
 backtest con costes planos no puede responder.</div>
 
-<h3>3.7 · Partición train/test</h3>
-<p>Cada muestra se parte en una ventana de entrenamiento y una de test (por defecto 70/30 temporal), y
-la puntuación de cabecera se toma <b>fuera de muestra</b> (en la ventana de test).</p>
-<div class="note"><b>Limitación.</b> Es una partición única, sin purga ni embargo entre ventanas.
-Validación multiventana / CPCV con purga queda pendiente (§7).</div>
+
+<h3>3.7 · Partición temporal: de un corte a una distribución de ventanas</h3>
+<p>Un backtest se puede partir en entrenamiento y test de muchas formas, y <b>la forma elegida cambia la
+respuesta</b>. El sistema partía cada muestra con un único corte temporal 70/30. Eso tenía tres problemas
+distintos, y sólo el primero es evidente:</p>
+<ul>
+<li><b>Un número no tiene cola.</b> La unidad de evaluación de este proyecto es la distribución y su
+estadístico es el CVaR (§5.3) — pero el CVaR de una lista de un elemento <b>es</b> ese elemento. El
+estadístico robusto existía sin tener sobre qué ser robusto dentro de la muestra.</li>
+<li><b>La dispersión temporal era inobservable.</b> Con una sola ventana no hay forma de saber cuánto
+depende el resultado del tramo de historia que tocó. No es que fuera pequeña: es que no se medía.</li>
+<li><b>El corte no era limpio.</b> Las dos ventanas se pedían como intervalos cerrados, así que el día
+del corte caía en <b>ambas</b>; y una posición abierta el último día de entrenamiento sigue viva dentro
+del test hasta <span class="mono">max_holding_days</span>, de modo que el desenlace de las mismas
+operaciones se contaba a los dos lados.</li>
+</ul>
+<h4>Los tres esquemas</h4>
+<table><thead><tr><th>Esquema</th><th class="n">Ventanas OOS</th><th>Cómo</th></tr></thead><tbody>
+<tr><td><span class="mono">single_split</span></td><td class="n">1</td><td>El corte 70/30 histórico. Se
+conserva como <b>referencia</b>, para poder medir en qué se diferencia de los otros dos.</td></tr>
+<tr><td><span class="mono">walk_forward</span></td><td class="n">5</td><td>El rango se
+parte en 6 grupos; cada uno a partir del segundo es el test de un fold que entrena
+con todo lo anterior. Es lo que hace un operador real: avanza y no tira el pasado.</td></tr>
+<tr><td><span class="mono">cpcv</span></td><td class="n">15</td><td>Combinatorial Purged
+Cross-Validation: 6 grupos y <b>todas</b> las combinaciones de 2 como
+test. Más ventanas con la misma historia, y cada tramo evaluado acompañado de contextos distintos.</td></tr>
+</tbody></table>
+<h4>Purga y embargo</h4>
+<p>Entre el entrenamiento y cada tramo de test se abren dos huecos, y cada uno tapa una vía distinta:</p>
+<ul>
+<li><b>Purga</b> (15 días): se borran del entrenamiento los días inmediatamente
+<b>anteriores</b> al test. El número no se elige a ojo — es exactamente
+<span class="mono">max_holding_days</span>, cuánto puede seguir viva una posición abierta el último día
+de entrenamiento.</li>
+<li><b>Embargo</b> (6 días, el 1% del rango): se borran los días inmediatamente
+<b>posteriores</b>. Los retornos están serialmente correlacionados, así que entrenar con el día siguiente
+al test es entrenar con su eco. Sólo muerde en CPCV, donde hay entrenamiento <i>después</i> del test.</li>
+</ul>
+<div class="why"><b>Lo que la purga no hace, dicho claro.</b> Dentro de un backtest no se ajusta nada: la
+configuración entra fija y el motor construye reloj, estado y estrategias <b>nuevos</b> por ventana, de
+modo que el entrenamiento de un fold no influye en su test. Purgar y embargar por tanto <b>no mejoran ni
+empeoran</b> ninguna cifra out-of-sample, y hay un test que fija ese invariante (§6). Sirven para otras
+dos cosas, ambas reales: que la referencia in-sample que se reporta no esté contaminada por operaciones
+que siguen vivas dentro del test, y que la geometría ya sea correcta cuando algo <b>sí</b> se ajuste
+sobre el entrenamiento — el optimizador del bucle exterior, o una política aprendida. Presentarlo de otro
+modo sería vender como mejora de resultados lo que es una garantía estructural.</div>
+<h4>Qué cambia al partir el tiempo de otra forma (medido)</h4>
+<p>Se corrieron los tres esquemas sobre exactamente las mismas barras y la misma ventana, para
+32 unidades (4 configuraciones × 8 muestras de
+<span class="mono">ai_v2</span>), y se comparó <b>pareado</b>:</p>
+<table><thead><tr><th>Magnitud</th><th class="n">Mediana</th><th class="n">IQR</th><th class="n">Mín … máx</th></tr></thead><tbody>
+<tr><td>Diferencia del 70/30 frente a la <b>mediana</b> walk-forward</td>
+<td class="n mono">-0,042</td><td class="n mono">-1,40 … 1,35</td>
+<td class="n mono">-3,4 … 4,7</td></tr>
+<tr><td>Diferencia del 70/30 frente a la mediana CPCV</td>
+<td class="n mono">0,332</td>
+<td class="n mono">-0,98 … 2,19</td>
+<td class="n mono">-3,8 … 4,2</td></tr>
+<tr><td>Diferencia frente a la <b>cola</b> (CVaR walk-forward), que es lo que se rankea</td>
+<td class="n mono">1,355</td>
+<td class="n mono">0,25 … 3,79</td>
+<td class="n mono">-0,7 … 6,8</td></tr>
+<tr><td>Dispersión entre ventanas de una misma muestra (desviación típica)</td>
+<td class="n mono">2,002</td><td class="n mono">1,54 … 2,64</td>
+<td class="n mono">0,4 … 3,7</td></tr>
+<tr><td>Rango entre la mejor y la peor ventana</td>
+<td class="n mono">5,10</td>
+<td class="n mono">3,40 … 6,37</td>
+<td class="n mono">1,2 … 9,1</td></tr>
+</tbody></table>
+<div class="why"><b>El resultado no confirma la hipótesis de partida, y se reporta como salió.</b> La
+sospecha que motivó este trabajo era que el corte único <i>sobre-estimaba sistemáticamente</i> la
+robustez. La medición no lo sostiene: frente a la mediana de las ventanas honestas la diferencia es
+<b>-0,042</b> —indistinguible de cero— y el rango va de -3,44 a
++4,68. El corte único no está sesgado al alza: es <b>arbitrario</b>, y regala o castiga
+según dónde caiga el corte. Lo que sí sostiene la evidencia son otras tres cosas, y la tercera es la que
+decide.</div>
+<h4>1 · La cola no existía</h4>
+<p>Frente al CVaR@25% de las ventanas, el corte único puntúa <b>1,355</b> más alto
+(IQR 0,25 … 3,79), y positivo en más de tres de cada cuatro unidades. No
+es un sesgo del corte: es que <b>el CVaR de un solo número es ese número</b>. El sistema rankea por la
+cola mala (§5.3) y, con una sola ventana, no había cola que promediar — el estadístico robusto se
+degradaba silenciosamente a "el resultado del último 30% del rango". Ésta es la brecha estructural, y es
+la que justifica el cambio.</p>
+<h4>2 · El ruido temporal es mayor que la señal que se quiere medir</h4>
+<p>Entre ventanas de una misma muestra el headline se mueve una desviación típica de
+<b>2,002</b>, con un rango mediano de <b>5,10</b> puntos entre
+la mejor y la peor. Puesto en contexto: dentro de una misma muestra, lo que separa a la mejor de la peor
+<b>configuración</b> es <b>1,53</b>. Es decir, mover
+la ventana mueve el resultado <b>3,3 veces más</b> que cambiar de estrategia.</p>
+<div class="why">Ése es el argumento entero, en una frase: si el ruido temporal es tres veces la señal que
+se quiere medir, elegir con <b>una</b> ventana es elegir mayoritariamente por el tramo de historia que
+tocó. No hace falta que el corte único esté sesgado para que sea una mala regla de decisión — basta con
+que sea arbitrario, que es justo lo que resultó ser.</div>
+<p>CPCV estima la dispersión más baja (1,28) porque sus ventanas solapan y cada una
+cubre más calendario, así que promedian más historia — no porque el mundo sea más estable.</p>
+<h4>3 · La elección cambia</h4>
+<p>Lo que decide no es el nivel sino el <b>orden</b>. El acuerdo de rangos (Spearman) entre ordenar las
+configuraciones por el corte único y ordenarlas por la recompensa multiventana tiene mediana
+<b>0,80</b> pero media
+<b>0,38</b> y baja hasta
+<b>-1,0</b> (orden exactamente invertido). La configuración ganadora
+cambia en <b>4/8</b> muestras
+(50%) con walk-forward y en
+<b>5/8</b> (62%) con CPCV.</p>
+<div class="note"><b>Límites declarados, y son serios.</b> 32 unidades sobre
+4 configuraciones y 8 muestras de una sola librería, un camino por
+escenario. El acuerdo de rangos y los cambios de elección se miden sobre <b>8
+muestras</b>: "4 de 8" es una señal, no una tasa — el
+intervalo de confianza de esa proporción cubre medio rango, y afirmar "la mitad de las veces" como cifra
+sería sobre-leer el dato. Las ventanas de un mismo esquema <b>comparten historia</b> (en CPCV cada tramo
+entra en varios folds), así que la dispersión medida no son observaciones independientes y no debe leerse
+como un error estándar. Y el camino que usa el optimizador (§5.5) sigue puntuando cada muestra con el
+corte único: cablear ahí el esquema multiventana es la evolución pendiente. Los
+640 folds ejecutados pasaron la auditoría de fuga temporal. Evidencia completa
+en <span class="mono">data/validation/report_ai_v2.json</span> (2026-08-10); un backtest
+suelto se corre con <span class="mono">ai-trader backtest --validation cpcv</span>.</div>
 
 <h3>3.8 · El motor de riesgo como puerta única</h3>
 <p>Toda señal, venga de donde venga, pasa por el motor de riesgo antes de convertirse en orden. El riesgo
@@ -485,6 +597,14 @@ que dependen de él están marcadas como tales y deben interpretarse con cuidado
 <p>Una estrategia no se juzga por un camino, sino por la <b>distribución de su resultado</b> sobre las
 900 muestras (escenarios × caminos). Puntuar sobre un solo camino es medir ruido; se ha
 verificado que un único path no es informativo.</p>
+<p>Esa dispersión es <b>entre mundos</b>. Hay una segunda, ortogonal y hasta ahora invisible: la que hay
+<b>dentro de un mundo</b>, entre tramos de su propia historia. La validación multiventana (§3.7) la mide,
+y resulta no ser pequeña. Conviene no confundirlas: la primera pregunta "¿funciona en escenarios
+distintos?", la segunda "¿funciona en momentos distintos del mismo escenario?".</p>
+<div class="note"><b>Estado.</b> Lo que hoy alimenta al optimizador (§5.5) es la primera dispersión: cada
+muestra sigue aportando <b>un</b> número, obtenido con el corte único. Componer las dos agregaciones —el
+CVaR entre ventanas y el CVaR entre muestras— no es automático: encadenar dos veces la cola puede ser
+excesivamente conservador, y esa decisión se tomará midiendo, no razonando (§7).</div>
 
 <h3>5.2 · La métrica de cabecera: Sharpe penalizado</h3>
 <p>La puntuación de una muestra es su <b>headline score fuera de muestra</b>:</p>
@@ -697,14 +817,24 @@ corrigiendo además por asimetría y colas gruesas de los retornos.</p>
 número sino un método.</div>
 
 <h2 id="s6">6 · Tests y garantías</h2>
-<p>La base cuenta con <b>379 tests</b> automatizados y <i>linting</i> (ruff) sobre todo el
+<p>La base cuenta con <b>424 tests</b> automatizados y <i>linting</i> (ruff) sobre todo el
 código. Más allá del número, importa <b>qué</b> se garantiza. Los tests se agrupan por invariante:</p>
 <ul>
 <li><b>Determinismo:</b> la misma semilla produce las mismas velas y las mismas curvas de equity.</li>
 <li><b>Validez de las velas:</b> máximo ≥ cuerpo ≥ mínimo y precios positivos, en todos los regímenes,
 incluidos los que activan saltos.</li>
 <li><b>Anti-look-ahead:</b> tests dedicados verifican que la barra de hoy queda excluida y la de ayer
-incluida, tanto en la fuente de datos como en el ensamblador de régimen.</li>
+incluida, tanto en la fuente de datos como en el ensamblador de régimen. En la validación multiventana
+se comprueba además a nivel de ejecución: borrar todas las barras <b>posteriores</b> a una ventana no
+cambia ni un decimal de su curva de equity.</li>
+<li><b>No hay fuga temporal entre folds:</b> para cada esquema (walk-forward anclado y rodante, CPCV,
+corte único) se comprueba <b>día a día</b> —sobre fechas explícitas, no sobre los intervalos que
+construyeron el fold— que ningún día aparece a la vez en entrenamiento y test, y que los huecos
+respetan la purga y el embargo declarados. El auditor se ejercita también en negativo: folds con solape
+y folds con purga insuficiente <b>deben</b> hacer fallar la ejecución antes de gastar cómputo. Se fija
+además el invariante que delimita qué hace la purga: purgar cambia la ventana in-sample y <b>no</b>
+la out-of-sample; y dos folds con el mismo test y entrenamientos distintos dan idéntico resultado OOS,
+que es lo que legitima reutilizar tramos ya corridos entre folds.</li>
 <li><b>Estructura de correlación:</b> activos que cargan el mismo factor correlacionan positivamente; un
 shock mueve al activo que lo carga.</li>
 <li><b>Microestructura ajustada en varianza:</b> añadir colas, agrupamiento o autocorrelación no cambia
@@ -745,7 +875,8 @@ de sobreajuste puro da PBO ≈ 1; probar más configuraciones sube el listón de
 <tr><td>Calibración con evidencia de los pesos λ (turnover) y κ (drawdown)</td><td class="ok">Hecho</td><td>Medidos por barrido en rejilla (§5.2b): la superficie es plana y λ no duplica los costes ya pagados.</td></tr>
 <tr><td>Costes que muerden (slippage por símbolo/vol/tamaño; fills parciales)</td><td class="ok">Hecho</td><td>La fricción dejó de ser una constante: el coste distingue BTC de un altcoin ilíquido y el tamaño tiene techo (§3.4-3.6).</td></tr>
 <tr><td>Re-medición de λ y κ con el modelo de costes nuevo</td><td class="pend">Pendiente</td><td>La calibración publicada se midió con deslizamiento plano; la conclusión se refuerza, pero los decimales no están re-medidos.</td></tr>
-<tr><td>Validación (CPCV / walk-forward multiventana)</td><td class="pend">Pendiente</td><td>El split único sobre-estima la robustez.</td></tr>
+<tr><td>Validación temporal multiventana (walk-forward y CPCV con purga y embargo)</td><td class="ok">Hecho</td><td>Implementada, auditada contra fuga temporal y <b>medida</b>: el corte único no estaba sesgado al alza, pero degradaba el CVaR a un solo número y escondía una dispersión entre ventanas capaz de cambiar qué configuración gana (§3.7).</td></tr>
+<tr><td>Cablear la validación multiventana en el scoring y el CEM</td><td class="pend">Pendiente</td><td>El optimizador aún puntúa cada muestra con el corte único, así que optimiza la cifra optimista; falta decidir cómo se componen el CVaR entre ventanas y el CVaR entre muestras.</td></tr>
 <tr><td>Validación sintético-vs-real (correlación de rangos con CCXT)</td><td class="ok">Hecho</td><td>Medida contra ocho años de histórico real: el nivel de riesgo y el orden de las correlaciones cruzadas se sostienen (§2.8).</td></tr>
 <tr><td>Colas y agrupamiento por debajo del mercado real</td><td class="pend">Pendiente</td><td>Lo que destapó esa validación: el sustrato subestima la pérdida de cola, así que las cifras absolutas de riesgo son optimistas.</td></tr>
 <tr><td>Limpieza de consistencia (universo, anualización, reproducibilidad del diseñador)</td><td class="ok">Hecho</td><td>La anualización distingue clase de activo (252 sesiones / 365 días naturales) y se reporta; la no-reproducibilidad del diseñador está documentada y su petición ya no envía parámetros de muestreo retirados; MATIC/USDT queda fuera del universo operado y dentro del sintético, con el motivo escrito.</td></tr>
@@ -794,9 +925,18 @@ responde a "¿es creíble este resultado habiendo buscado tanto?".</li>
 <li><b>PBO (Probability of Backtest Overfitting):</b> con qué frecuencia la configuración ganadora dentro
 de muestra queda por debajo de la mediana fuera de muestra.</li>
 <li><b>Hold-out:</b> datos reservados que el modelo no ve durante el ajuste, para medir sobreajuste.</li>
+<li><b>Walk-forward:</b> validación que avanza en el tiempo — se entrena con el pasado y se puntúa en el
+tramo siguiente, repitiendo. Da varias ventanas out-of-sample consecutivas y disjuntas.</li>
+<li><b>CPCV (Combinatorial Purged Cross-Validation):</b> se parte el rango en N grupos y se prueban todas
+las combinaciones de k como test. Da C(N,k) ventanas con la misma historia, y evalúa cada tramo
+acompañado de contextos de entrenamiento distintos.</li>
+<li><b>Purga:</b> días de entrenamiento eliminados justo <i>antes</i> del test, para que ninguna
+operación abierta al final del entrenamiento tenga su desenlace dentro del test.</li>
+<li><b>Embargo:</b> días de entrenamiento eliminados justo <i>después</i> del test, para que la
+correlación serial de los retornos no filtre el test en el entrenamiento posterior.</li>
 <li><b>CEM:</b> método de entropía cruzada — optimización de caja negra por muestreo y élite.</li>
 <li><b>Stylized facts:</b> propiedades estadísticas robustas de los mercados reales (colas gruesas,
 agrupamiento de volatilidad, autocorrelación) que un buen simulador debe reproducir.</li>
 </ul>
-<p class="meta">Fin del documento · AI-Trader · commit <span class="mono">a5e2dd2</span>.</p>
+<p class="meta">Fin del documento · AI-Trader · commit <span class="mono">8beaef5</span>.</p>
 </div></body></html>

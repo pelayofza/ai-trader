@@ -32,6 +32,9 @@ risk/engine.py          Puerta única: aprueba, dimensiona y asigna stop-loss/ta
 execution/router.py     Enruta cada orden al motor de su clase de activo.
 execution/paper.py      Simulación de fills: cuánto se llena y a qué precio.
 execution/microstructure.py  Coste de ejecución: spread por símbolo, volatilidad, impacto.
+backtest/engine.py      Conduce el runner real sobre histórico; corre planes de folds.
+backtest/validation.py  Geometría temporal: walk-forward, CPCV, purga, embargo, auditoría.
+scoring/multiwindow.py  Agrega las ventanas de una muestra en una distribución robusta.
 notifications/          Canal hacia el humano (Telegram) desacoplado del núcleo.
 data/                   Proveedores (Alpaca, CCXT, Polymarket) + caché parquet.
 shared/                 Vocabulario común + `clock.py`, la costura para el backtest.
@@ -51,6 +54,9 @@ poetry run ai-trader-bot          # con bot de Telegram
 
 # backtest con split train/test out-of-sample
 poetry run ai-trader backtest --start 2025-12-20 --end 2026-06-01 --capital 10000
+
+# validación multiventana con purga y embargo (walk_forward | cpcv)
+poetry run ai-trader backtest --start 2025-12-20 --end 2026-06-01 --validation cpcv
 ```
 
 ## Backtest
@@ -75,6 +81,49 @@ equity ya paga. La evidencia se publica en `data/calibration/` y se reproduce co
 .venv\Scripts\python.exe -m ai_trader.scoring.weight_study   # el estudio completo (horas)
 .venv\Scripts\python.exe -m ai_trader.scoring.weight_study --analyze-only  # re-analiza
 ```
+
+### Validación temporal multiventana
+
+Un backtest se puede partir en train y test de muchas formas, y la forma elegida **cambia
+la respuesta**. Además del corte único 70/30 —que se conserva como referencia— cada
+muestra se puede evaluar en **varias** ventanas out-of-sample disjuntas, y sus headline
+scores se agregan con el mismo CVaR@25% que rankea el resto del sistema:
+
+- `walk_forward`: N ventanas consecutivas; cada fold entrena con el pasado y se puntúa en
+  el tramo siguiente.
+- `cpcv`: Combinatorial Purged Cross-Validation — N grupos y todas las combinaciones de k
+  como test, así que salen C(N,k) ventanas y cada tramo se evalúa acompañado de contextos
+  distintos.
+
+Entre train y test se abren dos huecos: **purga** (`max_holding_days`, exactamente lo que
+puede seguir viva una posición abierta el último día de train) y **embargo** (1% del
+rango, contra el eco serial de los retornos). La geometría vive en
+`backtest/validation.py`, separada del motor a propósito: una fuga temporal es un error de
+geometría y comprobarlo no debería exigir ejecutar nada. `assert_no_leakage` audita el
+plan **antes** de gastar cómputo, y hay tests que comprueban día a día que ningún día cae
+en los dos lados.
+
+Lo que cambia al partir el tiempo de otra forma está **medido**, no supuesto, y el
+resultado no confirmó la sospecha de partida: el corte único **no** sobre-estima
+sistemáticamente (su diferencia con la mediana de las ventanas es ≈0, pero va de −3,4 a
++4,7 — es *arbitrario*, no optimista). Lo que sí sostiene la evidencia: puntúa +1,35 por
+encima del **CVaR** de las ventanas, porque el CVaR de un solo número es ese número; y que
+mover la ventana mueve el resultado **3,3 veces más que cambiar de estrategia** (rango
+entre ventanas 5,10 vs 1,53 entre configuraciones), con la configuración ganadora
+cambiando en 4 de 8 muestras. No hace falta que el corte único esté sesgado para que sea
+una mala regla de decisión: basta con que sea arbitrario. La evidencia se publica en
+`data/validation/` y se reproduce con:
+
+```powershell
+.venv\Scripts\python.exe -m ai_trader.scoring.validation_study --workers 7
+.venv\Scripts\python.exe -m ai_trader.scoring.validation_study --analyze-only
+```
+
+Aviso honesto: dentro de un backtest no se ajusta nada (la configuración entra fija y cada
+ventana construye reloj, estado y estrategias nuevos), así que purgar y embargar **no**
+cambian ninguna cifra out-of-sample —hay un test que lo fija como invariante—. Lo que
+aporta valor hoy es tener varias ventanas en vez de una; la purga es la geometría correcta
+para cuando algo *sí* se ajuste sobre el train.
 
 **Anualización por clase de activo.** Sharpe, Sortino y volatilidad se anualizan por
 `√N`, donde `N` es el número de observaciones al año, y eso depende del mercado: cripto

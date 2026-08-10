@@ -20,6 +20,7 @@ from ai_trader.backtest.metrics import DEFAULT_HEADLINE_WEIGHTS
 from ai_trader.observation.features import OWN_ASSET_FEATURES
 from ai_trader.observation.regime import REGIME_FEATURES
 from ai_trader.scoring.search_space import get_space
+from ai_trader.scoring.validation_study import VALIDATION_REPORT, load_validation_report
 from ai_trader.scoring.weight_calibration import (
     CALIBRATION_REPORT,
     grid_point,
@@ -220,6 +221,43 @@ def _fidelity() -> dict | None:
     }
 
 
+def _validation() -> dict | None:
+    """Cifras del estudio de validacion multiventana (data/validation).
+
+    Igual que la calibracion y la fidelidad: se leen del informe publicado, no se
+    recalculan. Cada unidad del estudio son ~20 ventanas de backtest real."""
+    report = load_validation_report(ROOT / VALIDATION_REPORT)
+    if not report:
+        logger.warning("Sin informe de validacion: la seccion 3.7 saldra degradada")
+        return None
+
+    plan = report["plan"]
+    rows = report["rows"]
+    return {
+        "library": plan["library_id"],
+        "n_units": len(rows),
+        "n_configs": len(plan["config_ids"]),
+        "n_samples": len(plan["scenario_ids"]) * plan["n_paths"],
+        "n_folds_wf": plan["n_folds"],
+        "n_folds_cpcv": rows[0]["cpcv"]["n_folds"] if rows else 0,
+        "n_groups": plan["n_groups"],
+        "n_test_groups": plan["n_test_groups"],
+        "purge": plan["purge_days"],
+        "embargo": rows[0]["walk_forward"]["embargo_days"] if rows else 0,
+        "opt_wf": report["optimism"]["walk_forward"],
+        "opt_cpcv": report["optimism"]["cpcv"],
+        "opt_tail": report["optimism"]["vs_tail"],
+        "std": report["dispersion"]["walk_forward_std"],
+        "std_cpcv": report["dispersion"]["cpcv_std"]["median"],
+        "range": report["dispersion"]["walk_forward_range"],
+        "svn": report["signal_vs_noise"],
+        "rank": report["rank_agreement"],
+        "flips": report["decision_flips"],
+        "leakage": report["leakage"],
+        "generated_at": report["generated_at"][:10],
+    }
+
+
 def collect() -> dict:
     store = SyntheticStore(ROOT / "data" / "synthetic")
     facts: dict = {}
@@ -251,6 +289,7 @@ def collect() -> dict:
 
     facts["calibration"] = _calibration()
     facts["fidelity"] = _fidelity()
+    facts["validation"] = _validation()
 
     facts["mom_params"] = _params(CryptoMomentumStrategy().config)
     facts["mr_params"] = _params(MeanReversionStrategy().config)
