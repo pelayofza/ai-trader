@@ -23,6 +23,8 @@ import numpy as np
 
 from ai_trader.backtest.metrics import DEFAULT_HEADLINE_WEIGHTS
 from ai_trader.config import StrategySpec, load_config
+from ai_trader.data.backtest_source import HistoricalDataSource
+from ai_trader.execution.microstructure import BarLiquidityProvider
 from ai_trader.observation.features import OWN_ASSET_FEATURES
 from ai_trader.observation.regime import REGIME_FEATURES
 from ai_trader.scoring.aggregate import aggregate_reward
@@ -38,6 +40,8 @@ from ai_trader.scoring.weight_calibration import (
     load_calibration_report,
 )
 from ai_trader.shared import bars as bar_schema
+from ai_trader.shared.clock import HistoricalClock
+from ai_trader.shared.instruments import AssetClass
 from ai_trader.strategies import build_strategy
 from ai_trader.strategies.mean_reversion import MeanReversionStrategy
 from ai_trader.strategies.momentum_crypto import CryptoMomentumStrategy
@@ -69,6 +73,16 @@ RANK_CONFIGS = [
 
 CHART_SYMBOLS = ["BTC/USDT", "SPY", "GLD"]
 CHART_POINTS = 160  # downsample de las series de precio para el JSON
+
+# --- panel de costes de ejecucion ---------------------------------------------------
+# Muestra transversal del universo: dos cripto de primer nivel, tres altcoins, dos
+# indices y dos macro. Los tamanos van de "orden de andar por casa" a institucional,
+# que es donde el impacto y el techo de capacidad dejan de ser teoria.
+COST_SYMBOLS = [
+    "BTC/USDT", "ETH/USDT", "SOL/USDT", "DOGE/USDT", "MATIC/USDT",
+    "SPY", "QQQ", "GLD", "UUP",
+]
+COST_ORDER_USD = [1_000.0, 250_000.0, 25_000_000.0]
 
 
 # ------------------------------------------------------------------ util ------------
@@ -487,6 +501,58 @@ def run_ranking(store: SyntheticStore) -> dict:
     return result
 
 
+def collect_costs(store: SyntheticStore) -> dict:
+    """Lo que cuesta EJECUTAR en cada mercado del universo.
+
+    No corre backtests: toma un escenario real de la libreria, resuelve la liquidez de
+    cada simbolo con la misma costura que usa el motor (mediana de volumen y volatilidad
+    de las ultimas barras cerradas) y evalua el modelo para ordenes de tamano creciente.
+    Es la evidencia de que la friccion dejo de ser una constante."""
+    out: dict = {"library": PRIMARY_LIB, "sizes_usd": COST_ORDER_USD, "rows": []}
+    try:
+        config = load_config(ROOT / "config" / "synthetic.toml")
+        manifest = store.load_manifest(PRIMARY_LIB)
+        bars = store.load_bars(PRIMARY_LIB, manifest.scenarios[0]["id"], 0)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Panel de costes no disponible: %s", exc)
+        return out
+
+    symbols = [s for s in COST_SYMBOLS if s in bars and len(bars[s]) > 2]
+    if not symbols:
+        logger.warning("Panel de costes: ningun simbolo de la muestra esta en %s", PRIMARY_LIB)
+        return out
+
+    model = config.execution.slippage
+    out["max_participation"] = config.execution.max_participation
+    out["fee_rate"] = config.execution.fee_rate
+
+    # Reloj al final de la serie: la liquidez se mide con barras ya cerradas.
+    clock = HistoricalClock(bars[symbols[0]].index[-1].to_pydatetime())
+    provider = BarLiquidityProvider(HistoricalDataSource(bars, clock), clock)
+
+    for symbol in symbols:
+        price = float(bar_schema.series(bars[symbol], bar_schema.CLOSE).iloc[-2])
+        asset_class = AssetClass.CRYPTO if "/" in symbol else AssetClass.STOCK
+        snapshot = provider.snapshot(symbol)
+
+        out["rows"].append(
+            {
+                "symbol": symbol,
+                "spread_bps": model.base_spread_bps(symbol, asset_class),
+                "vol_pct": round(100.0 * (snapshot.recent_volatility or 0.0), 2),
+                "capacity_usd": round((snapshot.bar_volume or 0.0)
+                                      * config.execution.max_participation * price),
+                "slippage_bps": [
+                    round(model.slippage_bps(symbol, usd / price, snapshot, asset_class), 1)
+                    for usd in COST_ORDER_USD
+                ],
+            }
+        )
+
+    out["rows"].sort(key=lambda r: r["slippage_bps"][-1], reverse=True)
+    return out
+
+
 def _stats_row(stats) -> dict:
     return {
         "cvar25": round(stats.cvar25, 3),
@@ -604,6 +670,8 @@ def build() -> None:
     strategies = collect_strategies()
     logger.info("Demo de señales...")
     signals = strategy_signals_demo(store, synthetic)
+    logger.info("Costes de ejecucion por simbolo...")
+    costs = collect_costs(store)
     logger.info("Ranking (muestra reducida, puede tardar unos minutos)...")
     ranking = run_ranking(store)
     kpis = collect_kpis(store, synthetic)
@@ -614,6 +682,7 @@ def build() -> None:
         "facts": facts,
         "strategies": strategies,
         "signals": signals,
+        "costs": costs,
         "ranking": ranking,
         "calibration": collect_calibration(),
         "roadmap": collect_roadmap(),
@@ -655,26 +724,30 @@ ROADMAP = [
         ),
     },
     {
-        "id": "line-c-costs",
-        "title": "Costes de ejecucion realistas",
-        "line": "C", "status": "pendiente", "impact": "alto", "effort": "medio",
-        "why": "El slippage es plano (5 bps) y allow_partial_fills=False llena cualquier "
-               "tamano entero: no hay techo de capacidad. 5 bps en un altcoin es ficcion.",
+        "id": "line-c-recalibrate",
+        "title": "Re-medir lambda y kappa con los costes nuevos",
+        "line": "A/C", "status": "pendiente", "impact": "bajo", "effort": "medio",
+        "why": "La calibracion publicada (data/calibration) se midio con el slippage PLANO "
+               "que ya no existe. El modelo actual cobra mas friccion y la reparte por "
+               "simbolo y tamano: refuerza la conclusion (lambda es un margen pequeno sobre "
+               "costes ya pagados), pero los decimales no estan re-medidos.",
         "prompt": (
-            "Proyecto ai-trader (Python). El motor de ejecucion en papel "
-            "(src/ai_trader/execution/paper.py) aplica un slippage PLANO (5 bps) y, con "
-            "allow_partial_fills=False, llena cualquier tamano entero sin techo de capacidad; "
-            "es irreal, sobre todo en activos poco liquidos.\n"
-            "TAREA:\n"
-            "1) Sustituye el slippage plano por un modelo funcion de (spread base del simbolo, "
-            "volatilidad reciente del activo, tamano de la orden / volumen de la barra). El "
-            "campo 'volume' de las velas sinteticas hoy es decorativo (ninguna pieza lo "
-            "consulta): usalo como proxy de liquidez para el impacto de mercado.\n"
-            "2) Activa fills parciales con un techo de capacidad por barra (p.ej. una fraccion "
-            "del volumen); las ordenes grandes se llenan parcialmente.\n"
-            "3) Tests: un altcoin iliquido paga mas slippage que BTC; una orden mayor que el "
-            "techo se llena parcial. Regenera dashboard y docs. Determinismo + "
-            ".venv\\Scripts\\python.exe (poetry run roto) + ruff."
+            "Proyecto ai-trader (Python). El estudio que fija los pesos del headline score "
+            "(src/ai_trader/scoring/weight_study.py, informe en data/calibration/"
+            "report_ai_v2.json) se midio cuando el motor cobraba un slippage PLANO de 5 bps. "
+            "Hoy la ejecucion usa un modelo de microestructura "
+            "(src/ai_trader/execution/microstructure.py: medio spread por simbolo + "
+            "volatilidad reciente + impacto por raiz cuadrada de la participacion) y un techo "
+            "de capacidad por barra.\n"
+            "TAREA: (1) Repite el barrido de (lambda, kappa) con los costes actuales sobre "
+            "ai_v2 y publica el informe nuevo sin borrar el anterior, para poder comparar. "
+            "(2) Revisa turnover_cost_audit en src/ai_trader/scoring/weight_calibration.py: "
+            "hoy deriva el lambda implicito de un cost_rate PLANO (fee_rate + slippage_bps); "
+            "hazlo a partir del slippage REALMENTE cobrado por operacion (ExecutionResult."
+            "slippage_bps), que ya no es una constante. (3) Decide con la evidencia nueva si "
+            "DEFAULT_HEADLINE_WEIGHTS se mueve, y actualiza el test que los congela. "
+            "Determinismo + .venv\\Scripts\\python.exe (poetry run roto) + ruff. Regenera "
+            "dashboard y docs."
         ),
     },
     {

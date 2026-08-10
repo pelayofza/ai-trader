@@ -199,9 +199,11 @@ class SlippageModel:
             sigma = self.reference_volatility
         sigma_bps = sigma * BPS
 
+        participation = self._participation(size, snap)
+
         half_spread = 0.5 * self.base_spread_bps(symbol, asset_class)
         vol_term = self.vol_coef * sigma_bps
-        impact = self.impact_coef * sigma_bps * self._participation(size, snap) ** self.impact_exponent
+        impact = self.impact_coef * sigma_bps * participation**self.impact_exponent
 
         return round(min(half_spread + vol_term + impact, self.max_slippage_bps), 6)
 

@@ -362,9 +362,12 @@ petrolera por encima del factor de materias primas).</p>
 <p>%%NASSETS%% activos: %%NCRYPTO%% criptomonedas, %%NEQUITY%% de renta variable (índices y nombres
 por sector) y %%NMACRO%% de macro/refugio (oro, bonos largos, dólar). La mezcla es deliberada para que
 las correlaciones cruzadas tengan sentido: las financieras cargan tipos en positivo, la energía carga
-materias primas, y los refugios cargan la renta variable en negativo. El universo se guarda de forma
-autocontenida en el manifiesto de cada librería (incluye el precio inicial), de modo que se pueda
-reconstruir el universo exacto y regenerar datos idénticos aunque el código cambie.</p>
+materias primas, y los refugios cargan la renta variable en negativo. Cada activo declara además su
+<b>liquidez</b> (volumen típico negociado en dólares al día), que abarca más de dos órdenes de magnitud
+entre un índice amplio y un altcoin: es el eje que hace que ejecutar cueste distinto en cada mercado
+(§3.4). El universo se guarda de forma autocontenida en el manifiesto de cada librería (precio inicial,
+betas, volatilidad idiosincrática y liquidez), de modo que se pueda reconstruir el universo exacto y
+regenerar datos idénticos aunque el código cambie.</p>
 
 <h3>2.4 · El diseñador de escenarios (la única pieza con IA)</h3>
 <p>Un modelo de lenguaje (Claude) diseña la "física" de cada escenario macro y la emite como

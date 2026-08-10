@@ -687,6 +687,13 @@ def turnover_cost_audit(
     `min_trades` filtra ventanas casi inactivas: con 5 operaciones y un 1% de
     volatilidad el cociente coste/vol se dispara y contamina la mediana con un regimen
     en el que la rotacion no es el problema de nadie.
+
+    LIMITACION conocida: `slippage_bps` es el coste PLANO de referencia del config, no
+    lo que cobra hoy el motor de ejecucion (spread por simbolo + volatilidad + impacto,
+    ver execution/microstructure.py). El lambda implicito que sale de aqui es, por tanto,
+    una COTA INFERIOR de la friccion real: el modelo cobra mas, no menos, asi que la
+    conclusion del estudio -que la rotacion ya se paga dentro del Sharpe- se refuerza.
+    Re-medirlo con el slippage realmente cobrado por operacion esta pendiente.
     """
     slippage_rate = slippage_bps / 10_000.0
     cost_rate = fee_rate + slippage_rate

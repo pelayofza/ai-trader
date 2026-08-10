@@ -148,6 +148,11 @@ def evaluate_baselines(
     El corte train/test sale de `resolve_split_cutoff`, la misma funcion que usa el
     motor de backtest: los baselines se miden en la ventana exacta de la estrategia, y
     con los costes del config (fee_rate + slippage) para que nadie compare gratis.
+
+    El slippage que pagan es el PLANO de referencia, no el modelo de microestructura que
+    paga la estrategia: un baseline hace dos operaciones sobre los activos mas liquidos
+    del universo, y darle el coste barato solo puede ENDURECER el liston que la
+    estrategia tiene que superar. La direccion prudente del error.
     """
     cutoff = resolve_split_cutoff(start, end, split_ratio=split_ratio)
     return compute_baselines(

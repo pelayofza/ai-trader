@@ -30,7 +30,8 @@ app/state_store.py      Persistencia atómica del estado.
 strategies/registry.py  Registro tipo -> constructor. Una estrategia es {tipo, params}.
 risk/engine.py          Puerta única: aprueba, dimensiona y asigna stop-loss/take-profit.
 execution/router.py     Enruta cada orden al motor de su clase de activo.
-execution/paper.py      Simulación de fills: slippage y comisiones.
+execution/paper.py      Simulación de fills: cuánto se llena y a qué precio.
+execution/microstructure.py  Coste de ejecución: spread por símbolo, volatilidad, impacto.
 notifications/          Canal hacia el humano (Telegram) desacoplado del núcleo.
 data/                   Proveedores (Alpaca, CCXT, Polymarket) + caché parquet.
 shared/                 Vocabulario común + `clock.py`, la costura para el backtest.
@@ -77,6 +78,23 @@ equity ya paga. La evidencia se publica en `data/calibration/` y se reproduce co
 
 Los mercados de predicción (Polymarket) quedan fuera del backtest: no hay histórico
 OHLCV, solo midpoint vivo.
+
+### Costes de ejecución
+
+El deslizamiento no es una constante. Cada fill paga **medio spread del símbolo**
+(tabla explícita en `execution/microstructure.py`: de 0,4 pb en un índice amplio a
+20-25 pb en un altcoin de segunda fila), más un término por la **volatilidad reciente**
+del activo, más **impacto de mercado** por la ley de raíz cuadrada sobre la fracción del
+volumen de la barra que consume la orden. Además, ninguna orden puede consumir más de
+una fracción del volumen de la barra (`max_participation`, 10% por defecto): lo que
+exceda ese techo **no se llena**. Las salidas están exentas del techo —entrar es
+opcional, salir no— y pagan el impacto de todo el tamaño.
+
+La liquidez se estima con la mediana del volumen de las últimas 20 barras **ya
+cerradas** (mismo corte anti look-ahead que la estrategia), no con la barra de hoy ni
+con su pico. El generador sintético escala el volumen de cada activo a su volumen
+típico negociado (`adv_usd` en `synthetic/universe.py`), de modo que la columna
+`volume` es un eje de liquidez real y no un adorno.
 
 Variables de entorno (ver `.env.example`):
 

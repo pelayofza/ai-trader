@@ -250,6 +250,41 @@ class TestDeterminism:
         assert r1.headline_score == r2.headline_score
 
 
+class TestLiquidityIsWired:
+    """El motor inyecta la costura de liquidez en la ejecucion: dos mercados identicos
+    salvo por la profundidad de sus barras NO pueden costar lo mismo."""
+
+    def _run(self, symbol: str, volume: float):
+        bars = {symbol: trending_df(400).assign(volume=volume)}
+        config = make_config()
+        config.runner.symbols = [symbol]
+        return BacktestEngine.from_bars(config, bars, 10_000.0).run(
+            start=datetime(2024, 6, 1, tzinfo=timezone.utc),
+            end=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        )
+
+    def test_a_thin_market_erodes_more_equity_than_a_deep_one(self):
+        # Mismo simbolo (mismo spread base) y mismo camino de precios: solo cambia el
+        # volumen, asi que la unica diferencia posible es el impacto de mercado.
+        deep = self._run("AAA/USDT", 1_000_000.0)
+        thin = self._run("AAA/USDT", 100.0)  # capacidad 10 u: aun no recorta el tamano
+
+        assert deep.train.metrics.num_trades == thin.train.metrics.num_trades
+        assert thin.train.metrics.ending_equity < deep.train.metrics.ending_equity
+
+    def test_capacity_caps_what_a_thin_market_can_absorb(self):
+        """Con barras muy finas el techo recorta el tamano: se opera menos notional que
+        el que el riesgo autoriza, que es justo lo que un backtest sin capacidad ignora."""
+        deep = self._run("AAA/USDT", 1_000_000.0)
+        thin = self._run("AAA/USDT", 10.0)  # capacidad 1 u por barra
+
+        biggest_deep = max(p.size for p in deep.train.trades)
+        biggest_thin = max(p.size for p in thin.train.trades)
+
+        assert biggest_thin < biggest_deep
+        assert biggest_thin <= 10.0 * 0.10 + 1e-9  # max_participation del config
+
+
 class TestCompounding:
     def test_larger_starting_capital_scales_position_sizes(self):
         bars = {"BTC/USDT": trending_df(400)}

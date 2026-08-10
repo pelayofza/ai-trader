@@ -232,7 +232,7 @@ function renderOverview(){
     ['Wiring','ai_v2 como sustrato por defecto del scoring','hecho'],
     ['A','Métrica y ranking honestos (headline, CVaR, baselines, DSR/PBO)','hecho'],
     ['A','Calibración medida de λ y κ (rejilla + auditoría de costes)','hecho'],
-    ['C','Costes que muerden','pendiente'],
+    ['C','Costes que muerden (spread por símbolo, impacto, capacidad)','hecho'],
     ['D','Validación (CPCV/walk-forward)','pendiente'],
     ['E','Limpieza de consistencia','pendiente'],
   ];
@@ -436,6 +436,7 @@ function renderRanking(){
     </tbody></table></div></div>
     ${(G.missing&&G.missing.length)?`<div class="note"><b>Baselines no disponibles en este scope:</b>
       <span class="mono">${G.missing.map(esc).join(', ')}</span>. No se sustituyen por nada: si un rival no se puede construir, se dice.</div>`:''}`:''}
+    ${costPanel(D.costs)}
     ${pbo.computable||dsr.computable?`
     <h2>Descuento por múltiples pruebas</h2>
     <p class="lead">Probar muchas configuraciones garantiza encontrar una que brilla aunque no haya nada que encontrar.
@@ -461,6 +462,39 @@ function renderRanking(){
     bl.forEach(b=>groups.push({label:b.label,values:(R.distributions[b.name]||[]),color:cssv('--muted')}));
     dotStrip($('#distchart'),groups.filter(g=>g.values.length));
   }
+}
+
+function usd(v){
+  if(v>=1e9)return '$'+fmt(v/1e9,1)+' B';
+  if(v>=1e6)return '$'+fmt(v/1e6,1)+' M';
+  if(v>=1e3)return '$'+fmt(v/1e3,0)+' k';
+  return '$'+fmt(v,0);
+}
+
+function costPanel(C){
+  if(!C||!C.rows||!C.rows.length)return '';
+  const sizes=C.sizes_usd||[];
+  const head=sizes.map(s=>`<th class="num">${usd(s)}</th>`).join('');
+  return `
+    <h2>Lo que cuesta ejecutar</h2>
+    <p class="lead">El deslizamiento <b>no es una constante</b>. Cada fill paga
+      <span class="mono">medio spread del símbolo + volatilidad reciente + impacto</span>, y el impacto sigue la
+      <b>ley de raíz cuadrada</b> sobre la fracción del volumen de la barra que consume la orden: cuadruplicar el tamaño
+      duplica el coste. Cifras calculadas sobre barras reales de <span class="mono">${esc(C.library)}</span>, en puntos básicos.</p>
+    <div class="card"><div class="tblwrap"><table>
+      <thead><tr><th>Símbolo</th><th class="num">spread base</th><th class="num">vol. diaria</th>${head}<th class="num">capacidad / barra</th></tr></thead>
+      <tbody>${C.rows.map(r=>`<tr>
+        <td><b>${esc(r.symbol)}</b></td>
+        <td class="num">${fmt(r.spread_bps,1)} pb</td>
+        <td class="num">${fmt(r.vol_pct,1)}%</td>
+        ${(r.slippage_bps||[]).map(b=>`<td class="num">${fmt(b,1)}</td>`).join('')}
+        <td class="num">${usd(r.capacity_usd)}</td></tr>`).join('')}
+      </tbody></table></div></div>
+    <div class="note"><b>Cómo leerlo.</b> A tamaño pequeño manda el <b>spread</b>: el orden lo fija el símbolo, y ahí un
+      altcoin cuesta ya varias veces lo que BTC. A tamaño grande manda el <b>impacto</b>, y la separación se dispara.
+      La última columna es el techo de capacidad (${fmt((C.max_participation||0)*100,0)}% del volumen de la barra):
+      por encima de esa cifra la orden se llena <b>parcialmente</b>, no entera. Con capitales de cinco cifras ese techo
+      no llega a morder — es justo lo que hace que un resultado deje de escalar cuando el capital crece.</div>`;
 }
 
 function renderPaper(){

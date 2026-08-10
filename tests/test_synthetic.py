@@ -463,6 +463,7 @@ class TestUniverseReconstruction:
             assert clone.start_price == original.start_price
             assert clone.idio_vol == original.idio_vol
             assert clone.loadings == original.loadings
+            assert clone.adv_usd == original.adv_usd
 
     def test_missing_start_price_raises(self):
         from ai_trader.synthetic.universe import universe_from_summary
@@ -470,6 +471,69 @@ class TestUniverseReconstruction:
         bad = [{"symbol": "X", "asset_class": "crypto", "loadings": {}, "idio_vol": 0.01}]
         with pytest.raises(KeyError):
             universe_from_summary(bad, DEFAULT_UNIVERSE.factors)
+
+    def test_manifests_without_liquidity_fall_back_to_the_code_universe(self):
+        """`adv_usd` es posterior a las primeras librerias: regenerar una antigua debe
+        recuperar la liquidez del codigo, no tumbar la reconstruccion ni dejarla plana."""
+        from ai_trader.synthetic.universe import DEFAULT_ADV_USD, universe_from_summary
+
+        old_style = [
+            {"symbol": "BTC/USDT", "asset_class": "crypto", "start_price": 40_000.0,
+             "loadings": {}, "idio_vol": 0.02},
+            {"symbol": "NOT/IN/UNIVERSE", "asset_class": "crypto", "start_price": 1.0,
+             "loadings": {}, "idio_vol": 0.02},
+        ]
+
+        rebuilt = universe_from_summary(old_style, DEFAULT_UNIVERSE.factors)
+
+        assert rebuilt.asset("BTC/USDT").adv_usd == DEFAULT_UNIVERSE.asset("BTC/USDT").adv_usd
+        assert rebuilt.asset("NOT/IN/UNIVERSE").adv_usd == DEFAULT_ADV_USD
+
+
+class TestLiquidityAxis:
+    """El volumen dejo de ser decorativo: es el eje de liquidez que consume la ejecucion."""
+
+    def test_volume_reflects_each_asset_liquidity(self):
+        bars = PathEngine(DEFAULT_UNIVERSE).generate(_equity_only(days=120), seed=11)
+
+        def notional(symbol):
+            df = bars[symbol]
+            return float((df["volume"] * df["close"]).median())
+
+        # SPY mueve ordenes de magnitud mas dinero al dia que un altcoin o que UUP.
+        assert notional("SPY") > notional("DOGE/USDT") > notional("UUP")
+        assert notional("BTC/USDT") > 10 * notional("DOT/USDT")
+
+    def test_volume_is_positive_and_reacts_to_movement(self):
+        bars = PathEngine(DEFAULT_UNIVERSE).generate(_equity_only(vol=0.03, days=200), seed=5)
+        df = bars["BTC/USDT"]
+        moves = np.abs(np.diff(np.log(df["close"].to_numpy())))
+
+        assert (df["volume"] > 0).all()
+        # Los dias de movimiento fuerte negocian mas que los tranquilos.
+        loud = df["volume"].to_numpy()[1:][moves > np.median(moves)]
+        quiet = df["volume"].to_numpy()[1:][moves <= np.median(moves)]
+        assert loud.mean() > quiet.mean()
+
+    def test_relative_volume_is_untouched_by_the_liquidity_scale(self):
+        """La feature volume_ratio (volumen / media) es adimensional: escalar el volumen
+        por activo NO puede moverla, y por tanto no cambia ninguna senal ya calibrada."""
+        from dataclasses import replace
+
+        from ai_trader.synthetic.universe import SyntheticUniverse
+
+        asset = DEFAULT_UNIVERSE.asset("BTC/USDT")
+        thin = SyntheticUniverse(assets=(replace(asset, adv_usd=1_000.0),))
+        deep = SyntheticUniverse(assets=(replace(asset, adv_usd=1_000_000_000.0),))
+        spec = _equity_only(days=90)
+
+        a = PathEngine(thin).generate(spec, seed=3)["BTC/USDT"]
+        b = PathEngine(deep).generate(spec, seed=3)["BTC/USDT"]
+
+        assert np.allclose(a["close"].to_numpy(), b["close"].to_numpy())
+        ratio_a = a["volume"].to_numpy() / a["volume"].mean()
+        ratio_b = b["volume"].to_numpy() / b["volume"].mean()
+        assert np.allclose(ratio_a, ratio_b)
 
 
 class TestResynthesize:
