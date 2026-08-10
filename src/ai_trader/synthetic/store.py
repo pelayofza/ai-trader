@@ -4,6 +4,7 @@ import json
 import logging
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from collections.abc import Iterable, Sequence
 from typing import Iterator
 
 import pandas as pd
@@ -136,18 +137,52 @@ class SyntheticStore:
         self, library_id: str, scenario_id: str, path_index: int
     ) -> dict[str, pd.DataFrame]:
         """Puente hacia el backtest: un (escenario, path) -> dict[symbol -> OHLCV]."""
-        parquet = self.root / library_id / "scenarios" / scenario_id / "paths.parquet"
-        if not parquet.exists():
-            raise FileNotFoundError(f"No paths parquet at {parquet}")
-
-        df = pd.read_parquet(parquet)
+        df = self._read_paths_frame(library_id, scenario_id)
         subset = df[df[_PATH_COL] == path_index]
         if subset.empty:
             raise ValueError(f"Path {path_index} not found in {scenario_id}")
+        return self._pivot_paths(subset, OHLCV_COLUMNS)
 
+    def load_scenario_paths(
+        self,
+        library_id: str,
+        scenario_id: str,
+        *,
+        path_indices: Iterable[int] | None = None,
+        columns: Sequence[str] = OHLCV_COLUMNS,
+    ) -> dict[int, dict[str, pd.DataFrame]]:
+        """
+        Varios paths de un escenario con UNA sola lectura del parquet.
+
+        `load_bars` relee el fichero entero en cada llamada, lo que es correcto cuando se
+        quiere una muestra suelta y muy caro cuando se quieren muchas del mismo escenario
+        (el estudio de fidelidad recorre la libreria entera). `columns` permite ademas
+        leer solo lo que se va a usar: con los cierres basta para medir stylized-facts.
+        """
+        df = self._read_paths_frame(library_id, scenario_id, columns=columns)
+        if path_indices is not None:
+            df = df[df[_PATH_COL].isin(list(path_indices))]
+        return {
+            int(path_index): self._pivot_paths(group, columns)
+            for path_index, group in df.groupby(_PATH_COL)
+        }
+
+    def _read_paths_frame(
+        self, library_id: str, scenario_id: str, *, columns: Sequence[str] | None = None
+    ) -> pd.DataFrame:
+        parquet = self.root / library_id / "scenarios" / scenario_id / "paths.parquet"
+        if not parquet.exists():
+            raise FileNotFoundError(f"No paths parquet at {parquet}")
+        read_columns = (
+            None if columns is None else [_PATH_COL, _SYMBOL_COL, _TS_COL, *columns]
+        )
+        return pd.read_parquet(parquet, columns=read_columns)
+
+    @staticmethod
+    def _pivot_paths(frame: pd.DataFrame, columns: Sequence[str]) -> dict[str, pd.DataFrame]:
         bars: dict[str, pd.DataFrame] = {}
-        for symbol, group in subset.groupby(_SYMBOL_COL):
-            ohlcv = group.set_index(_TS_COL)[list(OHLCV_COLUMNS)].sort_index()
+        for symbol, group in frame.groupby(_SYMBOL_COL):
+            ohlcv = group.set_index(_TS_COL)[list(columns)].sort_index()
             ohlcv.index.name = _TS_COL
             bars[str(symbol)] = ohlcv
         return bars

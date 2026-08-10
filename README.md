@@ -79,6 +79,33 @@ equity ya paga. La evidencia se publica en `data/calibration/` y se reproduce co
 Los mercados de predicción (Polymarket) quedan fuera del backtest: no hay histórico
 OHLCV, solo midpoint vivo.
 
+### Fidelidad del sustrato sintético
+
+Que la librería sintética tenga colas gruesas, agrupamiento de volatilidad y estructura
+serial no dice que los tenga **en la magnitud del mercado**. Esa pregunta se responde
+midiendo: `synthetic/fidelity.py` calcula los *stylized facts* (autocorrelación de
+retornos, autocorrelación de |retorno| a lags 1-10, exceedances más allá de 3σ, curtosis
+en exceso y correlaciones cruzadas par a par) y `synthetic/fidelity_study.py` los compara
+contra el histórico diario real de Binance vía CCXT, cacheado en disco. El histórico real
+se trocea en ventanas del mismo tamaño que un camino sintético, porque esos estimadores
+están sesgados en muestras cortas y comparar longitudes distintas compararía el sesgo.
+
+Se reportan tres ejes por métrica: **nivel** (ratio sintético/real), **ordenación**
+(correlación de rangos de Spearman sobre la sección cruzada de activos, o de pares) y
+**cobertura** (qué fracción de los valores reales cae dentro del [p10, p90] del ensemble).
+La evidencia se publica en `data/fidelity/` y la vista *Fidelidad* del dashboard:
+
+```powershell
+.venv\Scripts\python.exe -m ai_trader.synthetic.fidelity_study                     # descarga + mide
+.venv\Scripts\python.exe -m ai_trader.synthetic.fidelity_study --offline           # solo caché
+.venv\Scripts\python.exe -m ai_trader.synthetic.fidelity_study --verify-determinism
+```
+
+Resultado actual de `ai_v2`: el nivel de volatilidad y el orden de las correlaciones
+cruzadas se sostienen; **las colas y el agrupamiento se quedan cortos** frente al mercado
+real, así que las cifras absolutas de riesgo medidas sobre este sustrato son optimistas.
+Está declarado en la documentación (§2.8) y es la siguiente evolución del generador.
+
 ### Costes de ejecución
 
 El deslizamiento no es una constante. Cada fill paga **medio spread del símbolo**
@@ -120,6 +147,8 @@ poetry run ruff check .  # linter
 
 - `data/runtime_state.json` es **estado de ejecución mutable**, no fuente. No se versiona.
 - `.cache/bars/` es caché de barras en parquet; se puede borrar sin consecuencias, se regenera.
+- `data/calibration/` y `data/fidelity/` **sí** se versionan: son la evidencia publicada de los
+  estudios (pesos del headline y fidelidad sintético-vs-real) que consumen dashboard y documentación.
 
 ## Mover la herramienta a otro ordenador
 

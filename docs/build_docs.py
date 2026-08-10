@@ -26,6 +26,12 @@ from ai_trader.scoring.weight_calibration import (
     load_calibration_report,
 )
 from ai_trader.shared import bars as bar_schema
+from ai_trader.synthetic.fidelity import (
+    FIDELITY_REPORT,
+    TARGET_METRIC_KEYS,
+    load_fidelity_report,
+    metric,
+)
 from ai_trader.strategies.mean_reversion import MeanReversionStrategy
 from ai_trader.strategies.momentum_crypto import CryptoMomentumStrategy
 from ai_trader.synthetic.universe import DEFAULT_UNIVERSE, FACTOR_DESCRIPTIONS
@@ -161,6 +167,59 @@ def _calibration() -> dict | None:
     }
 
 
+def _fidelity() -> dict | None:
+    """Cifras del estudio de fidelidad sintetico-vs-real (data/fidelity).
+
+    Igual que la calibracion: se leen del informe publicado, no se recalculan. Medirlo
+    exige descargar ocho anos de historico real y recorrer la libreria entera; la
+    documentacion tiene que ser barata de regenerar. Sin informe, prosa sin cifras."""
+    report = load_fidelity_report(ROOT / FIDELITY_REPORT)
+    if not report:
+        logger.warning("Sin informe de fidelidad: la seccion 2.8 saldra degradada")
+        return None
+
+    plan = report["plan"]
+    by_key = {m["key"]: m for m in report["metrics"]}
+    rows = [
+        *(by_key[k] for k in TARGET_METRIC_KEYS),
+        report["cross_correlation"],
+        *(m for m in report["metrics"] if m["key"] not in TARGET_METRIC_KEYS),
+    ]
+    return {
+        "library": plan["library_id"],
+        "exchange": plan["exchange"],
+        "start": plan["real_window"]["start"],
+        "end": plan["real_window"]["end"],
+        "window_days": plan["window_days"],
+        "step_days": plan["step_days"],
+        "n_scenarios": plan["n_scenarios"],
+        "n_paths": plan["n_paths"],
+        "missing": plan["missing_symbols"],
+        "rows": [
+            {
+                "label": row["label"],
+                "decimals": 3 if row["key"] == "cross_corr" else metric(row["key"]).decimals,
+                "real": row["real_median"],
+                "synth": row["synth_median"],
+                "ratio": row["ratio"],
+                "rank_corr": row["rank_corr"],
+                "coverage": row["coverage_pct"],
+                "is_cross": row["key"] == "cross_corr",
+                "is_target": row["key"] == "cross_corr" or row["key"] in TARGET_METRIC_KEYS,
+            }
+            for row in rows
+        ],
+        "kurtosis": by_key["excess_kurtosis"],
+        "exceed": by_key["exceed_3sigma_pct"],
+        "clustering": by_key["ac_abs1"],
+        "autocorr": by_key["ac1"],
+        "vol": by_key["vol_annual_pct"],
+        "cross": report["cross_correlation"],
+        **report["summary"],
+        "generated_at": report["generated_at"][:10],
+    }
+
+
 def collect() -> dict:
     store = SyntheticStore(ROOT / "data" / "synthetic")
     facts: dict = {}
@@ -191,6 +250,7 @@ def collect() -> dict:
     facts["n_regime"] = len(REGIME_FEATURES)
 
     facts["calibration"] = _calibration()
+    facts["fidelity"] = _fidelity()
 
     facts["mom_params"] = _params(CryptoMomentumStrategy().config)
     facts["mr_params"] = _params(MeanReversionStrategy().config)

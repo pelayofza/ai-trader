@@ -45,6 +45,12 @@ from ai_trader.shared.instruments import AssetClass
 from ai_trader.strategies import build_strategy
 from ai_trader.strategies.mean_reversion import MeanReversionStrategy
 from ai_trader.strategies.momentum_crypto import CryptoMomentumStrategy
+from ai_trader.synthetic.fidelity import (
+    FIDELITY_REPORT,
+    TARGET_METRIC_KEYS,
+    load_fidelity_report,
+    metric,
+)
 from ai_trader.synthetic.store import SyntheticStore
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -654,6 +660,44 @@ def collect_calibration() -> dict | None:
     }
 
 
+def collect_fidelity() -> dict | None:
+    """Comparacion de los stylized-facts de ai_v2 contra el historico real (data/fidelity).
+
+    Se LEE del informe publicado; no se recalcula. Medirlo exige descargar ocho anos de
+    historico y recorrer la libreria entera, y el dashboard tiene que seguir siendo
+    regenerable en minutos."""
+    report = load_fidelity_report(ROOT / FIDELITY_REPORT)
+    if not report:
+        logger.warning("Sin informe de fidelidad: el panel sintetico-vs-real saldra vacio")
+        return None
+
+    plan = report["plan"]
+    metrics = [
+        {
+            **m,
+            "is_target": m["key"] in TARGET_METRIC_KEYS,
+            "decimals": metric(m["key"]).decimals,
+        }
+        for m in report["metrics"]
+    ]
+    return {
+        "library": plan["library_id"],
+        "exchange": plan["exchange"],
+        "real_start": plan["real_window"]["start"],
+        "real_end": plan["real_window"]["end"],
+        "window_days": plan["window_days"],
+        "step_days": plan["step_days"],
+        "overlap": plan["windows_overlap"],
+        "n_paths": plan["n_paths"],
+        "n_scenarios": plan["n_scenarios"],
+        "missing": plan["missing_symbols"],
+        "metrics": metrics,
+        "cross": {**report["cross_correlation"], "is_target": True, "decimals": 3},
+        "summary": report["summary"],
+        "generated_at": report["generated_at"][:10],
+    }
+
+
 def collect_roadmap() -> list[dict]:
     """Evoluciones pendientes, cada una con un prompt copiable para Claude Code."""
     from ai_trader.synthetic import retrofit  # noqa: F401  (asegura que el modulo existe)
@@ -666,6 +710,8 @@ def build() -> None:
     synthetic = collect_synthetic(store)
     logger.info("Stylized facts ai_v1 vs ai_v2...")
     facts = stylized_facts(store)
+    logger.info("Fidelidad sintetico vs real (informe publicado)...")
+    fidelity = collect_fidelity()
     logger.info("Catalogo de estrategias...")
     strategies = collect_strategies()
     logger.info("Demo de señales...")
@@ -680,6 +726,7 @@ def build() -> None:
         "kpis": kpis,
         "synthetic": synthetic,
         "facts": facts,
+        "fidelity": fidelity,
         "strategies": strategies,
         "signals": signals,
         "costs": costs,
@@ -769,24 +816,37 @@ ROADMAP = [
         ),
     },
     {
-        "id": "line-b7-rankcorr",
-        "title": "Validacion sintetico vs real (rank-corr)",
-        "line": "B", "status": "pendiente", "impact": "medio", "effort": "medio",
-        "why": "Falta medir que ai_v2 se parece al mercado real. Se difirio a sub-linea; los "
-               "stylized-facts objetivo ya estan definidos (autocorr, clustering, colas).",
+        "id": "line-b8-tail-calibration",
+        "title": "Subir colas y clustering de ai_v2 al nivel medido",
+        "line": "B", "status": "pendiente", "impact": "alto", "effort": "medio",
+        "why": "El harness de fidelidad ya midio el hueco contra el mercado real "
+               "(data/fidelity): la curtosis sintetica es una fraccion de la real y el "
+               "clustering, la mitad. Mientras siga asi, los backtests subestiman la perdida "
+               "de cola y las estrategias parecen mas seguras de lo que serian.",
         "prompt": (
-            "Proyecto ai-trader (Python). Existe una libreria sintetica realista 'ai_v2' "
-            "(data/synthetic/ai_v2) con colas gruesas, clustering de volatilidad y estructura "
-            "serial, pero falta comprobar que se parece al mercado REAL. El proyecto ya integra "
-            "CCXT para historicos de cripto.\n"
-            "TAREA: construye un harness que compare los stylized-facts de ai_v2 contra el "
-            "historico real de cripto via CCXT: autocorrelacion de retornos, clustering de "
-            "volatilidad (autocorrelacion de |retorno|), indice de cola (exceedances mas alla "
-            "de 3 sigma / kurtosis) y correlaciones cruzadas entre activos. Reporta la "
-            "correlacion de rangos sintetico-vs-real por metrica. Cachea los datos reales en "
-            "disco. Anade al dashboard (dashboard/build_dashboard.py) una vista con la "
-            "comparacion y regenera dashboard y docs. Determinismo + tests + "
-            ".venv\\Scripts\\python.exe (poetry run roto)."
+            "Proyecto ai-trader (Python). El estudio de fidelidad "
+            "(src/ai_trader/synthetic/fidelity_study.py, informe en data/fidelity/"
+            "report_ai_v2.json, vista 'Fidelidad' del dashboard) ya midio los stylized-facts de "
+            "la libreria sintetica ai_v2 contra el historico real de cripto de Binance. "
+            "Resultado: el NIVEL de volatilidad y la ORDENACION de las correlaciones cruzadas "
+            "son razonables, pero las COLAS (curtosis en exceso y exceedances mas alla de 3 "
+            "sigma) y el CLUSTERING de volatilidad se quedan muy por debajo del mercado real, "
+            "con cobertura casi nula: el ensemble sintetico no llega a producir el valor real "
+            "ni en su percentil 90.\n"
+            "TAREA: cierra ese hueco en el generador. (1) En src/ai_trader/synthetic/"
+            "retrofit.py y synthetic/engine.py, recalibra los parametros de microestructura "
+            "(tail_dof, vol_persistence, jump_intensity/jump_scale y su asignacion por fase) "
+            "para que las metricas medidas se acerquen a las reales; hoy las colas solo se "
+            "activan en fases de crisis y el clustering base es 0,85 plano. (2) Usa el propio "
+            "harness como funcion objetivo: itera regenerando y re-midiendo con "
+            "'python -m ai_trader.synthetic.fidelity_study --offline' (los datos reales ya "
+            "estan cacheados) hasta que la cobertura de curtosis y clustering deje de ser "
+            "cero. (3) Conserva los invariantes que ya estan testeados: ajuste en varianza "
+            "(anadir cola no cambia la volatilidad total), velas validas y neutralidad de los "
+            "valores por defecto. (4) Regenera la libreria a una nueva version (ai_v3) sin "
+            "borrar ai_v2, publica el informe de fidelidad de ambas y compara. Determinismo + "
+            "tests + .venv\\Scripts\\python.exe (poetry run roto) + ruff. Regenera dashboard y "
+            "docs."
         ),
     },
     {

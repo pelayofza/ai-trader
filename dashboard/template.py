@@ -214,6 +214,63 @@ function dotStrip(host, groups, opts={}){
   draw();RECHART.push(draw);
 }
 
+function scatterChart(host, points, opts={}){
+  // points: [{name,x,y,lo,hi}] -> real (x) vs sintetico (y), con el rango p10-p90 del
+  // ensemble como barra vertical. Misma escala en ambos ejes: la diagonal y=x es la
+  // referencia y solo significa algo si las unidades coinciden.
+  opts=Object.assign({h:320,pad:{t:16,r:18,b:40,l:58},d:2,xlab:'real',ylab:'sintético'},opts);
+  const draw=()=>{
+    host.innerHTML='';
+    const W=host.clientWidth||680,H=opts.h,p=opts.pad;
+    let lo=Infinity,hi=-Infinity;
+    points.forEach(pt=>[pt.x,pt.y,pt.lo,pt.hi].forEach(v=>{
+      if(v===null||v===undefined||Number.isNaN(v))return; if(v<lo)lo=v; if(v>hi)hi=v;}));
+    if(!isFinite(lo)){lo=0;hi=1;}
+    const pad=(hi-lo)*0.10||Math.abs(hi)*0.1||1; lo-=pad; hi+=pad;
+    const X=v=>p.l+(W-p.l-p.r)*(v-lo)/(hi-lo||1);
+    const Y=v=>p.t+(H-p.t-p.b)*(1-(v-lo)/(hi-lo||1));
+    const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,width:'100%',height:H});
+    for(let g=0;g<=4;g++){
+      const val=lo+(hi-lo)*g/4;
+      svg.appendChild(el('line',{x1:p.l,y1:Y(val),x2:W-p.r,y2:Y(val),stroke:cssv('--grid'),'stroke-width':1}));
+      svg.appendChild(el('line',{x1:X(val),y1:p.t,x2:X(val),y2:H-p.b,stroke:cssv('--grid'),'stroke-width':1}));
+      const ty=el('text',{x:p.l-7,y:Y(val)+3,'text-anchor':'end',fill:cssv('--muted'),'font-size':10});
+      ty.textContent=fmt(val,opts.d);svg.appendChild(ty);
+      const tx=el('text',{x:X(val),y:H-p.b+15,'text-anchor':'middle',fill:cssv('--muted'),'font-size':10});
+      tx.textContent=fmt(val,opts.d);svg.appendChild(tx);
+    }
+    svg.appendChild(el('line',{x1:X(lo),y1:Y(lo),x2:X(hi),y2:Y(hi),stroke:cssv('--axis'),
+      'stroke-width':1.5,'stroke-dasharray':'5 4'}));
+    const dl=el('text',{x:W-p.r-6,y:Y(hi)+15,'text-anchor':'end',fill:cssv('--muted'),'font-size':10});
+    dl.textContent='sintético = real';svg.appendChild(dl);
+    const xl=el('text',{x:(p.l+W-p.r)/2,y:H-4,'text-anchor':'middle',fill:cssv('--ink2'),'font-size':11});
+    xl.textContent=opts.xlab;svg.appendChild(xl);
+    const cy=(p.t+H-p.b)/2;
+    const yl=el('text',{x:13,y:cy,'text-anchor':'middle',fill:cssv('--ink2'),'font-size':11,
+      transform:`rotate(-90 13 ${cy})`});
+    yl.textContent=opts.ylab;svg.appendChild(yl);
+    const tt=tip();
+    points.forEach(pt=>{
+      if(pt.lo!==null&&pt.hi!==null)
+        svg.appendChild(el('line',{x1:X(pt.x),y1:Y(pt.lo),x2:X(pt.x),y2:Y(pt.hi),stroke:cssv('--s1'),
+          'stroke-width':2.5,opacity:.25,'stroke-linecap':'round'}));
+      svg.appendChild(el('circle',{cx:X(pt.x),cy:Y(pt.y),r:5,fill:cssv('--s1'),
+        stroke:cssv('--surface'),'stroke-width':2}));
+      const hit=el('circle',{cx:X(pt.x),cy:Y(pt.y),r:15,fill:'transparent'});
+      hit.addEventListener('mousemove',ev=>{
+        tt.style.display='block';tt.style.left=(ev.clientX+12)+'px';tt.style.top=(ev.clientY-10)+'px';
+        tt.innerHTML=`<b>${esc(pt.name)}</b><br>real: ${fmt(pt.x,opts.d)}<br>`+
+          `sintético: ${fmt(pt.y,opts.d)} <span style="opacity:.7">[${fmt(pt.lo,opts.d)}, ${fmt(pt.hi,opts.d)}]</span>`+
+          `<br>${pt.inside?'✓ el real cae dentro del rango':'✗ fuera del rango sintético'}`;
+      });
+      hit.addEventListener('mouseleave',()=>tt.style.display='none');
+      svg.appendChild(hit);
+    });
+    host.appendChild(svg);
+  };
+  draw();RECHART.push(draw);
+}
+
 function miniBar(v,max,cls=''){const w=Math.max(2,Math.round(100*Math.abs(v)/(max||1)));return `<span class="mbar ${cls}" style="width:${w}px"></span>`;}
 function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
@@ -233,6 +290,7 @@ function renderOverview(){
     ['A','Métrica y ranking honestos (headline, CVaR, baselines, DSR/PBO)','hecho'],
     ['A','Calibración medida de λ y κ (rejilla + auditoría de costes)','hecho'],
     ['C','Costes que muerden (spread por símbolo, impacto, capacidad)','hecho'],
+    ['B','Fidelidad sintético-vs-real medida contra CCXT (rank-corr)','hecho'],
     ['D','Validación (CPCV/walk-forward)','pendiente'],
     ['E','Limpieza de consistencia','pendiente'],
   ];
@@ -277,6 +335,9 @@ function renderSynthetic(){
     <div class="note"><b>Sustrato por defecto.</b> El harness de scoring optimiza sobre <span class="mono">ai_v2</span>
       (<span class="mono">DEFAULT_LIBRARY_ID</span> en <span class="mono">src/ai_trader/scoring/optimize.py</span>);
       <span class="mono">ai_v1</span> se conserva solo como referencia comparativa y hay que pedirla explícitamente.</div>
+    <div class="note"><b>Esta tabla compara el mundo sintético consigo mismo.</b> Que ai_v2 tenga colas y
+      agrupamiento no dice que los tenga <i>en la magnitud del mercado</i>. Esa pregunta se responde
+      midiendo contra el histórico real: sección <b>Fidelidad</b>.</div>
     <h2>Explorador de escenarios</h2>
     <div class="split">
       <div class="scenlist" id="scenlist"></div>
@@ -306,6 +367,134 @@ function renderSynthetic(){
       </tbody></table></div></div>`;
     const series=syms.map((sy,i)=>({name:sy,color:colors[i%3],values:s.series[sy]}));
     if(series.length)lineChart($('#scenchart'),series,{xlab:'día',h:240});
+  }
+}
+
+function renderFidelity(){
+  const host=$('#fidelity'),F=D.fidelity;
+  if(!F){
+    host.innerHTML=`<h1>Fidelidad contra el mercado real</h1>
+      <div class="card"><p class="tag">No hay informe publicado. Genéralo con
+      <span class="mono">python -m ai_trader.synthetic.fidelity_study</span>.</p></div>`;
+    return;
+  }
+  const S=F.summary, all=[...F.metrics,F.cross], M=k=>all.find(r=>r.key===k);
+  const rows=[...F.metrics.filter(m=>m.is_target),F.cross,...F.metrics.filter(m=>!m.is_target)];
+  const kurt=M('excess_kurtosis'),exc=M('exceed_3sigma_pct'),clus=M('ac_abs1'),
+        vol=M('vol_annual_pct'),ac=M('ac1'),cross=F.cross;
+  const pct=v=>(v===null||v===undefined)?'—':fmt(v,0)+'%';
+  const ratio=r=>r.ratio===null?'—':fmt(r.ratio,2)+'×';
+  const tiles=[
+    ['Rank corr · pares',fmt(S.rank_corr_cross,2),'ordena los '+S.n_pairs+' pares como el mercado'],
+    ['Cobertura media',pct(S.coverage_mean_pct),'valores reales dentro del rango sintético'],
+    ['Curtosis real / sint.',fmt(kurt.real_median,1)+' / '+fmt(kurt.synth_median,1),'el hueco más grande'],
+    ['Muestras',S.n_real_windows+' / '+S.n_synthetic_samples,'ventanas reales / paths sintéticos'],
+  ];
+  host.innerHTML=`
+    <h1>Fidelidad contra el mercado real</h1>
+    <p class="lead">Un mercado sintético solo vale si se parece al real en sus propiedades estadísticas.
+      Aquí se miden los mismos <i>stylized facts</i> sobre <b>${esc(F.library)}</b> y sobre el histórico
+      diario real de ${esc(F.exchange)} (${esc(F.real_start)} → ${esc(F.real_end)}, ${S.n_symbols} criptos),
+      y se comparan en tres ejes distintos: <b>nivel</b> (¿la magnitud es la del mercado?),
+      <b>ordenación</b> (¿ordena los activos como el mercado?, correlación de rangos de Spearman) y
+      <b>cobertura</b> (¿produce el ensemble sintético el valor real como una realización plausible?).</p>
+    <div class="grid tiles">${tiles.map(t=>`<div class="card tile"><div class="k">${t[0]}</div>
+      <div class="v">${t[1]}</div><div class="s">${t[2]}</div></div>`).join('')}</div>
+    <div class="note"><b>Comparación pareada en tamaño de muestra.</b> El histórico real se trocea en
+      ventanas de <b>${F.window_days} días</b> —el mismo horizonte que un camino sintético— porque la
+      autocorrelación y sobre todo la curtosis están sesgadas en muestras cortas: medir el real sobre ocho
+      años seguidos y el sintético sobre dos compararía el sesgo, no el mundo. Las ventanas avanzan
+      ${F.step_days} días${F.overlap?' y por tanto <b>solapan</b>: sirven para la tendencia central, no como estimaciones independientes':''}.</div>
+    <h2>Métrica a métrica</h2>
+    <div class="card"><div class="tblwrap"><table>
+      <thead><tr><th>Stylized fact</th><th class="num">real</th><th class="num">sintético</th>
+        <th class="num">ratio</th><th class="num">rank corr</th><th class="num">cobertura</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr>
+        <td>${esc(r.label)} ${r.key==='cross_corr'?'<span class="pill">pares</span>':(r.is_target?'':'<span class="pill">contexto</span>')}</td>
+        <td class="num">${fmt(r.real_median,r.decimals)}</td>
+        <td class="num">${fmt(r.synth_median,r.decimals)}</td>
+        <td class="num">${ratio(r)}</td>
+        <td class="num">${fmt(r.rank_corr,2)}</td>
+        <td class="num">${fmt(r.coverage_pct,0)}%</td></tr>`).join('')}
+      </tbody></table></div></div>
+    <p class="tag"><b>ratio</b> = sintético / real (1,00 sería clavarlo). <b>rank corr</b> = Spearman entre
+      la sección cruzada real y la sintética: es invariante a la escala, así que mide la ordenación aunque
+      el nivel esté mal. <b>cobertura</b> = qué fracción de los valores reales cae dentro del rango
+      [p10, p90] que el ensemble sintético produce para ese mismo activo (o par).</p>
+    <h2>Activo a activo</h2>
+    <p class="lead">Cada punto es un activo (o un par, en las correlaciones cruzadas): en el eje X su valor
+      real, en el Y el que produce el mundo sintético, con la barra vertical marcando el rango p10–p90 del
+      ensemble. Si el generador fuese fiel, los puntos caerían sobre la diagonal.</p>
+    <div class="rowbtns" id="fidbtns"></div>
+    <div class="card" style="margin-top:12px">
+      <div class="legend"><span><span class="swatch" style="background:var(--s1)"></span>mediana sintética</span>
+        <span><span class="swatch" style="background:var(--s1);opacity:.3"></span>rango p10–p90 del ensemble</span>
+        <span class="tag">· diagonal = fidelidad perfecta</span></div>
+      <div id="fidchart"></div>
+      <div class="tblwrap" id="fidtable" style="margin-top:10px;max-height:360px;overflow:auto"></div>
+    </div>
+    <h2>Veredicto</h2>
+    <div class="note"><b>1 · Lo que el mundo sintético acierta.</b> El <b>nivel de riesgo</b> es el del
+      mercado (volatilidad anualizada ${fmt(vol.real_median,0)}% real vs ${fmt(vol.synth_median,0)}%
+      sintético, ratio ${ratio(vol)}), y el modelo de factores <b>ordena los pares como la realidad</b>:
+      rank corr ${fmt(cross.rank_corr,2)} sobre ${cross.n} pares. Que las correlaciones cruzadas emerjan de
+      cargas compartidas —y no de una matriz inventada— produce un acoplamiento con la forma correcta.</div>
+    <div class="note"><b>2 · Lo que no acierta: las colas.</b> La curtosis en exceso real es
+      <b>${fmt(kurt.real_median,1)}</b> y la sintética <b>${fmt(kurt.synth_median,1)}</b>
+      (${fmt(kurt.coverage_pct,0)}% de cobertura), y las exceedances más allá de 3σ son
+      ${fmt(exc.real_median,2)}% frente a ${fmt(exc.synth_median,2)}%. Cobertura ${fmt(kurt.coverage_pct,0)}%
+      no significa "el sintético se queda corto de media": significa que <b>ni en su percentil 90</b> el
+      ensemble llega al valor real. El agrupamiento de volatilidad va por el mismo camino, a
+      <b>${ratio(clus)}</b> del real.</div>
+    <div class="note"><b>3 · Qué implica para lo que se mide con este sustrato.</b> Un mundo con colas más
+      finas que las reales <b>subestima la pérdida de cola</b>: los drawdowns de crisis, los huecos que se
+      saltan un stop y el peor cuartil del CVaR salen mejores de lo que saldrían contra el mercado. Los
+      rankings de estrategias siguen siendo comparaciones honestas <i>entre sí</i> (todas compiten en el
+      mismo mundo), pero sus <b>cifras absolutas de riesgo son optimistas</b>. Cerrarlo es la evolución
+      "Subir colas y clustering de ai_v2 al nivel medido" de la sección Evoluciones.</div>
+    <div class="note"><b>4 · La autocorrelación merece leerse aparte.</b> Real ${fmt(ac.real_median,3)},
+      sintético ${fmt(ac.synth_median,3)}: el mercado no regala estructura serial —si la regalara, sería
+      dinero gratis— mientras que el generador la <b>fija a propósito</b>, con signo según el régimen, para
+      que la reversión a la media y el momentum tengan algo que capturar. Aquí un ratio lejos de 1 no es un
+      defecto sino el diseño: sin ella no habría <i>edge</i> que buscar y el evaluador mediría ruido. Lo que
+      sí es una advertencia es que el <i>edge</i> sintético es más limpio que el real.</div>
+    <div class="note"><b>Límites.</b> Solo cripto: la renta variable del universo va por otro proveedor y
+      otra sesión de mercado, así que ${S.n_symbols} activos y ${S.n_pairs} pares es todo el ancho que hay.
+      Con ${S.n_symbols} puntos, una correlación de rangos tiene un error grande: sirve para distinguir
+      "ordena como el mercado" de "no ordena", no para comparar 0,55 con 0,65.
+      ${F.missing.length?('Sin contraparte real: <span class="mono">'+F.missing.map(esc).join(', ')+'</span>.'):''}
+      Además, el histórico real es un único camino de la historia: sus siete ventanas comparten los mismos
+      ciclos de 2018-2025, mientras que el sintético son ${S.n_synthetic_samples} mundos distintos.</div>
+    <p class="tag">Evidencia completa: <span class="mono">data/fidelity/report_${esc(F.library)}.json</span> ·
+      reproducible con <span class="mono">python -m ai_trader.synthetic.fidelity_study</span>
+      (${F.n_scenarios} escenarios × ${F.n_paths} caminos; ${esc(F.generated_at)}).</p>`;
+
+  const selectable=[...F.metrics.filter(m=>m.is_target),F.cross];
+  const btns=$('#fidbtns');
+  selectable.forEach((m,i)=>{
+    const b=document.createElement('button');
+    b.className='btn'+(i?' ghost':'');
+    b.textContent=m.label.replace(/ \(.*/,'');
+    b.onclick=()=>{
+      $$('#fidbtns .btn').forEach(x=>x.className='btn ghost');
+      b.className='btn';show(m);
+    };
+    btns.appendChild(b);
+  });
+  if(selectable.length)show(selectable[0]);
+
+  function show(m){
+    const pts=m.items.map(i=>({name:i.name.replace('|',' · '),x:i.real,y:i.synth,
+      lo:i.synth_p10,hi:i.synth_p90,inside:i.inside}));
+    scatterChart($('#fidchart'),pts,{d:m.decimals,xlab:'real · '+m.label,ylab:'sintético'});
+    $('#fidtable').innerHTML=`<table><thead><tr><th>${m.key==='cross_corr'?'Par':'Activo'}</th>
+      <th class="num">real</th><th class="num">sintético</th><th class="num">p10</th>
+      <th class="num">p90</th><th>cubierto</th></tr></thead><tbody>
+      ${m.items.map(i=>`<tr><td class="mono">${esc(i.name.replace('|',' · '))}</td>
+        <td class="num">${fmt(i.real,m.decimals)}</td><td class="num">${fmt(i.synth,m.decimals)}</td>
+        <td class="num">${fmt(i.synth_p10,m.decimals)}</td><td class="num">${fmt(i.synth_p90,m.decimals)}</td>
+        <td>${i.inside?'<span class="chip hecho">sí</span>':'<span class="chip pend">no</span>'}</td></tr>`).join('')}
+      </tbody></table>`;
   }
 }
 
@@ -533,7 +722,8 @@ window.copyPrompt=copyPrompt;
 
 function main(){
   initTheme();initNav();
-  renderOverview();renderSynthetic();renderStrategies();renderRanking();renderPaper();renderRoadmap();
+  renderOverview();renderSynthetic();renderFidelity();renderStrategies();
+  renderRanking();renderPaper();renderRoadmap();
   addEventListener('resize',()=>{clearTimeout(window._rt);window._rt=setTimeout(rerenderCharts,150);});
 }
 main();
@@ -546,6 +736,7 @@ SHELL = """
     <ul class="nav">
       <li><button class="active" data-sec="overview">Resumen</button></li>
       <li><button data-sec="synthetic">Datos sintéticos</button></li>
+      <li><button data-sec="fidelity">Fidelidad</button></li>
       <li><button data-sec="strategies">Estrategias</button></li>
       <li><button data-sec="ranking">Ranking</button></li>
       <li><button data-sec="paper">Paper trading</button></li>
@@ -556,6 +747,7 @@ SHELL = """
     <button id="themeBtn" class="btn ghost toggle">☾ Oscuro</button>
     <section id="overview" class="section active"></section>
     <section id="synthetic" class="section"></section>
+    <section id="fidelity" class="section"></section>
     <section id="strategies" class="section"></section>
     <section id="ranking" class="section"></section>
     <section id="paper" class="section"></section>

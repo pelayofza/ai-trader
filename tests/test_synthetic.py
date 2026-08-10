@@ -422,6 +422,43 @@ class TestStoreRoundTrip:
         assert len(bars["BTC/USDT"]) == 150
         assert list(bars["BTC/USDT"].columns) == ["open", "high", "low", "close", "volume"]
 
+    def test_load_scenario_paths_matches_loading_them_one_by_one(self, tmp_path):
+        # Una lectura del parquet para varios caminos tiene que dar exactamente lo mismo
+        # que la via cara (load_bars); si no, el estudio de fidelidad mediria otra cosa.
+        service, store = self._service(tmp_path)
+        manifest = service.generate(
+            "lib3", n_scenarios=1, n_paths=3, horizon_days=120, seed_base=1000,
+            created_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        )
+        scenario = manifest.scenarios[0]["id"]
+
+        batch = store.load_scenario_paths("lib3", scenario, path_indices=[0, 2])
+
+        assert sorted(batch) == [0, 2]
+        for path_index in (0, 2):
+            one = store.load_bars("lib3", scenario, path_index)
+            assert set(batch[path_index]) == set(one)
+            assert np.allclose(
+                batch[path_index]["BTC/USDT"].to_numpy(), one["BTC/USDT"].to_numpy()
+            )
+
+    def test_load_scenario_paths_can_read_a_single_column(self, tmp_path):
+        service, store = self._service(tmp_path)
+        manifest = service.generate(
+            "lib4", n_scenarios=1, n_paths=2, horizon_days=100, seed_base=1000,
+            created_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        )
+        scenario = manifest.scenarios[0]["id"]
+
+        batch = store.load_scenario_paths("lib4", scenario, columns=["close"])
+
+        assert sorted(batch) == [0, 1]
+        assert list(batch[0]["ETH/USDT"].columns) == ["close"]
+        assert np.allclose(
+            batch[0]["ETH/USDT"]["close"].to_numpy(),
+            store.load_bars("lib4", scenario, 0)["ETH/USDT"]["close"].to_numpy(),
+        )
+
     def test_iter_samples_covers_everything(self, tmp_path):
         service, store = self._service(tmp_path)
         service.generate(

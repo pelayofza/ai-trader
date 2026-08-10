@@ -202,6 +202,123 @@ más duros. Cuando la línea C (costes que muerden) aterrice, este estudio hay q
 está, y re-analizar cuesta segundos porque los componentes están cacheados.</div>"""
 
 
+def _fidelity_table(rows):
+    """Tabla de la comparacion, metrica a metrica: nivel, ordenacion y cobertura."""
+    head = ("<tr><th>Stylized fact</th><th class=n>real</th><th class=n>sintético</th>"
+            "<th class=n>ratio</th><th class=n>rank corr</th><th class=n>cobertura</th></tr>")
+    body = []
+    for row in rows:
+        tag = ""
+        if row["is_cross"]:
+            tag = " <i>(pares)</i>"
+        elif not row["is_target"]:
+            tag = " <i>(contexto)</i>"
+        ratio = "—" if row["ratio"] is None else f"{_n(row['ratio'], 2)}×"
+        body.append(
+            f"<tr><td>{row['label']}{tag}</td>"
+            f"<td class='n mono'>{_n(row['real'], row['decimals'])}</td>"
+            f"<td class='n mono'>{_n(row['synth'], row['decimals'])}</td>"
+            f"<td class='n mono'>{ratio}</td>"
+            f"<td class='n mono'>{_n(row['rank_corr'], 2)}</td>"
+            f"<td class='n mono'>{_n(row['coverage'], 0)}%</td></tr>"
+        )
+    return f"<table><thead>{head}</thead><tbody>{''.join(body)}</tbody></table>"
+
+
+def _fidelity_block(f):
+    """Seccion 2.8: ¿se parece este mundo al real? Con la evidencia que lo responde."""
+    if not f:
+        return (
+            "<h3>2.8 · Fidelidad contra el mercado real</h3>"
+            "<div class=\"note\"><b>Limitación declarada.</b> El informe de fidelidad "
+            "(<span class=\"mono\">data/fidelity/</span>) no está disponible en este árbol, así "
+            "que este documento no puede citar las cifras que comparan el mundo sintético con el "
+            "histórico real. Regenéralo con "
+            "<span class=\"mono\">python -m ai_trader.synthetic.fidelity_study</span>.</div>"
+        )
+    kurt, exc = f["kurtosis"], f["exceed"]
+    clus, ac, vol, cross = f["clustering"], f["autocorr"], f["vol"], f["cross"]
+
+    def ratio(row):
+        return "—" if row["ratio"] is None else f"{_n(row['ratio'], 2)}×"
+
+    return f"""
+<h3>2.8 · Fidelidad contra el mercado real (validación externa)</h3>
+<p>Las secciones anteriores comparan el mundo sintético <b>consigo mismo</b>: ai_v2 tiene colas y
+agrupamiento donde ai_v1 no los tenía. Eso no dice que los tenga <b>en la magnitud del mercado</b>.
+Esta sección responde esa pregunta contra el histórico diario real de
+<span class="mono">{f["exchange"]}</span> ({f["start"]} → {f["end"]}, {f["n_symbols"]} criptomonedas,
+{f["n_pairs"]} pares), midiendo exactamente las mismas magnitudes sobre los dos mundos.</p>
+<div class="why"><b>Dos decisiones metodológicas que hacen que la comparación signifique algo.</b>
+<ul>
+<li><b>Misma longitud de muestra.</b> El histórico real se trocea en ventanas de {f["window_days"]}
+días — el mismo horizonte que un camino sintético — y se compara mediana contra mediana. La
+autocorrelación y sobre todo la curtosis son estimadores <b>sesgados en muestras cortas</b>: medir el
+real sobre ocho años seguidos y el sintético sobre dos compararía el sesgo, no el mundo. Las ventanas
+avanzan {f["step_days"]} días, así que <b>solapan</b>: dan una tendencia central mejor, no
+estimaciones independientes, y se declara por eso.</li>
+<li><b>Ventana histórica cerrada.</b> El periodo descargado es una constante del estudio, no "hasta
+hoy": si el final se moviera con la fecha de ejecución, dos regeneraciones no serían comparables y el
+informe no sería reproducible. Los datos se cachean en disco (la misma caché que usa el sistema en
+vivo), de modo que el estudio se puede repetir sin red.</li>
+</ul></div>
+<p>Y tres ejes de lectura, deliberadamente distintos, porque un generador puede fallar en uno y
+acertar en otro:</p>
+<ul>
+<li><b>Nivel</b> (columna <i>ratio</i>): ¿la magnitud es la del mercado? 1,00 sería clavarlo.</li>
+<li><b>Ordenación</b> (<i>rank corr</i>): correlación de rangos de Spearman entre la sección cruzada
+real y la sintética. Es <b>invariante a la escala</b>, así que responde a algo que el nivel no puede:
+si el mundo sintético sabe <i>qué</i> activo tiene más cola o <i>qué</i> par está más acoplado, aunque
+el nivel absoluto esté mal calibrado.</li>
+<li><b>Cobertura</b>: qué fracción de los valores reales cae dentro del rango [p10, p90] que el
+ensemble sintético produce para ese mismo activo. Un generador honesto no tiene que acertar el número
+real: tiene que poder <b>producirlo</b> como una realización plausible.</li>
+</ul>
+{_fidelity_table(f["rows"])}
+<h4>Resultado 1 · El nivel de riesgo y la estructura de correlaciones son razonables</h4>
+<p>La volatilidad anualizada sintética es {_n(vol["synth_median"], 0)}% frente a
+{_n(vol["real_median"], 0)}% real ({ratio(vol)}): los dos mundos tienen el mismo tamaño de riesgo, que
+es la condición mínima para que una comparación de estrategias entre ellos no sea un cambio de unidades.
+Y el modelo de factores <b>ordena los pares como la realidad</b>: correlación de rangos
+{_n(cross["rank_corr"], 2)} sobre los {cross["n"]} pares, con nivel {_n(cross["synth_median"], 3)} frente
+a {_n(cross["real_median"], 3)} real. Que las correlaciones cruzadas <b>emerjan</b> de cargas
+compartidas — y no de una matriz impuesta — produce un acoplamiento con la forma correcta, algo más
+débil que el real.</p>
+<h4>Resultado 2 · Las colas se quedan cortas, y no por poco</h4>
+<div class="why">Éste es el hallazgo incómodo y el motivo de que esta sección exista. La curtosis en
+exceso real es <b>{_n(kurt["real_median"], 1)}</b> y la sintética <b>{_n(kurt["synth_median"], 2)}</b>;
+las exceedances más allá de 3σ, {_n(exc["real_median"], 2)}% frente a {_n(exc["synth_median"], 2)}%
+(recordatorio: bajo una normal serían 0,27%). El agrupamiento de volatilidad va por el mismo camino, a
+{ratio(clus)} del real.
+<p>Lo que convierte esto en un diagnóstico y no en un matiz es la <b>cobertura</b>:
+{_n(kurt["coverage_pct"], 0)}% en curtosis. No significa "el sintético se queda corto de media"; significa
+que <b>ni en su percentil 90</b> el ensemble llega al valor real. La cola gruesa del generador existe
+—se activa en las fases de crisis— pero promediada sobre dos años de camino no alcanza la del mercado.</p>
+<p><b>Consecuencia honesta para todo lo que se mide con este sustrato:</b> un mundo con colas más finas
+que las reales <b>subestima la pérdida de cola</b>. Los drawdowns de crisis, los huecos que se saltan un
+stop y el peor cuartil que puntúa el CVaR (§5) salen mejores de lo que saldrían contra el mercado. Los
+rankings entre estrategias siguen siendo comparaciones honestas —todas compiten en el mismo mundo— pero
+sus <b>cifras absolutas de riesgo son optimistas</b>, y así hay que leerlas.</p></div>
+<h4>Resultado 3 · La autocorrelación se lee al revés que las demás</h4>
+<p>Autocorrelación real {_n(ac["real_median"], 3)} frente a {_n(ac["synth_median"], 3)} sintética. Aquí
+un ratio lejos de 1 <b>no es un defecto: es el diseño</b>. El mercado no regala estructura serial —si la
+regalara sería dinero gratis— mientras que el generador la fija a propósito, con signo según el régimen
+(§2.6), para que la reversión a la media y el momentum tengan algo real que capturar. Lo que sí es una
+advertencia es la magnitud: el <i>edge</i> sintético es <b>más limpio</b> que cualquier cosa que el
+mercado ofrezca, así que un rendimiento medido aquí no se traslada a un rendimiento allí.</p>
+<div class="note"><b>Límites de este estudio.</b> Solo criptomonedas: la renta variable del universo va
+por otro proveedor y otra sesión de mercado, así que {f["n_symbols"]} activos y {f["n_pairs"]} pares es
+todo el ancho disponible; con {f["n_symbols"]} puntos, una correlación de rangos distingue "ordena como
+el mercado" de "no ordena", pero no permite comparar dos valores parecidos. Las
+{f["n_real_windows"]} ventanas reales solapan y proceden de <b>un único camino de la historia</b> (los
+ciclos de 2018-2025), mientras que el lado sintético son {f["n_synthetic_samples"]} mundos distintos:
+la comparación es entre "lo que pasó" y "lo que podría pasar", y esa asimetría no se puede eliminar,
+solo declarar.{" Sin contraparte real: " + ", ".join(f["missing"]) + "." if f["missing"] else ""}</div>
+<p class="tag">Evidencia completa: <span class="mono">data/fidelity/report_{f["library"]}.json</span> ·
+reproducible con <span class="mono">python -m ai_trader.synthetic.fidelity_study</span>
+({f["n_scenarios"]} escenarios × {f["n_paths"]} caminos; {f["generated_at"]}).</p>"""
+
+
 def _factor_table(factors):
     body = "".join(f"<tr><td class=mono>{f}</td><td>{d}</td></tr>" for f, d in factors)
     return ("<table><thead><tr><th>Factor</th><th>Interpretación</th></tr></thead>"
@@ -247,6 +364,7 @@ def render_html(f: dict) -> str:
         "SPACE_MOM": _rows(f.get("space_mom", []), ["Parámetro", "Rango CEM"]),
         "SPACE_MR": _rows(f.get("space_mr", []), ["Parámetro", "Rango CEM"]),
         "CALIBRATION": _calibration_block(f.get("calibration")),
+        "FIDELITY": _fidelity_block(f.get("fidelity")),
         "LAMBDA": _n((f.get("calibration") or {}).get("lambda", 0.5), 2),
         "KAPPA": _n((f.get("calibration") or {}).get("kappa", 1.0), 1),
     }
@@ -338,8 +456,9 @@ shocks de tipos o inviernos cripto, y en la proporción que necesitemos para est
 estadística robusta, y podemos reservar <b>arquetipos macro enteros</b> como validación (§5.3).</li>
 </ul>
 <div class="note"><b>Contrapartida reconocida.</b> Un mercado sintético solo es útil si se parece al
-real en sus propiedades estadísticas (<i>stylized facts</i>). De ahí la validación de §2.7 y la
-sub-línea de validación contra datos reales que queda pendiente (§7).</div>
+real en sus propiedades estadísticas (<i>stylized facts</i>). De ahí la validación interna de §2.7 y,
+sobre todo, la validación <b>externa contra el histórico real</b> de §2.8 — que es la que dice en qué
+se parece y en qué no.</div>
 
 <h3>2.2 · El modelo de factores</h3>
 <p>El retorno diario de cada activo se construye con un modelo de factores:</p>
@@ -452,9 +571,11 @@ que tienden y regímenes que revierten, la volatilidad se agrupa y las colas eng
 (<span class="mono">ai_v1</span>) se conserva únicamente como referencia comparativa: para evaluar sobre
 ella hay que pedirla <b>explícitamente</b>. Importa porque optimizar contra ruido independiente premia
 justo los sesgos optimistas que el retrofit vino a corregir.</div>
-<div class="note"><b>Limitación.</b> Falta comparar estos <i>stylized facts</i> contra el histórico real
-de criptomonedas (correlación de rangos sintético-vs-real). Los objetivos ya están definidos; el harness
-de comparación queda pendiente (§7).</div>
+<div class="note"><b>Esta tabla compara el mundo sintético consigo mismo.</b> Dice que ai_v2 dejó de
+ser ruido independiente, no que sus colas o su agrupamiento tengan el tamaño de los del mercado. Esa es
+otra pregunta, y se responde con datos reales en §2.8.</div>
+
+%%FIDELITY%%
 
 <h2 id="s3">3 · Metodología de backtest</h2>
 
@@ -725,6 +846,11 @@ más con la misma curva de equity puntúa peor.</li>
 y la varianza al alza no se castiga.</li>
 <li><b>El filtro de baselines no se puede esquivar:</b> sin ningún baseline disponible el veredicto es
 "no aprueba", y los baselines pagan las mismas comisiones que la estrategia.</li>
+<li><b>El medidor de fidelidad mide lo que dice:</b> recupera el signo y el tamaño de una
+autocorrelación conocida, distingue una serie con colas t-Student de una gaussiana y una con
+volatilidad agrupada de una plana, devuelve NaN (no 0) cuando la serie es degenerada, y su
+correlación de rangos da +1 y −1 en órdenes idénticos e invertidos. El estudio completo es
+determinista y declara los símbolos sin contraparte real en vez de rellenarlos.</li>
 <li><b>El descuento por múltiples pruebas discrimina:</b> un caso de habilidad genuina da PBO ≈ 0 y uno
 de sobreajuste puro da PBO ≈ 1; probar más configuraciones sube el listón del DSR.</li>
 </ul>
@@ -739,7 +865,8 @@ de sobreajuste puro da PBO ≈ 1; probar más configuraciones sube el listón de
 <tr><td>Costes que muerden (slippage por símbolo/vol/tamaño; fills parciales)</td><td class="ok">Hecho</td><td>La fricción dejó de ser una constante: el coste distingue BTC de un altcoin ilíquido y el tamaño tiene techo (§3.4-3.6).</td></tr>
 <tr><td>Re-medición de λ y κ con el modelo de costes nuevo</td><td class="pend">Pendiente</td><td>La calibración publicada se midió con deslizamiento plano; la conclusión se refuerza, pero los decimales no están re-medidos.</td></tr>
 <tr><td>Validación (CPCV / walk-forward multiventana)</td><td class="pend">Pendiente</td><td>El split único sobre-estima la robustez.</td></tr>
-<tr><td>Validación sintético-vs-real (correlación de rangos con CCXT)</td><td class="pend">Pendiente</td><td>Cierra la pregunta "¿se parece este mundo al real?".</td></tr>
+<tr><td>Validación sintético-vs-real (correlación de rangos con CCXT)</td><td class="ok">Hecho</td><td>Medida contra ocho años de histórico real: el nivel de riesgo y el orden de las correlaciones cruzadas se sostienen (§2.8).</td></tr>
+<tr><td>Colas y agrupamiento por debajo del mercado real</td><td class="pend">Pendiente</td><td>Lo que destapó esa validación: el sustrato subestima la pérdida de cola, así que las cifras absolutas de riesgo son optimistas.</td></tr>
 <tr><td>Limpieza de consistencia (universo, anualización, reproducibilidad del diseñador)</td><td class="pend">Pendiente</td><td>Higiene para comparaciones y auditoría.</td></tr>
 <tr><td>Optimización CEM completa sobre el sustrato realista</td><td class="pend">Pendiente</td><td>El harness está listo; falta correrlo a escala (coste de cómputo).</td></tr>
 </tbody></table>
