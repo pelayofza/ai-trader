@@ -22,6 +22,22 @@ from ai_trader.scoring.sample_eval import (
 )
 from ai_trader.scoring.scenario_split import ScenarioSplit, split_scenarios
 from ai_trader.scoring.search_space import SPACES, ParamSpace, get_space
+from ai_trader.scoring.weight_calibration import (
+    CALIBRATION_REPORT,
+    CalibrationMatrix,
+    CalibrationSample,
+    TurnoverCostAudit,
+    WeightGridPoint,
+    WindowComponents,
+    candidate_specs,
+    evaluate_calibration_sample,
+    evaluate_weight_point,
+    grid_point,
+    load_calibration_report,
+    spearman,
+    sweep_weights,
+    turnover_cost_audit,
+)
 
 __all__ = [
     "DEFAULT_CVAR_ALPHA",
@@ -47,4 +63,18 @@ __all__ = [
     "evaluate_baselines",
     "evaluate_sample",
     "evaluate_sample_detailed",
+    "CALIBRATION_REPORT",
+    "CalibrationMatrix",
+    "CalibrationSample",
+    "TurnoverCostAudit",
+    "WeightGridPoint",
+    "WindowComponents",
+    "candidate_specs",
+    "evaluate_calibration_sample",
+    "evaluate_weight_point",
+    "grid_point",
+    "load_calibration_report",
+    "spearman",
+    "sweep_weights",
+    "turnover_cost_audit",
 ]

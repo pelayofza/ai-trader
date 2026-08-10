@@ -441,6 +441,9 @@ class TradingRunner:
             asset_class=position.asset_class,
             instrument_id=position.instrument_id,
             outcome=position.outcome,
+            # Salida: exenta del techo de capacidad. Si se llenara parcialmente, la
+            # posicion quedaria cerrada en el estado pero solo pagada a medias.
+            reduce_only=True,
             metadata={"close_reason": reason, "position_id": position.position_id or ""},
         )
 

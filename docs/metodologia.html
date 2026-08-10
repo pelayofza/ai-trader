@@ -64,8 +64,8 @@ figure{margin:14px 0}
 <h1>AI-Trader — Documentación funcional</h1>
 <div class="sub">Cómo funciona la herramienta, con el detalle necesario para replicarla y auditarla.
 Cada decisión de diseño va justificada.</div>
-<div class="meta">Documento vivo · generado desde el commit <span class="mono">b6d8ce2</span>
-(69 commits)2026-08-09 · se regenera con <span class="mono">python -m docs.build_docs</span>.
+<div class="meta">Documento vivo · generado desde el commit <span class="mono">6c53219</span>
+(70 commits)2026-08-09 · se regenera con <span class="mono">python -m docs.build_docs</span>.
 Las cifras marcadas son extraídas del repositorio en el momento de generar este documento.</div>
 
 <div class="toc noprint">
@@ -344,7 +344,8 @@ verificado que un único path no es informativo.</p>
 <h3>5.2 · La métrica de cabecera: Sharpe penalizado</h3>
 <p>La puntuación de una muestra es su <b>headline score fuera de muestra</b>:</p>
 <p style="text-align:center"><span class="mono"><b>Sharpe<sub>OOS</sub> − λ·turnover − κ·maxDD</b></span>
-&nbsp;&nbsp;(λ = 0,5 sobre la rotación diaria; κ = 1,0 sobre el drawdown en fracción)</p>
+&nbsp;&nbsp;(λ sobre la rotación diaria, κ sobre el drawdown en fracción; ambos <b>medidos</b>, no
+supuestos: λ = 0,25 y κ = 0,0 — ver §5.2b)</p>
 <p>El <b>turnover</b> es una métrica nueva del motor: el <i>notional</i> rotado por día en unidades del
 capital inicial, contando las dos patas de cada operación. Un turnover de 0,20 significa "cada día rota
 el 20% de la cartera", así que mide <i>churn</i> de verdad — tamaño por frecuencia — y no solo el número
@@ -362,15 +363,95 @@ operar casi nunca" — un óptimo degenerado y perfectamente alcanzable.</li>
 <li><b>Degeneraba sin drawdown.</b> Una estrategia sin caída alguna recibía, por convención, la peor
 puntuación posible: cero.</li>
 </ul>
-El headline actual cierra las tres puertas. El drawdown entra como <b>penalización suave y aditiva</b>
-(ni denominador ni descarte binario), el Sharpe no se puede inflar dejando de operar (una curva plana
-puntúa 0, no infinito) y la rotación tiene un precio explícito, de modo que el óptimo degenerado
-desaparece <i>por construcción</i>, no por vigilancia.</div>
-<div class="note"><b>Limitación declarada.</b> λ = 0,5 y κ = 1,0 son una calibración <b>razonada por
-orden de magnitud</b>, no medida: con un turnover diario típico de 0,1–0,3 la rotación cuesta 0,05–0,15
-puntos de Sharpe, y un drawdown del 30% cuesta 0,30. Las comisiones ya muerden dentro de la curva de
-equity, así que la penalización por rotación es <i>además</i> un regularizador contra sobreajustar el
-modelo de costes. Medir los pesos con evidencia es una evolución pendiente.</div>
+El headline actual cierra las tres puertas. El drawdown, si se cobra, entra como <b>penalización suave y
+aditiva</b> (ni denominador ni descarte binario), el Sharpe no se puede inflar dejando de operar (una curva
+plana puntúa 0, no infinito) y la rotación tiene un precio explícito, de modo que el óptimo degenerado
+desaparece <i>por construcción</i>, no por vigilancia. Nótese que las dos puertas que de verdad cerraban el
+óptimo degenerado son el Sharpe y el precio de la rotación, <b>no</b> el término de drawdown: por eso la
+calibración de §5.2b puede dejarlo en cero sin reabrir ninguna de ellas.</div>
+
+<h3>5.2b · De dónde salen λ y κ (calibración medida)</h3>
+<p>λ y κ no son una preferencia estética: son una <b>regla de selección</b>, y una regla de selección se
+juzga por lo que elige. Se han barrido en rejilla
+(λ ∈ {0,00, 0,25, 0,50, 1,00, 2,00, 4,00} × κ ∈ {0,0, 0,5, 1,0, 2,0, 4,0})
+sobre <b>480 backtests reales</b> de la librería <span class="mono">ai_v2</span>:
+16 configuraciones (hipercubo latino sobre el espacio de búsqueda de las dos primitivas)
+× 30 muestras.</p>
+<p>El truco que hace asequible el barrido: los <b>componentes</b> del score (Sharpe, turnover, maxDD)
+<i>no dependen de los pesos</i>. Se corre el backtest una vez por (configuración, muestra), se guardan
+los componentes crudos y la rejilla entera se evalúa después en memoria — 480 backtests,
+no 480 × 30.</p>
+<div class="why"><b>Las dos cifras que deciden, y por qué son adimensionales.</b> Subir λ o κ encoge y
+desplaza la escala del score, así que comparar <i>gaps</i> en crudo premiaría a los pesos grandes por
+deflactar la unidad, no por elegir mejor. Por eso el criterio son dos magnitudes invariantes a la escala:
+<ul>
+<li><b>Rank IC</b> (eje temporal): correlación de rangos de Spearman entre el ranking de las
+16 configuraciones <b>dentro</b> de muestra (ventana train) y <b>fuera</b> (ventana test),
+promediada sobre las muestras. Responde: "si elijo con lo que veo, ¿sobrevive la elección?".</li>
+<li><b>Gap train-validation normalizado</b> (eje de escenarios): cuánto se desinfla la configuración
+elegida al pasar de los 22 arquetipos de train a los 8 reservados, dividido
+por la dispersión entre configuraciones. Responde: "¿cuánto de lo que elegí era del escenario y no de la
+estrategia?".</li>
+</ul>
+Las combinaciones se comparan <b>pareadas</b> sobre las mismas muestras: la varianza común se cancela y
+diferencias pequeñas se vuelven medibles, cosa que restar dos medias con sus errores sueltos no logra.</div>
+<p><b>Rank IC medio por combinación</b> (más alto = elección más estable; en negrita, los pesos fijados):</p>
+<table><thead><tr><th>&nbsp;</th><th class=n>κ=0,0</th><th class=n>κ=0,5</th><th class=n>κ=1,0</th><th class=n>κ=2,0</th><th class=n>κ=4,0</th></tr></thead><tbody><tr><td class=mono>λ=0,00</td><td class='n mono'>0,130</td><td class='n mono'>0,122</td><td class='n mono'>0,110</td><td class='n mono'>0,095</td><td class='n mono'>0,083</td></tr><tr><td class=mono>λ=0,25</td><td class='n mono'><b>0,126</b></td><td class='n mono'>0,116</td><td class='n mono'>0,107</td><td class='n mono'>0,092</td><td class='n mono'>0,080</td></tr><tr><td class=mono>λ=0,50</td><td class='n mono'>0,122</td><td class='n mono'>0,110</td><td class='n mono'>0,108</td><td class='n mono'>0,091</td><td class='n mono'>0,076</td></tr><tr><td class=mono>λ=1,00</td><td class='n mono'>0,114</td><td class='n mono'>0,107</td><td class='n mono'>0,102</td><td class='n mono'>0,085</td><td class='n mono'>0,068</td></tr><tr><td class=mono>λ=2,00</td><td class='n mono'>0,103</td><td class='n mono'>0,100</td><td class='n mono'>0,093</td><td class='n mono'>0,078</td><td class='n mono'>0,061</td></tr><tr><td class=mono>λ=4,00</td><td class='n mono'>0,084</td><td class='n mono'>0,077</td><td class='n mono'>0,070</td><td class='n mono'>0,061</td><td class='n mono'>0,042</td></tr></tbody></table>
+<h4>Resultado 1 · Los pesos no cambian la decisión</h4>
+<p>En los 30 puntos de la rejilla — desde no penalizar nada hasta
+penalizar ocho veces más que la configuración anterior — gana <b>siempre la misma configuración</b>
+(1 ganadora distinta en total), y lo mismo ocurre al repetir el barrido sólo con las
+8 configuraciones que operan de verdad. En el rango medido λ y κ <b>no arbitran nada</b>:
+quien decide el ranking es el Sharpe.</p>
+<h4>Resultado 2 · Penalizar no estabiliza; degrada un poco</h4>
+<p>Se esperaba un punto dulce —algo de penalización actuando como regularizador—. No lo hay: el rank IC
+es <b>máximo sin penalizar</b> (0,130 ± 0,064) y baja de forma
+<b>monótona</b> al subir cualquiera de los dos pesos, hasta 0,042 en la
+esquina (λ=4, κ=4). El gap train-validation normalizado se
+mueve en la misma dirección (1,94 sin penalizar →
+2,06 con los pesos anteriores). Los pesos que traía la herramienta
+(λ = 0,5; κ = 1,0) costaban <b>0,022 ± 0,008</b>
+de rank IC frente a no penalizar: un 17% del nivel de la señal, y significativo.</p>
+<div class="why"><b>Por qué tiene sentido que el término de drawdown sea el que más cuesta.</b> Es la misma
+objeción que retiró al Calmar: el máximo drawdown es el estadístico <b>más ruidoso</b> de una curva de
+equity, porque depende de un único par de puntos de un único camino. Meterlo en el denominador disparaba la
+varianza del estimador; meterlo como sumando la sube menos, pero la sube. Lo que el estudio añade es que
+ese ruido <b>no compra nada</b>: ni cambia la configuración elegida ni mejora la supervivencia del ranking.</div>
+<h4>Resultado 3 · La rotación ya se paga dentro del Sharpe</h4>
+<div class="why">Ésta era la pregunta con más riesgo —¿se está cobrando dos veces la misma rotación?— y la
+respuesta resultó ser la contraria de la temida. La curva de equity ya paga
+<span class="mono">fee_rate + slippage</span> = 0,150% de cada notional rotado, en
+las dos patas. Convertido a la unidad de λ (puntos de Sharpe por unidad de turnover):
+<p style="text-align:center" class="mono">λ<sub>implícito</sub> = cost_rate × 365 / σ<sub>anual</sub>
+= 0,0015 × 365 / 0,087 ≈ <b>6,3</b></p>
+<b>Control de que la cadena es real y no una hipótesis:</b> las comisiones efectivamente cobradas divididas
+por el notional reconstruido desde el turnover dan 0,1000%, que reproduce
+exactamente el <span class="mono">fee_rate</span> configurado. La aritmética se apoya en lo cobrado, no en
+una suposición.
+<p>Con un turnover mediano de 0,037, la fricción ya se come
+0,240 puntos de Sharpe <i>dentro</i> del propio Sharpe. La penalización explícita
+λ = 0,25 añade sobre eso un <b>4%</b> (IQR del λ implícito:
+4,6–9,7: depende de la volatilidad de cada configuración, no es
+una constante, y por eso ninguna λ fija puede "tarifar" los costes). Lejos de duplicar la factura, λ era
+—y sigue siendo— un <b>margen de seguridad</b> pequeño sobre el modelo de costes.</p></div>
+<h4>Los pesos que quedan fijados, y por qué no son los del máximo</h4>
+<ul>
+<li><b>λ = 0,25</b> — el menor valor <b>no nulo</b> de la rejilla. La evidencia preferiría
+λ = 0, pero el headline tiene una propiedad comprometida: <i>misma curva de equity y más rotación tiene que
+puntuar peor</i>. Con λ = 0 esa puerta se reabre. Su precio medido es
+0,004 ± 0,002 de rank IC (indistinguible de cero en el subconjunto
+activo), y equivale a un 4% del coste ya cobrado.</li>
+<li><b>κ = 0,0</b> — ninguna propiedad del diseño lo exige, es el término que más
+estabilidad cuesta por unidad y su input es el más ruidoso. El mecanismo sigue en la fórmula: quien quiera
+aversión explícita al drawdown pasa <span class="mono">kappa_maxdd</span>, pero ya no se cobra por defecto
+sin que nadie lo haya pedido.</li>
+</ul>
+<div class="note"><b>Límites de este estudio.</b> Un único corte temporal 70/30 por muestra, un solo camino
+por escenario y 16 configuraciones, sobre un sustrato de rotación baja (turnover mediano
+0,037). Es suficiente para descartar que penalizar fuerte ayude y para mostrar que
+los pesos no cambian la decisión; <b>no</b> para afinar decimales, ni para extrapolar a un régimen de costes
+más duros. Cuando la línea C (costes que muerden) aterrice, este estudio hay que repetirlo: el harness ya
+está, y re-analizar cuesta segundos porque los componentes están cacheados.</div>
 
 <h3>5.3 · El estadístico de recompensa: CVaR al 25%</h3>
 <p>Los headline scores de todas las muestras se agregan con el <b>CVaR@25%</b> — la media del peor
@@ -446,7 +527,7 @@ corrigiendo además por asimetría y colas gruesas de los retornos.</p>
 número sino un método.</div>
 
 <h2 id="s6">6 · Tests y garantías</h2>
-<p>La base cuenta con <b>233 tests</b> automatizados y <i>linting</i> (ruff) sobre todo el
+<p>La base cuenta con <b>271 tests</b> automatizados y <i>linting</i> (ruff) sobre todo el
 código. Más allá del número, importa <b>qué</b> se garantiza. Los tests se agrupan por invariante:</p>
 <ul>
 <li><b>Determinismo:</b> la misma semilla produce las mismas velas y las mismas curvas de equity.</li>
@@ -482,7 +563,7 @@ de sobreajuste puro da PBO ≈ 1; probar más configuraciones sube el listón de
 <tr><td>Realismo del generador (colas, agrupamiento, estructura serial, saltos)</td><td class="ok">Hecho</td><td>El sustrato dejó de mentir en la dirección optimista.</td></tr>
 <tr><td>Cableado del sustrato realista en el scoring (<span class="mono">ai_v2</span> por defecto)</td><td class="ok">Hecho</td><td>Lo que se optimiza se mide contra el mundo realista, no contra ruido iid.</td></tr>
 <tr><td>Métrica y ranking honestos (headline penalizado, CVaR@25%, baselines, DSR/PBO)</td><td class="ok">Hecho</td><td>El óptimo degenerado del Calmar desapareció, y ganar exige batir a no hacer nada.</td></tr>
-<tr><td>Calibración con evidencia de los pesos λ (turnover) y κ (drawdown)</td><td class="pend">Pendiente</td><td>Hoy son un orden de magnitud razonado, no una medición.</td></tr>
+<tr><td>Calibración con evidencia de los pesos λ (turnover) y κ (drawdown)</td><td class="ok">Hecho</td><td>Medidos por barrido en rejilla (§5.2b): la superficie es plana y λ no duplica los costes ya pagados.</td></tr>
 <tr><td>Costes que muerden (slippage por símbolo/vol/tamaño; fills parciales)</td><td class="pend">Pendiente</td><td>Los costes planos subestiman la fricción real, sobre todo en activos ilíquidos.</td></tr>
 <tr><td>Validación (CPCV / walk-forward multiventana)</td><td class="pend">Pendiente</td><td>El split único sobre-estima la robustez.</td></tr>
 <tr><td>Validación sintético-vs-real (correlación de rangos con CCXT)</td><td class="pend">Pendiente</td><td>Cierra la pregunta "¿se parece este mundo al real?".</td></tr>
@@ -536,5 +617,5 @@ de muestra queda por debajo de la mediana fuera de muestra.</li>
 <li><b>Stylized facts:</b> propiedades estadísticas robustas de los mercados reales (colas gruesas,
 agrupamiento de volatilidad, autocorrelación) que un buen simulador debe reproducir.</li>
 </ul>
-<p class="meta">Fin del documento · AI-Trader · commit <span class="mono">b6d8ce2</span>.</p>
+<p class="meta">Fin del documento · AI-Trader · commit <span class="mono">6c53219</span>.</p>
 </div></body></html>

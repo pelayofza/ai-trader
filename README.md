@@ -59,8 +59,21 @@ que opera en vivo con un reloj simulado y datos con anti look-ahead. La decisió
 con la barra ya cerrada, la entrada se llena al open del día siguiente y los stop-loss /
 take-profit se comprueban intrabar contra high/low. Dimensiona por fracción del equity
 (compounding real) y separa train (in-sample) de test (out-of-sample); la métrica
-cabecera es el **Calmar out-of-sample** (CAGR / max drawdown), pensada para el futuro
-scoring de estrategias por RL.
+cabecera es el **Sharpe out-of-sample penalizado**, `Sharpe − λ·turnover − κ·maxDD`
+(`backtest/metrics.py`), pensada para el scoring de estrategias por RL. Sustituyó al
+Calmar, que premiaba la inactividad y disparaba la varianza del estimador al meter el
+drawdown en el denominador.
+
+Los pesos λ y κ están **medidos, no supuestos**: se barrieron en rejilla sobre cientos
+de backtests reales de la librería sintética `ai_v2`, midiendo por combinación la
+correlación de rangos in-sample/out-of-sample y el gap train-validation, más una
+auditoría de que la penalización por rotación no duplica los costes que la curva de
+equity ya paga. La evidencia se publica en `data/calibration/` y se reproduce con:
+
+```powershell
+.venv\Scripts\python.exe -m ai_trader.scoring.weight_study   # el estudio completo (horas)
+.venv\Scripts\python.exe -m ai_trader.scoring.weight_study --analyze-only  # re-analiza
+```
 
 Los mercados de predicción (Polymarket) quedan fuera del backtest: no hay histórico
 OHLCV, solo midpoint vivo.

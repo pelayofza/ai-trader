@@ -231,6 +231,7 @@ function renderOverview(){
     ['B','Generador (colas, clustering, serial)','hecho'],
     ['Wiring','ai_v2 como sustrato por defecto del scoring','hecho'],
     ['A','Métrica y ranking honestos (headline, CVaR, baselines, DSR/PBO)','hecho'],
+    ['A','Calibración medida de λ y κ (rejilla + auditoría de costes)','hecho'],
     ['C','Costes que muerden','pendiente'],
     ['D','Validación (CPCV/walk-forward)','pendiente'],
     ['E','Limpieza de consistencia','pendiente'],
@@ -342,6 +343,63 @@ function renderStrategies(){
   });
 }
 
+function calibrationPanel(C){
+  if(!C) return '';
+  const w=C.weights,ch=C.chosen,nu=C.neutral||{},co=C.cost;
+  const ics=C.points.map(p=>p.rank_ic_mean), lo=Math.min(...ics), hi=Math.max(...ics);
+  const shade=v=>{const t=hi>lo?(v-lo)/(hi-lo):0.5;
+    return `background:color-mix(in srgb,var(--accent) ${(8+t*30).toFixed(0)}%,transparent)`;};
+  const at=(l,k)=>C.points.find(p=>p.lambda_turnover===l&&p.kappa_maxdd===k);
+  const head=C.kappas.map(k=>`<th class="num">κ=${k}</th>`).join('');
+  const rows=C.lambdas.map(l=>`<tr><td class="mono">λ=${l}</td>${C.kappas.map(k=>{
+    const p=at(l,k),sel=(l===w.lambda_turnover&&k===w.kappa_maxdd);
+    return `<td class="num mono" style="${shade(p.rank_ic_mean)}">${sel?'<b>'+fmt(p.rank_ic_mean,3)+'</b>':fmt(p.rank_ic_mean,3)}</td>`;
+  }).join('')}</tr>`).join('');
+  return `
+    <h2>De dónde salen λ y κ</h2>
+    <p class="lead">Los pesos no son una preferencia estética: son una <b>regla de selección</b>, y se juzgan por lo que eligen.
+      Se barrieron en rejilla sobre <b>${C.n_backtests} backtests reales</b> de <span class="mono">${esc(C.library)}</span>
+      (${C.n_configs} configuraciones × ${C.n_samples} muestras). Los componentes del score (Sharpe, turnover, maxDD) no dependen
+      de los pesos, así que se backtestea una vez y la rejilla entera se evalúa después en memoria.</p>
+    <div class="grid tiles">
+      <div class="card tile"><div class="k">λ · turnover</div><div class="v">${w.lambda_turnover}</div><div class="s">medido, no supuesto</div></div>
+      <div class="card tile"><div class="k">κ · maxDD</div><div class="v">${w.kappa_maxdd}</div><div class="s">${w.kappa_maxdd===0?'desactivado por la medición':'medido, no supuesto'}</div></div>
+      <div class="card tile"><div class="k">ganadora única</div><div class="v">${C.n_winners===1?'sí':'no'}</div>
+        <div class="s">misma config en los ${C.points.length} puntos</div></div>
+      <div class="card tile"><div class="k">λ implícito</div><div class="v">${fmt(co.implied_lambda_median,1)}</div>
+        <div class="s">el que ya paga la curva de equity</div></div>
+    </div>
+    <p class="lead"><b>Rank IC medio</b> por combinación: correlación de rangos entre el ranking in-sample y el out-of-sample
+      de las ${C.n_configs} configuraciones. Más alto = la elección sobrevive al salir de muestra. En negrita, los pesos fijados.</p>
+    <div class="card"><div class="tblwrap"><table><thead><tr><th>&nbsp;</th>${head}</tr></thead><tbody>${rows}</tbody></table></div></div>
+    <div class="note"><b>1 · Los pesos no cambian la decisión.</b> En los ${C.points.length} puntos de la rejilla —de no penalizar nada a
+      penalizar ocho veces más que antes— gana <b>siempre la misma configuración</b>, y también al repetir el barrido sólo con las
+      configuraciones que operan de verdad. En el rango medido, λ y κ no arbitran nada: quien decide es el Sharpe.</div>
+    <div class="note"><b>2 · Penalizar no estabiliza: degrada un poco.</b> No hay punto dulce. El rank IC es <b>máximo sin penalizar</b>
+      (${fmt(nu.rank_ic_mean,3)} ± ${fmt(nu.rank_ic_se,3)}) y baja de forma <b>monótona</b> al subir cualquiera de los dos pesos.
+      Los pesos anteriores (λ=0,5; κ=1,0) costaban <b>${fmt(Math.abs(C.prev.rank_ic_gain),3)} ± ${fmt(C.prev.rank_ic_gain_se,3)}</b> de rank IC
+      frente a no penalizar —un 17% del nivel de la señal—, y el gap train-validation se movía de ${fmt(nu.selection_gap_norm,2)} a
+      ${fmt(C.prev.selection_gap_norm,2)}. El término de drawdown es el que más cuesta, lo cual encaja: el maxDD es el estadístico más
+      ruidoso de una curva de equity, la misma objeción que retiró al Calmar.</div>
+    <div class="note"><b>3 · ¿Se cobra dos veces la rotación? No — al contrario.</b> La curva de equity ya paga
+      <span class="mono">fee_rate + slippage = ${(co.cost_rate*100).toFixed(3)}%</span> de cada notional rotado, en las dos patas.
+      En unidades de λ eso es <span class="mono">cost_rate × 365 / σ</span> ≈ <b>${fmt(co.implied_lambda_median,1)}</b>
+      (IQR ${fmt(co.implied_lambda_p25,1)}–${fmt(co.implied_lambda_p75,1)}: depende de la volatilidad de cada configuración, no es una constante).
+      La penalización explícita λ=${w.lambda_turnover} añade un <b>${fmt(C.share_pct,0)}%</b> sobre lo ya pagado: es un margen de seguridad, no una segunda factura.
+      Control de que la cadena es real: las comisiones efectivamente cobradas sobre el notional reconstruido desde el turnover dan
+      <span class="mono">${(co.measured_fee_rate*100).toFixed(4)}%</span>, que reproduce el <span class="mono">fee_rate</span> configurado.</div>
+    <div class="note"><b>Por qué λ no es 0 aunque la evidencia lo prefiera.</b> El headline se comprometió a que rotar más sobre la
+      <i>misma</i> curva de equity puntúe peor; con λ=0 esa puerta se reabre. Se fija el menor valor no nulo de la rejilla, cuyo precio medido
+      (${fmt(Math.abs(ch.rank_ic_gain),3)} ± ${fmt(ch.rank_ic_gain_se,3)}) es indistinguible de cero entre las configuraciones activas.
+      κ, en cambio, no lo exige ninguna propiedad del diseño: el mecanismo sigue disponible pasando <span class="mono">kappa_maxdd</span>,
+      pero ya no se cobra por defecto sin que nadie lo pida.</div>
+    <div class="note"><b>Límites.</b> Un solo corte 70/30 por muestra, un camino por escenario y ${C.n_configs} configuraciones, sobre un
+      sustrato de rotación baja. Sirve para descartar que penalizar fuerte ayude; no para afinar decimales ni para extrapolar a costes más
+      duros. Cuando aterrice la línea C, hay que repetirlo: re-analizar cuesta segundos porque los componentes están cacheados.</div>
+    <p class="tag">Evidencia completa: <span class="mono">data/calibration/report_${esc(C.library)}.json</span> ·
+      reproducible con <span class="mono">python -m ai_trader.scoring.weight_study</span> (${esc(C.generated_at)}).</p>`;
+}
+
 function renderRanking(){
   const host=$('#ranking'),R=D.ranking,sc=R.scope||{},W=sc.weights||{},G=R.gate||{},OV=R.overfit||{};
   const bl=R.baselines||[];
@@ -352,8 +410,9 @@ function renderRanking(){
   host.innerHTML=`
     <h1>Ranking de estrategias</h1>
     <p class="lead">La unidad de evaluación es la DISTRIBUCIÓN sobre muestras (no un path). La puntuación por muestra es el
-      <b>headline out-of-sample</b> = <span class="mono">Sharpe − ${W.lambda_turnover ?? 'λ'}·turnover − ${W.kappa_maxdd ?? 'κ'}·maxDD</span>,
+      <b>headline out-of-sample</b> = <span class="mono">Sharpe − ${W.lambda_turnover ?? 'λ'}·turnover${W.kappa_maxdd?' − '+W.kappa_maxdd+'·maxDD':''}</span>${W.kappa_maxdd===0?' (el término de maxDD queda en 0 por la calibración medida, más abajo)':''},
       y el ranking es el <b>CVaR@25%</b> de esa distribución (media del peor cuartil: se compite por la cola mala, no por el centro).</p>
+    ${calibrationPanel(D.calibration)}
     <div class="note"><b>Muestra reducida.</b> ${sc.n_scenarios} escenarios × ${sc.n_paths} paths sobre <b>${esc(sc.library)}</b>,
       universo de ${sc.universe?sc.universe.length:'?'} activos, ventana ${sc.window_days} días. Para ampliar el scope,
       edita las constantes <span class="mono">RANK_*</span> en <span class="mono">dashboard/build_dashboard.py</span> y regenera.</div>

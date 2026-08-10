@@ -31,11 +31,17 @@ FACTOR_DESCRIPTIONS: dict[str, str] = {
 }
 
 
+# Volumen tipico negociado (USD/dia) de un activo sin dato propio. Conservador: un
+# activo desconocido no se supone liquido.
+DEFAULT_ADV_USD = 100_000_000.0
+
+
 @dataclass(slots=True, frozen=True)
 class SyntheticAsset:
     """
     Un activo del universo sintetico y su estructura ESTABLE (no cambia entre
-    escenarios): cargas sobre cada factor, volatilidad idiosincratica y precio inicial.
+    escenarios): cargas sobre cada factor, volatilidad idiosincratica, precio inicial y
+    liquidez.
 
     La respuesta del activo a un escenario sale de: loadings x movimientos-de-factor
     (comun a todos) + ruido idiosincratico + tilts que la IA anade por escenario.
@@ -48,9 +54,20 @@ class SyntheticAsset:
     loadings: dict[str, float]
     # vol diaria idiosincratica (log-retorno): lo que no explican los factores.
     idio_vol: float
+    # Volumen tipico negociado, en USD/dia. Es el eje de LIQUIDEZ del universo: el motor
+    # de paths lo convierte a unidades por barra (adv_usd / start_price) y el motor de
+    # ejecucion lo consume desde la columna 'volume' para el impacto de mercado y el
+    # techo de capacidad. Antes el volumen era el mismo para los 35 activos -decorativo-,
+    # con lo que un altcoin resultaba tan profundo como BTC.
+    adv_usd: float = DEFAULT_ADV_USD
 
     def loading(self, factor: str) -> float:
         return float(self.loadings.get(factor, 0.0))
+
+    @property
+    def adv_units(self) -> float:
+        """Volumen tipico por barra en UNIDADES del activo (lo que guarda la vela)."""
+        return self.adv_usd / self.start_price
 
 
 @dataclass(slots=True, frozen=True)
@@ -79,74 +96,83 @@ class SyntheticUniverse:
 # los tipos). Las cargas son cualitativas pero plausibles; la IA no las toca, solo
 # mueve los factores y aplica tilts por escenario.
 
-def _crypto(symbol, price, equity, usd, crypto, idio):
+def _crypto(symbol, price, equity, usd, crypto, idio, adv):
     return SyntheticAsset(
         symbol=symbol,
         asset_class=AssetClass.CRYPTO,
         start_price=price,
         loadings={EQUITY: equity, RATES: -0.10, USD: usd, COMMODITY: 0.10, CRYPTO: crypto},
         idio_vol=idio,
+        adv_usd=adv,
     )
 
 
-def _stock(symbol, price, equity, rates, usd, commodity, crypto, idio):
+def _stock(symbol, price, equity, rates, usd, commodity, crypto, idio, adv):
     return SyntheticAsset(
         symbol=symbol,
         asset_class=AssetClass.STOCK,
         start_price=price,
         loadings={EQUITY: equity, RATES: rates, USD: usd, COMMODITY: commodity, CRYPTO: crypto},
         idio_vol=idio,
+        adv_usd=adv,
     )
+
+
+# Volumen tipico negociado por activo (USD/dia), en ordenes de magnitud publicos. Es lo
+# que separa un mercado en el que una orden pasa desapercibida de uno en el que la propia
+# orden mueve el precio: un rango de mas de dos ordenes de magnitud entre SPY y UUP.
+_B = 1_000_000_000.0
+_M = 1_000_000.0
 
 
 DEFAULT_UNIVERSE = SyntheticUniverse(
     factors=DEFAULT_FACTORS,
     assets=(
         # --- Cripto (12): beta CRYPTO alta, sensibles a EQUITY y al dolar (USD<0) ---
-        _crypto("BTC/USDT", 40_000.0, equity=0.30, usd=-0.25, crypto=1.00, idio=0.020),
-        _crypto("ETH/USDT", 2_500.0, equity=0.35, usd=-0.25, crypto=1.15, idio=0.026),
-        _crypto("SOL/USDT", 100.0, equity=0.40, usd=-0.25, crypto=1.35, idio=0.038),
-        _crypto("BNB/USDT", 400.0, equity=0.32, usd=-0.22, crypto=1.05, idio=0.030),
-        _crypto("XRP/USDT", 0.60, equity=0.25, usd=-0.20, crypto=0.95, idio=0.036),
-        _crypto("ADA/USDT", 0.45, equity=0.32, usd=-0.22, crypto=1.20, idio=0.034),
-        _crypto("AVAX/USDT", 35.0, equity=0.40, usd=-0.24, crypto=1.40, idio=0.042),
-        _crypto("LINK/USDT", 15.0, equity=0.38, usd=-0.24, crypto=1.30, idio=0.040),
-        _crypto("DOGE/USDT", 0.12, equity=0.30, usd=-0.18, crypto=1.25, idio=0.055),
-        _crypto("DOT/USDT", 6.50, equity=0.36, usd=-0.22, crypto=1.25, idio=0.038),
-        _crypto("MATIC/USDT", 0.80, equity=0.38, usd=-0.22, crypto=1.30, idio=0.044),
-        _crypto("LTC/USDT", 90.0, equity=0.28, usd=-0.20, crypto=1.00, idio=0.032),
+        _crypto("BTC/USDT", 40_000.0, equity=0.30, usd=-0.25, crypto=1.00, idio=0.020, adv=25 * _B),
+        _crypto("ETH/USDT", 2_500.0, equity=0.35, usd=-0.25, crypto=1.15, idio=0.026, adv=12 * _B),
+        _crypto("SOL/USDT", 100.0, equity=0.40, usd=-0.25, crypto=1.35, idio=0.038, adv=3 * _B),
+        _crypto("BNB/USDT", 400.0, equity=0.32, usd=-0.22, crypto=1.05, idio=0.030, adv=1.2 * _B),
+        _crypto("XRP/USDT", 0.60, equity=0.25, usd=-0.20, crypto=0.95, idio=0.036, adv=2 * _B),
+        _crypto("ADA/USDT", 0.45, equity=0.32, usd=-0.22, crypto=1.20, idio=0.034, adv=500 * _M),
+        _crypto("AVAX/USDT", 35.0, equity=0.40, usd=-0.24, crypto=1.40, idio=0.042, adv=400 * _M),
+        _crypto("LINK/USDT", 15.0, equity=0.38, usd=-0.24, crypto=1.30, idio=0.040, adv=500 * _M),
+        _crypto("DOGE/USDT", 0.12, equity=0.30, usd=-0.18, crypto=1.25, idio=0.055, adv=1.2 * _B),
+        _crypto("DOT/USDT", 6.50, equity=0.36, usd=-0.22, crypto=1.25, idio=0.038, adv=250 * _M),
+        _crypto("MATIC/USDT", 0.80, equity=0.38, usd=-0.22, crypto=1.30, idio=0.044, adv=300 * _M),
+        _crypto("LTC/USDT", 90.0, equity=0.28, usd=-0.20, crypto=1.00, idio=0.032, adv=400 * _M),
         # --- Renta variable (20): indices amplios + nombres por sector ---
         # Indices
-        _stock("SPY", 450.0, equity=1.00, rates=-0.20, usd=-0.05, commodity=0.05, crypto=0.05, idio=0.004),
-        _stock("QQQ", 380.0, equity=1.10, rates=-0.40, usd=-0.05, commodity=0.00, crypto=0.10, idio=0.006),
+        _stock("SPY", 450.0, equity=1.00, rates=-0.20, usd=-0.05, commodity=0.05, crypto=0.05, idio=0.004, adv=30 * _B),
+        _stock("QQQ", 380.0, equity=1.10, rates=-0.40, usd=-0.05, commodity=0.00, crypto=0.10, idio=0.006, adv=18 * _B),
         # Tech / crecimiento
-        _stock("AAPL", 180.0, equity=1.05, rates=-0.30, usd=-0.05, commodity=0.00, crypto=0.08, idio=0.012),
-        _stock("MSFT", 400.0, equity=1.05, rates=-0.30, usd=-0.05, commodity=0.00, crypto=0.06, idio=0.011),
-        _stock("GOOGL", 140.0, equity=1.10, rates=-0.30, usd=-0.05, commodity=0.00, crypto=0.06, idio=0.014),
-        _stock("AMZN", 150.0, equity=1.15, rates=-0.35, usd=-0.05, commodity=0.00, crypto=0.07, idio=0.016),
-        _stock("META", 350.0, equity=1.15, rates=-0.30, usd=-0.05, commodity=0.00, crypto=0.08, idio=0.018),
+        _stock("AAPL", 180.0, equity=1.05, rates=-0.30, usd=-0.05, commodity=0.00, crypto=0.08, idio=0.012, adv=10 * _B),
+        _stock("MSFT", 400.0, equity=1.05, rates=-0.30, usd=-0.05, commodity=0.00, crypto=0.06, idio=0.011, adv=8 * _B),
+        _stock("GOOGL", 140.0, equity=1.10, rates=-0.30, usd=-0.05, commodity=0.00, crypto=0.06, idio=0.014, adv=5 * _B),
+        _stock("AMZN", 150.0, equity=1.15, rates=-0.35, usd=-0.05, commodity=0.00, crypto=0.07, idio=0.016, adv=7 * _B),
+        _stock("META", 350.0, equity=1.15, rates=-0.30, usd=-0.05, commodity=0.00, crypto=0.08, idio=0.018, adv=6 * _B),
         # Semiconductores (beta alta, muy sensibles a tipos y con correlacion cripto)
-        _stock("NVDA", 500.0, equity=1.20, rates=-0.50, usd=-0.05, commodity=0.00, crypto=0.15, idio=0.022),
-        _stock("AMD", 140.0, equity=1.25, rates=-0.50, usd=-0.05, commodity=0.00, crypto=0.15, idio=0.026),
-        _stock("TSLA", 240.0, equity=1.30, rates=-0.45, usd=-0.05, commodity=0.05, crypto=0.20, idio=0.030),
+        _stock("NVDA", 500.0, equity=1.20, rates=-0.50, usd=-0.05, commodity=0.00, crypto=0.15, idio=0.022, adv=25 * _B),
+        _stock("AMD", 140.0, equity=1.25, rates=-0.50, usd=-0.05, commodity=0.00, crypto=0.15, idio=0.026, adv=4 * _B),
+        _stock("TSLA", 240.0, equity=1.30, rates=-0.45, usd=-0.05, commodity=0.05, crypto=0.20, idio=0.030, adv=20 * _B),
         # Financieras (cargan RATES en positivo: se benefician de tipos altos)
-        _stock("JPM", 150.0, equity=0.90, rates=0.40, usd=0.00, commodity=0.05, crypto=0.00, idio=0.012),
-        _stock("BAC", 35.0, equity=0.95, rates=0.45, usd=0.00, commodity=0.05, crypto=0.00, idio=0.014),
-        _stock("GS", 380.0, equity=1.00, rates=0.35, usd=0.00, commodity=0.05, crypto=0.02, idio=0.015),
+        _stock("JPM", 150.0, equity=0.90, rates=0.40, usd=0.00, commodity=0.05, crypto=0.00, idio=0.012, adv=2 * _B),
+        _stock("BAC", 35.0, equity=0.95, rates=0.45, usd=0.00, commodity=0.05, crypto=0.00, idio=0.014, adv=1.5 * _B),
+        _stock("GS", 380.0, equity=1.00, rates=0.35, usd=0.00, commodity=0.05, crypto=0.02, idio=0.015, adv=1 * _B),
         # Energia (cargan COMMODITY fuerte)
-        _stock("XOM", 110.0, equity=0.60, rates=0.10, usd=0.00, commodity=0.90, crypto=0.00, idio=0.012),
-        _stock("CVX", 155.0, equity=0.60, rates=0.10, usd=0.00, commodity=0.85, crypto=0.00, idio=0.012),
+        _stock("XOM", 110.0, equity=0.60, rates=0.10, usd=0.00, commodity=0.90, crypto=0.00, idio=0.012, adv=2 * _B),
+        _stock("CVX", 155.0, equity=0.60, rates=0.10, usd=0.00, commodity=0.85, crypto=0.00, idio=0.012, adv=1.2 * _B),
         # Defensivas / consumo / salud (beta baja)
-        _stock("KO", 60.0, equity=0.45, rates=-0.05, usd=-0.05, commodity=0.05, crypto=0.00, idio=0.008),
-        _stock("PG", 155.0, equity=0.40, rates=-0.05, usd=-0.05, commodity=0.00, crypto=0.00, idio=0.008),
-        _stock("JNJ", 155.0, equity=0.45, rates=-0.05, usd=-0.05, commodity=0.00, crypto=0.00, idio=0.008),
-        _stock("UNH", 520.0, equity=0.55, rates=-0.05, usd=-0.05, commodity=0.00, crypto=0.00, idio=0.012),
+        _stock("KO", 60.0, equity=0.45, rates=-0.05, usd=-0.05, commodity=0.05, crypto=0.00, idio=0.008, adv=800 * _M),
+        _stock("PG", 155.0, equity=0.40, rates=-0.05, usd=-0.05, commodity=0.00, crypto=0.00, idio=0.008, adv=900 * _M),
+        _stock("JNJ", 155.0, equity=0.45, rates=-0.05, usd=-0.05, commodity=0.00, crypto=0.00, idio=0.008, adv=900 * _M),
+        _stock("UNH", 520.0, equity=0.55, rates=-0.05, usd=-0.05, commodity=0.00, crypto=0.00, idio=0.012, adv=1.5 * _B),
         # Industrial (algo de exposicion a materias primas)
-        _stock("CAT", 280.0, equity=0.95, rates=0.05, usd=-0.05, commodity=0.30, crypto=0.00, idio=0.014),
+        _stock("CAT", 280.0, equity=0.95, rates=0.05, usd=-0.05, commodity=0.30, crypto=0.00, idio=0.014, adv=800 * _M),
         # --- Macro / refugio (3): oro, bonos largos, dolar ---
-        _stock("GLD", 180.0, equity=-0.10, rates=-0.30, usd=-0.50, commodity=0.60, crypto=0.00, idio=0.006),
-        _stock("TLT", 95.0, equity=-0.10, rates=-1.00, usd=0.10, commodity=-0.05, crypto=0.00, idio=0.006),
-        _stock("UUP", 28.0, equity=-0.15, rates=0.20, usd=1.00, commodity=-0.10, crypto=-0.05, idio=0.004),
+        _stock("GLD", 180.0, equity=-0.10, rates=-0.30, usd=-0.50, commodity=0.60, crypto=0.00, idio=0.006, adv=2 * _B),
+        _stock("TLT", 95.0, equity=-0.10, rates=-1.00, usd=0.10, commodity=-0.05, crypto=0.00, idio=0.006, adv=2 * _B),
+        _stock("UUP", 28.0, equity=-0.15, rates=0.20, usd=1.00, commodity=-0.10, crypto=-0.05, idio=0.004, adv=100 * _M),
     ),
 )
 
@@ -164,6 +190,7 @@ def universe_summary(universe: SyntheticUniverse = DEFAULT_UNIVERSE) -> list[dic
             "start_price": a.start_price,
             "loadings": {f: a.loading(f) for f in universe.factors},
             "idio_vol": a.idio_vol,
+            "adv_usd": a.adv_usd,
         }
         for a in universe.assets
     ]
@@ -176,6 +203,10 @@ def universe_from_summary(
     Reconstruye un SyntheticUniverse desde el resumen guardado en un manifiesto.
     Requiere start_price (manifiestos nuevos lo incluyen). Lanza KeyError si falta,
     para que el llamante pueda recurrir al universo del codigo en librerias antiguas.
+
+    `adv_usd` (liquidez) es posterior a las primeras librerias: si el manifiesto no lo
+    trae se toma el del universo del codigo para ese simbolo, de modo que regenerar una
+    libreria antigua produzca volumen con sentido en vez de tumbar la reconstruccion.
     """
     assets = tuple(
         SyntheticAsset(
@@ -184,7 +215,13 @@ def universe_from_summary(
             start_price=float(item["start_price"]),
             loadings={f: float(item.get("loadings", {}).get(f, 0.0)) for f in factors},
             idio_vol=float(item["idio_vol"]),
+            adv_usd=float(item.get("adv_usd") or _known_adv_usd(item["symbol"])),
         )
         for item in summary
     )
     return SyntheticUniverse(assets=assets, factors=tuple(factors))
+
+
+def _known_adv_usd(symbol: str) -> float:
+    asset = DEFAULT_UNIVERSE.asset(symbol)
+    return asset.adv_usd if asset is not None else DEFAULT_ADV_USD

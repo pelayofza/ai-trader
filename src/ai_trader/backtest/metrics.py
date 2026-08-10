@@ -23,17 +23,45 @@ class HeadlineWeights:
     OOS y le RESTA el coste de rotar y el de sufrir caidas, de modo que cada peso dice
     cuanto Sharpe vale la pena pagar por una unidad de esa magnitud.
 
-    Calibracion por defecto (ordenes de magnitud tipicos de este harness):
-    - `lambda_turnover` = 0.5 sobre un turnover diario tipico de 0.1-0.3 -> 0.05-0.15
-      puntos de Sharpe. Las comisiones ya muerden dentro de la curva de equity; esta
-      penalizacion es ADEMAS un regularizador contra sobreajustar el modelo de costes.
-    - `kappa_maxdd` = 1.0 sobre un maxDD en FRACCION (0.30 = -30%) -> 0.30 puntos. El
-      maxDD entra como penalizacion suave: ni denominador (que dispara la varianza del
-      estimador) ni descarte binario.
+    CALIBRACION MEDIDA (no razonada): 480 backtests reales sobre la libreria ai_v2
+    (16 configuraciones de un hipercubo latino x 30 escenarios), barriendo
+    lambda ∈ {0, .25, .5, 1, 2, 4} x kappa ∈ {0, .5, 1, 2, 4}. Evidencia completa y
+    reproducible en `data/calibration/` (ver ai_trader.scoring.weight_study). Tres
+    resultados, y los tres empujan hacia pesos PEQUENOS:
+
+    1. Los pesos NO cambian la decision. La misma configuracion gana en los 30 puntos de
+       la rejilla, tanto en el conjunto completo como en el de configuraciones activas.
+       En el rango medido, lambda y kappa no arbitran nada: quien decide es el Sharpe.
+    2. Penalizar NO estabiliza el ranking; lo degrada un poco. La correlacion de rangos
+       entre el ranking in-sample y el out-of-sample es maxima sin penalizar
+       (0.130 +- 0.064) y baja de forma monotona con ambos pesos. Contra los antiguos
+       (0.5, 1.0) la perdida pareada era -0.022 +- 0.008, un 17% del nivel de la senal.
+       El gap train-validation normalizado se mueve en la misma direccion (1.94 -> 2.06).
+    3. La rotacion YA se paga dentro del Sharpe. fee_rate + slippage = 0.15% de cada
+       notional rotado equivale a lambda ~6.3 puntos de Sharpe por unidad de turnover
+       (IQR 4.6-9.7); la friccion se come 0.24 puntos de Sharpe al turnover mediano.
+
+    De ahi los valores fijados:
+    - `lambda_turnover` = 0.25: el menor valor NO NULO de la rejilla. No puede ser 0
+      porque el headline tiene una propiedad comprometida —misma curva de equity y mas
+      rotacion tiene que puntuar peor— y porque rotar cuesta dinero de verdad. Su coste
+      medido es -0.004 +- 0.002 (indistinguible de cero en las configuraciones activas)
+      y supone un 4% del coste implicito ya cobrado: es un margen de seguridad explicito
+      sobre el modelo de costes, no una segunda factura por la misma rotacion.
+    - `kappa_maxdd` = 0.0: ninguna propiedad del diseno lo exige, es el termino que mas
+      estabilidad cuesta por unidad, y el maxDD es el estadistico mas ruidoso de una
+      curva de equity —la misma objecion que retiro al Calmar—. El mecanismo sigue
+      disponible: quien quiera aversion explicita al drawdown pasa `kappa_maxdd`, pero
+      ya no se cobra por defecto sin que nadie lo haya pedido.
+
+    Limite declarado: se midio con un unico corte temporal 70/30, un camino por escenario
+    y 16 configuraciones. Basta para descartar que los pesos grandes ayuden; no para
+    afinar decimales. Mover estos valores exige re-correr el estudio (hay un test que los
+    ata a la evidencia publicada).
     """
 
-    lambda_turnover: float = 0.5
-    kappa_maxdd: float = 1.0
+    lambda_turnover: float = 0.25
+    kappa_maxdd: float = 0.0
 
     def as_dict(self) -> dict[str, float]:
         return {
@@ -105,6 +133,11 @@ def headline_score(
     Aqui el maxDD entra como penalizacion SUAVE y aditiva (en fraccion, no en %), el
     Sharpe no se puede inflar dejando de operar (una curva plana puntua 0) y la rotacion
     tiene un precio explicito, asi que el optimo degenerado desaparece por construccion.
+
+    Con los pesos por defecto CALIBRADOS (ver HeadlineWeights) el termino de maxDD queda
+    en 0: la medicion no encontro ningun beneficio en cobrarlo y si un coste en
+    estabilidad del ranking. El sumando sigue en la formula porque el peso es un
+    parametro, no una constante: pasar `kappa_maxdd` lo reactiva.
     """
     return (
         metrics.sharpe

@@ -16,9 +16,15 @@ from pathlib import Path
 
 import numpy as np
 
+from ai_trader.backtest.metrics import DEFAULT_HEADLINE_WEIGHTS
 from ai_trader.observation.features import OWN_ASSET_FEATURES
 from ai_trader.observation.regime import REGIME_FEATURES
 from ai_trader.scoring.search_space import get_space
+from ai_trader.scoring.weight_calibration import (
+    CALIBRATION_REPORT,
+    grid_point,
+    load_calibration_report,
+)
 from ai_trader.shared import bars as bar_schema
 from ai_trader.strategies.mean_reversion import MeanReversionStrategy
 from ai_trader.strategies.momentum_crypto import CryptoMomentumStrategy
@@ -94,6 +100,67 @@ def _stylized(store: SyntheticStore, lib: str, n_paths: int = 2, n_scen: int = 1
     }
 
 
+def _calibration() -> dict | None:
+    """Cifras del estudio de calibracion de los pesos del headline (data/calibration).
+
+    Se leen del informe publicado, no se recalculan: el estudio cuesta cientos de
+    backtests reales y la documentacion tiene que ser barata de regenerar. Si el informe
+    no esta, la prosa se genera sin cifras en vez de inventarlas."""
+    report = load_calibration_report(ROOT / CALIBRATION_REPORT)
+    if not report:
+        return None
+
+    weights = DEFAULT_HEADLINE_WEIGHTS
+    chosen = grid_point(report, weights.lambda_turnover, weights.kappa_maxdd)
+    neutral = grid_point(report, 0.0, 0.0)
+    if chosen is None or neutral is None:
+        logger.warning("El informe de calibracion no cubre los pesos por defecto")
+        return None
+
+    audit = report["cost_audit_active"]
+    plan = report["plan"]
+    return {
+        "lambda": weights.lambda_turnover,
+        "kappa": weights.kappa_maxdd,
+        "n_configs": len(report["configs"]["kept"]),
+        "n_samples": report["configs"]["n_samples"],
+        "n_backtests": len(report["configs"]["kept"]) * report["configs"]["n_samples"],
+        "library": plan["library_id"],
+        "n_train": len(report["split"]["train"]),
+        "n_validation": len(report["split"]["validation"]),
+        "lambdas": report["grid"]["lambdas"],
+        "kappas": report["grid"]["kappas"],
+        "grid": {
+            (p["lambda_turnover"], p["kappa_maxdd"]): p["rank_ic_mean"]
+            for p in report["grid"]["points"]
+        },
+        "ic": chosen["rank_ic_mean"],
+        "ic_se": chosen["rank_ic_se"],
+        "ic_neutral": neutral["rank_ic_mean"],
+        "ic_neutral_se": neutral["rank_ic_se"],
+        "gain": chosen["rank_ic_gain"],
+        "gain_se": chosen["rank_ic_gain_se"],
+        "gap": chosen["selection_gap_norm"],
+        "gap_neutral": neutral["selection_gap_norm"],
+        "best": report["ranked_by_stability"][0],
+        # Cuantas configuraciones distintas gana alguien en toda la rejilla: 1 significa
+        # que los pesos no cambian la decision, que es el hallazgo central del estudio.
+        "n_winners": len({p["selected_config"] for p in report["grid"]["points"]}),
+        "prev": grid_point(report, 0.5, 1.0),
+        "worst": grid_point(report, max(report["grid"]["lambdas"]), max(report["grid"]["kappas"])),
+        "n_active": len(report["active_subset"]["configs"]),
+        "cost_rate": audit["cost_rate"],
+        "measured_fee_rate": audit["measured_fee_rate"],
+        "implied_lambda": audit["implied_lambda_median"],
+        "implied_p25": audit["implied_lambda_p25"],
+        "implied_p75": audit["implied_lambda_p75"],
+        "median_turnover": audit["median_turnover"],
+        "median_vol": audit["median_volatility"],
+        "sharpe_drag": audit["median_sharpe_drag"],
+        "share_pct": 100.0 * weights.lambda_turnover / audit["implied_lambda_median"],
+    }
+
+
 def collect() -> dict:
     store = SyntheticStore(ROOT / "data" / "synthetic")
     facts: dict = {}
@@ -122,6 +189,8 @@ def collect() -> dict:
 
     facts["n_own"] = len(OWN_ASSET_FEATURES)
     facts["n_regime"] = len(REGIME_FEATURES)
+
+    facts["calibration"] = _calibration()
 
     facts["mom_params"] = _params(CryptoMomentumStrategy().config)
     facts["mr_params"] = _params(MeanReversionStrategy().config)

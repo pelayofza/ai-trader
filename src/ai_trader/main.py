@@ -10,11 +10,13 @@ from ai_trader.app.runner import TradingRunner
 from ai_trader.bots.telegram_bot import build_application
 from ai_trader.config import DEFAULT_CONFIG_PATH, AppConfig, load_config
 from ai_trader.data.market_data import MarketDataService
+from ai_trader.execution.microstructure import BarLiquidityProvider
 from ai_trader.execution.paper import PaperExecutionEngine
 from ai_trader.execution.polymarket_paper import PolymarketPaperExecutionEngine
 from ai_trader.execution.router import ExecutionRouter
 from ai_trader.notifications.base import Notifier
 from ai_trader.risk.engine import RiskEngine
+from ai_trader.shared.clock import LiveClock
 from ai_trader.strategies.registry import build_strategy
 
 logging.basicConfig(
@@ -63,13 +65,20 @@ def build_runner(
         for spec in config.strategies
     ]
 
-    paper_engine = PaperExecutionEngine(config.execution)
+    # Un unico reloj para el runner y para la liquidez: el estado de mercado con el que
+    # se cobra el fill tiene que ser el del mismo instante en que se decide.
+    clock = LiveClock()
+    paper_engine = PaperExecutionEngine(
+        config.execution,
+        liquidity_provider=BarLiquidityProvider(market_data_service, clock),
+    )
 
     return TradingRunner(
         config=config.runner,
         market_data_reader=market_data_service,
         strategies=strategies,
         risk_engine=RiskEngine(config.risk),
+        clock=clock,
         execution_router=ExecutionRouter.paper(
             spot_engine=paper_engine,
             # Comparte el motor de papel para que las comisiones configuradas

@@ -41,7 +41,15 @@ max_stop_distance_pct = 15.0
 
 [execution]
 fee_rate = 0.001
+# Coste plano de REFERENCIA para baselines y auditoria de costes; el fill lo valora el
+# modelo de microestructura (medio spread por simbolo + volatilidad + impacto).
 slippage_bps = 5.0
+max_participation = 0.10
+
+[execution.slippage]
+vol_coef = 0.02
+impact_coef = 0.60
+max_slippage_bps = 500.0
 
 [[strategies]]
 type = "crypto_momentum"

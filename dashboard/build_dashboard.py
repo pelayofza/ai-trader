@@ -32,6 +32,11 @@ from ai_trader.scoring.overfit import (
     probability_of_backtest_overfitting,
 )
 from ai_trader.scoring.sample_eval import evaluate_baselines, evaluate_sample_detailed
+from ai_trader.scoring.weight_calibration import (
+    CALIBRATION_REPORT,
+    grid_point,
+    load_calibration_report,
+)
 from ai_trader.shared import bars as bar_schema
 from ai_trader.strategies import build_strategy
 from ai_trader.strategies.mean_reversion import MeanReversionStrategy
@@ -546,6 +551,43 @@ def collect_kpis(store: SyntheticStore, synthetic: dict) -> dict:
     }
 
 
+def collect_calibration() -> dict | None:
+    """Evidencia del estudio que fija lambda y kappa (data/calibration).
+
+    Se LEE del informe publicado; no se recalcula. El estudio son cientos de backtests
+    reales y el dashboard debe seguir siendo regenerable en minutos."""
+    report = load_calibration_report(ROOT / CALIBRATION_REPORT)
+    if not report:
+        logger.warning("Sin informe de calibracion: el panel de pesos saldra vacio")
+        return None
+
+    weights = DEFAULT_HEADLINE_WEIGHTS
+    chosen = grid_point(report, weights.lambda_turnover, weights.kappa_maxdd)
+    if chosen is None:
+        return None
+
+    audit = report["cost_audit_active"]
+    return {
+        "weights": weights.as_dict(),
+        "library": report["plan"]["library_id"],
+        "n_configs": len(report["configs"]["kept"]),
+        "n_samples": report["configs"]["n_samples"],
+        "n_backtests": len(report["configs"]["kept"]) * report["configs"]["n_samples"],
+        "lambdas": report["grid"]["lambdas"],
+        "kappas": report["grid"]["kappas"],
+        "points": report["grid"]["points"],
+        "chosen": chosen,
+        "neutral": grid_point(report, 0.0, 0.0),
+        "prev": grid_point(report, 0.5, 1.0),  # los pesos razonados "a ojo" que esto sustituye
+        "best": report["ranked_by_stability"][0],
+        # 1 ganadora en toda la rejilla = los pesos no cambian la decision (hallazgo central).
+        "n_winners": len({p["selected_config"] for p in report["grid"]["points"]}),
+        "cost": audit,
+        "share_pct": 100.0 * weights.lambda_turnover / audit["implied_lambda_median"],
+        "generated_at": report["generated_at"][:10],
+    }
+
+
 def collect_roadmap() -> list[dict]:
     """Evoluciones pendientes, cada una con un prompt copiable para Claude Code."""
     from ai_trader.synthetic import retrofit  # noqa: F401  (asegura que el modulo existe)
@@ -573,6 +615,7 @@ def build() -> None:
         "strategies": strategies,
         "signals": signals,
         "ranking": ranking,
+        "calibration": collect_calibration(),
         "roadmap": collect_roadmap(),
     }
 
@@ -586,27 +629,28 @@ def build() -> None:
 
 ROADMAP = [
     {
-        "id": "line-a-calibration",
-        "title": "Calibrar los pesos del headline con evidencia",
-        "line": "A", "status": "pendiente", "impact": "medio", "effort": "bajo",
-        "why": "El headline honesto ya existe (Sharpe - lambda*turnover - kappa*maxDD, agregado "
-               "por CVaR@25%, con gate de baselines y descuento DSR/PBO), pero lambda=0.5 y "
-               "kappa=1.0 son una calibracion razonada A OJO, no medida.",
+        "id": "line-a-calibration-multiwindow",
+        "title": "Calibracion de pesos con validacion multiventana",
+        "line": "A", "status": "pendiente", "impact": "bajo", "effort": "medio",
+        "why": "El barrido de lambda/kappa ya esta hecho y publicado (data/calibration): la "
+               "superficie resulto PLANA y lambda no duplica los costes ya pagados. Pero se midio "
+               "con un unico split temporal 70/30, un camino por escenario y 16 configuraciones: "
+               "sirve para descartar que los pesos importen mucho, no para afinar decimales.",
         "prompt": (
-            "Proyecto ai-trader (Python). La metrica de cabecera de un backtest es "
-            "`Sharpe_OOS - lambda_turnover*turnover - kappa*maxDD` "
-            "(src/ai_trader/backtest/metrics.py, funcion headline_score y dataclass "
-            "HeadlineWeights). Los pesos por defecto (lambda_turnover=0.5, kappa_maxdd=1.0) "
-            "estan razonados en el docstring pero NO medidos: se eligieron por orden de "
-            "magnitud.\n"
-            "TAREA: calibra los pesos con evidencia sobre la libreria ai_v2. (1) Barre "
-            "lambda_turnover y kappa_maxdd en una rejilla y mide, para cada combinacion, la "
-            "correlacion de rangos entre el ranking in-sample y el out-of-sample de un conjunto "
-            "de configuraciones (estabilidad de la eleccion) y el gap train-validation. (2) "
-            "Comprueba que la penalizacion de turnover es del mismo orden que los costes que ya "
-            "paga la curva de equity (fee_rate + slippage por rotacion), para no cobrar dos "
-            "veces lo mismo sin saberlo. (3) Fija los pesos elegidos como DEFAULT_HEADLINE_WEIGHTS "
-            "documentando la evidencia, y anade un test que los congele. Determinismo + "
+            "Proyecto ai-trader (Python). Los pesos del headline score "
+            "(src/ai_trader/backtest/metrics.py: DEFAULT_HEADLINE_WEIGHTS) ya estan calibrados "
+            "con evidencia: el estudio vive en src/ai_trader/scoring/weight_study.py y su "
+            "informe publicado en data/calibration/report_ai_v2.json. El resultado fue que la "
+            "superficie (lambda, kappa) es PLANA en rank IC y en gap train-validation.\n"
+            "TAREA: subir la potencia estadistica del estudio para saber si la planitud es real "
+            "o falta de resolucion. (1) Repite el barrido con varios splits temporales por "
+            "muestra (walk-forward, no un unico 70/30) y con mas de un camino por escenario, "
+            "reutilizando el cacheo de componentes crudos que ya existe (los componentes no "
+            "dependen de los pesos). (2) Anade intervalos de confianza por bootstrap sobre "
+            "escenarios al rank IC y al gap, para poder afirmar o descartar diferencias entre "
+            "puntos de la rejilla. (3) Si y solo si la evidencia nueva mueve el optimo fuera del "
+            "error, actualiza DEFAULT_HEADLINE_WEIGHTS y el test que los congela "
+            "(tests/test_backtest_metrics.py::TestDefaultWeightsAreCalibrated). Determinismo + "
             ".venv\\Scripts\\python.exe (poetry run roto) + ruff. Regenera dashboard y docs."
         ),
     },

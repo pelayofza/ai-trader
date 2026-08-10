@@ -17,7 +17,6 @@ DEFAULT_ANCHOR = datetime(2015, 1, 1, tzinfo=timezone.utc)
 # Son fracciones de la volatilidad diaria del activo, no numeros absolutos.
 OVERNIGHT_GAP_FACTOR = 0.4  # dispersion del hueco de apertura vs cierre anterior
 WICK_FACTOR = 0.5           # tamano tipico de las mechas por encima/debajo del cuerpo
-BASE_VOLUME = 1_000_000.0
 
 
 class PathEngine:
@@ -100,7 +99,7 @@ class PathEngine:
 
             bars[asset.symbol] = self._build_ohlcv(
                 asset_returns, asset.start_price, daily_vol_t,
-                jump_intensity_t, jump_scale_t, index, rng,
+                jump_intensity_t, jump_scale_t, index, rng, asset.adv_units,
             )
 
         return bars
@@ -171,11 +170,16 @@ class PathEngine:
         jump_scale: np.ndarray,
         index: pd.DatetimeIndex,
         rng: np.random.Generator,
+        base_volume: float,
     ) -> pd.DataFrame:
         """De log-retornos diarios a velas OHLCV validas (high>=cuerpo>=low, >0).
 
         `daily_vol` es un array POR DIA (misma longitud que returns): la escala de
-        huecos y mechas de cada vela usa la volatilidad de su propia fase."""
+        huecos y mechas de cada vela usa la volatilidad de su propia fase.
+
+        `base_volume` es el volumen tipico del activo en unidades por barra: es lo que
+        convierte la columna 'volume' en un eje de liquidez real (BTC no se negocia como
+        un altcoin) en vez de en el mismo numero para los 35 activos."""
         horizon = len(returns)
 
         close = start_price * np.exp(np.cumsum(returns))
@@ -207,9 +211,12 @@ class PathEngine:
         high = body_high * (1.0 + up)
         low = body_low * (1.0 - down)
 
-        # Volumen sintetico: base con ruido, mayor en dias de movimiento fuerte.
+        # Volumen sintetico: la escala es la del activo (su ADV en unidades), con ruido
+        # log-normal y mas actividad en los dias de movimiento fuerte. El consumo de RNG
+        # es identico al de antes -solo cambia el factor de escala-, asi que ningun path
+        # ya generado cambia de OHLC ni el volumen relativo (volumen/media) se altera.
         vol_noise = np.exp(rng.standard_normal(horizon) * 0.3)
-        volume = BASE_VOLUME * vol_noise * (1.0 + 5.0 * np.abs(returns))
+        volume = base_volume * vol_noise * (1.0 + 5.0 * np.abs(returns))
 
         return pd.DataFrame(
             {

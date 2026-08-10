@@ -77,6 +77,131 @@ def _rows(pairs, headers):
     return f"<table><thead><tr>{h}</tr></thead><tbody>{body}</tbody></table>"
 
 
+def _n(value, decimals=2):
+    """Numero con coma decimal (el documento esta en castellano)."""
+    if value is None:
+        return "—"
+    return f"{value:,.{decimals}f}".replace(",", " ").replace(".", ",")
+
+
+def _ic_grid(c):
+    """Tabla λ×κ del rank IC: la evidencia cruda del barrido, para poder auditarla sin
+    abrir el JSON."""
+    head = "".join(f"<th class=n>κ={_n(k, 1)}</th>" for k in c["kappas"])
+    rows = []
+    for lam in c["lambdas"]:
+        cells = []
+        for kap in c["kappas"]:
+            point = c["grid"].get((lam, kap))
+            chosen = lam == c["lambda"] and kap == c["kappa"]
+            value = _n(point, 3) if point is not None else "—"
+            cells.append(f"<td class='n mono'>{'<b>' + value + '</b>' if chosen else value}</td>")
+        rows.append(f"<tr><td class=mono>λ={_n(lam, 2)}</td>{''.join(cells)}</tr>")
+    return (
+        f"<table><thead><tr><th>&nbsp;</th>{head}</tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table>"
+    )
+
+
+def _calibration_block(c):
+    """Seccion 5.2b: la calibracion de λ y κ, con la evidencia que la sostiene."""
+    if not c:
+        return (
+            "<div class=\"note\"><b>Limitación declarada.</b> El informe de calibración "
+            "(<span class=\"mono\">data/calibration/</span>) no está disponible en este árbol, así "
+            "que este documento no puede citar las cifras que fijan λ y κ. Regenéralo con "
+            "<span class=\"mono\">python -m ai_trader.scoring.weight_study</span>.</div>"
+        )
+    return f"""
+<h3>5.2b · De dónde salen λ y κ (calibración medida)</h3>
+<p>λ y κ no son una preferencia estética: son una <b>regla de selección</b>, y una regla de selección se
+juzga por lo que elige. Se han barrido en rejilla
+(λ ∈ {{{", ".join(_n(x, 2) for x in c["lambdas"])}}} × κ ∈ {{{", ".join(_n(x, 1) for x in c["kappas"])}}})
+sobre <b>{c["n_backtests"]} backtests reales</b> de la librería <span class="mono">{c["library"]}</span>:
+{c["n_configs"]} configuraciones (hipercubo latino sobre el espacio de búsqueda de las dos primitivas)
+× {c["n_samples"]} muestras.</p>
+<p>El truco que hace asequible el barrido: los <b>componentes</b> del score (Sharpe, turnover, maxDD)
+<i>no dependen de los pesos</i>. Se corre el backtest una vez por (configuración, muestra), se guardan
+los componentes crudos y la rejilla entera se evalúa después en memoria — {c["n_backtests"]} backtests,
+no {c["n_backtests"]} × {len(c["lambdas"]) * len(c["kappas"])}.</p>
+<div class="why"><b>Las dos cifras que deciden, y por qué son adimensionales.</b> Subir λ o κ encoge y
+desplaza la escala del score, así que comparar <i>gaps</i> en crudo premiaría a los pesos grandes por
+deflactar la unidad, no por elegir mejor. Por eso el criterio son dos magnitudes invariantes a la escala:
+<ul>
+<li><b>Rank IC</b> (eje temporal): correlación de rangos de Spearman entre el ranking de las
+{c["n_configs"]} configuraciones <b>dentro</b> de muestra (ventana train) y <b>fuera</b> (ventana test),
+promediada sobre las muestras. Responde: "si elijo con lo que veo, ¿sobrevive la elección?".</li>
+<li><b>Gap train-validation normalizado</b> (eje de escenarios): cuánto se desinfla la configuración
+elegida al pasar de los {c["n_train"]} arquetipos de train a los {c["n_validation"]} reservados, dividido
+por la dispersión entre configuraciones. Responde: "¿cuánto de lo que elegí era del escenario y no de la
+estrategia?".</li>
+</ul>
+Las combinaciones se comparan <b>pareadas</b> sobre las mismas muestras: la varianza común se cancela y
+diferencias pequeñas se vuelven medibles, cosa que restar dos medias con sus errores sueltos no logra.</div>
+<p><b>Rank IC medio por combinación</b> (más alto = elección más estable; en negrita, los pesos fijados):</p>
+{_ic_grid(c)}
+<h4>Resultado 1 · Los pesos no cambian la decisión</h4>
+<p>En los {len(c["lambdas"]) * len(c["kappas"])} puntos de la rejilla — desde no penalizar nada hasta
+penalizar ocho veces más que la configuración anterior — gana <b>siempre la misma configuración</b>
+({c["n_winners"]} ganadora distinta en total), y lo mismo ocurre al repetir el barrido sólo con las
+{c["n_active"]} configuraciones que operan de verdad. En el rango medido λ y κ <b>no arbitran nada</b>:
+quien decide el ranking es el Sharpe.</p>
+<h4>Resultado 2 · Penalizar no estabiliza; degrada un poco</h4>
+<p>Se esperaba un punto dulce —algo de penalización actuando como regularizador—. No lo hay: el rank IC
+es <b>máximo sin penalizar</b> ({_n(c["ic_neutral"], 3)} ± {_n(c["ic_neutral_se"], 3)}) y baja de forma
+<b>monótona</b> al subir cualquiera de los dos pesos, hasta {_n(c["worst"]["rank_ic_mean"], 3)} en la
+esquina (λ={_n(c["lambdas"][-1], 0)}, κ={_n(c["kappas"][-1], 0)}). El gap train-validation normalizado se
+mueve en la misma dirección ({_n(c["gap_neutral"], 2)} sin penalizar →
+{_n(c["prev"]["selection_gap_norm"], 2)} con los pesos anteriores). Los pesos que traía la herramienta
+(λ = 0,5; κ = 1,0) costaban <b>{_n(abs(c["prev"]["rank_ic_gain"]), 3)} ± {_n(c["prev"]["rank_ic_gain_se"], 3)}</b>
+de rank IC frente a no penalizar: un 17% del nivel de la señal, y significativo.</p>
+<div class="why"><b>Por qué tiene sentido que el término de drawdown sea el que más cuesta.</b> Es la misma
+objeción que retiró al Calmar: el máximo drawdown es el estadístico <b>más ruidoso</b> de una curva de
+equity, porque depende de un único par de puntos de un único camino. Meterlo en el denominador disparaba la
+varianza del estimador; meterlo como sumando la sube menos, pero la sube. Lo que el estudio añade es que
+ese ruido <b>no compra nada</b>: ni cambia la configuración elegida ni mejora la supervivencia del ranking.</div>
+<h4>Resultado 3 · La rotación ya se paga dentro del Sharpe</h4>
+<div class="why">Ésta era la pregunta con más riesgo —¿se está cobrando dos veces la misma rotación?— y la
+respuesta resultó ser la contraria de la temida. La curva de equity ya paga
+<span class="mono">fee_rate + slippage</span> = {_n(c["cost_rate"] * 100, 3)}% de cada notional rotado, en
+las dos patas. Convertido a la unidad de λ (puntos de Sharpe por unidad de turnover):
+<p style="text-align:center" class="mono">λ<sub>implícito</sub> = cost_rate × 365 / σ<sub>anual</sub>
+= {_n(c["cost_rate"], 4)} × 365 / {_n(c["median_vol"], 3)} ≈ <b>{_n(c["implied_lambda"], 1)}</b></p>
+<b>Control de que la cadena es real y no una hipótesis:</b> las comisiones efectivamente cobradas divididas
+por el notional reconstruido desde el turnover dan {_n(c["measured_fee_rate"] * 100, 4)}%, que reproduce
+exactamente el <span class="mono">fee_rate</span> configurado. La aritmética se apoya en lo cobrado, no en
+una suposición.
+<p>Con un turnover mediano de {_n(c["median_turnover"], 3)}, la fricción ya se come
+{_n(c["sharpe_drag"], 3)} puntos de Sharpe <i>dentro</i> del propio Sharpe. La penalización explícita
+λ = {_n(c["lambda"], 2)} añade sobre eso un <b>{_n(c["share_pct"], 0)}%</b> (IQR del λ implícito:
+{_n(c["implied_p25"], 1)}–{_n(c["implied_p75"], 1)}: depende de la volatilidad de cada configuración, no es
+una constante, y por eso ninguna λ fija puede "tarifar" los costes). Lejos de duplicar la factura, λ era
+—y sigue siendo— un <b>margen de seguridad</b> pequeño sobre el modelo de costes.</p>
+<p><b>Vigencia tras el modelo de costes por microestructura (§3.4).</b> Este estudio se midió con el
+deslizamiento plano que entonces cobraba el motor. El modelo actual cobra <b>más</b> fricción, y sobre
+todo la reparte por símbolo y por tamaño: eso <b>refuerza</b> la conclusión —la rotación ya se paga
+dentro del Sharpe, y λ es un margen aún más pequeño en términos relativos—, no la invierte. Re-medir la
+rejilla con los costes nuevos es trabajo pendiente de la línea A, no un supuesto de esta.</p></div>
+<h4>Los pesos que quedan fijados, y por qué no son los del máximo</h4>
+<ul>
+<li><b>λ = {_n(c["lambda"], 2)}</b> — el menor valor <b>no nulo</b> de la rejilla. La evidencia preferiría
+λ = 0, pero el headline tiene una propiedad comprometida: <i>misma curva de equity y más rotación tiene que
+puntuar peor</i>. Con λ = 0 esa puerta se reabre. Su precio medido es
+{_n(abs(c["gain"]), 3)} ± {_n(c["gain_se"], 3)} de rank IC (indistinguible de cero en el subconjunto
+activo), y equivale a un {_n(c["share_pct"], 0)}% del coste ya cobrado.</li>
+<li><b>κ = {_n(c["kappa"], 1)}</b> — ninguna propiedad del diseño lo exige, es el término que más
+estabilidad cuesta por unidad y su input es el más ruidoso. El mecanismo sigue en la fórmula: quien quiera
+aversión explícita al drawdown pasa <span class="mono">kappa_maxdd</span>, pero ya no se cobra por defecto
+sin que nadie lo haya pedido.</li>
+</ul>
+<div class="note"><b>Límites de este estudio.</b> Un único corte temporal 70/30 por muestra, un solo camino
+por escenario y {c["n_configs"]} configuraciones, sobre un sustrato de rotación baja (turnover mediano
+{_n(c["median_turnover"], 3)}). Es suficiente para descartar que penalizar fuerte ayude y para mostrar que
+los pesos no cambian la decisión; <b>no</b> para afinar decimales, ni para extrapolar a un régimen de costes
+más duros. Cuando la línea C (costes que muerden) aterrice, este estudio hay que repetirlo: el harness ya
+está, y re-analizar cuesta segundos porque los componentes están cacheados.</div>"""
+
+
 def _factor_table(factors):
     body = "".join(f"<tr><td class=mono>{f}</td><td>{d}</td></tr>" for f, d in factors)
     return ("<table><thead><tr><th>Factor</th><th>Interpretación</th></tr></thead>"
@@ -121,6 +246,9 @@ def render_html(f: dict) -> str:
         "MR_PARAMS": _rows(f.get("mr_params", []), ["Parámetro", "Valor"]),
         "SPACE_MOM": _rows(f.get("space_mom", []), ["Parámetro", "Rango CEM"]),
         "SPACE_MR": _rows(f.get("space_mr", []), ["Parámetro", "Rango CEM"]),
+        "CALIBRATION": _calibration_block(f.get("calibration")),
+        "LAMBDA": _n((f.get("calibration") or {}).get("lambda", 0.5), 2),
+        "KAPPA": _n((f.get("calibration") or {}).get("kappa", 1.0), 1),
     }
     html = BODY
     for k, v in rep.items():
@@ -352,20 +480,64 @@ siguiente</b> (no al cierre con el que se decidió).</li>
 <div class="why"><b>Por qué pesimista.</b> Un backtest optimista es peligroso. Ante la ambigüedad
 intrabar, preferimos <b>subestimar</b> el resultado: si una estrategia parece buena aquí, tiene margen.</div>
 
-<h3>3.4 · Costes</h3>
-<p>Cada ejecución paga comisiones y deslizamiento (<i>slippage</i>), y el motor de riesgo fija el
-stop/take-profit definitivos. Hoy el deslizamiento es plano y no hay techo de capacidad.</p>
-<div class="note"><b>Limitación.</b> Un deslizamiento plano es irreal para un activo poco líquido, y
-llenar cualquier tamaño entero ignora el impacto de mercado. El modelo de costes dependiente de
-símbolo, volatilidad y tamaño (con fills parciales) queda pendiente (§7).</div>
+<h3>3.4 · Costes de ejecución: spread, volatilidad e impacto</h3>
+<p>Cada ejecución paga comisiones y deslizamiento (<i>slippage</i>). El deslizamiento <b>no es una
+constante</b>: se calcula orden a orden como suma de tres términos, cada uno responsable de una
+pregunta distinta:</p>
+<table><thead><tr><th>Término</th><th>Qué mide</th><th>De qué depende</th></tr></thead><tbody>
+<tr><td><b>Medio spread</b></td><td>Lo que cuesta cruzar el libro por existir, aunque la orden sea
+minúscula</td><td>Solo del <b>símbolo</b> (tabla explícita: de 0,4 pb en un índice amplio a 20-25 pb en
+un altcoin de segunda fila)</td></tr>
+<tr><td><b>Volatilidad</b></td><td>El ensanchamiento de la horquilla cuando el activo se mueve</td>
+<td>De la <b>volatilidad reciente</b> del activo (20 barras cerradas)</td></tr>
+<tr><td><b>Impacto</b></td><td>Mover el precio con el propio tamaño</td><td>De la <b>fracción del
+volumen de la barra</b> que consume la orden, por la <b>ley de raíz cuadrada</b></td></tr>
+</tbody></table>
+<p>La ley de raíz cuadrada (Almgren-Chriss, y la evidencia empírica de ejecución) dice que el coste de
+impacto crece con la <b>raíz</b> de la participación, no linealmente: cuadruplicar el tamaño duplica el
+impacto. El resultado se limita a un techo declarado (500 pb por defecto): más allá, extrapolar el
+modelo no significaría nada, y es preferible un tope explícito a un número inventado.</p>
+<div class="why"><b>Por qué importa.</b> Un deslizamiento plano de 5 pb dice que mover un millón de
+dólares en un altcoin ilíquido cuesta lo mismo que moverlos en BTC. Eso no es una simplificación
+conservadora: es un <b>subsidio</b> a las estrategias que rotan mucho y operan lo pequeño e ilíquido,
+justo donde un backtest tiende a encontrar señales espurias.</div>
 
-<h3>3.5 · Partición train/test</h3>
+<h3>3.5 · Techo de capacidad y fills parciales</h3>
+<p>Ninguna orden puede consumir más de una <b>fracción del volumen de la barra</b> (10% por defecto).
+Lo que exceda ese techo <b>no se llena</b>: la orden queda <i>parcialmente llenada</i> y la posición se
+abre por el tamaño realmente ejecutado. Si la barra no da ni para eso, la orden se <b>rechaza</b>.</p>
+<p>Las <b>salidas</b> están exentas del techo, por asimetría deliberada: entrar es opcional —si no hay
+liquidez, no entras— pero salir no lo es. Un cierre se llena entero y <b>paga el impacto de todo el
+tamaño</b>, que con la ley de raíz cuadrada puede ser varias veces el de la entrada.</p>
+<div class="why"><b>Por qué asimétrico.</b> Si un cierre se llenara parcialmente, la posición quedaría
+cerrada en el estado del sistema pero pagada solo a medias: una contabilidad optimista escondida en un
+detalle de ejecución. Se prefiere cobrar de más al salir que dejar el agujero.</div>
+
+<h3>3.6 · El volumen como proxy de liquidez</h3>
+<p>La columna <span class="mono">volume</span> de las velas, que antes era decorativa (ninguna pieza la
+consultaba), es hoy el <b>eje de liquidez</b> del sistema: el generador la escala al volumen típico
+negociado de cada activo, y el motor de ejecución la lee para el impacto y la capacidad. La liquidez se
+estima con la <b>mediana</b> de las últimas 20 barras <b>ya cerradas</b> —nunca la de hoy— por dos
+razones: el mismo corte anti-look-ahead que usa la estrategia, y porque el volumen se dispara los días
+de movimiento fuerte, de modo que tomar ese pico como capacidad regalaría profundidad justo en los días
+en que de verdad escasea.</p>
+<div class="note"><b>Limitación.</b> Los baselines pasivos (§5.6) siguen pagando un coste plano de
+referencia, no el modelo completo: solo hacen dos operaciones sobre los activos más líquidos, y darles
+el coste barato endurece el listón que la estrategia debe superar, que es la dirección prudente del
+error.</div>
+<div class="note"><b>Nota de escala.</b> Con capitales de cinco cifras el término que domina es el
+spread: una orden de unos cientos de dólares no mueve el precio de ningún activo del universo, y el
+techo de capacidad no llega a morder. Los términos de impacto y capacidad son los que hacen que el
+resultado <b>deje de escalar</b> cuando el capital crece, que es exactamente la pregunta que un
+backtest con costes planos no puede responder.</div>
+
+<h3>3.7 · Partición train/test</h3>
 <p>Cada muestra se parte en una ventana de entrenamiento y una de test (por defecto 70/30 temporal), y
 la puntuación de cabecera se toma <b>fuera de muestra</b> (en la ventana de test).</p>
 <div class="note"><b>Limitación.</b> Es una partición única, sin purga ni embargo entre ventanas.
 Validación multiventana / CPCV con purga queda pendiente (§7).</div>
 
-<h3>3.6 · El motor de riesgo como puerta única</h3>
+<h3>3.8 · El motor de riesgo como puerta única</h3>
 <p>Toda señal, venga de donde venga, pasa por el motor de riesgo antes de convertirse en orden. El riesgo
 es <b>dueño</b> del stop y el take-profit (puede recortar lo que propone la estrategia), y aplica los
 límites de exposición por símbolo y total, la confianza mínima por operación y el límite de pérdida
@@ -419,7 +591,8 @@ verificado que un único path no es informativo.</p>
 <h3>5.2 · La métrica de cabecera: Sharpe penalizado</h3>
 <p>La puntuación de una muestra es su <b>headline score fuera de muestra</b>:</p>
 <p style="text-align:center"><span class="mono"><b>Sharpe<sub>OOS</sub> − λ·turnover − κ·maxDD</b></span>
-&nbsp;&nbsp;(λ = 0,5 sobre la rotación diaria; κ = 1,0 sobre el drawdown en fracción)</p>
+&nbsp;&nbsp;(λ sobre la rotación diaria, κ sobre el drawdown en fracción; ambos <b>medidos</b>, no
+supuestos: λ = %%LAMBDA%% y κ = %%KAPPA%% — ver §5.2b)</p>
 <p>El <b>turnover</b> es una métrica nueva del motor: el <i>notional</i> rotado por día en unidades del
 capital inicial, contando las dos patas de cada operación. Un turnover de 0,20 significa "cada día rota
 el 20% de la cartera", así que mide <i>churn</i> de verdad — tamaño por frecuencia — y no solo el número
@@ -437,15 +610,13 @@ operar casi nunca" — un óptimo degenerado y perfectamente alcanzable.</li>
 <li><b>Degeneraba sin drawdown.</b> Una estrategia sin caída alguna recibía, por convención, la peor
 puntuación posible: cero.</li>
 </ul>
-El headline actual cierra las tres puertas. El drawdown entra como <b>penalización suave y aditiva</b>
-(ni denominador ni descarte binario), el Sharpe no se puede inflar dejando de operar (una curva plana
-puntúa 0, no infinito) y la rotación tiene un precio explícito, de modo que el óptimo degenerado
-desaparece <i>por construcción</i>, no por vigilancia.</div>
-<div class="note"><b>Limitación declarada.</b> λ = 0,5 y κ = 1,0 son una calibración <b>razonada por
-orden de magnitud</b>, no medida: con un turnover diario típico de 0,1–0,3 la rotación cuesta 0,05–0,15
-puntos de Sharpe, y un drawdown del 30% cuesta 0,30. Las comisiones ya muerden dentro de la curva de
-equity, así que la penalización por rotación es <i>además</i> un regularizador contra sobreajustar el
-modelo de costes. Medir los pesos con evidencia es una evolución pendiente.</div>
+El headline actual cierra las tres puertas. El drawdown, si se cobra, entra como <b>penalización suave y
+aditiva</b> (ni denominador ni descarte binario), el Sharpe no se puede inflar dejando de operar (una curva
+plana puntúa 0, no infinito) y la rotación tiene un precio explícito, de modo que el óptimo degenerado
+desaparece <i>por construcción</i>, no por vigilancia. Nótese que las dos puertas que de verdad cerraban el
+óptimo degenerado son el Sharpe y el precio de la rotación, <b>no</b> el término de drawdown: por eso la
+calibración de §5.2b puede dejarlo en cero sin reabrir ninguna de ellas.</div>
+%%CALIBRATION%%
 
 <h3>5.3 · El estadístico de recompensa: CVaR al 25%</h3>
 <p>Los headline scores de todas las muestras se agregan con el <b>CVaR@25%</b> — la media del peor
@@ -540,6 +711,10 @@ reproduce exactamente el mundo previo.</li>
 backtest, y el ciclo completo (estrategia → riesgo → ejecución) funciona sobre datos sintéticos.</li>
 <li><b>Contabilidad honesta:</b> el PnL es neto de comisiones; las salidas (stop/take-profit/tiempo)
 pasan por el motor de ejecución para pagar costes reales.</li>
+<li><b>Los costes discriminan:</b> un altcoin ilíquido paga más deslizamiento que BTC por el mismo
+notional; el coste crece con el tamaño de forma cóncava (4× tamaño → 2× impacto) y con la volatilidad;
+sin dato de liquidez no se inventa impacto. Una orden por encima del techo de capacidad se llena
+<b>parcialmente</b> y las comisiones siguen al tamaño llenado, no al pedido.</li>
 <li><b>La métrica de cabecera no tiene óptimo degenerado:</b> hay tests que fijan que una curva plana
 puntúa 0 (no infinito), que el drawdown penaliza de forma aditiva y no en el denominador, y que rotar
 más con la misma curva de equity puntúa peor.</li>
@@ -557,8 +732,9 @@ de sobreajuste puro da PBO ≈ 1; probar más configuraciones sube el listón de
 <tr><td>Realismo del generador (colas, agrupamiento, estructura serial, saltos)</td><td class="ok">Hecho</td><td>El sustrato dejó de mentir en la dirección optimista.</td></tr>
 <tr><td>Cableado del sustrato realista en el scoring (<span class="mono">ai_v2</span> por defecto)</td><td class="ok">Hecho</td><td>Lo que se optimiza se mide contra el mundo realista, no contra ruido iid.</td></tr>
 <tr><td>Métrica y ranking honestos (headline penalizado, CVaR@25%, baselines, DSR/PBO)</td><td class="ok">Hecho</td><td>El óptimo degenerado del Calmar desapareció, y ganar exige batir a no hacer nada.</td></tr>
-<tr><td>Calibración con evidencia de los pesos λ (turnover) y κ (drawdown)</td><td class="pend">Pendiente</td><td>Hoy son un orden de magnitud razonado, no una medición.</td></tr>
-<tr><td>Costes que muerden (slippage por símbolo/vol/tamaño; fills parciales)</td><td class="pend">Pendiente</td><td>Los costes planos subestiman la fricción real, sobre todo en activos ilíquidos.</td></tr>
+<tr><td>Calibración con evidencia de los pesos λ (turnover) y κ (drawdown)</td><td class="ok">Hecho</td><td>Medidos por barrido en rejilla (§5.2b): la superficie es plana y λ no duplica los costes ya pagados.</td></tr>
+<tr><td>Costes que muerden (slippage por símbolo/vol/tamaño; fills parciales)</td><td class="ok">Hecho</td><td>La fricción dejó de ser una constante: el coste distingue BTC de un altcoin ilíquido y el tamaño tiene techo (§3.4-3.6).</td></tr>
+<tr><td>Re-medición de λ y κ con el modelo de costes nuevo</td><td class="pend">Pendiente</td><td>La calibración publicada se midió con deslizamiento plano; la conclusión se refuerza, pero los decimales no están re-medidos.</td></tr>
 <tr><td>Validación (CPCV / walk-forward multiventana)</td><td class="pend">Pendiente</td><td>El split único sobre-estima la robustez.</td></tr>
 <tr><td>Validación sintético-vs-real (correlación de rangos con CCXT)</td><td class="pend">Pendiente</td><td>Cierra la pregunta "¿se parece este mundo al real?".</td></tr>
 <tr><td>Limpieza de consistencia (universo, anualización, reproducibilidad del diseñador)</td><td class="pend">Pendiente</td><td>Higiene para comparaciones y auditoría.</td></tr>

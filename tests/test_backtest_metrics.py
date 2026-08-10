@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
@@ -16,6 +17,13 @@ from ai_trader.backtest.metrics import (
     skewness,
     turnover_ratio,
 )
+from ai_trader.scoring.weight_calibration import (
+    CALIBRATION_REPORT,
+    grid_point,
+    load_calibration_report,
+)
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def curve(values: list[float]) -> list[EquityPoint]:
@@ -116,9 +124,96 @@ class TestHeadlineScore:
         assert churner.sharpe == pytest.approx(quiet.sharpe)
         assert headline_score(churner) < headline_score(quiet)
 
-    def test_default_weights_are_the_documented_ones(self):
-        assert DEFAULT_HEADLINE_WEIGHTS.lambda_turnover == 0.5
-        assert DEFAULT_HEADLINE_WEIGHTS.kappa_maxdd == 1.0
+
+class TestDefaultWeightsAreCalibrated:
+    """
+    Congela los pesos por defecto Y los ata a la evidencia que los justifica.
+
+    Un test que solo comprobara las dos constantes seria un espejo del codigo: pasaria
+    igual si alguien las cambiara a ojo. Estos ademas exigen que el informe publicado del
+    estudio (data/calibration) cubra exactamente esos pesos y siga respaldandolos, asi
+    que mover los pesos obliga a re-correr el estudio y republicar la evidencia, que es
+    el punto entero de haberlo medido.
+    """
+
+    LAMBDA_TURNOVER = 0.25
+    KAPPA_MAXDD = 0.0
+
+    @pytest.fixture(scope="class")
+    def report(self) -> dict:
+        published = load_calibration_report(ROOT / CALIBRATION_REPORT)
+        assert published is not None, (
+            f"Falta la evidencia de calibracion en {CALIBRATION_REPORT}. "
+            "Regenerala con: python -m ai_trader.scoring.weight_study"
+        )
+        return published
+
+    def test_weights_are_frozen(self):
+        assert DEFAULT_HEADLINE_WEIGHTS.lambda_turnover == self.LAMBDA_TURNOVER
+        assert DEFAULT_HEADLINE_WEIGHTS.kappa_maxdd == self.KAPPA_MAXDD
+
+    def test_the_published_grid_actually_swept_these_weights(self, report):
+        """No basta con documentar un numero: tiene que estar EN la rejilla medida."""
+        point = grid_point(report, self.LAMBDA_TURNOVER, self.KAPPA_MAXDD)
+
+        assert point is not None, "Los pesos por defecto no estan en la rejilla barrida"
+        assert report["plan"]["library_id"] == "ai_v2"
+        assert len(report["configs"]["kept"]) >= 8
+        assert report["configs"]["n_samples"] >= 20
+
+    def test_penalising_costs_at_most_a_tenth_of_the_ranking_signal(self, report):
+        """
+        El estudio midio que penalizar NO estabiliza el ranking: lo degrada un poco, de
+        forma monotona en ambos pesos. Asumido eso, lo que hay que acotar es el precio.
+
+        La cifra es la perdida PAREADA de rank IC frente a no penalizar (misma muestra,
+        asi que la varianza comun se cancela), y el liston es el 10% del nivel de la
+        senal. Los pesos anteriores (0.5, 1.0) costaban un 17% y este test los habria
+        rechazado: no es un espejo de las constantes, es un criterio que sabe fallar.
+        """
+        point = grid_point(report, self.LAMBDA_TURNOVER, self.KAPPA_MAXDD)
+        best = max(p["rank_ic_mean"] for p in report["grid"]["points"])
+
+        assert point["rank_ic_gain"] <= 0.0  # el maximo esta en no penalizar
+        assert abs(point["rank_ic_gain"]) <= 0.10 * best
+
+    def test_the_weights_do_not_change_which_config_wins(self, report):
+        """
+        El hallazgo que convierte a lambda y kappa en un regularizador barato y no en el
+        motor del ranking: en TODA la rejilla gana la misma configuracion. Si algun dia
+        deja de ser cierto, la eleccion de pesos vuelve a ser una decision de producto y
+        este test tiene que obligar a revisarla.
+        """
+        winners = {p["selected_config"] for p in report["grid"]["points"]}
+
+        assert len(winners) == 1
+
+    def test_a_zero_turnover_price_would_break_a_committed_property(self):
+        """
+        Por que lambda no es 0 aunque la evidencia lo prefiera: el headline se comprometio
+        a que rotar mas sobre la MISMA curva de equity puntue peor. Con lambda = 0 esa
+        propiedad desaparece, asi que el minimo de la rejilla no es una opcion.
+        """
+        assert DEFAULT_HEADLINE_WEIGHTS.lambda_turnover > 0.0
+
+    def test_turnover_penalty_does_not_double_charge_the_costs_already_paid(self, report):
+        """
+        Punto (2) del encargo. La curva de equity ya paga fee_rate + slippage al rotar, y
+        ese coste vive DENTRO del Sharpe. lambda es un regularizador anadido, asi que
+        tiene que ser una fraccion pequena del coste implicito: si se acercara a el,
+        estariamos cobrando dos veces la misma rotacion.
+        """
+        implied = report["cost_audit_active"]["implied_lambda_median"]
+
+        assert implied > 0
+        assert self.LAMBDA_TURNOVER < 0.25 * implied
+
+    def test_the_cost_chain_was_validated_against_fees_actually_charged(self, report):
+        """El lambda implicito se apoya en reconstruir el notional desde el turnover; el
+        informe debe demostrar que esa reconstruccion reproduce el fee_rate real."""
+        audit = report["cost_audit_active"]
+
+        assert audit["measured_fee_rate"] == pytest.approx(audit["fee_rate"], rel=0.02)
 
 
 class TestReturnMoments:

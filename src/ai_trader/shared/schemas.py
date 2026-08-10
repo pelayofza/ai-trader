@@ -106,6 +106,10 @@ class OrderRequest:
     asset_class: AssetClass | None = None
     instrument_id: str | None = None
     outcome: str | None = None
+    # Orden que CIERRA exposicion (salida de posicion). El motor de ejecucion la exime
+    # del techo de capacidad: entrar es opcional -si no hay liquidez, no entras-, pero
+    # salir no lo es. Se llena entera y paga el impacto de todo el tamano.
+    reduce_only: bool = False
 
     def __post_init__(self) -> None:
         if not self.symbol:

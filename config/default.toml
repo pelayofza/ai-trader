@@ -55,7 +55,21 @@ max_stop_distance_pct = 15.0
 
 [execution]
 fee_rate = 0.001
+# Coste plano de REFERENCIA (bps): ya no lo cobra el motor de ejecucion, que usa el
+# modelo de microestructura de abajo. Lo consumen los baselines pasivos y la auditoria
+# de costes, que necesitan un numero unico y comparable.
 slippage_bps = 5.0
+# Techo de capacidad por barra: una orden no puede consumir mas de esta fraccion del
+# volumen de la barra. Lo que exceda no se llena (fill parcial).
+max_participation = 0.10
+
+# Modelo de deslizamiento: medio spread del simbolo + vol_coef*sigma + impacto por raiz
+# cuadrada de la participacion. Los spreads por simbolo viven en
+# src/ai_trader/execution/microstructure.py; aqui solo se sobrescriben si hace falta.
+[execution.slippage]
+vol_coef = 0.02
+impact_coef = 0.60
+max_slippage_bps = 500.0
 
 # Estrategias activas. `type` se resuelve contra el registro de strategies/registry.py.
 # Este bloque es el formato que emitira el generador de estrategias con IA.

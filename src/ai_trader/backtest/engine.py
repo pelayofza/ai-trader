@@ -19,6 +19,7 @@ from ai_trader.backtest.metrics import (
 from ai_trader.config import AppConfig
 from ai_trader.data.backtest_source import BarProvider, HistoricalDataSource
 from ai_trader.execution.market_model import IntrabarMarketModel
+from ai_trader.execution.microstructure import BarLiquidityProvider
 from ai_trader.execution.paper import PaperExecutionEngine
 from ai_trader.execution.polymarket_paper import PolymarketPaperExecutionEngine
 from ai_trader.execution.router import ExecutionRouter
@@ -244,7 +245,13 @@ class BacktestEngine:
             attach = getattr(strategy, "attach_regime_provider", None)
             if callable(attach):
                 attach(regime_provider)
-        paper_engine = PaperExecutionEngine(self.config.execution)
+        # Costura de liquidez: el motor de ejecucion cobra spread, volatilidad e impacto
+        # leyendo las barras YA CERRADAS del simbolo (mismo corte anti look-ahead que la
+        # estrategia). Sin ella el fill no sabria distinguir BTC de un altcoin iliquido.
+        paper_engine = PaperExecutionEngine(
+            self.config.execution,
+            liquidity_provider=BarLiquidityProvider(source, clock),
+        )
         router = ExecutionRouter.paper(
             spot_engine=paper_engine,
             prediction_engine=PolymarketPaperExecutionEngine(paper_engine=paper_engine),
