@@ -9,11 +9,22 @@ que naturaleza es esa historia (`pit`).
 LOS DOS CAMPOS QUE HACEN HONESTO EL RESTO
 -----------------------------------------
 `history_from` es la primera fecha con dato COMPROBADO POR NOSOTROS, no la que anuncia el
-proveedor. Arranca en `None` en todas las fuentes, y `None` significa exactamente una
-cosa: **solo hacia adelante**. Esa fuente no puede participar en un backtest hasta que
-alguien mida su profundidad y escriba la fecha. Lo que el proveedor promete se escribe en
-`notes`, en prosa y como lo que es —una afirmacion suya—, para que ningun codigo pueda
-confundir una promesa con una medicion.
+proveedor. `None` significa exactamente una cosa: **solo hacia adelante**, y esa fuente no
+puede participar en un backtest. Lo que el proveedor promete se escribe en `notes`, en
+prosa y como lo que es —una afirmacion suya—, para que ningun codigo pueda confundir una
+promesa con una medicion.
+
+QUIEN TIENE DERECHO A ESCRIBIR UNA FECHA AQUI. Solo `signals/depth.py`: la sonda descarga
+la serie, la deriva con el adaptador REAL y apunta lo que encuentra en
+`data/signals/history_depth.json`. La fecha del catalogo se copia de ahi a mano y un test
+(`tests/test_signal_adapters.py`) falla si alguien declara una que el registro no respalda.
+
+Y con una condicion mas: la sonda tiene que haber medido al menos `MIN_MEASURED_DAYS` dias.
+El motivo es que en una fuente `forward_capture` el "primer dia con dato" es simplemente el
+dia que arranco la captura; declararlo pondria `backtestable=True` en una serie de un dia,
+que es exactamente la clase de verdad literal y engañosa que este catalogo existe para
+evitar. Para esas, el registro de mediciones guarda desde cuando se captura —que es el dato
+util— y el catalogo espera a que la ventana exista.
 
 `pit` (point-in-time) dice si la historia, cuando la haya, vale para backtest:
 
@@ -28,10 +39,13 @@ confundir una promesa con una medicion.
     point-in-time por construccion y su profundidad es la de nuestro historico de precios.
 
 Juntos responden la unica pregunta que importa antes de puntuar nada: **que fuentes pueden
-entrar en un backtest y cuales solo en vivo**. Hoy la respuesta, medida, es que ninguna
-puede: el catalogo entero esta en `history_from=None`. Eso no es un defecto del catalogo,
-es el estado real del sistema el dia que se construye el esqueleto, y aparece publicado en
-el dashboard como tal.
+entrar en un backtest y cuales solo en vivo**. El dia que se construyo el esqueleto la
+respuesta era "ninguna", con el catalogo entero en `None`. Hoy, con el primer lote continuo
+conectado y sondeado, son seis, y las demas siguen a `None` por tres motivos distintos que
+conviene no confundir: la credencial no esta en el entorno (Guavy, FRED), la cuota del
+proveedor se agoto antes de terminar (GitHub), o la fuente no tiene pasado que descargar y
+su profundidad la compra el calendario (P2P, funding). Las seis mecanicas (Tier A) ni
+siquiera tienen adaptador todavia.
 
 LAS DOS PUERTAS (`tier`)
 ------------------------
@@ -263,11 +277,14 @@ CATALOG: tuple[SignalSource, ...] = (
         ),
         pit=PIT_ARCHIVE_REVISABLE,
         license="Comercial, plan gratuito. Bearer token.",
-        endpoint="/api/v1/sentiment/get-sentiment-history/<symbol>",
+        endpoint="https://guavy.com/api/v1/sentiment/get-sentiment-history/<symbol>",
         auth_env="GUAVY_API_KEY",
         notes="Se consumen SOLO los conteos crudos. Los endpoints trend/signal son el "
               "output de SU modelo: pueden estar recalculados con informacion posterior y "
-              "no son auditables. El proveedor no documenta profundidad; hay que medirla.",
+              "no son auditables (el adaptador los rechaza por codigo). El host esta "
+              "MEDIDO: guavy.com responde 401 sin token y api.guavy.com da 404. Sin "
+              "credencial en el entorno la sonda no pudo medir profundidad, y por eso "
+              "history_from sigue a None.",
     ),
     SignalSource(
         key="etf_flows",
@@ -278,17 +295,20 @@ CATALOG: tuple[SignalSource, ...] = (
         entity_kind=EntityKind.TOKEN,
         features=(
             SignalFeature("etf_netflow_usd", AGG_SUM, "USD", "Flujo neto del dia."),
-            SignalFeature("etf_issuer_dispersion", AGG_LAST, "z",
-                          "Dispersion entre emisores: separa rotacion de flujo neto."),
+            SignalFeature("etf_issuer_dispersion", AGG_LAST, "ratio",
+                          "Bruto/|neto| entre emisores: 1 = flujo neto puro, alto = rotacion."),
             SignalFeature("etf_issuers_reporting", AGG_LAST, "n",
                           "Emisores que reportaron ese dia (cobertura, no senal)."),
         ),
         pit=PIT_ARCHIVE_REVISABLE,
+        history_from=date(2024, 1, 11),  # MEDIDO: 662 dias, 1 entidad (BTC)
         license="TFTC: CC BY 4.0. Farside/SoSoValue como contraste.",
-        endpoint="https://tftc.io (JSON abierto)",
-        notes="TFTC AFIRMA serie completa desde enero de 2024. Es una afirmacion suya: "
-              "history_from sigue a None hasta que se descargue y se compruebe. Los flujos "
-              "se revisan al alza el dia siguiente, de ahi archive_revisable.",
+        endpoint="https://www.tftc.io/bitcoin-etf-flows/data.json",
+        notes="MEDIDO: solo BITCOIN. TFTC no publica dataset equivalente de ETH (las rutas "
+              "evidentes dan 404), asi que ETH no tiene cobertura por esta puerta y NO se "
+              "rellena con un agregado de otro sitio: sin desglose por emisor, "
+              "etf_issuer_dispersion significaria otra cosa para ese activo. Los flujos se "
+              "revisan al alza el dia siguiente, de ahi archive_revisable.",
     ),
     SignalSource(
         key="fred_macro",
@@ -305,11 +325,18 @@ CATALOG: tuple[SignalSource, ...] = (
         license="FRED: uso publico, key gratuita.",
         endpoint="https://api.stlouisfed.org/fred/series/observations",
         auth_env="FRED_API_KEY",
-        fixed_entities=("DTWEXBGS", "DFII10", "T10Y2Y", "SP500", "VIXCLS"),
-        notes="La entidad es la SERIE (DTWEXBGS, DFII10, T10Y2Y...), no un activo. FRED "
+        fixed_entities=(
+            "DTWEXBGS", "DFII10", "DGS2", "DGS10", "T10Y2Y",
+            "SP500", "NASDAQ100", "VIXCLS", "DCOILWTICO",
+        ),
+        notes="La entidad es la SERIE, no un activo, y cada una mapea sobre un factor del "
+              "generador sintetico (adapters/fred.py::FACTOR_OF; universe.py: EQUITY, "
+              "RATES, USD, COMMODITY). Las nueve existen: COMPROBADO. El ORO no esta y es "
+              "una medicion, no un olvido: FRED discontinuo las series de la LBMA "
+              "(GOLDAMGBD228NLBM da 404 hoy) y el factor COMMODITY se cubre con WTI. FRED "
               "revisa series hacia atras: sin el archivo crudo con fetched_at no hay forma "
-              "de saber que se veia aquel dia. Mapea uno a uno sobre los factores del "
-              "generador sintetico (synthetic/universe.py: EQUITY, RATES, USD, COMMODITY).",
+              "de saber que se veia aquel dia. Sin FRED_API_KEY en el entorno la sonda no "
+              "pudo medir profundidad.",
     ),
     SignalSource(
         key="defillama_stablecoins",
@@ -323,11 +350,15 @@ CATALOG: tuple[SignalSource, ...] = (
             SignalFeature("stablecoin_issuance_usd", AGG_SUM, "USD", "Emision neta del dia."),
         ),
         pit=PIT_ARCHIVE_REVISABLE,
+        history_from=date(2017, 11, 29),  # MEDIDO: 12.497 dias-cadena sobre 6 cadenas
         license="DefiLlama: abierta, sin auth.",
         endpoint="https://stablecoins.llama.fi/stablecoincharts/<chain>",
         fixed_entities=("ethereum", "solana", "arbitrum", "base", "tron", "bsc"),
         notes="La emision neta es polvora seca entrando; el desglose POR CADENA es rotacion "
-              "de capital entre ecosistemas, que es la parte que no se publica agregada.",
+              "de capital entre ecosistemas, que es la parte que no se publica agregada. La "
+              "emision se deriva como VARIACION de la oferta: tras un hueco, el primer dia "
+              "acumula lo emitido durante todo el hueco, y `observed` esta al lado para "
+              "saber cuando fiarse.",
     ),
     SignalSource(
         key="defillama_fees",
@@ -342,10 +373,14 @@ CATALOG: tuple[SignalSource, ...] = (
             SignalFeature("tvl_usd", AGG_LAST, "USD", "Valor bloqueado al cierre."),
         ),
         pit=PIT_ARCHIVE_REVISABLE,
+        history_from=date(2011, 1, 31),  # MEDIDO: 54.129 dias-entidad sobre 24 entidades
         license="DefiLlama: abierta, sin auth.",
         endpoint="https://api.llama.fi/summary/fees/<protocol>",
         notes="Con el precio ya en el sistema salen P/F y P/S. El universo con ingresos "
-              "reales es pequeno e ignorado, que es lo que lo hace interesante.",
+              "reales es pequeno e ignorado, que es lo que lo hace interesante. Los 24 "
+              "slugs estan COMPROBADOS: XRP y ATOM entran por su cadena (xrpl, cosmos-hub) "
+              "porque el slug obvio da 400. La serie llega en tres llamadas (dailyFees, "
+              "dailyRevenue, y el TVL del protocolo) marcadas en request.series.",
     ),
     SignalSource(
         key="defillama_volumes",
@@ -355,14 +390,20 @@ CATALOG: tuple[SignalSource, ...] = (
         cadence="daily",
         entity_kind=EntityKind.TOKEN,
         features=(
-            SignalFeature("dex_volume_usd", AGG_SUM, "USD", "Volumen en DEX."),
-            SignalFeature("dex_share", AGG_LAST, "fraccion", "Fraccion del volumen en DEX."),
+            SignalFeature("dex_volume_usd", AGG_SUM, "USD", "Volumen en DEX (cadena del activo)."),
+            SignalFeature("cex_volume_usd", AGG_SUM, "USD", "Volumen en CEX (par de referencia)."),
+            SignalFeature("dex_share", AGG_LAST, "fraccion", "DEX / (DEX + CEX)."),
         ),
         pit=PIT_ARCHIVE_REVISABLE,
-        license="DefiLlama: abierta, sin auth.",
-        endpoint="https://api.llama.fi/overview/dexs/<protocol>",
-        notes="Donde se forma el precio. Un activo cuyo volumen migra a DEX cambia de "
-              "microestructura, y el modelo de costes lo trata igual (limite conocido).",
+        history_from=date(2017, 8, 17),  # MEDIDO: 30.590 dias-entidad sobre 14 activos
+        license="DefiLlama: abierta, sin auth. Pata CEX via CCXT (endpoints publicos).",
+        endpoint="https://api.llama.fi/overview/dexs/<chain>",
+        notes="Donde se forma el precio. La cuota necesita las DOS patas y DefiLlama no "
+              "publica volumen de CEX: la de CEX sale de CCXT y se archiva como un crudo "
+              "mas, marcado en request.series. Solo estan las cadenas MEDIDAS: polkadot, "
+              "celestia y cosmos devuelven 500, asi que DOT, TIA y ATOM no tienen pata DEX. "
+              "Un activo cuyo volumen migra a DEX cambia de microestructura y el modelo de "
+              "costes lo trata igual (limite conocido).",
     ),
     SignalSource(
         key="wikipedia_pageviews",
@@ -377,11 +418,16 @@ CATALOG: tuple[SignalSource, ...] = (
                           "Concentracion por idioma: descomposicion GEOGRAFICA de la atencion."),
         ),
         pit=PIT_ARCHIVE_REVISABLE,
+        history_from=date(2015, 7, 1),  # MEDIDO: el limite de la propia API, 15 activos
         license="Wikimedia REST: CC BY-SA, sin auth.",
-        endpoint="https://wikimedia.org/api/rest_v1/metrics/pageviews",
-        notes="Horario y desglosado por idioma, que es lo que Google Trends no da limpio. "
-              "Es la fuente con el backfill mas creible del lote, pero medirlo sigue "
-              "siendo obligatorio antes de ponerle fecha.",
+        endpoint="https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article",
+        notes="Desglosado por idioma, que es lo que Google Trends no da limpio: seis "
+              "proyectos (en/es/de/ja/ru/zh) dan una descomposicion geografica de la "
+              "atencion. Dos limites MEDIDOS: el User-Agent generico se come un 403 y el "
+              "limite de peticiones salta a 429 incluso en serie a 0,7 s, asi que el "
+              "adaptador va secuencial con pausa de 2 s. Los titulos son una TABLA (el "
+              "articulo de SOL es 'Solana (blockchain platform)'), comprobada uno a uno: lo "
+              "que daba 404 no esta.",
     ),
     SignalSource(
         key="p2p_premium",
@@ -396,11 +442,16 @@ CATALOG: tuple[SignalSource, ...] = (
             SignalFeature("p2p_currencies", AGG_LAST, "n", "Divisas con cotizacion ese dia."),
         ),
         pit=PIT_FORWARD_CAPTURE,
-        license="Endpoint publico de Binance.",
+        license="Endpoint publico de Binance. Tipo oficial: open.er-api.com (abierto).",
         endpoint="https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search",
-        notes="TRY/ARS/NGN. Demanda por crisis monetaria: un driver distinto y no "
-              "correlacionado con el ciclo especulativo. NADIE publica el historico de un "
-              "libro P2P: lo que no se capture hoy no existe manana.",
+        fixed_entities=("USDT",),
+        notes="TRY/ARS/NGN contra USDT (MEDIDO: TRY y ARS tienen libro lleno, NGN devuelve "
+              "cero anuncios y por eso p2p_currencies vale 2). Demanda por crisis monetaria: un driver distinto y "
+              "no correlacionado con el ciclo especulativo. Cada registro crudo guarda el "
+              "libro Y el tipo oficial del mismo momento, porque la prima es un cociente y "
+              "ninguna de las dos patas se puede re-descargar con fecha pasada. NADIE "
+              "publica el historico de un libro P2P: lo que no se capture hoy no existe "
+              "manana, y por eso la profundidad crece un dia por dia real.",
     ),
     SignalSource(
         key="funding_dispersion",
@@ -417,9 +468,13 @@ CATALOG: tuple[SignalSource, ...] = (
         ),
         pit=PIT_FORWARD_CAPTURE,
         license="Endpoints publicos de cada venue via CCXT.",
-        notes="La DISPERSION, no el nivel: el nivel esta muy arbitrado. Algunos venues "
-              "sirven historico de funding y otros no, asi que la profundidad real es "
-              "desigual por venue y hay que medirla venue a venue.",
+        endpoint="ccxt.fetch_funding_rate (binance, bybit, okx)",
+        notes="La DISPERSION, no el nivel: el nivel esta muy arbitrado. Los tres venues "
+              "estan MEDIDOS (los tres devolvieron funding de BTC/USDT:USDT). La "
+              "dispersion se calcula ENTRE VENUES en cada ventana de funding y solo "
+              "despues se promedia el dia: al reves mediria la variacion horaria, que es "
+              "otra cosa. Se exigen 3 venues como minimo. fetch_funding_rate da la foto de "
+              "AHORA, asi que la profundidad crece con la captura.",
     ),
     SignalSource(
         key="github_activity",
@@ -433,11 +488,28 @@ CATALOG: tuple[SignalSource, ...] = (
             SignalFeature("contributors", AGG_LAST, "n", "Contribuidores unicos activos."),
         ),
         pit=PIT_ARCHIVE_REVISABLE,
+        # MEDIDO: 15.877 dias-entidad sobre 24 repos. OJO a la asimetria, declarada abajo:
+        # esta fecha la alcanza `contributors`, no `commits`.
+        history_from=date(2009, 8, 23),
         license="GitHub API, token gratuito (rate limit 5000/h).",
         endpoint="https://api.github.com/repos/<owner>/<repo>/stats/commit_activity",
         auth_env="GITHUB_TOKEN",
-        notes="Santiment cobra por esto y el dato crudo es publico. Revisable: un "
-              "force-push reescribe el historico de commits.",
+        notes="Santiment cobra por esto y el dato crudo es publico. LAS DOS FEATURES NO "
+              "TIENEN LA MISMA PROFUNDIDAD, y por eso hay que decirlo aqui: history_from "
+              "(2009, la creacion del repo mas viejo) la alcanza contributors, que llega "
+              "con cubos semanales desde el principio; commits solo tiene 52 semanas por "
+              "captura, asi que hacia atras es NaN —no cero— y la historia larga se acumula "
+              "captura a captura en el archivo. commit_activity reparte la semana en curso "
+              "en siete dias incluidos los que AUN NO HAN PASADO: la capa 2 los corta con el "
+              "fetched_at del registro, porque un cero en un dia que no ha ocurrido no es "
+              "'no hubo commits'. contributors es SEMANAL y se ancla al inicio de su semana; "
+              "repetirlo siete veces convertiria una observacion en siete. Sin GITHUB_TOKEN "
+              "son 60 peticiones/hora y el universo necesita 48: la sonda se quedo sin cuota "
+              "en el primer intento (medido). "
+              "contributors es SEMANAL y se ancla al inicio de su semana; repetirlo siete "
+              "veces convertiria una observacion en siete. El 202 con cuerpo vacio (GitHub "
+              "calculando) se trata como 'hoy no hay dato'. Revisable: un force-push "
+              "reescribe el historico de commits.",
     ),
     SignalSource(
         key="cftc_cot",
@@ -447,16 +519,22 @@ CATALOG: tuple[SignalSource, ...] = (
         cadence="weekly",
         entity_kind=EntityKind.TOKEN,
         features=(
-            SignalFeature("cot_leveraged_net", AGG_LAST, "contratos", "Neto de fondos apalancados."),
+            SignalFeature("cot_leveraged_net", AGG_LAST, "contratos",
+                          "Neto de fondos apalancados."),
             SignalFeature("cot_dealer_net", AGG_LAST, "contratos", "Neto de dealers."),
             SignalFeature("cot_open_interest", AGG_LAST, "contratos", "Interes abierto."),
         ),
         pit=PIT_ARCHIVE_REVISABLE,
+        history_from=date(2018, 4, 13),  # MEDIDO: 714 publicaciones (BTC y ETH)
         license="CFTC: dominio publico (Socrata).",
         endpoint="https://publicreporting.cftc.gov/resource/gpe5-46if.json",
-        notes="Semanal (martes, publicado el viernes): el desfase de publicacion es de "
-              "TRES dias y el recorte por dia de observacion no lo captura. Cablearlo "
-              "exige decalar la serie a mano; queda declarado aqui para no olvidarlo.",
+        notes="Semanal: foto del MARTES, publicada el VIERNES. El dia con el que se archiva "
+              "es el de PUBLICACION, no el de referencia —el martes queda en el payload—, "
+              "porque el recorte por dia de observacion no ve un desfase de tres dias y "
+              "fechar el martes meteria tres dias de futuro en cualquier cruce. Solo los "
+              "dos contratos de CME con serie larga (BTC 435 semanas, ETH 279, medidas); "
+              "los micro y los de otros exchanges quedan fuera para no sumar contratos de "
+              "tamano distinto.",
     ),
     # ---------------- Tier A: mecanicas, entran como ELEGIBILIDAD --------------------
     SignalSource(

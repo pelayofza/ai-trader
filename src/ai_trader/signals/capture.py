@@ -11,14 +11,17 @@ no corre es un dia de profundidad que no se recupera nunca, ni pagando.
 
 De ahi que este modulo exista antes que los adaptadores, y que corra igual sin ninguno.
 
-QUE HACE HOY, EXACTAMENTE
--------------------------
-Recorre el catalogo, resuelve que entidades le tocan a cada fuente, busca su adaptador en
-`signals/source.py::REGISTRY` y, si lo encuentra, archiva lo que devuelva. Hoy el registro
-esta vacio, asi que el resultado es un informe que dice: 17 fuentes declaradas, 0
-conectadas, 0 registros. Ese numero no es un fallo de la captura; es el estado del sistema
-el dia que se construye el esqueleto, y es la linea base contra la que se mide cada
-adaptador que se escriba despues.
+QUE HACE, EXACTAMENTE
+---------------------
+Registra los adaptadores escritos (`connect_adapters`), recorre el catalogo, resuelve que
+entidades le tocan a cada fuente y archiva lo que devuelva. El informe publica las tres
+cifras que importan: declaradas, conectadas y con error. Que registrar sea un paso de la
+CAPTURA y no del import del catalogo es deliberado —importar una lista de declaraciones no
+puede abrir clientes HTTP— pero tiene que ser automatico: una captura que archivara cero
+por haber olvidado registrar diria "todo correcto, 0 registros", que es el peor informe
+posible.
+
+Y captura una VENTANA, no la historia entera: ver `CAPTURE_WINDOW_DAYS`.
 
 FALLA ABIERTA, FUENTE A FUENTE
 ------------------------------
@@ -33,7 +36,7 @@ import json
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from ai_trader.shared.clock import utc_now
@@ -48,6 +51,19 @@ logger = logging.getLogger(__name__)
 # se archivo y que no: es lo que permite, dentro de seis meses, saber si el hueco de una
 # serie fue un proveedor caido o una fuente que nunca se conecto.
 CAPTURE_REPORT = Path("data") / "signals" / "capture_report.json"
+
+# Dias hacia atras que pide una captura cuando nadie dice otra cosa.
+#
+# NO es una preferencia: la mitad de estas fuentes devuelven su historia COMPLETA en cada
+# llamada (DefiLlama manda 2.800 puntos por serie), y el archivo es append-only y no se
+# poda. Sin ventana, la captura de manana volveria a archivar entera la historia de hoy y el
+# archivo crecería megas al dia sin un solo dato nuevo dentro.
+#
+# Treinta dias y no uno porque las fuentes `archive_revisable` corrigen hacia atras: el
+# solape es lo que recoge esas revisiones, y comparar las dos lineas del mismo dia —cada una
+# con su `fetched_at`— es lo unico que permite medir cuanto revisa un proveedor. El backfill
+# completo es otra operacion, explicita: `signals depth`.
+CAPTURE_WINDOW_DAYS = 30
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,6 +165,20 @@ def entities_for(source: SignalSource, symbols: Sequence[str] = ()) -> tuple[str
     return tuple(out)
 
 
+def connect_adapters() -> tuple[str, ...]:
+    """
+    Da de alta los adaptadores escritos. Es el punto —el unico— en que el registro deja de
+    estar vacio.
+
+    Se llama al arrancar una captura y no al importar el catalogo: importar una lista de
+    declaraciones no puede tener como efecto que existan clientes HTTP, y el import de
+    `signals/adapters/` arrastra `ccxt` y compania. Es idempotente.
+    """
+    from ai_trader.signals.adapters import register_all
+
+    return register_all()
+
+
 def capture(
     symbols: Sequence[str] = (),
     *,
@@ -165,9 +195,13 @@ def capture(
     entra en un backtest es cosa de `history_from` y del consumidor, no de la captura —
     tirar hoy un dato porque hoy no sirve es la unica decision aqui que seria irreversible.
     """
+    connect_adapters()
     archive = store if store is not None else SignalStore()
     catalog = tuple(sources) if sources is not None else CATALOG
     started = utc_now()
+    # La ventana por defecto (ver CAPTURE_WINDOW_DAYS). Quien quiera el backfill entero lo
+    # pide a mano, que es justo lo que hace la sonda de profundidad.
+    window_start = start if start is not None else started - timedelta(days=CAPTURE_WINDOW_DAYS)
 
     results: list[SourceCapture] = []
     for source in catalog:
@@ -183,7 +217,7 @@ def capture(
             continue
 
         try:
-            records = adapter.fetch_raw(targets, start, end)
+            records = adapter.fetch_raw(targets, window_start, end)
             written = archive.append(source.key, records)
             logger.info("· %s: %s registros archivados", source.key, written)
             results.append(
@@ -228,9 +262,11 @@ def load_capture_report(path: Path | str = CAPTURE_REPORT) -> dict | None:
 
 __all__ = [
     "CAPTURE_REPORT",
+    "CAPTURE_WINDOW_DAYS",
     "CaptureReport",
     "SourceCapture",
     "capture",
+    "connect_adapters",
     "entities_for",
     "load_capture_report",
     "write_capture_report",

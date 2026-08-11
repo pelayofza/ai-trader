@@ -36,7 +36,8 @@ backtest/engine.py      Conduce el runner real sobre histórico; corre planes de
 backtest/validation.py  Geometría temporal: walk-forward, CPCV, purga, embargo, auditoría.
 scoring/multiwindow.py  Agrega las ventanas de una muestra en una distribución robusta.
 scoring/transfer_study.py  ¿Ordena el mundo sintético las estrategias como el real?
-signals/                Ingesta de señales externas: catálogo, puerto, archivo, auditoría.
+signals/                Ingesta de señales externas: catálogo, puerto, adaptadores,
+                        archivo, captura, sonda de profundidad y normalización.
 notifications/          Canal hacia el humano (Telegram) desacoplado del núcleo.
 data/                   Proveedores (Alpaca, CCXT, Polymarket) + caché parquet.
 shared/                 Vocabulario común + `clock.py`, la costura para el backtest.
@@ -363,23 +364,48 @@ en §3.3 de la documentación; se reproduce con:
 .venv\Scripts\python.exe -m ai_trader.backtest.session_study --offline  # solo caché
 ```
 
-### Señales externas: el esqueleto (17 declaradas, 0 conectadas)
+### Señales externas: 17 declaradas, 11 conectadas, 7 backtesteables
 
 Las estrategias solo ven **precio y volumen**. El único canal de contexto es el bloque de régimen,
-construido sobre las propias barras: no hay ninguna fuente externa a OHLCV en todo `src/`.
-`signals/` es el sitio donde enchufarlas, construido **sin conectar ninguna**: 17 fuentes
-declaradas que producirían 44 features, **0 con adaptador** y **0 backtesteables**.
+construido sobre las propias barras. `signals/` es el sitio donde enchufar fuentes externas, y el
+primer lote **continuo** (Tier B: entran como features, nunca como vetos) ya está conectado: 17
+fuentes declaradas que producen 45 features, **11 con adaptador**, **9 con profundidad medida** y
+**7 backtesteables**.
 
-Que esa última cifra sea 0 es el diseño, no un hueco. Cada fuente declara `history_from` —la
-primera fecha con dato **comprobado por nosotros**, no la que promete el proveedor— y `pit`
-(*forward_capture* / *archive_revisable* / *derived_from_price*). Ninguna tiene todavía una fecha
-medida, así que ninguna puede entrar en un backtest, y lo que el proveedor anuncia vive en las notas
-del catálogo en prosa, donde ningún código puede confundirlo con una medición.
+Que las tres cifras no coincidan es el contenido, no un hueco. Cada fuente declara `history_from`
+—la primera fecha con dato **comprobado por nosotros**— y `pit` (*forward_capture* /
+*archive_revisable* / *derived_from_price*). Esa comprobación es una operación explícita: la sonda
+descarga la serie, la deriva con el adaptador real y escribe lo que encuentra en
+`data/signals/history_depth.json`; el catálogo solo puede declarar lo que ese registro respalda **y con al
+menos un año medido** (por eso 9 medidas y 7 declarables: la prima P2P y la dispersión de funding
+tienen medición de un día, que es el día que arrancó la captura) — y un test lo verifica. Las que siguen sin fecha lo están por tres motivos
+distintos que conviene no confundir: falta la credencial (Guavy, FRED), la cuota del proveedor se
+agotó (GitHub) o la fuente **no tiene pasado que descargar** y su profundidad la compra el
+calendario (P2P, dispersión de funding).
 
-**La captura arranca ya, antes que los adaptadores.** 6 de las 17 fuentes son *forward capture*:
-nadie publica el pasado de una cola de staking, de un libro P2P ni de la lista SDN de hace tres
-meses. Para ésas la profundidad histórica no depende de escribir mejor código después, sino del
-calendario. Cada día sin capturar es profundidad que no se recupera.
+| fuente | desde (medido) | qué aporta |
+|---|---|---|
+| `defillama_fees` | 2011-01-31 | comisiones, ingresos y TVL por protocolo o cadena → P/F y P/S |
+| `defillama_volumes` | 2017-08-17 | volumen DEX (DefiLlama) contra CEX (CCXT): dónde se forma el precio |
+| `defillama_stablecoins` | 2017-11-29 | oferta por cadena: pólvora seca y rotación entre ecosistemas |
+| `wikipedia_pageviews` | 2015-07-01 | atención **por idioma**: descomposición geográfica barata |
+| `cftc_cot` | 2018-04-13 | posicionamiento CME por categoría, fechado el día que se **publica** |
+| `etf_flows` | 2024-01-11 | flujos de ETF spot **por emisor** (TFTC, CC BY 4.0) |
+| `github_activity` | 2009-08-23 | commits diarios y contribuidores únicos (asimétrica: la fecha
+la alcanza *contributors*; *commits* solo trae 52 semanas por captura) |
+
+**Toda feature se publica normalizada, con dos varas** (`signals/normalize.py`): `<feature>_z` es la
+z contra la propia historia de la entidad (expansiva y **causal**, mínimo 20 observaciones) y
+`<feature>_x` la z contra la sección cruzada del día (mínimo 5 entidades). Centro mediana, escala
+IQR/1.349 —con media y sigma, un día extremo apaga la señal justo cuando empieza a pasar algo—,
+recorte declarado a **±4** y huecos a **NaN**, nunca a 0: un 0 diría «normal, en la media», que es
+una afirmación que no se ha observado. La primera no existe para un listado nuevo; la segunda sí,
+desde el primer día, y por eso hacen falta las dos.
+
+**La captura arranca antes que los adaptadores.** 6 de las 17 fuentes son *forward capture*: nadie
+publica el pasado de una cola de staking, de un libro P2P ni de la lista SDN de hace tres meses.
+Para ésas la profundidad histórica no depende de escribir mejor código después, sino del calendario.
+Cada día sin capturar es profundidad que no se recupera.
 
 Cuatro decisiones que se pagan caras si se toman al revés:
 
@@ -400,11 +426,21 @@ Cuatro decisiones que se pagan caras si se toman al revés:
   procedencia (`rule` / `override` / `unmapped`) para que el cruce sea auditable. Sobre el universo
   configurado: 24 símbolos → 24 entidades, **100 % por regla, 0 overrides**.
 
+Lo que la medición destapó y no estaba en ningún folleto: el **COT se conoce tres días después de su
+fecha** (se archiva por día de publicación; fecharlo el martes metería tres días de futuro en
+cualquier cruce), el sello de *funding* de CCXT es el **próximo cobro** y habría fechado
+observaciones en el futuro, un único *slug* con 400 se llevaba por delante las otras 23 series de su
+fuente, Wikimedia contesta 403 al User-Agent genérico y 429 en cuanto hay prisa, TFTC publica los
+ETF de BTC pero no los de ETH, y FRED ya no sirve oro. Ninguno de esos huecos se rellena con un
+sustituto que significaría otra cosa: se declara y aparece como cobertura cero.
+
 Nada está cableado a las estrategias ni al runner.
 
 ```powershell
 .venv\Scripts\python.exe -m ai_trader.cli signals catalog   # las 17 fuentes declaradas
-.venv\Scripts\python.exe -m ai_trader.cli signals capture   # archiva lo que haya (hoy, nada)
+.venv\Scripts\python.exe -m ai_trader.cli signals capture   # archiva lo que devuelvan hoy
+.venv\Scripts\python.exe -m ai_trader.cli signals depth     # MIDE la profundidad y compara con lo declarado
+.venv\Scripts\python.exe -m ai_trader.cli signals features  # panel normalizado desde el archivo (sin red)
 .venv\Scripts\python.exe -m ai_trader.cli signals audit     # cobertura de entidades y archivo
 ```
 

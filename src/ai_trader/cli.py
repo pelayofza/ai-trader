@@ -332,6 +332,86 @@ def cmd_signals_audit(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_signals_depth(args: argparse.Namespace) -> int:
+    """MIDE la profundidad de cada fuente. Es lo unico que da derecho a escribir un
+    `history_from` en el catalogo, y deja la evidencia en data/signals/history_depth.json."""
+    import json
+
+    from ai_trader.signals.catalog import get_source
+    from ai_trader.signals.depth import declared_vs_measured, measure_depth
+
+    config = load_config(args.config)
+    sources = [get_source(args.source)] if args.source else None
+    report = measure_depth(config.runner.symbols, sources=sources, from_archive=args.from_archive)
+
+    if args.json:
+        print(json.dumps(report.as_dict(), indent=2))
+        return 0
+
+    print(f"=== PROFUNDIDAD MEDIDA | {report.n_measured}/{len(report.sources)} fuentes ===")
+    for item in report.sources:
+        state = item.error[:38] if item.error else f"{item.days:>6} dias, {len(item.entities)} ent."
+        print(f"  {item.source_key:<24} {item.method:<9} {str(item.first_day):<12} {state}")
+
+    mismatches = {
+        key: row
+        for key, row in declared_vs_measured().items()
+        if row["matches"] is False or (row["declared"] and not row["measured"])
+    }
+    print()
+    if mismatches:
+        print("  DESAJUSTES entre lo declarado y lo medido:")
+        for key, row in mismatches.items():
+            print(f"    {key:<24} declarado {row['declared']} != medido {row['measured']}")
+    else:
+        print("  Lo declarado en el catalogo coincide con lo medido.")
+    return 0
+
+
+def cmd_signals_features(args: argparse.Namespace) -> int:
+    """Deriva el archivo crudo y publica el panel NORMALIZADO. No toca red."""
+    import json
+
+    from ai_trader.signals.capture import connect_adapters
+    from ai_trader.signals.catalog import CATALOG, get_source
+    from ai_trader.signals.normalize import normalization_coverage, normalization_spec, panel
+    from ai_trader.signals.source import build_adapter
+    from ai_trader.signals.store import SignalStore
+
+    connect_adapters()
+    store = SignalStore()
+    sources = [get_source(args.source)] if args.source else list(CATALOG)
+
+    frames = {}
+    for source in sources:
+        adapter = build_adapter(source)
+        records = store.read(source.key) if adapter is not None else []
+        if adapter is None or not records:
+            continue
+        frames[source.key] = adapter.daily_from_raw(records)
+
+    wide = panel(frames)
+    coverage = normalization_coverage(wide)
+
+    if args.json:
+        print(json.dumps({"coverage": coverage, "spec": normalization_spec()}, indent=2))
+        return 0
+
+    print(f"=== PANEL NORMALIZADO | {len(frames)} fuentes derivadas ===")
+    for key, frame in sorted(frames.items()):
+        days = frame.index.get_level_values("day")
+        span = f"{days.min().date()} -> {days.max().date()}" if len(frame) else "vacio"
+        print(f"  {key:<24} {len(frame):>7} filas  {span}")
+    print()
+    print(f"  Panel: {coverage['rows']} filas x {coverage['columns']} columnas "
+          f"({coverage.get('entities', 0)} entidades)")
+    print(f"  Cobertura z propia: {coverage['self_pct']:.1f}%   "
+          f"transversal: {coverage['cross_pct']:.1f}%")
+    print(f"  Politica: mediana / IQR-1.349, recorte +-{normalization_spec()['clip']}, "
+          f"huecos a NaN (no a 0)")
+    return 0
+
+
 def _print_window(title, window) -> None:
     m = window.metrics
     print(f"=== {title} | {window.start.date()} -> {window.end.date()} ===")
@@ -494,6 +574,25 @@ def main(argv: list[str] | None = None) -> int:
     aud = signals_sub.add_parser("audit", help="Cobertura de entidades y del archivo crudo.")
     aud.add_argument("--json", action="store_true", help="Emit the audit as JSON.")
 
+    dep = signals_sub.add_parser(
+        "depth",
+        help="MIDE desde cuando hay dato de verdad y escribe el registro de mediciones.",
+    )
+    dep.add_argument("--json", action="store_true", help="Emit the ledger as JSON.")
+    dep.add_argument(
+        "--from-archive",
+        action="store_true",
+        help="No toca red: mide sobre lo ya archivado (unica opcion en forward_capture).",
+    )
+    dep.add_argument("--source", default=None, help="Medir solo esta fuente del catalogo.")
+
+    feat = signals_sub.add_parser(
+        "features",
+        help="Publica el panel NORMALIZADO (z propia + z transversal) desde el archivo.",
+    )
+    feat.add_argument("--json", action="store_true", help="Emit the coverage summary as JSON.")
+    feat.add_argument("--source", default=None, help="Publicar solo esta fuente del catalogo.")
+
     report_parser = sub.add_parser("report", help="Print reports without running a cycle.")
     report_parser.add_argument(
         "which",
@@ -517,6 +616,8 @@ def main(argv: list[str] | None = None) -> int:
             "catalog": cmd_signals_catalog,
             "capture": cmd_signals_capture,
             "audit": cmd_signals_audit,
+            "depth": cmd_signals_depth,
+            "features": cmd_signals_features,
         }
         return signal_handlers[args.signals_command](args)
 

@@ -1803,34 +1803,43 @@ const PIT_NOTE={forward_capture:'nadie publica su pasado: lo que no se capture h
 function renderSignals(){
   const host=$('#signals'),S=D.signals_platform;
   if(!S){host.innerHTML='<h1>Señales externas</h1><div class="card"><p class="tag">Sin datos.</p></div>';return;}
-  const M=S.summary,E=S.entities,A=S.archive,C=S.capture;
+  const M=S.summary,E=S.entities,A=S.archive,C=S.capture,N=S.normalization;
   const nConn=S.sources.filter(s=>s.connected).length;
+  const measured=S.sources.filter(s=>s.measured_from);
   const fwd=M.by_pit.forward_capture;
+  const deepest=measured.slice().sort((a,b)=>(a.measured_from<b.measured_from?-1:1))[0];
   const tiles=[
     ['Fuentes declaradas',M.n_sources,`${M.by_tier.A} mecánicas (A) · ${M.by_tier.B} estadísticas (B)`],
-    ['Features que producirían',M.n_features,'nombres únicos en todo el catálogo, verificado por test'],
-    ['Backtesteables hoy',M.n_backtestable+'/'+M.n_sources,'ninguna tiene history_from MEDIDO'],
-    ['Con adaptador',nConn+'/'+M.n_sources,'esta tarea construye el esqueleto, no conecta fuentes'],
+    ['Con adaptador',nConn+'/'+M.n_sources,'las '+M.by_tier.B+' continuas (Tier B); las mecánicas van por otra puerta'],
+    ['Con profundidad MEDIDA',measured.length+'/'+M.n_sources,
+      deepest?`la más honda arranca en ${deepest.measured_from} (${esc(deepest.key)})`:'sin medición todavía'],
+    ['Backtesteables hoy',M.n_backtestable+'/'+M.n_sources,'solo las que la sonda pudo medir'],
     ['Cobertura de entidades',fmt(E.coverage_pct,0)+'%',
       `${E.by_source.rule} por regla · ${E.by_source.override} overrides · ${E.by_source.unmapped} sin resolver`],
-    ['Registros archivados',A.records.toLocaleString('es'),'el archivo empieza vacío: es el día cero'],
+    ['Registros archivados',A.records.toLocaleString('es'),'crudo, append-only, con su fetched_at'],
   ];
   host.innerHTML=`
-    <h1>Señales externas: el esqueleto, y lo que aún no es</h1>
-    <p class="lead">Hoy las estrategias solo ven <b>precio y volumen</b>. El único canal de contexto que
-      existe es el régimen, construido sobre las propias barras. Esta pieza no conecta ninguna fuente:
-      construye el sitio donde enchufarlas para que <b>la fuente N+1 cueste casi cero</b> —un adaptador,
-      una entrada de catálogo y un test— y para que el archivo empiece a tener fondo <i>ya</i>.</p>
+    <h1>Señales externas: once fuentes conectadas y su profundidad medida</h1>
+    <p class="lead">Hoy las estrategias solo ven <b>precio y volumen</b>. Sobre el esqueleto ya construido
+      —catálogo, puerto de dos capas, archivo crudo, captura, auditoría— este paso conecta el primer lote
+      de fuentes <b>continuas</b> (Tier B: entran como features, nunca como vetos) y mide lo único que
+      decide si sirven para algo: <b>desde cuándo hay dato de verdad</b>. Sigue sin cablearse nada a
+      ninguna estrategia.</p>
     <div class="grid tiles">${tiles.map(t=>`<div class="card tile"><div class="k">${t[0]}</div>
       <div class="v">${t[1]}</div><div class="s">${t[2]}</div></div>`).join('')}</div>
 
-    <div class="note"><b>Los dos campos que hacen honesto el catálogo.</b>
-      <span class="mono">history_from</span> es la primera fecha con dato <b>comprobado por nosotros</b>,
-      no la que anuncia el proveedor: arranca en <i>None</i> en las ${M.n_sources} fuentes, y <i>None</i>
-      significa <b>solo hacia adelante</b>. <span class="mono">pit</span> dice si esa historia, cuando la
-      haya, vale para backtest. Juntos contestan la única pregunta que importa antes de puntuar nada:
-      qué fuentes pueden entrar en un backtest y cuáles solo en vivo. La respuesta medida hoy es
-      <b>ninguna</b>, y aparece aquí en vez de esconderse.</div>
+    <div class="note"><b>El día cero decía «0 conectadas, 0 backtesteables».</b> Hoy dice
+      <b>${nConn} conectadas</b>, <b>${measured.length} medidas</b> y <b>${M.n_backtestable}
+      backtesteables</b>, y que las tres cifras no coincidan es el contenido. Tener adaptador no es
+      tener historia: <span class="mono">history_from</span> solo se escribe en el catálogo cuando la
+      sonda (<span class="mono">ai-trader signals depth</span>) descarga la serie, la deriva con el
+      adaptador de verdad y apunta la fecha en
+      <span class="mono">data/signals/history_depth.json</span>${S.depth_measured_at?` (última medición:
+      ${esc(S.depth_measured_at)})`:''}. Y tener medición tampoco basta: hace falta <b>al menos un año
+      medido</b>, porque en una fuente <i>forward capture</i> el primer día con dato es sencillamente
+      el día que arrancó la captura, y declararlo pondría «backtesteable» en una serie de un día. Un
+      test compara las tres cosas y falla si alguien declara una fecha que el registro no respalda: la
+      honestidad deja de depender de que nadie se despiste.</div>
 
     <h2>Por qué la captura se arranca antes que los adaptadores</h2>
     <p class="lead"><b>${fwd} de las ${M.n_sources}</b> fuentes son <span class="mono">forward_capture</span>:
@@ -1848,22 +1857,29 @@ function renderSignals(){
       optimizador, porque un CEM suelto sobre catorce observaciones construye una estrategia preciosa y
       falsa. El tier <b>B</b> son series continuas con efectos pequeños y decadentes: entra como features.</p>
     <div class="card"><div class="tblwrap"><table>
-      <thead><tr><th>fuente</th><th>tier</th><th>alcance</th><th>cadencia</th><th>point-in-time</th>
-        <th class="num">features</th><th class="num">entidades</th><th>historia</th><th>acceso</th></tr></thead>
+      <thead><tr><th>fuente</th><th>tier</th><th>point-in-time</th>
+        <th class="num">features</th><th class="num">ent.</th><th>declarada</th><th>MEDIDA</th>
+        <th class="num">días</th><th class="num">registros</th><th>acceso</th></tr></thead>
       <tbody>${S.sources.map(s=>`<tr>
-        <td><b>${esc(s.title)}</b><div class="tag mono">${esc(s.key)}</div></td>
-        <td><span class="chip ${s.tier==='A'?'critica':'bajo'}">${s.tier}</span></td>
-        <td>${esc(s.scope)}</td><td>${esc(s.cadence)}</td>
+        <td><b>${esc(s.title)}</b><div class="tag mono">${esc(s.key)} · ${esc(s.scope)} · ${esc(s.cadence)}</div></td>
+        <td><span class="chip ${s.tier==='A'?'critica':'bajo'}">${s.tier}</span>
+          ${s.connected?'<div class="tag">conectada</div>':'<div class="tag">sin adaptador</div>'}</td>
         <td>${esc(PIT_LABEL[s.pit]||s.pit)}<div class="tag">${esc(PIT_NOTE[s.pit]||'')}</div></td>
         <td class="num">${s.features.length}</td>
         <td class="num">${s.n_entities}</td>
         <td>${s.history_from?esc(s.history_from):'<span class="chip pend">sin medir</span>'}</td>
+        <td>${s.measured_from?`${esc(s.measured_from)}<div class="tag">${esc(s.measure_method||'')} · ${s.measured_entities} ent.</div>`
+          :`<span class="chip pend">—</span>${s.measure_error?`<div class="tag">${esc(String(s.measure_error).slice(0,60))}</div>`:''}`}</td>
+        <td class="num">${s.measured_days?s.measured_days.toLocaleString('es'):'·'}</td>
+        <td class="num">${s.archived_records?s.archived_records.toLocaleString('es'):'·'}</td>
         <td class="tag">${s.auth_env?esc(s.auth_env):'abierta'}</td></tr>`).join('')}
       </tbody></table></div>
-      <p class="tag">La columna <b>entidades</b> es lo que se le pediría hoy a cada fuente con el universo
-        configurado: por activo sale del universo, las de cadena y macro las declara el catálogo, y las de
-        mercado tienen una sola. Lo que el proveedor promete de profundidad vive en las notas del catálogo
-        <i>en prosa</i>, para que ningún código pueda confundir una promesa con una medición.</p></div>
+      <p class="tag"><b>Declarada</b> es lo que dice el catálogo y <b>medida</b> lo que devolvió el
+        proveedor al sondearlo; tienen que coincidir y hay un test que lo exige. Un guion en la columna
+        medida no significa «no hay historia»: significa que no se pudo medir, y el motivo está al lado
+        —una credencial que falta, una cuota agotada—. Las fuentes
+        <span class="mono">forward_capture</span> miden lo que llevan capturado, que arranca en cero por
+        definición y crece un día por día real.</p></div>
 
     <h2>Símbolo → entidad: una regla, y una tabla que arranca vacía</h2>
     <p class="lead">Las fuentes externas no hablan en símbolos de mercado. La clave común se deriva con una
@@ -1916,10 +1932,69 @@ function renderSignals(){
           neutralidad.</p></div>
     </div>
 
+    <h2>Toda feature se publica normalizada, y con dos varas de medir</h2>
+    <p class="lead">Las once fuentes producen números que no se pueden ni sumar ni comparar: 90.000
+      millones de oferta de stablecoins, 3,4 puntos básicos de dispersión de funding, 23.000 visitas, una
+      prima del 12%, 47 commits. Y comparar <i>entre activos</i> es peor: BTC tiene 23.000 visitas y SEI
+      40, lo cual no dice nada sobre cuál está recibiendo atención <b>inusual</b>. Por eso nada sale de la
+      ingesta en crudo.</p>
+    <div class="grid cards">
+      <div class="card"><h3><span class="mono">&lt;feature&gt;${esc(N.suffix_self)}</span> · contra su propia historia</h3>
+        <p class="lead" style="margin:8px 0">Ventana <b>expansiva y causal</b> (hasta el día <i>t</i>
+          incluido, jamás futuro). Responde: <i>¿esto es alto para este activo?</i> Necesita al menos
+          <b>${N.min_history}</b> observaciones propias, así que un listado nuevo no la tiene.</p></div>
+      <div class="card"><h3><span class="mono">&lt;feature&gt;${esc(N.suffix_cross)}</span> · contra la sección cruzada del día</h3>
+        <p class="lead" style="margin:8px 0">Responde: <i>¿esto es alto hoy, comparado con los demás?</i>
+          Exige <b>${N.min_cross_section}</b> entidades con dato ese día. Es la que <b>sí</b> funciona
+          desde el primer día de un listado nuevo, y por eso hacen falta las dos.</p></div>
+      <div class="card"><h3>Mediana e IQR, no media y desviación típica</h3>
+        <p class="lead" style="margin:8px 0">Estas series tienen colas gruesas por construcción: un hack,
+          un unlock, un pico de menciones. Con media y sigma, <b>un</b> día extremo infla la escala y
+          aplasta todo lo que viene después —la señal se apaga justo cuando empieza a pasar algo—. Con
+          <span class="mono">${esc(N.scale)}</span> el mismo día se sale de rango sin mover la vara.</p></div>
+      <div class="card"><h3>Recorte declarado y huecos a NaN</h3>
+        <p class="lead" style="margin:8px 0">Todo se recorta a <b>±${N.clip}</b>, un número publicado y no
+          escondido en el código: una z de 300 no es una señal fortísima, es una división por casi cero.
+          Y lo que no se puede calcular queda en <b>NaN</b>, nunca en 0: un cero diría «normal, en la
+          media», que es una afirmación sobre el mundo que no se ha observado.</p></div>
+    </div>
+
+    <h2>Lo que se aprendió midiendo (y que no estaba en ningún folleto)</h2>
+    <div class="card"><div class="tblwrap"><table>
+      <thead><tr><th>hallazgo</th><th>qué cambió</th></tr></thead><tbody>
+      ${S.etf_dispersion&&S.etf_dispersion.days?`<tr><td><b>Bajar al emisor no es un adorno</b></td>
+        <td>Sobre los ${S.etf_dispersion.days} días de flujos de ETF: la dispersión
+          bruto/|neto| tiene mediana <b>${fmt(S.etf_dispersion.median,2)}</b> —casi todos los días son
+          flujo neto puro— y percentil 95 de <b>${fmt(S.etf_dispersion.p95,1)}</b>, con
+          <b>${S.etf_dispersion.rotation_days}</b> días por encima de 3. Esos son días en los que unos
+          emisores entran mientras otros salen y el agregado, que es la cifra que publica todo el
+          mundo, marca poco o nada.</td></tr>`:''}
+      <tr><td><b>El COT se conoce tres días después de su fecha</b></td>
+        <td>La foto es del martes y se publica el viernes. La serie se archiva con el día de
+          <b>publicación</b>, no el de referencia: fecharla el martes metería tres días de futuro en
+          cualquier cruce, y el recorte por día de observación no puede verlo.</td></tr>
+      <tr><td><b>El sello de funding de CCXT es el próximo cobro, no la observación</b></td>
+        <td>Se descubrió porque la sonda devolvió una serie que empezaba <i>mañana</i>. El sello sigue
+          usándose para agrupar venues en la misma ventana; el día sale de la observación.</td></tr>
+      <tr><td><b>Un slug con 400 se llevó por delante otras 23 series</b></td>
+        <td>Una llamada rechazada ya no tumba a las demás de su fuente, igual que una fuente caída no
+          tumba la captura. El TVL de una cadena vive en otro endpoint que el de un protocolo.</td></tr>
+      <tr><td><b>Wikimedia contesta 403 al User-Agent genérico y 429 en cuanto hay prisa</b></td>
+        <td>Adaptador secuencial, pausa de 5 s y reintento largo. Con seis idiomas y quince artículos el
+          barrido tarda minutos: una fuente diaria puede permitírselo.</td></tr>
+      <tr><td><b>TFTC publica los ETF de BTC, no los de ETH</b></td>
+        <td>ETH se queda sin cobertura por esta puerta en vez de rellenarse con un agregado sin desglose,
+          que haría que la dispersión entre emisores significase otra cosa según el activo.</td></tr>
+      <tr><td><b>FRED discontinuó las series de oro de la LBMA</b></td>
+        <td>El factor COMMODITY se cubre con WTI. Declarar el id del oro «porque siempre estuvo» habría
+          dejado una serie que falla en silencio en cada captura.</td></tr>
+      </tbody></table></div></div>
+
     <div class="note"><b>Nada de esto está cableado todavía.</b> Ni a las estrategias, ni al runner, ni al
-      espacio de búsqueda del optimizador. El catálogo declara, la captura archiva y la auditoría mide;
-      cablearlo es el paso siguiente y tiene su propia compuerta: con las puertas neutras, la validación
-      multiventana tiene que devolver <b>exactamente</b> los scores ya publicados.</div>`;
+      espacio de búsqueda del optimizador. El catálogo declara, la captura archiva, la sonda mide y la
+      normalización publica; cablearlo es el paso siguiente y tiene su propia compuerta: con las puertas
+      neutras, la validación multiventana tiene que devolver <b>exactamente</b> los scores ya
+      publicados.</div>`;
 }
 
 function main(){

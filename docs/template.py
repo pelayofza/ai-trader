@@ -103,50 +103,87 @@ PIT_LABEL = {
 
 
 def _signals_block(s):
-    """Seccion 4.3: el esqueleto de ingesta de senales externas.
+    """Seccion 4.3: la plataforma de ingesta de senales externas.
 
     Va en §4, pegada al espacio de observacion, porque es de lo que trata: de ampliarlo.
-    Y va con las cifras a cero por delante —0 conectadas, 0 backtesteables— porque esa es
-    la medicion, y una seccion que describiera la plataforma sin decir que aun no ingiere
-    nada seria una promesa disfrazada de documentacion."""
+    Y va con las dos cifras juntas por delante —cuantas conectadas y cuantas con
+    profundidad MEDIDA— porque la diferencia entre las dos es el contenido: tener
+    adaptador no es tener historia, y solo lo segundo permite backtestear."""
     if not s:
         return ""
 
-    m, e = s["summary"], s["entities"]
+    m, e, n = s["summary"], s["entities"], s["normalization"]
     rows = [
-        (key, tier, scope, cadence, PIT_LABEL.get(pit, pit), nf, hist)
-        for key, tier, scope, cadence, pit, nf, hist in s["rows"]
+        (key, tier, PIT_LABEL.get(pit, pit), nf, conn, hist, measured, days)
+        for key, tier, pit, nf, conn, hist, measured, days in s["rows"]
     ]
     table = _rows(
         rows,
-        ["Fuente", "Tier", "Alcance", "Cadencia", "Point-in-time", "Features", "Historia medida"],
+        ["Fuente", "Tier", "Point-in-time", "Features", "Adaptador", "Declarada",
+         "MEDIDA", "Días"],
     )
     return f"""
-<h3>4.3 · Señales externas: el esqueleto de ingesta (y lo que todavía no es)</h3>
+<h3>4.3 · Señales externas: la plataforma de ingesta y su profundidad medida</h3>
 <p>Todo lo anterior se calcula sobre <b>precio y volumen</b>. El único canal de contexto que existe hoy es
-el bloque de régimen de §4.2, y está construido sobre las propias barras: el sistema no tiene ninguna
-fuente de datos externa a OHLCV. La plataforma de ingesta existe para ampliar ese espacio, y está
-construida <b>sin conectar ninguna fuente</b>: el catálogo declara {m['n_sources']} fuentes que producirían
-{m['n_features']} features, de las cuales <b>{s['n_connected']} tienen adaptador</b> y
-<b>{m['n_backtestable']} pueden entrar en un backtest</b>.</p>
+el bloque de régimen de §4.2, y está construido sobre las propias barras: el sistema no tenía ninguna
+fuente de datos externa a OHLCV. El catálogo declara {m['n_sources']} fuentes que producirían
+{m['n_features']} features; de ellas <b>{s['n_connected']} tienen adaptador</b> —el lote continuo, tier B—,
+<b>{s['n_measured']} tienen profundidad medida</b> y <b>{m['n_backtestable']} pueden entrar en un
+backtest</b>. Que las tres cifras no coincidan es el punto: tener adaptador no es tener historia, y tener
+historia solo cuenta si se ha comprobado.</p>
 
 <div class="why"><b>Por qué el esqueleto antes que las fuentes.</b> El valor no está en conectar
 <i>una</i> fuente, está en que la fuente N+1 cueste casi cero: un adaptador, una entrada de catálogo y un
-test. Si añadir la décima obligara a tocar el runner o las estrategias, el diseño habría fallado. Y hay un
-motivo para arrancar la captura aunque nada esté cableado: <b>{m['by_pit']['forward_capture']} de las
-{m['n_sources']}</b> fuentes son <i>forward capture</i> —nadie publica su pasado—, así que su profundidad
-histórica no depende de escribir mejor código después sino del calendario. Cada día sin capturar es
-profundidad que no se recupera.</div>
+test. Las once del primer lote comparten puerto, archivo, esquema, normalización y sonda; ninguna toca el
+runner ni las estrategias. Y hay un motivo para arrancar la captura aunque nada esté cableado:
+<b>{m['by_pit']['forward_capture']} de las {m['n_sources']}</b> fuentes son <i>forward capture</i> —nadie
+publica su pasado—, así que su profundidad histórica no depende de escribir mejor código después sino del
+calendario. Cada día sin capturar es profundidad que no se recupera.</div>
 
 <p>Dos campos del catálogo sostienen la honestidad del resto. <span class="mono">history_from</span> es la
-primera fecha con dato <b>comprobado por nosotros</b>, no la que anuncia el proveedor: arranca vacío en las
-{m['n_sources']} fuentes, y vacío significa <i>solo hacia adelante</i>. <span class="mono">pit</span> dice
-de qué naturaleza es esa historia —capturada en vivo, backfill revisable o derivada del precio—. Juntos
-contestan la única pregunta que hay que responder antes de puntuar nada: qué fuentes pueden participar en
-un backtest y cuáles solo en vivo. Lo que el proveedor promete vive en las notas del catálogo, en prosa,
-donde ningún código puede confundirlo con una medición.</p>
+primera fecha con dato <b>comprobado por nosotros</b>, no la que anuncia el proveedor. Esa comprobación es
+una operación explícita —<span class="mono">ai&#8209;trader signals depth</span>— que descarga la serie, la
+deriva con el adaptador real y escribe lo que encuentra en
+<span class="mono">data/signals/history_depth.json</span> (última medición: {s['depth_measured_at']}); el
+catálogo solo puede declarar lo que ese registro respalda, y un test lo verifica.
+<span class="mono">pit</span> dice de qué naturaleza es esa historia —capturada en vivo, backfill revisable
+o derivada del precio—. Juntos contestan la única pregunta que hay que responder antes de puntuar nada:
+qué fuentes pueden participar en un backtest y cuáles solo en vivo.</p>
 
 {table}
+
+<h4>Toda feature se publica normalizada, con dos varas de medir</h4>
+<p>Las fuentes producen magnitudes que no se pueden ni sumar ni comparar: miles de millones de oferta de
+<i>stablecoins</i>, puntos básicos de dispersión de <i>funding</i>, visitas, primas porcentuales, commits.
+Y la comparación entre activos es peor: que BTC tenga 23.000 visitas y SEI 40 no dice nada sobre cuál está
+recibiendo atención <b>inusual</b>. Por eso nada sale de la ingesta en crudo, y sale con
+<b>dos</b> normalizaciones y no con una: <span class="mono">&lt;feature&gt;{n['suffix_self']}</span> es la
+z contra la <b>propia historia</b> de la entidad —ventana expansiva y causal, hasta el día <i>t</i>
+incluido, con un mínimo de {n['min_history']} observaciones— y
+<span class="mono">&lt;feature&gt;{n['suffix_cross']}</span> es la z contra la <b>sección cruzada</b> del
+día, con un mínimo de {n['min_cross_section']} entidades. La primera no existe para un listado nuevo; la
+segunda sí, desde el primer día. El centro es la mediana y la escala <span class="mono">{n['scale']}</span>
+—con media y desviación típica, un solo día extremo infla la escala y apaga la señal justo cuando empieza
+a pasar algo—, todo recortado a <b>±{n['clip']}</b>, un umbral declarado y no escondido. Lo que no se puede
+calcular queda en <b>NaN</b>: un 0 diría «normal, en la media», que es una afirmación sobre el mundo que no
+se ha observado.</p>
+
+<h4>Lo que la medición destapó, y que ningún folleto decía</h4>
+<ul>
+<li><b>El COT se conoce tres días después de su fecha.</b> La foto es del martes y se publica el viernes.
+La serie se archiva con el día de <b>publicación</b>: fecharla el martes metería tres días de futuro en
+cualquier cruce, y el recorte por día de observación (§4.2) no puede verlo, porque para él el martes es
+pasado.</li>
+<li><b>El sello de <i>funding</i> de CCXT es el próximo cobro, no la observación.</b> Se descubrió porque
+la sonda devolvió una serie que empezaba <i>mañana</i>. El sello sigue sirviendo para agrupar venues dentro
+de la misma ventana —que es para lo que vale—, y el día sale del momento de la observación.</li>
+<li><b>Un único <i>slug</i> que devolvía 400 se llevó por delante las otras 23 series de su fuente.</b> El
+principio de «una fuente caída no tumba la captura» faltaba un nivel más abajo: una llamada rechazada no
+puede tumbar a las demás de su fuente.</li>
+<li><b>Hay huecos que son medición, no olvido.</b> TFTC publica la serie de ETF de BTC pero no la de ETH, y
+FRED discontinuó las series de oro de la LBMA. Ninguno de los dos se rellena con un sustituto que
+significaría otra cosa: el hueco se declara y aparece como cobertura cero.</li>
+</ul>
 
 <p><b>Dos puertas.</b> El tier <b>A</b> (mecánica: desbloqueos, colas de staking, dificultad, hacks,
 sanciones) es oferta calendarizada con muestras de <i>decenas</i>, y entra como <b>elegibilidad</b> —una
@@ -186,9 +223,10 @@ cobertura <b>{_n(e['coverage_pct'], 1)} %</b> ({e['by_source']['rule']} por regl
 </ul>
 
 <div class="note"><b>Nada de esto está cableado.</b> Ni a las estrategias, ni al runner, ni al espacio de
-búsqueda del optimizador. El catálogo declara, la captura archiva ({s['records']} registros hoy) y la
-auditoría mide. El cableado es un paso posterior y tiene su propia compuerta: con las puertas de señal en
-su valor neutro, la validación multiventana debe devolver <b>exactamente</b> los scores ya publicados.</div>
+búsqueda del optimizador. El catálogo declara, la captura archiva ({s['records']} registros hoy), la sonda
+mide y la normalización publica. El cableado es un paso posterior y tiene su propia compuerta: con las
+puertas de señal en su valor neutro, la validación multiventana debe devolver <b>exactamente</b> los scores
+ya publicados.</div>
 """
 
 

@@ -64,8 +64,8 @@ figure{margin:14px 0}
 <h1>AI-Trader — Documentación funcional</h1>
 <div class="sub">Cómo funciona la herramienta, con el detalle necesario para replicarla y auditarla.
 Cada decisión de diseño va justificada.</div>
-<div class="meta">Documento vivo · generado desde el commit <span class="mono">f72d0f4</span>
-(79 commits)2026-08-11 · se regenera con <span class="mono">python -m docs.build_docs</span>.
+<div class="meta">Documento vivo · generado desde el commit <span class="mono">8df02fa</span>
+(80 commits)2026-08-11 · se regenera con <span class="mono">python -m docs.build_docs</span>.
 Las cifras marcadas son extraídas del repositorio en el momento de generar este documento.</div>
 
 <div class="toc noprint">
@@ -769,31 +769,67 @@ rompe.</div>
 que dependen de él están marcadas como tales y deben interpretarse con cuidado.</div>
 
 
-<h3>4.3 · Señales externas: el esqueleto de ingesta (y lo que todavía no es)</h3>
+<h3>4.3 · Señales externas: la plataforma de ingesta y su profundidad medida</h3>
 <p>Todo lo anterior se calcula sobre <b>precio y volumen</b>. El único canal de contexto que existe hoy es
-el bloque de régimen de §4.2, y está construido sobre las propias barras: el sistema no tiene ninguna
-fuente de datos externa a OHLCV. La plataforma de ingesta existe para ampliar ese espacio, y está
-construida <b>sin conectar ninguna fuente</b>: el catálogo declara 17 fuentes que producirían
-44 features, de las cuales <b>0 tienen adaptador</b> y
-<b>0 pueden entrar en un backtest</b>.</p>
+el bloque de régimen de §4.2, y está construido sobre las propias barras: el sistema no tenía ninguna
+fuente de datos externa a OHLCV. El catálogo declara 17 fuentes que producirían
+45 features; de ellas <b>11 tienen adaptador</b> —el lote continuo, tier B—,
+<b>9 tienen profundidad medida</b> y <b>7 pueden entrar en un
+backtest</b>. Que las tres cifras no coincidan es el punto: tener adaptador no es tener historia, y tener
+historia solo cuenta si se ha comprobado.</p>
 
 <div class="why"><b>Por qué el esqueleto antes que las fuentes.</b> El valor no está en conectar
 <i>una</i> fuente, está en que la fuente N+1 cueste casi cero: un adaptador, una entrada de catálogo y un
-test. Si añadir la décima obligara a tocar el runner o las estrategias, el diseño habría fallado. Y hay un
-motivo para arrancar la captura aunque nada esté cableado: <b>6 de las
-17</b> fuentes son <i>forward capture</i> —nadie publica su pasado—, así que su profundidad
-histórica no depende de escribir mejor código después sino del calendario. Cada día sin capturar es
-profundidad que no se recupera.</div>
+test. Las once del primer lote comparten puerto, archivo, esquema, normalización y sonda; ninguna toca el
+runner ni las estrategias. Y hay un motivo para arrancar la captura aunque nada esté cableado:
+<b>6 de las 17</b> fuentes son <i>forward capture</i> —nadie
+publica su pasado—, así que su profundidad histórica no depende de escribir mejor código después sino del
+calendario. Cada día sin capturar es profundidad que no se recupera.</div>
 
 <p>Dos campos del catálogo sostienen la honestidad del resto. <span class="mono">history_from</span> es la
-primera fecha con dato <b>comprobado por nosotros</b>, no la que anuncia el proveedor: arranca vacío en las
-17 fuentes, y vacío significa <i>solo hacia adelante</i>. <span class="mono">pit</span> dice
-de qué naturaleza es esa historia —capturada en vivo, backfill revisable o derivada del precio—. Juntos
-contestan la única pregunta que hay que responder antes de puntuar nada: qué fuentes pueden participar en
-un backtest y cuáles solo en vivo. Lo que el proveedor promete vive en las notas del catálogo, en prosa,
-donde ningún código puede confundirlo con una medición.</p>
+primera fecha con dato <b>comprobado por nosotros</b>, no la que anuncia el proveedor. Esa comprobación es
+una operación explícita —<span class="mono">ai&#8209;trader signals depth</span>— que descarga la serie, la
+deriva con el adaptador real y escribe lo que encuentra en
+<span class="mono">data/signals/history_depth.json</span> (última medición: 2026-08-11); el
+catálogo solo puede declarar lo que ese registro respalda, y un test lo verifica.
+<span class="mono">pit</span> dice de qué naturaleza es esa historia —capturada en vivo, backfill revisable
+o derivada del precio—. Juntos contestan la única pregunta que hay que responder antes de puntuar nada:
+qué fuentes pueden participar en un backtest y cuáles solo en vivo.</p>
 
-<table><thead><tr><th>Fuente</th><th class=n>Tier</th><th class=n>Alcance</th><th class=n>Cadencia</th><th class=n>Point-in-time</th><th class=n>Features</th><th class=n>Historia medida</th></tr></thead><tbody><tr><td class=mono>guavy_sentiment</td><td class=n mono>B</td><td class=n mono>asset</td><td class=n mono>daily</td><td class=n mono>backfill revisable</td><td class=n mono>4</td><td class=n mono>—</td></tr><tr><td class=mono>etf_flows</td><td class=n mono>B</td><td class=n mono>asset</td><td class=n mono>daily</td><td class=n mono>backfill revisable</td><td class=n mono>3</td><td class=n mono>—</td></tr><tr><td class=mono>fred_macro</td><td class=n mono>B</td><td class=n mono>macro</td><td class=n mono>daily</td><td class=n mono>backfill revisable</td><td class=n mono>2</td><td class=n mono>—</td></tr><tr><td class=mono>defillama_stablecoins</td><td class=n mono>B</td><td class=n mono>chain</td><td class=n mono>daily</td><td class=n mono>backfill revisable</td><td class=n mono>2</td><td class=n mono>—</td></tr><tr><td class=mono>defillama_fees</td><td class=n mono>B</td><td class=n mono>asset</td><td class=n mono>daily</td><td class=n mono>backfill revisable</td><td class=n mono>3</td><td class=n mono>—</td></tr><tr><td class=mono>defillama_volumes</td><td class=n mono>B</td><td class=n mono>asset</td><td class=n mono>daily</td><td class=n mono>backfill revisable</td><td class=n mono>2</td><td class=n mono>—</td></tr><tr><td class=mono>wikipedia_pageviews</td><td class=n mono>B</td><td class=n mono>asset</td><td class=n mono>hourly</td><td class=n mono>backfill revisable</td><td class=n mono>2</td><td class=n mono>—</td></tr><tr><td class=mono>p2p_premium</td><td class=n mono>B</td><td class=n mono>venue</td><td class=n mono>hourly</td><td class=n mono>solo hacia adelante</td><td class=n mono>2</td><td class=n mono>—</td></tr><tr><td class=mono>funding_dispersion</td><td class=n mono>B</td><td class=n mono>venue</td><td class=n mono>hourly</td><td class=n mono>solo hacia adelante</td><td class=n mono>3</td><td class=n mono>—</td></tr><tr><td class=mono>github_activity</td><td class=n mono>B</td><td class=n mono>asset</td><td class=n mono>daily</td><td class=n mono>backfill revisable</td><td class=n mono>2</td><td class=n mono>—</td></tr><tr><td class=mono>cftc_cot</td><td class=n mono>B</td><td class=n mono>asset</td><td class=n mono>weekly</td><td class=n mono>backfill revisable</td><td class=n mono>3</td><td class=n mono>—</td></tr><tr><td class=mono>token_unlocks</td><td class=n mono>A</td><td class=n mono>asset</td><td class=n mono>event</td><td class=n mono>backfill revisable</td><td class=n mono>3</td><td class=n mono>—</td></tr><tr><td class=mono>staking_queue</td><td class=n mono>A</td><td class=n mono>chain</td><td class=n mono>daily</td><td class=n mono>solo hacia adelante</td><td class=n mono>3</td><td class=n mono>—</td></tr><tr><td class=mono>btc_difficulty</td><td class=n mono>A</td><td class=n mono>chain</td><td class=n mono>event</td><td class=n mono>solo hacia adelante</td><td class=n mono>3</td><td class=n mono>—</td></tr><tr><td class=mono>defillama_hacks</td><td class=n mono>A</td><td class=n mono>market</td><td class=n mono>event</td><td class=n mono>backfill revisable</td><td class=n mono>2</td><td class=n mono>—</td></tr><tr><td class=mono>ofac_sdn</td><td class=n mono>A</td><td class=n mono>market</td><td class=n mono>event</td><td class=n mono>solo hacia adelante</td><td class=n mono>2</td><td class=n mono>—</td></tr><tr><td class=mono>macro_calendar</td><td class=n mono>A</td><td class=n mono>macro</td><td class=n mono>event</td><td class=n mono>solo hacia adelante</td><td class=n mono>3</td><td class=n mono>—</td></tr></tbody></table>
+<table><thead><tr><th>Fuente</th><th class=n>Tier</th><th class=n>Point-in-time</th><th class=n>Features</th><th class=n>Adaptador</th><th class=n>Declarada</th><th class=n>MEDIDA</th><th class=n>Días</th></tr></thead><tbody><tr><td class=mono>guavy_sentiment</td><td class=n mono>B</td><td class=n mono>backfill revisable</td><td class=n mono>4</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>—</td><td class=n mono>0</td></tr><tr><td class=mono>etf_flows</td><td class=n mono>B</td><td class=n mono>backfill revisable</td><td class=n mono>3</td><td class=n mono>si</td><td class=n mono>2024-01-11</td><td class=n mono>2024-01-11</td><td class=n mono>662</td></tr><tr><td class=mono>fred_macro</td><td class=n mono>B</td><td class=n mono>backfill revisable</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>—</td><td class=n mono>0</td></tr><tr><td class=mono>defillama_stablecoins</td><td class=n mono>B</td><td class=n mono>backfill revisable</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>2017-11-29</td><td class=n mono>2017-11-29</td><td class=n mono>12 497</td></tr><tr><td class=mono>defillama_fees</td><td class=n mono>B</td><td class=n mono>backfill revisable</td><td class=n mono>3</td><td class=n mono>si</td><td class=n mono>2011-01-31</td><td class=n mono>2011-01-31</td><td class=n mono>54 129</td></tr><tr><td class=mono>defillama_volumes</td><td class=n mono>B</td><td class=n mono>backfill revisable</td><td class=n mono>3</td><td class=n mono>si</td><td class=n mono>2017-08-17</td><td class=n mono>2017-08-17</td><td class=n mono>30 590</td></tr><tr><td class=mono>wikipedia_pageviews</td><td class=n mono>B</td><td class=n mono>backfill revisable</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>2015-07-01</td><td class=n mono>2015-07-01</td><td class=n mono>36 024</td></tr><tr><td class=mono>p2p_premium</td><td class=n mono>B</td><td class=n mono>solo hacia adelante</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>2026-08-11</td><td class=n mono>1</td></tr><tr><td class=mono>funding_dispersion</td><td class=n mono>B</td><td class=n mono>solo hacia adelante</td><td class=n mono>3</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>2026-08-11</td><td class=n mono>24</td></tr><tr><td class=mono>github_activity</td><td class=n mono>B</td><td class=n mono>backfill revisable</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>2009-08-23</td><td class=n mono>2009-08-23</td><td class=n mono>15 877</td></tr><tr><td class=mono>cftc_cot</td><td class=n mono>B</td><td class=n mono>backfill revisable</td><td class=n mono>3</td><td class=n mono>si</td><td class=n mono>2018-04-13</td><td class=n mono>2018-04-13</td><td class=n mono>714</td></tr><tr><td class=mono>token_unlocks</td><td class=n mono>A</td><td class=n mono>backfill revisable</td><td class=n mono>3</td><td class=n mono>no</td><td class=n mono>—</td><td class=n mono>—</td><td class=n mono>0</td></tr><tr><td class=mono>staking_queue</td><td class=n mono>A</td><td class=n mono>solo hacia adelante</td><td class=n mono>3</td><td class=n mono>no</td><td class=n mono>—</td><td class=n mono>—</td><td class=n mono>0</td></tr><tr><td class=mono>btc_difficulty</td><td class=n mono>A</td><td class=n mono>solo hacia adelante</td><td class=n mono>3</td><td class=n mono>no</td><td class=n mono>—</td><td class=n mono>—</td><td class=n mono>0</td></tr><tr><td class=mono>defillama_hacks</td><td class=n mono>A</td><td class=n mono>backfill revisable</td><td class=n mono>2</td><td class=n mono>no</td><td class=n mono>—</td><td class=n mono>—</td><td class=n mono>0</td></tr><tr><td class=mono>ofac_sdn</td><td class=n mono>A</td><td class=n mono>solo hacia adelante</td><td class=n mono>2</td><td class=n mono>no</td><td class=n mono>—</td><td class=n mono>—</td><td class=n mono>0</td></tr><tr><td class=mono>macro_calendar</td><td class=n mono>A</td><td class=n mono>solo hacia adelante</td><td class=n mono>3</td><td class=n mono>no</td><td class=n mono>—</td><td class=n mono>—</td><td class=n mono>0</td></tr></tbody></table>
+
+<h4>Toda feature se publica normalizada, con dos varas de medir</h4>
+<p>Las fuentes producen magnitudes que no se pueden ni sumar ni comparar: miles de millones de oferta de
+<i>stablecoins</i>, puntos básicos de dispersión de <i>funding</i>, visitas, primas porcentuales, commits.
+Y la comparación entre activos es peor: que BTC tenga 23.000 visitas y SEI 40 no dice nada sobre cuál está
+recibiendo atención <b>inusual</b>. Por eso nada sale de la ingesta en crudo, y sale con
+<b>dos</b> normalizaciones y no con una: <span class="mono">&lt;feature&gt;_z</span> es la
+z contra la <b>propia historia</b> de la entidad —ventana expansiva y causal, hasta el día <i>t</i>
+incluido, con un mínimo de 20 observaciones— y
+<span class="mono">&lt;feature&gt;_x</span> es la z contra la <b>sección cruzada</b> del
+día, con un mínimo de 5 entidades. La primera no existe para un listado nuevo; la
+segunda sí, desde el primer día. El centro es la mediana y la escala <span class="mono">IQR/1.349</span>
+—con media y desviación típica, un solo día extremo infla la escala y apaga la señal justo cuando empieza
+a pasar algo—, todo recortado a <b>±4.0</b>, un umbral declarado y no escondido. Lo que no se puede
+calcular queda en <b>NaN</b>: un 0 diría «normal, en la media», que es una afirmación sobre el mundo que no
+se ha observado.</p>
+
+<h4>Lo que la medición destapó, y que ningún folleto decía</h4>
+<ul>
+<li><b>El COT se conoce tres días después de su fecha.</b> La foto es del martes y se publica el viernes.
+La serie se archiva con el día de <b>publicación</b>: fecharla el martes metería tres días de futuro en
+cualquier cruce, y el recorte por día de observación (§4.2) no puede verlo, porque para él el martes es
+pasado.</li>
+<li><b>El sello de <i>funding</i> de CCXT es el próximo cobro, no la observación.</b> Se descubrió porque
+la sonda devolvió una serie que empezaba <i>mañana</i>. El sello sigue sirviendo para agrupar venues dentro
+de la misma ventana —que es para lo que vale—, y el día sale del momento de la observación.</li>
+<li><b>Un único <i>slug</i> que devolvía 400 se llevó por delante las otras 23 series de su fuente.</b> El
+principio de «una fuente caída no tumba la captura» faltaba un nivel más abajo: una llamada rechazada no
+puede tumbar a las demás de su fuente.</li>
+<li><b>Hay huecos que son medición, no olvido.</b> TFTC publica la serie de ETF de BTC pero no la de ETH, y
+FRED discontinuó las series de oro de la LBMA. Ninguno de los dos se rellena con un sustituto que
+significaría otra cosa: el hueco se declara y aparece como cobertura cero.</li>
+</ul>
 
 <p><b>Dos puertas.</b> El tier <b>A</b> (mecánica: desbloqueos, colas de staking, dificultad, hacks,
 sanciones) es oferta calendarizada con muestras de <i>decenas</i>, y entra como <b>elegibilidad</b> —una
@@ -833,9 +869,10 @@ cobertura <b>100,0 %</b> (24 por regla,
 </ul>
 
 <div class="note"><b>Nada de esto está cableado.</b> Ni a las estrategias, ni al runner, ni al espacio de
-búsqueda del optimizador. El catálogo declara, la captura archiva (0 registros hoy) y la
-auditoría mide. El cableado es un paso posterior y tiene su propia compuerta: con las puertas de señal en
-su valor neutro, la validación multiventana debe devolver <b>exactamente</b> los scores ya publicados.</div>
+búsqueda del optimizador. El catálogo declara, la captura archiva (326625 registros hoy), la sonda
+mide y la normalización publica. El cableado es un paso posterior y tiene su propia compuerta: con las
+puertas de señal en su valor neutro, la validación multiventana debe devolver <b>exactamente</b> los scores
+ya publicados.</div>
 
 
 <h2 id="s5">5 · Evaluación y scoring</h2>
@@ -1129,7 +1166,7 @@ corrigiendo además por asimetría y colas gruesas de los retornos.</p>
 número sino un método.</div>
 
 <h2 id="s6">6 · Tests y garantías</h2>
-<p>La base cuenta con <b>631 tests</b> automatizados y <i>linting</i> (ruff) sobre todo el
+<p>La base cuenta con <b>698 tests</b> automatizados y <i>linting</i> (ruff) sobre todo el
 código. Más allá del número, importa <b>qué</b> se garantiza. Los tests se agrupan por invariante:</p>
 <ul>
 <li><b>Determinismo:</b> la misma semilla produce las mismas velas y las mismas curvas de equity.</li>
@@ -1273,5 +1310,5 @@ correlación serial de los retornos no filtre el test en el entrenamiento poster
 <li><b>Stylized facts:</b> propiedades estadísticas robustas de los mercados reales (colas gruesas,
 agrupamiento de volatilidad, autocorrelación) que un buen simulador debe reproducir.</li>
 </ul>
-<p class="meta">Fin del documento · AI-Trader · commit <span class="mono">f72d0f4</span>.</p>
+<p class="meta">Fin del documento · AI-Trader · commit <span class="mono">8df02fa</span>.</p>
 </div></body></html>

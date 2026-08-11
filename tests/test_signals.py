@@ -290,13 +290,15 @@ class TestCatalog:
             assert source.aggregations().keys() == set(source.feature_names)
             assert safe_name(source.key) == source.key  # sirve de nombre de directorio
 
-    def test_no_source_is_backtestable_today(self):
-        """La medicion del dia cero: `history_from` esta a None en TODO el catalogo, asi
-        que ninguna fuente puede entrar todavia en un backtest. Este test cambia el dia
-        que alguien mida una profundidad de verdad, que es justo cuando debe cambiar."""
-        assert backtestable_sources() == ()
-        assert catalog_summary()["n_backtestable"] == 0
-        assert all(s.history_from is None for s in CATALOG)
+    def test_backtestable_is_exactly_what_was_measured(self):
+        """El dia cero esto decia "ninguna". Cambio cuando alguien midio, que es justo
+        cuando debia cambiar: hoy son backtesteables las fuentes que la sonda
+        (`signals/depth.py`) pudo medir, y solo esas. Las que siguen a None no es que no
+        tengan historia: es que nadie la ha comprobado todavia."""
+        measured = backtestable_sources()
+        assert catalog_summary()["n_backtestable"] == len(measured)
+        assert all(s.history_from is not None for s in measured)
+        assert {s.key for s in CATALOG if s.history_from} == {s.key for s in measured}
 
     def test_backtestable_follows_measured_history(self):
         measured = SignalSource(
@@ -440,10 +442,15 @@ class FakeAdapter(BaseJsonAdapter):
 
 
 class TestPort:
-    def test_registry_starts_empty(self):
-        """Esta tarea NO conecta fuentes. Cuando deje de ser cierto, sera a proposito."""
-        assert source_module.REGISTRY == {}
-        assert all(build_adapter(s) is None for s in CATALOG)
+    def test_the_registry_holds_exactly_the_connected_batch(self):
+        """El dia cero esto decia "vacio". Hoy dice cuales estan conectadas, y sigue siendo
+        la misma pregunta: el registro es la unica respuesta a "que fuentes existen de
+        verdad", y las mecanicas (Tier A) siguen sin adaptador a proposito."""
+        from ai_trader.signals.capture import connect_adapters
+
+        connected = set(connect_adapters())
+        assert connected == {s.key for s in CATALOG if s.tier == TIER_STATISTICAL}
+        assert all(build_adapter(s) is None for s in CATALOG if s.tier == TIER_MECHANICAL)
 
     def test_raw_record_stamps_fetched_at(self):
         record = raw_record(source="s", entity="BTC", payload={"a": 1})
@@ -583,8 +590,12 @@ class TestCapture:
         chains = get_source("defillama_stablecoins")
         assert entities_for(chains, ["BTC/USDT"]) == chains.fixed_entities
 
-    def test_day_zero_over_the_real_catalog(self, tmp_path):
-        """Corre HOY, sin un solo adaptador, y publica el estado real del sistema."""
+    def test_a_pass_over_the_real_catalog_publishes_what_falta(self, tmp_path, monkeypatch):
+        """La pasada completa, sin red: con el registro vaciado, TODAS las fuentes salen
+        como pendientes. Es el mismo informe del dia cero, y lo que mide ahora es cuantas
+        siguen sin adaptador —las seis mecanicas— y no cuantas hay declaradas."""
+        monkeypatch.setattr(source_module, "REGISTRY", {})
+        monkeypatch.setattr(capture_module, "connect_adapters", lambda: ())
         report = capture(
             ["BTC/USDT", "ETH/USDT"],
             store=SignalStore(tmp_path / "raw"),
@@ -598,6 +609,18 @@ class TestCapture:
         assert capture_module.load_capture_report(tmp_path / "capture.json")["n_pending"] == len(
             CATALOG
         )
+
+    def test_a_capture_connects_the_batch_by_itself(self, tmp_path):
+        """La captura NO puede depender de que alguien se acuerde de registrar: un registro
+        vacio archivaria cero y el informe diria 'todo correcto, 0 registros'."""
+        monkeypatched_registry = dict(source_module.REGISTRY)
+        source_module.REGISTRY.clear()
+        try:
+            report = capture([], store=SignalStore(tmp_path), sources=[], report_path=None)
+            assert report.n_sources == 0
+            assert set(source_module.REGISTRY) >= {"etf_flows", "cftc_cot"}
+        finally:
+            source_module.REGISTRY.update(monkeypatched_registry)
 
     def test_archives_when_an_adapter_exists(self, tmp_path, monkeypatch):
         monkeypatch.setitem(source_module.REGISTRY, TEST_SOURCE.key, FakeAdapter)

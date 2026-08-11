@@ -420,27 +420,37 @@ def _sessions() -> dict | None:
 
 def _signals() -> dict:
     """
-    El esqueleto de ingesta de senales (seccion 4.3): catalogo declarado y cobertura MEDIDA.
+    La plataforma de ingesta de senales (seccion 4.3): catalogo, conexion y PROFUNDIDAD.
 
-    A diferencia de los demas bloques, este NO lee un informe: el catalogo es codigo y la
-    auditoria de entidades y de archivo es barata (no toca red y el archivo es local). Se
-    mide en el momento de generar, que ademas es lo unico coherente con lo que dice la
-    seccion: las cifras que importan son cuantas fuentes tienen historia medida y cuantas
-    estan conectadas, y las dos cambian escribiendo codigo, no re-corriendo un estudio.
+    A diferencia de los demas bloques, este NO lee un informe de estudio: el catalogo es
+    codigo, la auditoria de entidades y de archivo es local, y la profundidad sale del
+    registro de mediciones que escribe la sonda (`data/signals/history_depth.json`). Las
+    cifras que importan —cuantas fuentes tienen adaptador y cuantas tienen historia
+    MEDIDA— cambian escribiendo codigo y corriendo la sonda, no re-corriendo un estudio.
     """
     from ai_trader.signals.audit import audit_archive, audit_entities
+    from ai_trader.signals.capture import connect_adapters
     from ai_trader.signals.catalog import CATALOG, catalog_summary
+    from ai_trader.signals.depth import DEPTH_LEDGER, load_ledger
+    from ai_trader.signals.normalize import normalization_spec
     from ai_trader.signals.source import connected_keys
     from ai_trader.signals.store import SignalStore
 
     universe = list(load_config(ROOT / "config" / "default.toml").runner.symbols)
+    connect_adapters()
     entities = audit_entities(universe)
     archive = audit_archive(SignalStore(ROOT / "data" / "signals_raw"))
+
+    ledger = load_ledger(ROOT / DEPTH_LEDGER) or {}
+    depth = {row["source_key"]: row for row in ledger.get("sources") or []}
 
     return {
         "summary": catalog_summary(),
         "n_connected": len(connected_keys()),
+        "n_measured": sum(1 for r in depth.values() if r.get("first_day")),
         "records": archive.records,
+        "normalization": normalization_spec(),
+        "depth_measured_at": (ledger.get("generated_at") or "")[:10] or "—",
         "entities": {
             "n_symbols": entities.n_symbols,
             "coverage_pct": round(entities.coverage_pct, 2),
@@ -452,11 +462,12 @@ def _signals() -> dict:
             (
                 s.key,
                 s.tier,
-                s.scope,
-                s.cadence,
                 s.pit,
                 str(len(s.features)),
+                "si" if s.key in set(connected_keys()) else "no",
                 s.history_from.isoformat() if s.history_from else "—",
+                (depth.get(s.key) or {}).get("first_day") or "—",
+                f"{(depth.get(s.key) or {}).get('days', 0):,}".replace(",", " "),
             )
             for s in CATALOG
         ],

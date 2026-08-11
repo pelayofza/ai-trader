@@ -1021,33 +1021,79 @@ def collect_activity() -> dict | None:
     }
 
 
+def _etf_dispersion(store) -> dict:
+    """La distribucion de `etf_issuer_dispersion`, que es lo que justifica bajar al emisor.
+
+    Un solo numero no lo demuestra: la MEDIANA cerca de 1 dice que casi todos los dias son
+    flujo neto, y la cola alta dice que existe un pun~ado de dias de rotacion pura en los
+    que el agregado marca cero y el mercado se movio entero. Se mide aqui porque es barato
+    (662 registros) y porque una afirmacion asi no puede ir escrita a mano en la plantilla.
+    """
+    from ai_trader.signals.adapters.etf_flows import TftcEtfFlows
+    from ai_trader.signals.catalog import get_source
+
+    records = store.read("etf_flows")
+    if not records:
+        return {}
+    frame = TftcEtfFlows(get_source("etf_flows")).daily_from_raw(records)
+    column = frame["etf_issuer_dispersion"].dropna()
+    if column.empty:
+        return {}
+    return {
+        "days": int(len(frame)),
+        "median": round(float(column.median()), 2),
+        "p95": round(float(column.quantile(0.95)), 1),
+        "rotation_days": int((column > 3.0).sum()),
+    }
+
+
 def collect_signals() -> dict:
     """
-    El esqueleto de ingesta de senales: catalogo declarado, mapeo de entidades y estado
-    del archivo. Todo MEDIDO en el momento de generar, y todo barato: el catalogo no toca
-    red y la auditoria lee el archivo local, que hoy esta vacio.
+    La plataforma de ingesta de senales: catalogo, mapeo de entidades, archivo crudo y
+    —lo que cambia la lectura de todo lo demas— la PROFUNDIDAD MEDIDA de cada fuente.
 
-    Que casi todas las cifras salgan a cero es el contenido: 17 fuentes declaradas, 0
-    conectadas, 0 backtesteables. Es la linea base contra la que se leera el primer
-    adaptador que se escriba.
+    Todo se lee de disco y del registro de mediciones (`data/signals/history_depth.json`);
+    nada de esto toca red al generar el dashboard. La cifra que hay que mirar no es cuantas
+    fuentes hay declaradas, sino cuantas tienen `history_from` MEDIDO: esas son las unicas
+    que pueden entrar en un backtest, y el resto solo existen hacia adelante.
     """
     from ai_trader.signals.audit import audit_archive, audit_entities
-    from ai_trader.signals.capture import CAPTURE_REPORT, entities_for, load_capture_report
+    from ai_trader.signals.capture import (
+        CAPTURE_REPORT,
+        connect_adapters,
+        entities_for,
+        load_capture_report,
+    )
     from ai_trader.signals.catalog import CATALOG, catalog_summary
+    from ai_trader.signals.depth import DEPTH_LEDGER, load_ledger
+    from ai_trader.signals.normalize import normalization_spec
     from ai_trader.signals.source import connected_keys
     from ai_trader.signals.store import SignalStore
 
     config = load_config(ROOT / "config" / "default.toml")
     universe = list(config.runner.symbols)
 
+    connect_adapters()  # sin esto, "conectadas" seria 0 por no haber importado nada
     entities = audit_entities(universe)
     archive = audit_archive(SignalStore(ROOT / "data" / "signals_raw"))
     capture_report = load_capture_report(ROOT / CAPTURE_REPORT)
     connected = set(connected_keys())
 
+    ledger = load_ledger(ROOT / DEPTH_LEDGER) or {}
+    depth_by_key = {row["source_key"]: row for row in ledger.get("sources") or []}
+    archive_by_key = {row.source_key: row for row in archive.sources}
+    etf = _etf_dispersion(SignalStore(ROOT / "data" / "signals_raw"))
+
     return {
-        "summary": catalog_summary(),
+        "summary": {
+            **catalog_summary(),
+            "n_connected": len(connected),
+            "n_measured": sum(1 for r in depth_by_key.values() if r.get("first_day")),
+        },
         "universe": universe,
+        "normalization": normalization_spec(),
+        "etf_dispersion": etf,
+        "depth_measured_at": (ledger.get("generated_at") or "")[:10] or None,
         "sources": [
             {
                 "key": s.key,
@@ -1065,6 +1111,17 @@ def collect_signals() -> dict:
                 "n_entities": len(entities_for(s, universe)),
                 "connected": s.key in connected,
                 "notes": s.notes,
+                # Lo MEDIDO, al lado de lo declarado: sin las dos cosas juntas no se ve la
+                # diferencia entre "no hay historia" y "nadie la ha comprobado".
+                "measured_from": (depth_by_key.get(s.key) or {}).get("first_day"),
+                "measured_to": (depth_by_key.get(s.key) or {}).get("last_day"),
+                "measured_days": (depth_by_key.get(s.key) or {}).get("days", 0),
+                "measured_entities": (depth_by_key.get(s.key) or {}).get("n_entities", 0),
+                "measure_method": (depth_by_key.get(s.key) or {}).get("method"),
+                "measure_error": (depth_by_key.get(s.key) or {}).get("error"),
+                "archived_records": (
+                    archive_by_key[s.key].records if s.key in archive_by_key else 0
+                ),
             }
             for s in CATALOG
         ],
@@ -1183,6 +1240,20 @@ def build() -> None:
 # pareada. Sacar el sintetico del criterio de seleccion pasa a ser la CONTINGENCIA, no la
 # conclusion automatica.
 #
+# ACTUALIZACION 2026-08-11 (4): el primer lote CONTINUO (Tier B) esta conectado: 11 de las
+# 17 fuentes tienen adaptador (`src/ai_trader/signals/adapters/`), 9 tienen profundidad MEDIDA
+# y 7 son backtesteables. Las tres cifras se separan a proposito: la profundidad se mide en
+# vez de creerse el folleto (`signals/depth.py` -> `data/signals/history_depth.json`), el
+# catalogo solo declara `history_from` donde hay medicion Y al menos un ano de ventana (en una
+# fuente forward_capture el primer dia es el dia que arranco la captura), y un test lo exige. Toda feature se publica normalizada con dos varas —z contra
+# la propia historia (expansiva, causal) y z contra la seccion cruzada del dia, mediana/IQR,
+# recorte declarado a +-4, huecos a NaN— para que sirva igual a BTC que a un listado nuevo.
+# Lo que la medicion destapo y no estaba en ningun sitio: el COT se conoce TRES dias despues
+# de su fecha (se archiva por dia de publicacion), el sello de funding de CCXT es el proximo
+# cobro y habria fechado observaciones en el futuro, TFTC publica los ETF de BTC pero no los
+# de ETH, FRED ya no sirve oro, y un solo slug con 400 se llevaba por delante las otras 23
+# series de su fuente. Sigue sin cablearse nada a estrategias.
+#
 # ACTUALIZACION 2026-08-11 (3): el ESQUELETO de ingesta de senales esta construido
 # (`src/ai_trader/signals/`: catalogo, puerto de dos capas, archivo crudo append-only,
 # captura y auditoria; esquema y entidades en `shared/`). No conecta ninguna fuente a
@@ -1221,11 +1292,12 @@ ROADMAP_GROUPS = [
                     "botella no es el generador sino el ESPACIO DE INPUTS: hoy las estrategias "
                     "solo ven precio y volumen. Las dos mediciones baratas que condicionaban la "
                     "lectura ya estan hechas -la ventana ciega (vista Sesiones) y el suelo de "
-                    "actividad del ranking (vista Actividad)-, y el ESQUELETO de ingesta tambien "
-                    "(vista Senales): catalogo, puerto de dos capas, archivo crudo y captura, con "
-                    "0 fuentes conectadas todavia y la captura ya corriendo. Lo que queda aqui es "
-                    "enchufar las fuentes, cablearlas y el reloj corriendo en paralelo. Nada de lo "
-                    "que se puntue mientras tanto vale mas que el juez que lo puntua.",
+                    "actividad del ranking (vista Actividad)-, y la plataforma de ingesta tambien "
+                    "(vista Senales): esqueleto, ONCE fuentes continuas conectadas y su "
+                    "profundidad MEDIDA fuente a fuente. Lo que queda aqui es la puerta de "
+                    "ELEGIBILIDAD para las mecanicas y el cableado al espacio de observacion, con "
+                    "el reloj de la captura corriendo en paralelo. Nada de lo que se puntue "
+                    "mientras tanto vale mas que el juez que lo puntua.",
     },
     {
         "key": "despues",
@@ -1249,72 +1321,8 @@ ROADMAP_GROUPS = [
 
 ROADMAP = [
     {
-        "id": "signals-tier-b-batch",
-        "rank": 1,
-        "group": "ahora",
-        "priority": "alta",
-        "title": "Lote barato de senales continuas (Tier B): diez fuentes sobre el mismo puerto",
-        "line": "Inputs", "status": "pendiente", "impact": "alto", "effort": "medio",
-        "evidence": "Todas gratuitas y verificadas: DefiLlama (sin auth, sin rate limit normal) "
-                    "para fees/TVL/stablecoins; TFTC publica la serie completa de flujos de ETF "
-                    "spot en JSON abierto CC BY 4.0 desde enero de 2024; CFTC COT via Socrata en "
-                    "publicreporting.cftc.gov; FRED con key gratuita; Guavy "
-                    "/api/v1/sentiment/get-sentiment-history/<symbol> devuelve serie diaria con "
-                    "positive/negative/neutral/total por 3-12 tokens la llamada.",
-        "why": "Es el lote donde se DEMUESTRA que el coste marginal de la fuente N+1 es casi "
-               "cero: si la decima cuesta lo mismo que la segunda, el esqueleto funciona. Dos "
-               "fuentes merecen mencion aparte. Los FLUJOS DIARIOS DE ETF son el canal "
-               "institucional dominante desde 2024 y no estan en ningun sitio del sistema. Y FRED "
-               "encaja de forma especial: el generador sintetico YA tiene EQUITY, RATES, USD, "
-               "COMMODITY y CRYPTO como factores (synthetic/universe.py), asi que las series "
-               "macro reales mapean uno a uno sobre ellos -- es el puente mas directo que existe "
-               "entre el mundo real y el sintetico.",
-        "prompt": (
-            "Proyecto ai-trader (Python). Con el esqueleto de src/ai_trader/signals/ ya "
-            "construido (catalogo, puerto de dos capas, archivo crudo, captura, auditoria), "
-            "conecta el primer lote de fuentes CONTINUAS (Tier B: entran como features, no como "
-            "vetos).\n"
-            "\n"
-            "FUENTES, todas gratis y todas con el mismo patron adaptador + entrada de catalogo + "
-            "test:\n"
-            "1. Guavy: /api/v1/sentiment/get-sentiment-history/<symbol>?limit=<dias>, serie "
-            "diaria con date/positive/negative/neutral/total. Bearer token por env. Consume SOLO "
-            "los conteos crudos: NUNCA los endpoints trend/signal, que son el output de SU modelo, "
-            "pueden estar recalculados con informacion posterior y no son auditables.\n"
-            "2. Flujos diarios de ETF spot BTC/ETH: TFTC publica la serie completa en JSON "
-            "abierto CC BY 4.0; Farside y SoSoValue como contraste. Por EMISOR, no solo agregado: "
-            "la dispersion entre emisores dice si es rotacion o flujo neto.\n"
-            "3. FRED (key gratuita): DXY, real yields, 2y/10y, oro, SPX/NDX. Mapea cada serie "
-            "explicitamente sobre los factores del generador sintetico.\n"
-            "4. DefiLlama stablecoins: oferta POR CADENA. La emision neta es polvora seca "
-            "entrando; el desglose por cadena es rotacion de capital entre ecosistemas.\n"
-            "5. DefiLlama fees/revenue/TVL por protocolo -> ratios P/F y P/S por token. El "
-            "universo con ingresos reales es pequeno e ignorado, que es lo que lo hace "
-            "interesante.\n"
-            "6. DefiLlama volumes: cuota DEX/CEX por activo (donde se forma el precio).\n"
-            "7. Wikipedia Pageviews: gratis, horario y DESGLOSADO POR IDIOMA -- da una "
-            "descomposicion geografica de la atencion que Google Trends no da limpia.\n"
-            "8. Primas P2P de Binance en TRY/ARS/NGN: demanda por crisis monetaria, un driver "
-            "distinto y no correlacionado con el ciclo especulativo.\n"
-            "9. Dispersion de funding entre venues via CCXT. NO el nivel, que esta muy arbitrado: "
-            "la dispersion.\n"
-            "10. GitHub API: velocidad de commits y contribuidores unicos (Santiment cobra por "
-            "esto y el dato crudo es publico). Y CFTC COT (TFF) via Socrata: posicionamiento "
-            "semanal por categoria en futuros CME de BTC/ETH.\n"
-            "\n"
-            "REGLAS COMUNES: todo se archiva crudo antes de derivar nada. Toda feature se publica "
-            "NORMALIZADA (z contra la propia historia del activo y contra la seccion cruzada del "
-            "dia, recortada a un rango declarado) para que sirva igual a BTC que a un listado "
-            "nuevo con poca cobertura. Cada fuente declara su history_from MEDIDO, no el que "
-            "promete el material comercial. Nada se cablea a estrategias en esta tarea.\n"
-            "\n"
-            "Tests + .venv\\Scripts\\python.exe (poetry run esta roto) + ruff. Regenera dashboard "
-            "y docs."
-        ),
-    },
-    {
         "id": "signals-tier-a-eligibility",
-        "rank": 2,
+        "rank": 1,
         "group": "ahora",
         "priority": "critica",
         "title": "Senales mecanicas (Tier A) como ELEGIBILIDAD, nunca como alfa",
@@ -1385,7 +1393,7 @@ ROADMAP = [
     },
     {
         "id": "signal-radar-wiring",
-        "rank": 3,
+        "rank": 2,
         "group": "ahora",
         "priority": "alta",
         "title": "Radar de features y cableado en backtest Y en vivo (cierra el hueco del regimen)",
@@ -1447,7 +1455,7 @@ ROADMAP = [
     },
     {
         "id": "paper-trading-live",
-        "rank": 4,
+        "rank": 3,
         "group": "ahora",
         "priority": "alta",
         "title": "Poner el paper trading a correr en vivo (y la vista del dashboard que lo lea)",
@@ -1513,7 +1521,7 @@ ROADMAP = [
     },
     {
         "id": "signals-expensive-batch",
-        "rank": 6,
+        "rank": 5,
         "group": "despues",
         "priority": "media",
         "title": "Lote caro de senales: apalancamiento observable, opciones, atencion geografica y legal",
@@ -1565,7 +1573,7 @@ ROADMAP = [
     },
     {
         "id": "synthetic-signal-emission",
-        "rank": 5,
+        "rank": 4,
         "group": "despues",
         "priority": "critica",
         "title": "Que el generador emita las senales, y re-medir la transferencia de forma pareada",
@@ -1634,7 +1642,7 @@ ROADMAP = [
     },
     {
         "id": "dat-mnav-index",
-        "rank": 7,
+        "rank": 6,
         "group": "despues",
         "priority": "media",
         "title": "Indice de estres de vendedores forzados (mNAV de tesorerias cotizadas)",
@@ -1684,7 +1692,7 @@ ROADMAP = [
     },
     {
         "id": "line-d-cpcv-two-stage-cem",
-        "rank": 8,
+        "rank": 7,
         "group": "despues",
         "priority": "alta",
         "title": "CPCV en dos etapas dentro del optimizador (que el CEM deje de puntuar con el corte unico)",
@@ -1746,7 +1754,7 @@ ROADMAP = [
     },
     {
         "id": "validation-study-full-ensemble",
-        "rank": 9,
+        "rank": 8,
         "group": "despues",
         "priority": "media",
         "title": "Re-correr el estudio de validacion con el ensemble completo",
@@ -1779,7 +1787,7 @@ ROADMAP = [
     },
     {
         "id": "pbo-blocks-scenario-aligned",
-        "rank": 10,
+        "rank": 9,
         "group": "despues",
         "priority": "media",
         "title": "Alinear los bloques del PBO con las fronteras de escenario",
@@ -1818,7 +1826,7 @@ ROADMAP = [
     },
     {
         "id": "report-n-failed-with-reward",
-        "rank": 11,
+        "rank": 10,
         "group": "despues",
         "priority": "media",
         "title": "Reportar n_failed junto al reward (la penalizacion domina la cola)",
@@ -1852,7 +1860,7 @@ ROADMAP = [
     },
     {
         "id": "dsr-independent-trials-caveat",
-        "rank": 12,
+        "rank": 11,
         "group": "despues",
         "priority": "baja",
         "title": "Declarar que el DSR asume intentos independientes y el CEM no los produce",
@@ -1887,7 +1895,7 @@ ROADMAP = [
     },
     {
         "id": "fidelity-rank-corr-ordering",
-        "rank": 13,
+        "rank": 12,
         "group": "despues",
         "priority": "media",
         "title": "Ordenacion de colas y clustering entre activos: el eje que ai_v3 no arreglo",
@@ -1952,7 +1960,7 @@ ROADMAP = [
     },
     {
         "id": "real-substrate-primary-ranking",
-        "rank": 14,
+        "rank": 13,
         "group": "despues",
         "priority": "critica",
         "title": "CONTINGENCIA: mover el sustrato primario del ranking al historico REAL",
@@ -2017,7 +2025,7 @@ ROADMAP = [
     },
     {
         "id": "rl-full-run",
-        "rank": 15,
+        "rank": 14,
         "group": "despues",
         "priority": "alta",
         "title": "Optimizacion CEM completa, ya con el juez validado",
@@ -2053,7 +2061,7 @@ ROADMAP = [
     },
     {
         "id": "execution-latency-budget",
-        "rank": 16,
+        "rank": 15,
         "group": "despues",
         "priority": "media",
         "title": "Presupuesto de latencia: el backtest supone que se llena a las 00:00 UTC en punto",
@@ -2098,7 +2106,7 @@ ROADMAP = [
     },
     {
         "id": "new-crypto-strategies",
-        "rank": 17,
+        "rank": 16,
         "group": "no-prioritario",
         "priority": "baja",
         "title": "Nuevas estrategias cripto (deliberadamente NO priorizada)",
@@ -2146,7 +2154,7 @@ ROADMAP = [
     },
     {
         "id": "weights-recalibrate-power",
-        "rank": 18,
+        "rank": 17,
         "group": "no-prioritario",
         "priority": "baja",
         "title": "Re-medir lambda y kappa con los costes nuevos y mas potencia estadistica",
@@ -2191,7 +2199,7 @@ ROADMAP = [
     },
     {
         "id": "designer-model-in-manifest",
-        "rank": 19,
+        "rank": 18,
         "group": "no-prioritario",
         "priority": "baja",
         "title": "Anotar el modelo de IA en el manifiesto de cada libreria",
@@ -2223,7 +2231,7 @@ ROADMAP = [
     },
     {
         "id": "equities-parked",
-        "rank": 20,
+        "rank": 19,
         "group": "segundo-plano",
         "priority": "aparcada",
         "title": "Renta variable: aparcada a proposito (no se activa la clase de activo)",
@@ -2270,7 +2278,7 @@ ROADMAP = [
     },
     {
         "id": "polymarket-parked",
-        "rank": 21,
+        "rank": 20,
         "group": "segundo-plano",
         "priority": "aparcada",
         "title": "Polymarket en el backtest: aparcado hasta tener historico propio",

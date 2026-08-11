@@ -25,6 +25,7 @@ data/*.sqlite3
 data/*.json
 data/archive/
 data/synthetic/
+data/signals_raw/
 
 # VS Code
 .vscode/
