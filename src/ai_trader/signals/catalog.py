@@ -1,0 +1,657 @@
+"""
+CATALOGO DE FUENTES DE SENAL: que se puede llegar a mirar, y con que honestidad.
+
+Una entrada de este catalogo no es una promesa de dato: es una DECLARACION. Dice que
+produce la fuente, cada cuanto, sobre que clase de entidad, con que licencia y —los dos
+campos que sostienen todo lo demas— desde cuando hay historia MEDIDA (`history_from`) y de
+que naturaleza es esa historia (`pit`).
+
+LOS DOS CAMPOS QUE HACEN HONESTO EL RESTO
+-----------------------------------------
+`history_from` es la primera fecha con dato COMPROBADO POR NOSOTROS, no la que anuncia el
+proveedor. Arranca en `None` en todas las fuentes, y `None` significa exactamente una
+cosa: **solo hacia adelante**. Esa fuente no puede participar en un backtest hasta que
+alguien mida su profundidad y escriba la fecha. Lo que el proveedor promete se escribe en
+`notes`, en prosa y como lo que es —una afirmacion suya—, para que ningun codigo pueda
+confundir una promesa con una medicion.
+
+`pit` (point-in-time) dice si la historia, cuando la haya, vale para backtest:
+
+  - `forward_capture`: solo es point-in-time lo que capturemos nosotros en vivo. Nadie
+    publica el pasado, o lo publica reescrito. Es el caso mas comun y el motivo por el que
+    `signals/capture.py` se arranca antes de que nada este cableado: cada dia sin capturar
+    es profundidad que no se recupera nunca.
+  - `archive_revisable`: hay backfill, pero el proveedor puede reetiquetar, borrar o
+    rellenar hacia atras. Sirve, con la advertencia declarada; el archivo crudo con su
+    `fetched_at` es lo que permite detectar la revision a posteriori.
+  - `derived_from_price`: se deriva de datos que ya tenemos (barras, libro). Es
+    point-in-time por construccion y su profundidad es la de nuestro historico de precios.
+
+Juntos responden la unica pregunta que importa antes de puntuar nada: **que fuentes pueden
+entrar en un backtest y cuales solo en vivo**. Hoy la respuesta, medida, es que ninguna
+puede: el catalogo entero esta en `history_from=None`. Eso no es un defecto del catalogo,
+es el estado real del sistema el dia que se construye el esqueleto, y aparece publicado en
+el dashboard como tal.
+
+LAS DOS PUERTAS (`tier`)
+------------------------
+`A` = MECANICA. Oferta calendarizada y determinista: unlocks, colas de staking, ajustes de
+dificultad, hacks, sanciones. Muestras de DECENAS. Entran como ELEGIBILIDAD (una guarda
+que veta operar) y NUNCA como feature de un optimizador: un CEM suelto sobre catorce
+observaciones construye una estrategia preciosa y falsa.
+
+`B` = ESTADISTICA. Series continuas con efectos pequenos y decadentes: sentimiento, flujos
+de ETF, macro, actividad de desarrollo, dispersion de funding. Entran como features.
+
+La separacion vive en el catalogo —no en un comentario— para que el dia que se cablee sea
+un filtro y no un acto de disciplina.
+
+ESTE MODULO NO CONECTA NADA. No importa `requests` ni ningun cliente: es una lista de
+declaraciones. Los adaptadores viven en `signals/source.py` y hoy no hay ninguno
+registrado; el catalogo es lo que permite medir cuantos faltan.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import date
+
+from ai_trader.shared.entities import EntityKind
+from ai_trader.shared.signals import (
+    AGG_LAST,
+    AGG_MEAN,
+    AGG_SUM,
+    AGGREGATIONS,
+    DEFAULT_AGGREGATION,
+)
+
+# --- vocabulario cerrado ------------------------------------------------------------
+
+TIER_MECHANICAL = "A"
+TIER_STATISTICAL = "B"
+TIERS: tuple[str, ...] = (TIER_MECHANICAL, TIER_STATISTICAL)
+
+SCOPE_ASSET = "asset"
+SCOPE_MARKET = "market"
+SCOPE_CHAIN = "chain"
+SCOPE_MACRO = "macro"
+SCOPE_VENUE = "venue"
+SCOPES: tuple[str, ...] = (SCOPE_ASSET, SCOPE_MARKET, SCOPE_CHAIN, SCOPE_MACRO, SCOPE_VENUE)
+
+PIT_FORWARD_CAPTURE = "forward_capture"
+PIT_ARCHIVE_REVISABLE = "archive_revisable"
+PIT_DERIVED_FROM_PRICE = "derived_from_price"
+PIT_KINDS: tuple[str, ...] = (PIT_FORWARD_CAPTURE, PIT_ARCHIVE_REVISABLE, PIT_DERIVED_FROM_PRICE)
+
+# Cadencia -> cada cuantos DIAS NATURALES se espera una observacion nueva. Es lo que
+# convierte "hay 40 dias con dato" en un porcentaje de cobertura (`signals/audit.py`).
+# `event` es None a proposito: una fuente por evento no tiene cadencia esperada, y darle
+# una convertiria "no paso nada" en "falta dato".
+CADENCE_DAYS: dict[str, float | None] = {
+    "hourly": 1.0,
+    "daily": 1.0,
+    "weekly": 7.0,
+    "monthly": 30.0,
+    "event": None,
+}
+CADENCES: tuple[str, ...] = tuple(CADENCE_DAYS)
+
+# Entidades que puede tener una fuente segun su alcance. Un alcance de mercado tiene UNA
+# entidad (`MARKET_ENTITY`); uno de activo, una por activo del universo.
+SCOPE_ENTITY_KINDS: dict[str, tuple[EntityKind, ...]] = {
+    SCOPE_ASSET: (EntityKind.TOKEN, EntityKind.EQUITY, EntityKind.PREDICTION),
+    SCOPE_MARKET: (EntityKind.MARKET,),
+    SCOPE_CHAIN: (EntityKind.CHAIN,),
+    SCOPE_MACRO: (EntityKind.MACRO, EntityKind.MARKET),
+    SCOPE_VENUE: (EntityKind.TOKEN, EntityKind.VENUE),
+}
+
+
+@dataclass(frozen=True, slots=True)
+class SignalFeature:
+    """
+    Una columna que produce la fuente, con su politica de agregacion a dia.
+
+    `agg` no es un detalle de implementacion: sumar un ESTADO (oferta de stablecoins) o
+    quedarse con el ultimo de un FLUJO (entradas de ETF) son errores que no se ven en la
+    grafica. Por eso la politica es un dato del catalogo y `shared/signals.py` la aplica,
+    en vez de dejarla en manos de cada adaptador.
+    """
+
+    name: str
+    agg: str = DEFAULT_AGGREGATION
+    unit: str = ""
+    description: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.name or not self.name.replace("_", "").isalnum():
+            raise ValueError(f"Nombre de feature invalido: '{self.name}'")
+        if self.name != self.name.lower():
+            raise ValueError(f"Los nombres de feature van en minusculas: '{self.name}'")
+        if self.agg not in AGGREGATIONS:
+            raise ValueError(f"Agregacion desconocida en '{self.name}': '{self.agg}'")
+
+    def as_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "agg": self.agg,
+            "unit": self.unit,
+            "description": self.description,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class SignalSource:
+    """Una fuente declarada. Ver el docstring del modulo para `history_from` y `pit`."""
+
+    key: str
+    title: str
+    tier: str
+    scope: str
+    cadence: str
+    entity_kind: EntityKind
+    features: tuple[SignalFeature, ...]
+    pit: str
+    license: str
+    # MEDIDO. None = no se ha medido -> solo hacia adelante -> fuera de cualquier backtest.
+    history_from: date | None = None
+    endpoint: str = ""
+    # Variable de entorno con la credencial, o None si la fuente es abierta. Es un NOMBRE
+    # de variable, nunca un valor: aqui no vive ningun secreto.
+    auth_env: str | None = None
+    # Entidades DECLARADAS, para las fuentes cuyo eje no sale del universo de simbolos: una
+    # cadena, una serie macro. Vacio = las entidades se derivan del universo configurado
+    # (`signals/capture.py::entities_for`), que es el caso de todo lo que es por activo.
+    fixed_entities: tuple[str, ...] = ()
+    notes: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.key or not _is_slug(self.key):
+            raise ValueError(f"Clave de fuente invalida: '{self.key}' (minusculas, [a-z0-9_])")
+        if self.tier not in TIERS:
+            raise ValueError(f"Tier desconocido en '{self.key}': '{self.tier}'")
+        if self.scope not in SCOPES:
+            raise ValueError(f"Scope desconocido en '{self.key}': '{self.scope}'")
+        if self.cadence not in CADENCES:
+            raise ValueError(f"Cadencia desconocida en '{self.key}': '{self.cadence}'")
+        if self.pit not in PIT_KINDS:
+            raise ValueError(f"pit desconocido en '{self.key}': '{self.pit}'")
+        if not self.license:
+            raise ValueError(f"La fuente '{self.key}' no declara licencia")
+        if not self.features:
+            raise ValueError(f"La fuente '{self.key}' no produce ninguna feature")
+        names = [f.name for f in self.features]
+        if len(set(names)) != len(names):
+            raise ValueError(f"Features repetidas en '{self.key}': {names}")
+        allowed = SCOPE_ENTITY_KINDS[self.scope]
+        if self.entity_kind not in allowed:
+            raise ValueError(
+                f"'{self.key}': entity_kind '{self.entity_kind.value}' no encaja con "
+                f"scope '{self.scope}' (admitidos: {[k.value for k in allowed]})"
+            )
+
+    @property
+    def feature_names(self) -> tuple[str, ...]:
+        """Orden canonico de las columnas de esta fuente."""
+        return tuple(f.name for f in self.features)
+
+    @property
+    def backtestable(self) -> bool:
+        """¿Puede participar en un backtest? Solo si hay historia MEDIDA. Sin `history_from`
+        la fuente existe unicamente hacia adelante, por muy profundo que sea el backfill
+        que anuncie el proveedor."""
+        return self.history_from is not None
+
+    @property
+    def expected_days_between_observations(self) -> float | None:
+        """Dias naturales entre observaciones esperadas. None = fuente por evento."""
+        return CADENCE_DAYS[self.cadence]
+
+    @property
+    def is_market_scoped(self) -> bool:
+        """True si la fuente tiene UNA entidad para todo el mercado, no una por activo."""
+        return self.entity_kind is EntityKind.MARKET
+
+    def aggregations(self) -> dict[str, str]:
+        """Politica feature -> agregacion, tal y como la consume `normalize_signals`."""
+        return {f.name: f.agg for f in self.features}
+
+    def as_dict(self) -> dict:
+        return {
+            "key": self.key,
+            "title": self.title,
+            "tier": self.tier,
+            "scope": self.scope,
+            "cadence": self.cadence,
+            "entity_kind": self.entity_kind.value,
+            "features": [f.as_dict() for f in self.features],
+            "pit": self.pit,
+            "license": self.license,
+            "history_from": self.history_from.isoformat() if self.history_from else None,
+            "backtestable": self.backtestable,
+            "endpoint": self.endpoint,
+            "auth_env": self.auth_env,
+            "fixed_entities": list(self.fixed_entities),
+            "notes": self.notes,
+        }
+
+
+def _is_slug(value: str) -> bool:
+    # La clave es tambien un NOMBRE DE DIRECTORIO en data/signals_raw/: nada de barras,
+    # espacios ni mayusculas, que en Windows y en Linux no se comportan igual.
+    return bool(value) and all(c.islower() or c.isdigit() or c == "_" for c in value)
+
+
+# --- el catalogo --------------------------------------------------------------------
+#
+# TODAS las fuentes arrancan con `history_from=None`. No es un hueco pendiente de
+# rellenar por comodidad: es el estado medido. Lo que el proveedor promete va en `notes`.
+
+CATALOG: tuple[SignalSource, ...] = (
+    # ---------------- Tier B: continuas, entran como features -----------------------
+    SignalSource(
+        key="guavy_sentiment",
+        title="Sentimiento social por token (Guavy)",
+        tier=TIER_STATISTICAL,
+        scope=SCOPE_ASSET,
+        cadence="daily",
+        entity_kind=EntityKind.TOKEN,
+        features=(
+            SignalFeature("sentiment_positive", AGG_SUM, "mensajes", "Menciones positivas."),
+            SignalFeature("sentiment_negative", AGG_SUM, "mensajes", "Menciones negativas."),
+            SignalFeature("sentiment_neutral", AGG_SUM, "mensajes", "Menciones neutras."),
+            SignalFeature("sentiment_total", AGG_SUM, "mensajes", "Volumen total de mencion."),
+        ),
+        pit=PIT_ARCHIVE_REVISABLE,
+        license="Comercial, plan gratuito. Bearer token.",
+        endpoint="/api/v1/sentiment/get-sentiment-history/<symbol>",
+        auth_env="GUAVY_API_KEY",
+        notes="Se consumen SOLO los conteos crudos. Los endpoints trend/signal son el "
+              "output de SU modelo: pueden estar recalculados con informacion posterior y "
+              "no son auditables. El proveedor no documenta profundidad; hay que medirla.",
+    ),
+    SignalSource(
+        key="etf_flows",
+        title="Flujos diarios de los ETF spot (BTC/ETH), por emisor",
+        tier=TIER_STATISTICAL,
+        scope=SCOPE_ASSET,
+        cadence="daily",
+        entity_kind=EntityKind.TOKEN,
+        features=(
+            SignalFeature("etf_netflow_usd", AGG_SUM, "USD", "Flujo neto del dia."),
+            SignalFeature("etf_issuer_dispersion", AGG_LAST, "z",
+                          "Dispersion entre emisores: separa rotacion de flujo neto."),
+            SignalFeature("etf_issuers_reporting", AGG_LAST, "n",
+                          "Emisores que reportaron ese dia (cobertura, no senal)."),
+        ),
+        pit=PIT_ARCHIVE_REVISABLE,
+        license="TFTC: CC BY 4.0. Farside/SoSoValue como contraste.",
+        endpoint="https://tftc.io (JSON abierto)",
+        notes="TFTC AFIRMA serie completa desde enero de 2024. Es una afirmacion suya: "
+              "history_from sigue a None hasta que se descargue y se compruebe. Los flujos "
+              "se revisan al alza el dia siguiente, de ahi archive_revisable.",
+    ),
+    SignalSource(
+        key="fred_macro",
+        title="Series macro de FRED (DXY, tipos reales, 2y/10y, oro, indices)",
+        tier=TIER_STATISTICAL,
+        scope=SCOPE_MACRO,
+        cadence="daily",
+        entity_kind=EntityKind.MACRO,
+        features=(
+            SignalFeature("macro_value", AGG_LAST, "nativa", "Valor de la serie ese dia."),
+            SignalFeature("macro_change_1d", AGG_LAST, "nativa", "Variacion diaria."),
+        ),
+        pit=PIT_ARCHIVE_REVISABLE,
+        license="FRED: uso publico, key gratuita.",
+        endpoint="https://api.stlouisfed.org/fred/series/observations",
+        auth_env="FRED_API_KEY",
+        fixed_entities=("DTWEXBGS", "DFII10", "T10Y2Y", "SP500", "VIXCLS"),
+        notes="La entidad es la SERIE (DTWEXBGS, DFII10, T10Y2Y...), no un activo. FRED "
+              "revisa series hacia atras: sin el archivo crudo con fetched_at no hay forma "
+              "de saber que se veia aquel dia. Mapea uno a uno sobre los factores del "
+              "generador sintetico (synthetic/universe.py: EQUITY, RATES, USD, COMMODITY).",
+    ),
+    SignalSource(
+        key="defillama_stablecoins",
+        title="Oferta de stablecoins por cadena (DefiLlama)",
+        tier=TIER_STATISTICAL,
+        scope=SCOPE_CHAIN,
+        cadence="daily",
+        entity_kind=EntityKind.CHAIN,
+        features=(
+            SignalFeature("stablecoin_supply_usd", AGG_LAST, "USD", "Oferta circulante."),
+            SignalFeature("stablecoin_issuance_usd", AGG_SUM, "USD", "Emision neta del dia."),
+        ),
+        pit=PIT_ARCHIVE_REVISABLE,
+        license="DefiLlama: abierta, sin auth.",
+        endpoint="https://stablecoins.llama.fi/stablecoincharts/<chain>",
+        fixed_entities=("ethereum", "solana", "arbitrum", "base", "tron", "bsc"),
+        notes="La emision neta es polvora seca entrando; el desglose POR CADENA es rotacion "
+              "de capital entre ecosistemas, que es la parte que no se publica agregada.",
+    ),
+    SignalSource(
+        key="defillama_fees",
+        title="Comisiones, ingresos y TVL por protocolo (DefiLlama)",
+        tier=TIER_STATISTICAL,
+        scope=SCOPE_ASSET,
+        cadence="daily",
+        entity_kind=EntityKind.TOKEN,
+        features=(
+            SignalFeature("fees_usd", AGG_SUM, "USD", "Comisiones del dia."),
+            SignalFeature("revenue_usd", AGG_SUM, "USD", "Ingresos del protocolo."),
+            SignalFeature("tvl_usd", AGG_LAST, "USD", "Valor bloqueado al cierre."),
+        ),
+        pit=PIT_ARCHIVE_REVISABLE,
+        license="DefiLlama: abierta, sin auth.",
+        endpoint="https://api.llama.fi/summary/fees/<protocol>",
+        notes="Con el precio ya en el sistema salen P/F y P/S. El universo con ingresos "
+              "reales es pequeno e ignorado, que es lo que lo hace interesante.",
+    ),
+    SignalSource(
+        key="defillama_volumes",
+        title="Cuota DEX/CEX por activo (DefiLlama)",
+        tier=TIER_STATISTICAL,
+        scope=SCOPE_ASSET,
+        cadence="daily",
+        entity_kind=EntityKind.TOKEN,
+        features=(
+            SignalFeature("dex_volume_usd", AGG_SUM, "USD", "Volumen en DEX."),
+            SignalFeature("dex_share", AGG_LAST, "fraccion", "Fraccion del volumen en DEX."),
+        ),
+        pit=PIT_ARCHIVE_REVISABLE,
+        license="DefiLlama: abierta, sin auth.",
+        endpoint="https://api.llama.fi/overview/dexs/<protocol>",
+        notes="Donde se forma el precio. Un activo cuyo volumen migra a DEX cambia de "
+              "microestructura, y el modelo de costes lo trata igual (limite conocido).",
+    ),
+    SignalSource(
+        key="wikipedia_pageviews",
+        title="Atencion por idioma (Wikipedia Pageviews)",
+        tier=TIER_STATISTICAL,
+        scope=SCOPE_ASSET,
+        cadence="hourly",
+        entity_kind=EntityKind.TOKEN,
+        features=(
+            SignalFeature("pageviews", AGG_SUM, "visitas", "Visitas del dia, todos los idiomas."),
+            SignalFeature("pageviews_lang_concentration", AGG_LAST, "HHI",
+                          "Concentracion por idioma: descomposicion GEOGRAFICA de la atencion."),
+        ),
+        pit=PIT_ARCHIVE_REVISABLE,
+        license="Wikimedia REST: CC BY-SA, sin auth.",
+        endpoint="https://wikimedia.org/api/rest_v1/metrics/pageviews",
+        notes="Horario y desglosado por idioma, que es lo que Google Trends no da limpio. "
+              "Es la fuente con el backfill mas creible del lote, pero medirlo sigue "
+              "siendo obligatorio antes de ponerle fecha.",
+    ),
+    SignalSource(
+        key="p2p_premium",
+        title="Prima P2P en monedas en crisis (Binance P2P)",
+        tier=TIER_STATISTICAL,
+        scope=SCOPE_VENUE,
+        cadence="hourly",
+        entity_kind=EntityKind.TOKEN,
+        features=(
+            SignalFeature("p2p_premium_pct", AGG_MEAN, "%",
+                          "Prima media del dia sobre el precio oficial."),
+            SignalFeature("p2p_currencies", AGG_LAST, "n", "Divisas con cotizacion ese dia."),
+        ),
+        pit=PIT_FORWARD_CAPTURE,
+        license="Endpoint publico de Binance.",
+        endpoint="https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search",
+        notes="TRY/ARS/NGN. Demanda por crisis monetaria: un driver distinto y no "
+              "correlacionado con el ciclo especulativo. NADIE publica el historico de un "
+              "libro P2P: lo que no se capture hoy no existe manana.",
+    ),
+    SignalSource(
+        key="funding_dispersion",
+        title="Dispersion de funding entre venues (CCXT)",
+        tier=TIER_STATISTICAL,
+        scope=SCOPE_VENUE,
+        cadence="hourly",
+        entity_kind=EntityKind.TOKEN,
+        features=(
+            SignalFeature("funding_dispersion", AGG_MEAN, "bps",
+                          "Desviacion tipica del funding entre venues."),
+            SignalFeature("funding_median", AGG_MEAN, "bps", "Nivel mediano (contexto)."),
+            SignalFeature("funding_venues", AGG_LAST, "n", "Venues con dato (cobertura)."),
+        ),
+        pit=PIT_FORWARD_CAPTURE,
+        license="Endpoints publicos de cada venue via CCXT.",
+        notes="La DISPERSION, no el nivel: el nivel esta muy arbitrado. Algunos venues "
+              "sirven historico de funding y otros no, asi que la profundidad real es "
+              "desigual por venue y hay que medirla venue a venue.",
+    ),
+    SignalSource(
+        key="github_activity",
+        title="Velocidad de desarrollo (GitHub API)",
+        tier=TIER_STATISTICAL,
+        scope=SCOPE_ASSET,
+        cadence="daily",
+        entity_kind=EntityKind.TOKEN,
+        features=(
+            SignalFeature("commits", AGG_SUM, "commits", "Commits del dia en el repo principal."),
+            SignalFeature("contributors", AGG_LAST, "n", "Contribuidores unicos activos."),
+        ),
+        pit=PIT_ARCHIVE_REVISABLE,
+        license="GitHub API, token gratuito (rate limit 5000/h).",
+        endpoint="https://api.github.com/repos/<owner>/<repo>/stats/commit_activity",
+        auth_env="GITHUB_TOKEN",
+        notes="Santiment cobra por esto y el dato crudo es publico. Revisable: un "
+              "force-push reescribe el historico de commits.",
+    ),
+    SignalSource(
+        key="cftc_cot",
+        title="Posicionamiento en futuros CME (CFTC COT / TFF)",
+        tier=TIER_STATISTICAL,
+        scope=SCOPE_ASSET,
+        cadence="weekly",
+        entity_kind=EntityKind.TOKEN,
+        features=(
+            SignalFeature("cot_leveraged_net", AGG_LAST, "contratos", "Neto de fondos apalancados."),
+            SignalFeature("cot_dealer_net", AGG_LAST, "contratos", "Neto de dealers."),
+            SignalFeature("cot_open_interest", AGG_LAST, "contratos", "Interes abierto."),
+        ),
+        pit=PIT_ARCHIVE_REVISABLE,
+        license="CFTC: dominio publico (Socrata).",
+        endpoint="https://publicreporting.cftc.gov/resource/gpe5-46if.json",
+        notes="Semanal (martes, publicado el viernes): el desfase de publicacion es de "
+              "TRES dias y el recorte por dia de observacion no lo captura. Cablearlo "
+              "exige decalar la serie a mano; queda declarado aqui para no olvidarlo.",
+    ),
+    # ---------------- Tier A: mecanicas, entran como ELEGIBILIDAD --------------------
+    SignalSource(
+        key="token_unlocks",
+        title="Desbloqueos y vesting (DefiLlama emissions)",
+        tier=TIER_MECHANICAL,
+        scope=SCOPE_ASSET,
+        cadence="event",
+        entity_kind=EntityKind.TOKEN,
+        features=(
+            SignalFeature("unlock_pct_float", AGG_SUM, "%", "Desbloqueo como % del float."),
+            SignalFeature("unlock_pct_adv", AGG_SUM, "%", "Desbloqueo como % del volumen diario."),
+            SignalFeature("days_to_unlock", AGG_LAST, "dias", "Dias hasta el proximo desbloqueo."),
+        ),
+        pit=PIT_ARCHIVE_REVISABLE,
+        license="DefiLlama: abierta, sin auth.",
+        endpoint="https://api.llama.fi/emissions",
+        notes="Lo valioso NO es 'hay unlock' (explotado) sino el desbloqueo NORMALIZADO: "
+              "un 3% sobre un token con 40 dias de volumen en circulacion es un evento; el "
+              "mismo 3% sobre uno liquido no lo es. El calendario futuro se reescribe "
+              "cuando el equipo cambia el vesting: revisable por naturaleza.",
+    ),
+    SignalSource(
+        key="staking_queue",
+        title="Cola de entrada/salida del staking (Ethereum y equivalentes)",
+        tier=TIER_MECHANICAL,
+        scope=SCOPE_CHAIN,
+        cadence="daily",
+        entity_kind=EntityKind.CHAIN,
+        features=(
+            SignalFeature("staking_exit_queue", AGG_LAST, "unidades", "Oferta futura en cola."),
+            SignalFeature("staking_entry_queue", AGG_LAST, "unidades", "Demanda futura en cola."),
+            SignalFeature("staking_queue_days", AGG_LAST, "dias", "Espera estimada."),
+        ),
+        pit=PIT_FORWARD_CAPTURE,
+        license="beaconcha.in: gratis con limite de peticiones.",
+        endpoint="https://beaconcha.in/api/v1/validators/queue",
+        fixed_entities=("ethereum", "solana", "cosmos"),
+        notes="Oferta futura con FECHA CONOCIDA dias antes. El endpoint devuelve la foto de "
+              "AHORA y no guarda la de ayer: es forward_capture puro, el caso que mas "
+              "penaliza retrasar la captura.",
+    ),
+    SignalSource(
+        key="btc_difficulty",
+        title="Ajuste de dificultad y hashprice (mempool.space)",
+        tier=TIER_MECHANICAL,
+        scope=SCOPE_CHAIN,
+        cadence="event",
+        entity_kind=EntityKind.CHAIN,
+        features=(
+            SignalFeature("difficulty_change_pct", AGG_LAST, "%", "Ajuste estimado/aplicado."),
+            SignalFeature("hashprice_usd", AGG_LAST, "USD/TH/dia", "Ingreso por unidad de hash."),
+            SignalFeature("days_to_adjustment", AGG_LAST, "dias", "Dias al proximo ajuste."),
+        ),
+        pit=PIT_FORWARD_CAPTURE,
+        license="mempool.space: abierta, sin auth.",
+        endpoint="https://mempool.space/api/v1/difficulty-adjustment",
+        fixed_entities=("bitcoin",),
+        notes="Cada 2016 bloques, con fecha estimable de antemano. Hashprice comprimido "
+              "implica venta forzada de mineros: oferta con calendario.",
+    ),
+    SignalSource(
+        key="defillama_hacks",
+        title="Hacks y exploits fechados (DefiLlama)",
+        tier=TIER_MECHANICAL,
+        scope=SCOPE_MARKET,
+        cadence="event",
+        entity_kind=EntityKind.MARKET,
+        features=(
+            SignalFeature("hack_amount_usd", AGG_SUM, "USD", "Importe comprometido ese dia."),
+            SignalFeature("hack_count", AGG_SUM, "n", "Numero de incidentes."),
+        ),
+        pit=PIT_ARCHIVE_REVISABLE,
+        license="DefiLlama: abierta, sin auth.",
+        endpoint="https://api.llama.fi/hacks",
+        notes="Muestra de decenas en anos. Es el ejemplo canonico de Tier A: como feature "
+              "de un optimizador seria un ajuste perfecto a catorce dias del historico.",
+    ),
+    SignalSource(
+        key="ofac_sdn",
+        title="Lista OFAC SDN (direcciones sancionadas)",
+        tier=TIER_MECHANICAL,
+        scope=SCOPE_MARKET,
+        cadence="event",
+        entity_kind=EntityKind.MARKET,
+        features=(
+            SignalFeature("sdn_crypto_addresses", AGG_LAST, "n", "Direcciones en la lista."),
+            SignalFeature("sdn_new_entries", AGG_SUM, "n", "Altas del dia."),
+        ),
+        pit=PIT_FORWARD_CAPTURE,
+        license="US Treasury: dominio publico.",
+        endpoint="https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN.XML",
+        notes="Se publica la lista de HOY, no la de una fecha pasada. Reconstruir el pasado "
+              "exige haber guardado cada version: forward_capture, y por eso el archivo es "
+              "append-only con fetched_at.",
+    ),
+    SignalSource(
+        key="macro_calendar",
+        title="Calendario macro (FOMC, CPI, vencimientos)",
+        tier=TIER_MECHANICAL,
+        scope=SCOPE_MACRO,
+        cadence="event",
+        entity_kind=EntityKind.MARKET,
+        features=(
+            SignalFeature("days_to_fomc", AGG_LAST, "dias", "Dias a la proxima reunion."),
+            SignalFeature("days_to_cpi", AGG_LAST, "dias", "Dias al proximo dato de IPC."),
+            SignalFeature("event_today", AGG_LAST, "0/1", "Hay evento programado hoy."),
+        ),
+        pit=PIT_FORWARD_CAPTURE,
+        license="Fuentes oficiales (Fed, BLS): dominio publico.",
+        notes="Determinista y conocido con meses de antelacion, que es lo que lo hace apto "
+              "como guarda de elegibilidad y no como alfa.",
+    ),
+)
+
+
+def _check_catalog(sources: tuple[SignalSource, ...]) -> None:
+    keys = [s.key for s in sources]
+    if len(set(keys)) != len(keys):
+        raise ValueError(f"Claves de fuente repetidas en el catalogo: {sorted(keys)}")
+
+    seen: dict[str, str] = {}
+    for source in sources:
+        for name in source.feature_names:
+            if name in seen:
+                # Global y no por fuente: el dia que estas columnas se junten en un solo
+                # vector de observacion, dos features homonimas se pisarian en silencio.
+                raise ValueError(
+                    f"Feature '{name}' declarada dos veces: '{seen[name]}' y '{source.key}'"
+                )
+            seen[name] = source.key
+
+
+_check_catalog(CATALOG)
+
+CATALOG_BY_KEY: dict[str, SignalSource] = {s.key: s for s in CATALOG}
+
+
+def get_source(key: str) -> SignalSource:
+    """La fuente con esa clave. KeyError con la lista completa si no existe."""
+    try:
+        return CATALOG_BY_KEY[key]
+    except KeyError:
+        raise KeyError(
+            f"Fuente de senal desconocida: '{key}'. Catalogo: {sorted(CATALOG_BY_KEY)}"
+        ) from None
+
+
+def sources_by_tier(tier: str) -> tuple[SignalSource, ...]:
+    if tier not in TIERS:
+        raise ValueError(f"Tier desconocido: '{tier}'")
+    return tuple(s for s in CATALOG if s.tier == tier)
+
+
+def backtestable_sources() -> tuple[SignalSource, ...]:
+    """Las que pueden entrar en un backtest HOY. Que hoy sea vacio es la medicion."""
+    return tuple(s for s in CATALOG if s.backtestable)
+
+
+def catalog_summary() -> dict:
+    """Recuento del catalogo tal y como se publica en el dashboard y en la metodologia."""
+    return {
+        "n_sources": len(CATALOG),
+        "n_features": sum(len(s.features) for s in CATALOG),
+        "by_tier": {tier: len(sources_by_tier(tier)) for tier in TIERS},
+        "by_scope": {scope: sum(1 for s in CATALOG if s.scope == scope) for scope in SCOPES},
+        "by_pit": {kind: sum(1 for s in CATALOG if s.pit == kind) for kind in PIT_KINDS},
+        "n_backtestable": len(backtestable_sources()),
+        "n_forward_only": sum(1 for s in CATALOG if not s.backtestable),
+        "n_open": sum(1 for s in CATALOG if s.auth_env is None),
+    }
+
+
+__all__ = [
+    "CADENCES",
+    "CADENCE_DAYS",
+    "CATALOG",
+    "CATALOG_BY_KEY",
+    "PIT_ARCHIVE_REVISABLE",
+    "PIT_DERIVED_FROM_PRICE",
+    "PIT_FORWARD_CAPTURE",
+    "PIT_KINDS",
+    "SCOPES",
+    "SCOPE_ASSET",
+    "SCOPE_CHAIN",
+    "SCOPE_MACRO",
+    "SCOPE_MARKET",
+    "SCOPE_VENUE",
+    "TIERS",
+    "TIER_MECHANICAL",
+    "TIER_STATISTICAL",
+    "SignalFeature",
+    "SignalSource",
+    "backtestable_sources",
+    "catalog_summary",
+    "get_source",
+    "sources_by_tier",
+]

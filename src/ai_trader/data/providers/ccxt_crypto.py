@@ -7,6 +7,8 @@ from typing import Any
 import ccxt  # type: ignore
 import pandas as pd
 
+from ai_trader.shared.instruments import split_pair
+
 
 def to_utc_datetime(value: datetime) -> datetime:
     if value.tzinfo is None:
@@ -136,21 +138,16 @@ class CCXTCrypto:
         return df
 
     def normalize_symbol(self, symbol: str) -> str:
-        cleaned = symbol.strip().upper().replace("-", "/")
-
-        if "/" in cleaned:
-            return cleaned
-
-        common_quotes = ("USDT", "USD", "USDC", "BTC", "ETH", "EUR")
-        for quote in common_quotes:
-            if cleaned.endswith(quote) and len(cleaned) > len(quote):
-                base = cleaned[: -len(quote)]
-                return f"{base}/{quote}"
-
-        raise ValueError(
-            f"Could not normalize crypto symbol '{symbol}'. "
-            "Use format like BTC/USDT or ETH/USD."
-        )
+        # La regla de corte (y la tupla de monedas de cotizacion) vive en
+        # shared/instruments.py: la comparten este proveedor y la resolucion de entidad
+        # de las senales, y duplicarla era la via directa a que divergieran.
+        pair = split_pair(symbol)
+        if pair is None:
+            raise ValueError(
+                f"Could not normalize crypto symbol '{symbol}'. "
+                "Use format like BTC/USDT or ETH/USD."
+            )
+        return f"{pair[0]}/{pair[1]}"
 
     def can_handle_symbol(self, symbol: str) -> bool:
         try:

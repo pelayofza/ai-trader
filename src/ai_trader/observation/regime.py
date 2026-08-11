@@ -7,16 +7,7 @@ import numpy as np
 import pandas as pd
 
 from ai_trader.shared import bars as bar_schema
-from ai_trader.shared.clock import Clock
-
-
-def _visible_cutoff(now: datetime) -> pd.Timestamp:
-    """Frontera anti look-ahead IDENTICA a HistoricalDataSource.get_daily_bars: solo
-    barras estrictamente anteriores a hoy. La barra de hoy aun no ha cerrado desde el
-    punto de vista de la decision, asi que el regimen tampoco puede verla."""
-    ts = pd.Timestamp(now)
-    ts = ts.tz_localize("UTC") if ts.tzinfo is None else ts.tz_convert("UTC")
-    return ts.normalize()
+from ai_trader.shared.clock import Clock, visible_cutoff
 
 # Orden canonico del bloque cross-sectional / regimen del vector de observacion.
 # breadth y agg_vol son de mercado (iguales para todos los simbolos ese dia);
@@ -94,7 +85,7 @@ class MarketRegimeProvider:
         if df is None or df.empty:
             return pd.Series(dtype=float)
         close = bar_schema.series(df, bar_schema.CLOSE)
-        return close[close.index < _visible_cutoff(as_of)].dropna()
+        return close[close.index < visible_cutoff(as_of)].dropna()
 
     # --- agregados de mercado (cacheados por dia) --------------------------
 

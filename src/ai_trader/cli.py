@@ -248,6 +248,90 @@ def cmd_synth_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_signals_catalog(args: argparse.Namespace) -> int:
+    """El catalogo de fuentes tal y como esta declarado. No toca red ni disco."""
+    import json
+
+    from ai_trader.signals.catalog import CATALOG, catalog_summary
+
+    if args.json:
+        print(json.dumps([s.as_dict() for s in CATALOG], indent=2))
+        return 0
+
+    summary = catalog_summary()
+    print(f"=== CATALOGO DE SENALES | {summary['n_sources']} fuentes | "
+          f"{summary['n_features']} features ===")
+    print(f"  {'clave':<24} {'tier':<5} {'scope':<7} {'cadencia':<9} {'pit':<18} "
+          f"{'historia':<11} feats")
+    for source in CATALOG:
+        history = source.history_from.isoformat() if source.history_from else "solo adelante"
+        print(f"  {source.key:<24} {source.tier:<5} {source.scope:<7} {source.cadence:<9} "
+              f"{source.pit:<18} {history:<11} {len(source.features)}")
+    print()
+    print(f"  Backtesteables HOY: {summary['n_backtestable']}/{summary['n_sources']} "
+          f"(el resto no tiene history_from MEDIDO: solo existen hacia adelante)")
+    print(f"  Sin credencial: {summary['n_open']}/{summary['n_sources']}")
+    return 0
+
+
+def cmd_signals_capture(args: argparse.Namespace) -> int:
+    """Una pasada de captura. Se puede correr HOY: sin adaptadores archiva 0 y lo declara."""
+    from ai_trader.signals.capture import capture
+
+    config = load_config(args.config)
+    report = capture(config.runner.symbols)
+
+    print(f"=== CAPTURA | {report.n_sources} fuentes | {report.records} registros ===")
+    for item in report.sources:
+        state = "sin adaptador" if not item.connected else (item.error or f"{item.records} reg.")
+        print(f"  {item.source_key:<24} {item.tier:<3} {len(item.entities):>3} ent.  {state}")
+    print()
+    print(f"  Conectadas {report.n_connected}/{report.n_sources} | "
+          f"pendientes {report.n_pending} | fallidas {report.n_failed}")
+    if report.n_connected == 0:
+        print("  Aviso: aun no hay ningun adaptador escrito. El archivo empieza a tener "
+              "fondo el dia que se registre el primero (signals.source.register_adapter).")
+    return 0
+
+
+def cmd_signals_audit(args: argparse.Namespace) -> int:
+    """Cobertura MEDIDA: del mapeo simbolo->entidad y del archivo crudo."""
+    import json
+
+    from ai_trader.signals.audit import audit_archive, audit_entities
+
+    config = load_config(args.config)
+    entities = audit_entities(config.runner.symbols)
+    archive = audit_archive()
+
+    if args.json:
+        print(json.dumps({"entities": entities.as_dict(), "archive": archive.as_dict()}, indent=2))
+        return 0
+
+    print(f"=== ENTIDADES | {entities.n_symbols} simbolos | "
+          f"cobertura {entities.coverage_pct:.1f}% ===")
+    counts = entities.by_source
+    print(f"  regla {counts['rule']} | overrides {counts['override']} | "
+          f"sin resolver {counts['unmapped']}")
+    if entities.unmapped:
+        print(f"  Sin resolver: {', '.join(entities.unmapped)}")
+    for key, symbols in entities.collisions.items():
+        print(f"  {key} <- {', '.join(symbols)}")
+    print()
+
+    print(f"=== ARCHIVO CRUDO | {archive.root} | {archive.records} registros ===")
+    for source in archive.sources:
+        if not source.years:
+            continue
+        for row in source.years:
+            pct = "n/a" if row.coverage_pct is None else f"{row.coverage_pct:.0f}%"
+            print(f"  {source.source_key:<24} {row.entity:<12} {row.year} "
+                  f"{row.days:>4}d  cobertura {pct:>5}  hueco max {row.max_gap_days}d")
+    if archive.records == 0:
+        print("  Vacio: todavia no se ha capturado nada.")
+    return 0
+
+
 def _print_window(title, window) -> None:
     m = window.metrics
     print(f"=== {title} | {window.start.date()} -> {window.end.date()} ===")
@@ -392,6 +476,24 @@ def main(argv: list[str] | None = None) -> int:
     lst = synth_sub.add_parser("list", help="List stored synthetic libraries.")
     lst.add_argument("--synthetic-root", default=None, help="Root dir (default data/synthetic).")
 
+    signals = sub.add_parser(
+        "signals",
+        help="Catalogo de senales externas, captura hacia adelante y auditoria de cobertura.",
+    )
+    signals_sub = signals.add_subparsers(dest="signals_command", required=True)
+
+    cat = signals_sub.add_parser("catalog", help="Lista las fuentes declaradas.")
+    cat.add_argument("--json", action="store_true", help="Emit the catalog as JSON.")
+
+    cap = signals_sub.add_parser(
+        "capture",
+        help="Recorre el catalogo y archiva lo que haya. Corre aunque no haya adaptadores.",
+    )
+    cap.add_argument("--json", action="store_true", help="Emit the report as JSON.")
+
+    aud = signals_sub.add_parser("audit", help="Cobertura de entidades y del archivo crudo.")
+    aud.add_argument("--json", action="store_true", help="Emit the audit as JSON.")
+
     report_parser = sub.add_parser("report", help="Print reports without running a cycle.")
     report_parser.add_argument(
         "which",
@@ -409,6 +511,14 @@ def main(argv: list[str] | None = None) -> int:
             "list": cmd_synth_list,
         }
         return synth_handlers[args.synth_command](args)
+
+    if args.command == "signals":
+        signal_handlers = {
+            "catalog": cmd_signals_catalog,
+            "capture": cmd_signals_capture,
+            "audit": cmd_signals_audit,
+        }
+        return signal_handlers[args.signals_command](args)
 
     handlers = {"run-cycle": cmd_run_cycle, "backtest": cmd_backtest, "report": cmd_report}
     return handlers[args.command](args)

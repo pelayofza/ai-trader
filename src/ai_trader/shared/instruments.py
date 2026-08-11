@@ -41,6 +41,43 @@ def detect_asset_class(symbol: str) -> AssetClass:
     return AssetClass.STOCK
 
 
+# Monedas de cotizacion con las que el sistema sabe partir un par PEGADO ("BTCUSDT" ->
+# BTC + USDT). Vive aqui, junto a `detect_asset_class`, por el mismo motivo que
+# PREDICTION_PREFIX: es parte de la convencion de nombres, no de un proveedor. La tenia
+# copiada `providers/ccxt_crypto.py::normalize_symbol` y la necesita la resolucion de
+# entidad de `shared/entities.py`, que no puede depender de un proveedor concreto.
+#
+# El ORDEN es significativo y va de mas larga a mas corta dentro de cada familia: se
+# prueba en secuencia y gana la primera que encaja, asi que "USDT" tiene que ir antes que
+# "USD" para que "XUSDT" no se parta como "XUSD" + "T".
+QUOTE_CURRENCIES: tuple[str, ...] = ("USDT", "USD", "USDC", "BTC", "ETH", "EUR")
+
+
+def split_pair(symbol: str) -> tuple[str, str] | None:
+    """
+    (base, cotizacion) de un par cripto, o None si el nombre no lo es.
+
+    Acepta las tres formas que llegan de los proveedores: "BTC/USDT", "BTC-USDT" y
+    "BTCUSDT". Con separador explicito NO se exige que la cotizacion este en
+    `QUOTE_CURRENCIES` —un par nuevo contra una moneda que no conocemos sigue siendo un
+    par, y el separador ya nos dice donde corta—; sin separador si, porque es la unica
+    informacion con la que adivinar donde termina la base.
+    """
+    cleaned = (symbol or "").strip().upper().replace("-", "/")
+    if not cleaned or cleaned.startswith(PREDICTION_PREFIX):
+        return None
+
+    if "/" in cleaned:
+        base, _, quote = cleaned.partition("/")
+        return (base, quote) if base and quote else None
+
+    for quote in QUOTE_CURRENCIES:
+        if cleaned.endswith(quote) and len(cleaned) > len(quote):
+            return cleaned[: -len(quote)], quote
+
+    return None
+
+
 @dataclass(slots=True)
 class OutcomeToken:
     outcome: str

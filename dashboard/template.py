@@ -1794,10 +1794,139 @@ function renderRoadmap(){
 function copyPrompt(i,btn){const t=D.roadmap[i].prompt;navigator.clipboard.writeText(t).then(()=>{const o=btn.textContent;btn.textContent='✓ Copiado';setTimeout(()=>btn.textContent=o,1500);});}
 window.copyPrompt=copyPrompt;
 
+const PIT_LABEL={forward_capture:'solo hacia adelante',archive_revisable:'backfill revisable',
+  derived_from_price:'derivada del precio'};
+const PIT_NOTE={forward_capture:'nadie publica su pasado: lo que no se capture hoy no existirá',
+  archive_revisable:'hay histórico, pero el proveedor puede reescribirlo',
+  derived_from_price:'point-in-time por construcción'};
+
+function renderSignals(){
+  const host=$('#signals'),S=D.signals_platform;
+  if(!S){host.innerHTML='<h1>Señales externas</h1><div class="card"><p class="tag">Sin datos.</p></div>';return;}
+  const M=S.summary,E=S.entities,A=S.archive,C=S.capture;
+  const nConn=S.sources.filter(s=>s.connected).length;
+  const fwd=M.by_pit.forward_capture;
+  const tiles=[
+    ['Fuentes declaradas',M.n_sources,`${M.by_tier.A} mecánicas (A) · ${M.by_tier.B} estadísticas (B)`],
+    ['Features que producirían',M.n_features,'nombres únicos en todo el catálogo, verificado por test'],
+    ['Backtesteables hoy',M.n_backtestable+'/'+M.n_sources,'ninguna tiene history_from MEDIDO'],
+    ['Con adaptador',nConn+'/'+M.n_sources,'esta tarea construye el esqueleto, no conecta fuentes'],
+    ['Cobertura de entidades',fmt(E.coverage_pct,0)+'%',
+      `${E.by_source.rule} por regla · ${E.by_source.override} overrides · ${E.by_source.unmapped} sin resolver`],
+    ['Registros archivados',A.records.toLocaleString('es'),'el archivo empieza vacío: es el día cero'],
+  ];
+  host.innerHTML=`
+    <h1>Señales externas: el esqueleto, y lo que aún no es</h1>
+    <p class="lead">Hoy las estrategias solo ven <b>precio y volumen</b>. El único canal de contexto que
+      existe es el régimen, construido sobre las propias barras. Esta pieza no conecta ninguna fuente:
+      construye el sitio donde enchufarlas para que <b>la fuente N+1 cueste casi cero</b> —un adaptador,
+      una entrada de catálogo y un test— y para que el archivo empiece a tener fondo <i>ya</i>.</p>
+    <div class="grid tiles">${tiles.map(t=>`<div class="card tile"><div class="k">${t[0]}</div>
+      <div class="v">${t[1]}</div><div class="s">${t[2]}</div></div>`).join('')}</div>
+
+    <div class="note"><b>Los dos campos que hacen honesto el catálogo.</b>
+      <span class="mono">history_from</span> es la primera fecha con dato <b>comprobado por nosotros</b>,
+      no la que anuncia el proveedor: arranca en <i>None</i> en las ${M.n_sources} fuentes, y <i>None</i>
+      significa <b>solo hacia adelante</b>. <span class="mono">pit</span> dice si esa historia, cuando la
+      haya, vale para backtest. Juntos contestan la única pregunta que importa antes de puntuar nada:
+      qué fuentes pueden entrar en un backtest y cuáles solo en vivo. La respuesta medida hoy es
+      <b>ninguna</b>, y aparece aquí en vez de esconderse.</div>
+
+    <h2>Por qué la captura se arranca antes que los adaptadores</h2>
+    <p class="lead"><b>${fwd} de las ${M.n_sources}</b> fuentes son <span class="mono">forward_capture</span>:
+      su pasado no se puede descargar porque nadie lo publica —una cola de staking, un libro P2P, la lista
+      SDN de hace tres meses—. Para esas, la profundidad histórica no depende de escribir mejor código
+      después, sino de una sola variable: <b>desde cuándo se está capturando</b>. Cada día sin capturar es
+      profundidad que no se recupera ni pagando. Por eso
+      <span class="mono">ai-trader signals capture</span> corre hoy, sin un solo adaptador, y declara
+      ${C?`${C.n_pending} fuentes pendientes y ${C.records} registros`:'el estado real'} en vez de fallar.</p>
+
+    <h2>Las ${M.n_sources} fuentes declaradas</h2>
+    <p class="lead"><b>Dos puertas, y la separación vive en el catálogo, no en un comentario.</b> El tier
+      <b>A</b> es oferta calendarizada y determinista —unlocks, colas de staking, dificultad, hacks,
+      sanciones— con muestras de <i>decenas</i>: entra como <b>elegibilidad</b> y nunca como feature de un
+      optimizador, porque un CEM suelto sobre catorce observaciones construye una estrategia preciosa y
+      falsa. El tier <b>B</b> son series continuas con efectos pequeños y decadentes: entra como features.</p>
+    <div class="card"><div class="tblwrap"><table>
+      <thead><tr><th>fuente</th><th>tier</th><th>alcance</th><th>cadencia</th><th>point-in-time</th>
+        <th class="num">features</th><th class="num">entidades</th><th>historia</th><th>acceso</th></tr></thead>
+      <tbody>${S.sources.map(s=>`<tr>
+        <td><b>${esc(s.title)}</b><div class="tag mono">${esc(s.key)}</div></td>
+        <td><span class="chip ${s.tier==='A'?'critica':'bajo'}">${s.tier}</span></td>
+        <td>${esc(s.scope)}</td><td>${esc(s.cadence)}</td>
+        <td>${esc(PIT_LABEL[s.pit]||s.pit)}<div class="tag">${esc(PIT_NOTE[s.pit]||'')}</div></td>
+        <td class="num">${s.features.length}</td>
+        <td class="num">${s.n_entities}</td>
+        <td>${s.history_from?esc(s.history_from):'<span class="chip pend">sin medir</span>'}</td>
+        <td class="tag">${s.auth_env?esc(s.auth_env):'abierta'}</td></tr>`).join('')}
+      </tbody></table></div>
+      <p class="tag">La columna <b>entidades</b> es lo que se le pediría hoy a cada fuente con el universo
+        configurado: por activo sale del universo, las de cadena y macro las declara el catálogo, y las de
+        mercado tienen una sola. Lo que el proveedor promete de profundidad vive en las notas del catálogo
+        <i>en prosa</i>, para que ningún código pueda confundir una promesa con una medición.</p></div>
+
+    <h2>Símbolo → entidad: una regla, y una tabla que arranca vacía</h2>
+    <p class="lead">Las fuentes externas no hablan en símbolos de mercado. La clave común se deriva con una
+      <b>regla</b> (<span class="mono">XYZ/USDT → XYZ</span>) que funciona el día que se añade un listado
+      nuevo, sin que nadie edite nada. La tabla de overrides existe para los casos en que la regla acierta
+      la forma y falla el fondo, y <b>empieza vacía</b>: cada línea tendrá que venir de un fallo observado
+      aquí. El descubrimiento es <b>medición</b>, no una sesión de curación previa.</p>
+    <div class="grid cards">
+      <div class="card"><h3>${E.n_symbols} símbolos → ${E.n_entities} entidades</h3>
+        <p class="lead" style="margin:8px 0">Cobertura <b>${fmt(E.coverage_pct,0)}%</b>:
+          ${E.by_source.rule} por regla derivada, ${E.by_source.override} por override,
+          ${E.by_source.unmapped} sin resolver.
+          ${E.unmapped.length?`Sin resolver: <span class="mono">${E.unmapped.map(esc).join(', ')}</span>.`:
+            'Ninguno sin resolver, así que la tabla de overrides sigue sin necesitar una sola línea.'}</p></div>
+      <div class="card"><h3>Colisiones: ${Object.keys(E.collisions).length}</h3>
+        <p class="lead" style="margin:8px 0">Dos símbolos que apuntan a la misma entidad
+          <i>no</i> son un error —BTC/USDT y BTC/USD son el mismo activo, y compartir entidad es lo que
+          evita descargar dos veces—. Se publican porque una colisión <b>inesperada</b> es exactamente el
+          fallo que la regla puede cometer, y sin esta lista sería invisible.
+          ${Object.keys(E.collisions).length?'':'Hoy no hay ninguna en el universo configurado.'}</p></div>
+    </div>
+
+    <h2>Cómo está montado (y qué se paga después si se monta mal)</h2>
+    <div class="grid cards">
+      <div class="card"><h3>El puerto tiene dos capas</h3>
+        <p class="lead" style="margin:8px 0"><span class="mono">fetch_raw</span> toca la red y devuelve el
+          payload <b>intacto</b>; <span class="mono">daily_from_raw</span> es una función <b>pura</b> que
+          lo traduce. La parte que se equivoca es siempre el mapeo, y separadas corregirlo
+          <b>re-deriva</b> sobre lo archivado en vez de re-descargar —que con una fuente cuyo pasado no
+          existe no es una molestia, es información perdida—.</p></div>
+      <div class="card"><h3>El crudo va en <span class="mono">data/</span>, no en <span class="mono">.cache/</span></h3>
+        <p class="lead" style="margin:8px 0">Append-only en
+          <span class="mono">data/signals_raw/&lt;fuente&gt;/&lt;entidad&gt;/&lt;mes&gt;.jsonl.gz</span> con
+          su <span class="mono">fetched_at</span>. No se re-deriva: se <b>guarda</b>. Es el mismo principio
+          por el que se guarda el <span class="mono">spec.json</span> de cada escenario sintético. Lo
+          derivado —los frames diarios— vive en <span class="mono">.cache/signals/</span> y se borra sin
+          perder nada.</p></div>
+      <div class="card"><h3>Un día tiene varias observaciones</h3>
+        <p class="lead" style="margin:8px 0">El esquema canónico es
+          <span class="mono">(entidad, día) → features + observed</span>, y <b>no</b> reutiliza el de
+          barras: aquel deduplica con <span class="mono">keep='last'</span> y se comería tres emisores
+          publicando el mismo día. La agregación vive en un solo sitio y cada feature declara <i>cómo</i>
+          se agrega (sumar un estado o quedarse con el último de un flujo son errores que no se ven en la
+          gráfica).</p></div>
+      <div class="card"><h3><span class="mono">observed</span>: los tres estados</h3>
+        <p class="lead" style="margin:8px 0">La convención del sistema es «feature no disponible = 0.0
+          neutro», y para señales es <b>peligrosa</b>: tono 0 es neutral, pero <i>no tengo datos</i> no es
+          <i>no hay señal</i>. La columna cuenta las observaciones crudas detrás de cada celda, que es lo
+          que permitirá que una puerta de señales <b>falle abierta</b> en vez de confundir ausencia con
+          neutralidad.</p></div>
+    </div>
+
+    <div class="note"><b>Nada de esto está cableado todavía.</b> Ni a las estrategias, ni al runner, ni al
+      espacio de búsqueda del optimizador. El catálogo declara, la captura archiva y la auditoría mide;
+      cablearlo es el paso siguiente y tiene su propia compuerta: con las puertas neutras, la validación
+      multiventana tiene que devolver <b>exactamente</b> los scores ya publicados.</div>`;
+}
+
 function main(){
   initTheme();initNav();
   renderOverview();renderSynthetic();renderFidelity();renderTransfer();renderStrategies();
-  renderRanking();renderActivity();renderValidation();renderSessions();renderPaper();renderRoadmap();
+  renderRanking();renderActivity();renderValidation();renderSessions();renderSignals();
+  renderPaper();renderRoadmap();
   addEventListener('resize',()=>{clearTimeout(window._rt);window._rt=setTimeout(rerenderCharts,150);});
 }
 main();
@@ -1817,6 +1946,7 @@ SHELL = """
       <li><button data-sec="activity">Actividad</button></li>
       <li><button data-sec="validation">Validación</button></li>
       <li><button data-sec="sessions">Sesiones</button></li>
+      <li><button data-sec="signals">Señales</button></li>
       <li><button data-sec="paper">Paper trading</button></li>
       <li><button data-sec="roadmap">Evoluciones</button></li>
     </ul>
@@ -1832,6 +1962,7 @@ SHELL = """
     <section id="activity" class="section"></section>
     <section id="validation" class="section"></section>
     <section id="sessions" class="section"></section>
+    <section id="signals" class="section"></section>
     <section id="paper" class="section"></section>
     <section id="roadmap" class="section"></section>
   </main>

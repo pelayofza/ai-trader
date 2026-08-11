@@ -1021,6 +1021,76 @@ def collect_activity() -> dict | None:
     }
 
 
+def collect_signals() -> dict:
+    """
+    El esqueleto de ingesta de senales: catalogo declarado, mapeo de entidades y estado
+    del archivo. Todo MEDIDO en el momento de generar, y todo barato: el catalogo no toca
+    red y la auditoria lee el archivo local, que hoy esta vacio.
+
+    Que casi todas las cifras salgan a cero es el contenido: 17 fuentes declaradas, 0
+    conectadas, 0 backtesteables. Es la linea base contra la que se leera el primer
+    adaptador que se escriba.
+    """
+    from ai_trader.signals.audit import audit_archive, audit_entities
+    from ai_trader.signals.capture import CAPTURE_REPORT, entities_for, load_capture_report
+    from ai_trader.signals.catalog import CATALOG, catalog_summary
+    from ai_trader.signals.source import connected_keys
+    from ai_trader.signals.store import SignalStore
+
+    config = load_config(ROOT / "config" / "default.toml")
+    universe = list(config.runner.symbols)
+
+    entities = audit_entities(universe)
+    archive = audit_archive(SignalStore(ROOT / "data" / "signals_raw"))
+    capture_report = load_capture_report(ROOT / CAPTURE_REPORT)
+    connected = set(connected_keys())
+
+    return {
+        "summary": catalog_summary(),
+        "universe": universe,
+        "sources": [
+            {
+                "key": s.key,
+                "title": s.title,
+                "tier": s.tier,
+                "scope": s.scope,
+                "cadence": s.cadence,
+                "entity_kind": s.entity_kind.value,
+                "pit": s.pit,
+                "history_from": s.history_from.isoformat() if s.history_from else None,
+                "backtestable": s.backtestable,
+                "license": s.license,
+                "auth_env": s.auth_env,
+                "features": list(s.feature_names),
+                "n_entities": len(entities_for(s, universe)),
+                "connected": s.key in connected,
+                "notes": s.notes,
+            }
+            for s in CATALOG
+        ],
+        "entities": {
+            "n_symbols": entities.n_symbols,
+            "coverage_pct": round(entities.coverage_pct, 2),
+            "by_source": entities.by_source,
+            "by_kind": entities.by_kind,
+            "unmapped": list(entities.unmapped),
+            "collisions": {k: list(v) for k, v in entities.collisions.items()},
+            "n_entities": len({r.key for r in entities.refs if r.resolved}),
+        },
+        "archive": {
+            "root": archive.root,
+            "records": archive.records,
+            "n_with_archive": archive.n_with_archive,
+        },
+        "capture": None if capture_report is None else {
+            "finished_at": capture_report["finished_at"][:10],
+            "n_connected": capture_report["n_connected"],
+            "n_pending": capture_report["n_pending"],
+            "records": capture_report["records"],
+        },
+    }
+
+
 def collect_roadmap() -> list[dict]:
     """Evoluciones pendientes, ordenadas por criticidad, con prompt para Claude Code."""
     from ai_trader.synthetic import retrofit  # noqa: F401  (asegura que el modulo existe)
@@ -1046,6 +1116,8 @@ def build() -> None:
     transfer = collect_transfer()
     logger.info("Descomposicion por sesion horaria (informe publicado)...")
     logger.info("Suelo de actividad del ranking (informe publicado)...")
+    logger.info("Catalogo de senales externas y auditoria de cobertura...")
+    signals_platform = collect_signals()
     logger.info("Catalogo de estrategias...")
     strategies = collect_strategies()
     logger.info("Demo de señales...")
@@ -1070,6 +1142,7 @@ def build() -> None:
         "validation": collect_validation(),
         "sessions": collect_sessions(),
         "activity": collect_activity(),
+        "signals_platform": signals_platform,
         "roadmap": collect_roadmap(),
         "roadmap_groups": ROADMAP_GROUPS,
     }
@@ -1110,6 +1183,14 @@ def build() -> None:
 # pareada. Sacar el sintetico del criterio de seleccion pasa a ser la CONTINGENCIA, no la
 # conclusion automatica.
 #
+# ACTUALIZACION 2026-08-11 (3): el ESQUELETO de ingesta de senales esta construido
+# (`src/ai_trader/signals/`: catalogo, puerto de dos capas, archivo crudo append-only,
+# captura y auditoria; esquema y entidades en `shared/`). No conecta ninguna fuente a
+# proposito, y lo que publica es una medicion incomoda y util: 17 fuentes declaradas, 0 con
+# adaptador y 0 backtesteables, porque ninguna tiene `history_from` MEDIDO. Lo que si
+# arranca hoy es la captura, y ese es el motivo de haberlo hecho antes que los adaptadores:
+# 6 de las 17 son forward_capture y su profundidad solo la compra el calendario.
+#
 # ACTUALIZACION 2026-08-11 (2): las dos mediciones baratas estan hechas y las dos cambiaron
 # algo. La ventana ciega resulto no tener ancho (el hueco cierre->open es 0,55 pb) pero la
 # LATENCIA si cuesta. Y el suelo de actividad destapo que el ranking real premiaba no
@@ -1140,9 +1221,11 @@ ROADMAP_GROUPS = [
                     "botella no es el generador sino el ESPACIO DE INPUTS: hoy las estrategias "
                     "solo ven precio y volumen. Las dos mediciones baratas que condicionaban la "
                     "lectura ya estan hechas -la ventana ciega (vista Sesiones) y el suelo de "
-                    "actividad del ranking (vista Actividad)-, asi que lo que queda aqui es la "
-                    "plataforma de senales y el reloj corriendo en paralelo. Nada de lo que se "
-                    "puntue mientras tanto vale mas que el juez que lo puntua.",
+                    "actividad del ranking (vista Actividad)-, y el ESQUELETO de ingesta tambien "
+                    "(vista Senales): catalogo, puerto de dos capas, archivo crudo y captura, con "
+                    "0 fuentes conectadas todavia y la captura ya corriendo. Lo que queda aqui es "
+                    "enchufar las fuentes, cablearlas y el reloj corriendo en paralelo. Nada de lo "
+                    "que se puntue mientras tanto vale mas que el juez que lo puntua.",
     },
     {
         "key": "despues",
@@ -1166,70 +1249,8 @@ ROADMAP_GROUPS = [
 
 ROADMAP = [
     {
-        "id": "signal-platform-skeleton",
-        "rank": 1,
-        "group": "ahora",
-        "priority": "critica",
-        "title": "Plataforma de ingesta de senales: catalogo, puerto unico y captura hacia adelante",
-        "line": "Inputs", "status": "pendiente", "impact": "alto", "effort": "medio",
-        "evidence": "Hoy las estrategias solo ven precio y volumen. El unico canal de contexto "
-                    "que existe es MarketRegimeProvider (observation/regime.py), construido sobre "
-                    "las propias barras. No hay ninguna fuente de datos externa a OHLCV en todo "
-                    "src/.",
-        "why": "El valor no esta en conectar UNA fuente, esta en que la fuente N+1 cueste casi "
-               "cero: un adaptador, una entrada en el catalogo y un test. Si anadir la decima "
-               "exige tocar el runner o las estrategias, el diseno ha fallado. Y hay una razon "
-               "para empezar ya aunque nada este cableado: la CAPTURA HACIA ADELANTE. Cualquier "
-               "backfill de un agregador es revisable (re-etiquetan, borran, rellenan hacia "
-               "atras); lo unico verdaderamente point-in-time es lo que se captura en vivo. Cada "
-               "dia sin capturar es profundidad que no se recupera nunca.",
-        "prompt": (
-            "Proyecto ai-trader (Python). Quiero ampliar el espacio de inputs de las estrategias "
-            "con muchas fuentes externas. Esta tarea NO conecta fuentes: construye el esqueleto "
-            "para que conectarlas despues sea trivial.\n"
-            "\n"
-            "TAREA: paquete src/ai_trader/signals/ con cinco piezas.\n"
-            "(a) CATALOGO (signals/catalog.py): una dataclass SignalSource por fuente con "
-            "key, tier ('A' mecanica / 'B' estadistica), scope (asset|market|chain|macro|venue), "
-            "cadence, features que produce, history_from (MEDIDO, no prometido; None = solo hacia "
-            "adelante), pit (forward_capture|archive_revisable|derived_from_price), license y "
-            "entity_kind. history_from y pit son los campos que hacen honesto todo lo demas: "
-            "permiten saber que fuentes pueden participar en un backtest y cuales solo en vivo.\n"
-            "(b) ESQUEMA (shared/signals.py): forma canonica diaria (entity, day) -> features + "
-            "columna `observed`. NO reutilices shared/bars.py::normalize_bars: deduplica por "
-            "indice con keep='last' y destruiria varias observaciones del mismo dia. La "
-            "agregacion a dia vive aqui, una vez.\n"
-            "(c) PUERTO (signals/source.py): protocolo con DOS capas por adaptador -- "
-            "fetch_raw(...) -> list[dict] (payload intacto + metadatos) y daily_from_raw(...) -> "
-            "DataFrame (funcion PURA, testeable sin red). Asi cambiar de proveedor o corregir un "
-            "mapeo RE-DERIVA en vez de re-descargar. Reusa data/providers/http.py::JsonHttpClient "
-            "(ya trae backoff y la regla de no reintentar 4xx que no sea 429).\n"
-            "(d) ARCHIVO Y CAPTURA (signals/store.py + signals/capture.py): crudo append-only en "
-            "data/signals_raw/<source>/<entity>/<YYYY-MM>.jsonl.gz con fetched_at, y cache "
-            "derivada desechable en .cache/signals/. El crudo va en data/ y NO en .cache/ porque "
-            "no es re-derivable: es el mismo principio que synthetic/designer.py:227-233 ('no se "
-            "re-deriva, se GUARDA'). `capture` recorre el catalogo y archiva; se arranca YA.\n"
-            "(e) ENTIDAD (shared/entities.py) y AUDITORIA (signals/audit.py): resolucion "
-            "simbolo->entidad en dos capas -- regla derivada ('XYZ/USDT' -> 'XYZ', que funciona "
-            "el dia que se anade un listado nuevo) y tabla de overrides que ARRANCA VACIA y solo "
-            "crece con fallos observados (precedente: SPREAD_BPS_BY_SYMBOL en "
-            "execution/microstructure.py). EntityRef lleva source ('rule'|'override'|'unmapped') "
-            "para que el mapeo sea auditable. La auditoria mide cobertura por fuente, entidad y "
-            "ano: el descubrimiento es MEDICION, no curacion.\n"
-            "\n"
-            "DEUDA A PAGAR DE PASO (dos convenciones duplicadas a mano, y el proyecto ya se quemo "
-            "con el prefijo 'crypto::'): sube visible_cutoff(now) a shared/clock.py para que "
-            "observation/regime.py y lo nuevo la importen en vez de copiarla una tercera vez, y "
-            "sube la tupla de quotes de data/providers/ccxt_crypto.py::normalize_symbol a "
-            "shared/instruments.py.\n"
-            "\n"
-            "Tests + .venv\\Scripts\\python.exe (poetry run esta roto) + ruff. Nada se cablea "
-            "todavia a estrategias ni al runner. Regenera dashboard y docs."
-        ),
-    },
-    {
         "id": "signals-tier-b-batch",
-        "rank": 2,
+        "rank": 1,
         "group": "ahora",
         "priority": "alta",
         "title": "Lote barato de senales continuas (Tier B): diez fuentes sobre el mismo puerto",
@@ -1293,7 +1314,7 @@ ROADMAP = [
     },
     {
         "id": "signals-tier-a-eligibility",
-        "rank": 3,
+        "rank": 2,
         "group": "ahora",
         "priority": "critica",
         "title": "Senales mecanicas (Tier A) como ELEGIBILIDAD, nunca como alfa",
@@ -1364,7 +1385,7 @@ ROADMAP = [
     },
     {
         "id": "signal-radar-wiring",
-        "rank": 4,
+        "rank": 3,
         "group": "ahora",
         "priority": "alta",
         "title": "Radar de features y cableado en backtest Y en vivo (cierra el hueco del regimen)",
@@ -1426,7 +1447,7 @@ ROADMAP = [
     },
     {
         "id": "paper-trading-live",
-        "rank": 5,
+        "rank": 4,
         "group": "ahora",
         "priority": "alta",
         "title": "Poner el paper trading a correr en vivo (y la vista del dashboard que lo lea)",
@@ -1492,7 +1513,7 @@ ROADMAP = [
     },
     {
         "id": "signals-expensive-batch",
-        "rank": 7,
+        "rank": 6,
         "group": "despues",
         "priority": "media",
         "title": "Lote caro de senales: apalancamiento observable, opciones, atencion geografica y legal",
@@ -1544,7 +1565,7 @@ ROADMAP = [
     },
     {
         "id": "synthetic-signal-emission",
-        "rank": 6,
+        "rank": 5,
         "group": "despues",
         "priority": "critica",
         "title": "Que el generador emita las senales, y re-medir la transferencia de forma pareada",
@@ -1613,7 +1634,7 @@ ROADMAP = [
     },
     {
         "id": "dat-mnav-index",
-        "rank": 8,
+        "rank": 7,
         "group": "despues",
         "priority": "media",
         "title": "Indice de estres de vendedores forzados (mNAV de tesorerias cotizadas)",
@@ -1663,7 +1684,7 @@ ROADMAP = [
     },
     {
         "id": "line-d-cpcv-two-stage-cem",
-        "rank": 9,
+        "rank": 8,
         "group": "despues",
         "priority": "alta",
         "title": "CPCV en dos etapas dentro del optimizador (que el CEM deje de puntuar con el corte unico)",
@@ -1725,7 +1746,7 @@ ROADMAP = [
     },
     {
         "id": "validation-study-full-ensemble",
-        "rank": 10,
+        "rank": 9,
         "group": "despues",
         "priority": "media",
         "title": "Re-correr el estudio de validacion con el ensemble completo",
@@ -1758,7 +1779,7 @@ ROADMAP = [
     },
     {
         "id": "pbo-blocks-scenario-aligned",
-        "rank": 11,
+        "rank": 10,
         "group": "despues",
         "priority": "media",
         "title": "Alinear los bloques del PBO con las fronteras de escenario",
@@ -1797,7 +1818,7 @@ ROADMAP = [
     },
     {
         "id": "report-n-failed-with-reward",
-        "rank": 12,
+        "rank": 11,
         "group": "despues",
         "priority": "media",
         "title": "Reportar n_failed junto al reward (la penalizacion domina la cola)",
@@ -1831,7 +1852,7 @@ ROADMAP = [
     },
     {
         "id": "dsr-independent-trials-caveat",
-        "rank": 13,
+        "rank": 12,
         "group": "despues",
         "priority": "baja",
         "title": "Declarar que el DSR asume intentos independientes y el CEM no los produce",
@@ -1866,7 +1887,7 @@ ROADMAP = [
     },
     {
         "id": "fidelity-rank-corr-ordering",
-        "rank": 14,
+        "rank": 13,
         "group": "despues",
         "priority": "media",
         "title": "Ordenacion de colas y clustering entre activos: el eje que ai_v3 no arreglo",
@@ -1931,7 +1952,7 @@ ROADMAP = [
     },
     {
         "id": "real-substrate-primary-ranking",
-        "rank": 15,
+        "rank": 14,
         "group": "despues",
         "priority": "critica",
         "title": "CONTINGENCIA: mover el sustrato primario del ranking al historico REAL",
@@ -1996,7 +2017,7 @@ ROADMAP = [
     },
     {
         "id": "rl-full-run",
-        "rank": 16,
+        "rank": 15,
         "group": "despues",
         "priority": "alta",
         "title": "Optimizacion CEM completa, ya con el juez validado",
@@ -2032,7 +2053,7 @@ ROADMAP = [
     },
     {
         "id": "execution-latency-budget",
-        "rank": 17,
+        "rank": 16,
         "group": "despues",
         "priority": "media",
         "title": "Presupuesto de latencia: el backtest supone que se llena a las 00:00 UTC en punto",
@@ -2077,7 +2098,7 @@ ROADMAP = [
     },
     {
         "id": "new-crypto-strategies",
-        "rank": 18,
+        "rank": 17,
         "group": "no-prioritario",
         "priority": "baja",
         "title": "Nuevas estrategias cripto (deliberadamente NO priorizada)",
@@ -2125,7 +2146,7 @@ ROADMAP = [
     },
     {
         "id": "weights-recalibrate-power",
-        "rank": 19,
+        "rank": 18,
         "group": "no-prioritario",
         "priority": "baja",
         "title": "Re-medir lambda y kappa con los costes nuevos y mas potencia estadistica",
@@ -2170,7 +2191,7 @@ ROADMAP = [
     },
     {
         "id": "designer-model-in-manifest",
-        "rank": 20,
+        "rank": 19,
         "group": "no-prioritario",
         "priority": "baja",
         "title": "Anotar el modelo de IA en el manifiesto de cada libreria",
@@ -2202,7 +2223,7 @@ ROADMAP = [
     },
     {
         "id": "equities-parked",
-        "rank": 21,
+        "rank": 20,
         "group": "segundo-plano",
         "priority": "aparcada",
         "title": "Renta variable: aparcada a proposito (no se activa la clase de activo)",
@@ -2249,7 +2270,7 @@ ROADMAP = [
     },
     {
         "id": "polymarket-parked",
-        "rank": 22,
+        "rank": 21,
         "group": "segundo-plano",
         "priority": "aparcada",
         "title": "Polymarket en el backtest: aparcado hasta tener historico propio",

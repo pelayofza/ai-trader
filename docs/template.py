@@ -95,6 +95,103 @@ def _ratio(numerator, denominator):
     return float(numerator) / float(denominator)
 
 
+PIT_LABEL = {
+    "forward_capture": "solo hacia adelante",
+    "archive_revisable": "backfill revisable",
+    "derived_from_price": "derivada del precio",
+}
+
+
+def _signals_block(s):
+    """Seccion 4.3: el esqueleto de ingesta de senales externas.
+
+    Va en §4, pegada al espacio de observacion, porque es de lo que trata: de ampliarlo.
+    Y va con las cifras a cero por delante —0 conectadas, 0 backtesteables— porque esa es
+    la medicion, y una seccion que describiera la plataforma sin decir que aun no ingiere
+    nada seria una promesa disfrazada de documentacion."""
+    if not s:
+        return ""
+
+    m, e = s["summary"], s["entities"]
+    rows = [
+        (key, tier, scope, cadence, PIT_LABEL.get(pit, pit), nf, hist)
+        for key, tier, scope, cadence, pit, nf, hist in s["rows"]
+    ]
+    table = _rows(
+        rows,
+        ["Fuente", "Tier", "Alcance", "Cadencia", "Point-in-time", "Features", "Historia medida"],
+    )
+    return f"""
+<h3>4.3 · Señales externas: el esqueleto de ingesta (y lo que todavía no es)</h3>
+<p>Todo lo anterior se calcula sobre <b>precio y volumen</b>. El único canal de contexto que existe hoy es
+el bloque de régimen de §4.2, y está construido sobre las propias barras: el sistema no tiene ninguna
+fuente de datos externa a OHLCV. La plataforma de ingesta existe para ampliar ese espacio, y está
+construida <b>sin conectar ninguna fuente</b>: el catálogo declara {m['n_sources']} fuentes que producirían
+{m['n_features']} features, de las cuales <b>{s['n_connected']} tienen adaptador</b> y
+<b>{m['n_backtestable']} pueden entrar en un backtest</b>.</p>
+
+<div class="why"><b>Por qué el esqueleto antes que las fuentes.</b> El valor no está en conectar
+<i>una</i> fuente, está en que la fuente N+1 cueste casi cero: un adaptador, una entrada de catálogo y un
+test. Si añadir la décima obligara a tocar el runner o las estrategias, el diseño habría fallado. Y hay un
+motivo para arrancar la captura aunque nada esté cableado: <b>{m['by_pit']['forward_capture']} de las
+{m['n_sources']}</b> fuentes son <i>forward capture</i> —nadie publica su pasado—, así que su profundidad
+histórica no depende de escribir mejor código después sino del calendario. Cada día sin capturar es
+profundidad que no se recupera.</div>
+
+<p>Dos campos del catálogo sostienen la honestidad del resto. <span class="mono">history_from</span> es la
+primera fecha con dato <b>comprobado por nosotros</b>, no la que anuncia el proveedor: arranca vacío en las
+{m['n_sources']} fuentes, y vacío significa <i>solo hacia adelante</i>. <span class="mono">pit</span> dice
+de qué naturaleza es esa historia —capturada en vivo, backfill revisable o derivada del precio—. Juntos
+contestan la única pregunta que hay que responder antes de puntuar nada: qué fuentes pueden participar en
+un backtest y cuáles solo en vivo. Lo que el proveedor promete vive en las notas del catálogo, en prosa,
+donde ningún código puede confundirlo con una medición.</p>
+
+{table}
+
+<p><b>Dos puertas.</b> El tier <b>A</b> (mecánica: desbloqueos, colas de staking, dificultad, hacks,
+sanciones) es oferta calendarizada con muestras de <i>decenas</i>, y entra como <b>elegibilidad</b> —una
+guarda que veta operar— y nunca como feature de un optimizador: sobre catorce observaciones, un CEM libre
+construye una estrategia preciosa y falsa. El tier <b>B</b> (estadística: sentimiento, flujos de ETF,
+macro, actividad de desarrollo, dispersión de <i>funding</i>) entra como features continuas, esperando
+efectos pequeños y decadentes. La separación vive en el catálogo, no en un comentario.</p>
+
+<h4>Las cuatro decisiones de diseño, y qué se paga si se toman al revés</h4>
+<ul>
+<li><b>El puerto tiene dos capas.</b> <span class="mono">fetch_raw</span> toca la red y devuelve el payload
+intacto; <span class="mono">daily_from_raw</span> es una función <b>pura</b> que lo traduce. La parte que
+se equivoca es siempre el mapeo, y separadas corregirlo <b>re-deriva</b> sobre lo ya archivado en vez de
+re-descargar — que con una fuente cuyo pasado no existe no es una molestia, es información perdida. Como
+efecto secundario, la mitad frágil se testea sin red y en milisegundos.</li>
+<li><b>El crudo va en <span class="mono">data/</span> y no en <span class="mono">.cache/</span>.</b>
+Append-only, en <span class="mono">data/signals_raw/&lt;fuente&gt;/&lt;entidad&gt;/&lt;mes&gt;.jsonl.gz</span>,
+con su <span class="mono">fetched_at</span>. No se re-deriva: se <b>guarda</b>. Es el mismo principio por el
+que se guarda el <span class="mono">spec.json</span> de cada escenario (§2.4). Nada se sobrescribe: cuando
+una fuente revisable reescribe el pasado, la línea vieja sigue ahí, y comparar las dos es la única forma de
+medir cuánto revisa. Lo derivado vive en <span class="mono">.cache/signals/</span> y es desechable.</li>
+<li><b>El esquema diario es propio.</b> <span class="mono">(entidad, día) → features + observed</span>, y
+<b>no</b> reutiliza el de barras: aquel deduplica por índice con <span class="mono">keep='last'</span>, que
+para barras es correcto y aquí destruiría varias observaciones legítimas del mismo día. La agregación vive
+en un solo sitio y cada feature declara <i>cómo</i> se agrega — sumar un estado o quedarse con el último de
+un flujo son errores que no se ven en la gráfica. La columna <span class="mono">observed</span> cuenta las
+observaciones crudas detrás de cada celda: es lo que distingue «vale 0» de «no hay dato», y la convención
+del sistema («feature no disponible = 0.0 neutro», §4.2) no lo distingue por sí sola.</li>
+<li><b>La entidad se deriva, y la tabla arranca vacía.</b> Las fuentes externas no hablan en símbolos de
+mercado. La clave común sale de una regla (<span class="mono">XYZ/USDT → XYZ</span>) que funciona el día que
+se añade un listado nuevo sin que nadie edite nada; la tabla de <i>overrides</i> existe para cuando la regla
+acierta la forma y falla el fondo, y hoy tiene <b>{e['n_overrides']} entradas</b>. Cada
+<span class="mono">EntityRef</span> lleva su procedencia (regla / override / sin resolver) para que el cruce
+sea auditable. Sobre el universo configurado: {e['n_symbols']} símbolos → {e['n_entities']} entidades,
+cobertura <b>{_n(e['coverage_pct'], 1)} %</b> ({e['by_source']['rule']} por regla,
+{e['by_source']['override']} por override, {e['by_source']['unmapped']} sin resolver).</li>
+</ul>
+
+<div class="note"><b>Nada de esto está cableado.</b> Ni a las estrategias, ni al runner, ni al espacio de
+búsqueda del optimizador. El catálogo declara, la captura archiva ({s['records']} registros hoy) y la
+auditoría mide. El cableado es un paso posterior y tiene su propia compuerta: con las puertas de señal en
+su valor neutro, la validación multiventana debe devolver <b>exactamente</b> los scores ya publicados.</div>
+"""
+
+
 def _activity_block(a):
     """Seccion 5.6b: el suelo de actividad, sus dos condiciones y de donde sale cada una.
 
@@ -982,6 +1079,7 @@ def render_html(f: dict) -> str:
         "VALIDATION": _validation_block(f.get("validation")),
         "SESSIONS": _sessions_block(f.get("sessions")),
         "ACTIVITY": _activity_block(f.get("activity")),
+        "SIGNALS": _signals_block(f.get("signals")),
         "LAMBDA": _n((f.get("calibration") or {}).get("lambda", 0.5), 2),
         "KAPPA": _n((f.get("calibration") or {}).get("kappa", 1.0), 1),
     }
@@ -1353,6 +1451,8 @@ rompe.</div>
 <div class="note"><b>Cautela documentada.</b> El volumen sintético es un proxy simplista; las features
 que dependen de él están marcadas como tales y deben interpretarse con cuidado.</div>
 
+%%SIGNALS%%
+
 <h2 id="s5">5 · Evaluación y scoring</h2>
 
 <h3>5.1 · La unidad de evaluación es la distribución</h3>
@@ -1558,6 +1658,7 @@ de sobreajuste puro da PBO ≈ 1; probar más configuraciones sube el listón de
 <tr><td>Validación temporal multiventana (walk-forward y CPCV con purga y embargo)</td><td class="ok">Hecho</td><td>Implementada, auditada contra fuga temporal y <b>medida</b>: el corte único no estaba sesgado al alza, pero degradaba el CVaR a un solo número y escondía una dispersión entre ventanas capaz de cambiar qué configuración gana (§3.7).</td></tr>
 <tr><td>Validación sintético-vs-real (correlación de rangos con CCXT)</td><td class="ok">Hecho</td><td>Medida contra ocho años de histórico real: el nivel de riesgo y el orden de las correlaciones cruzadas se sostienen (§2.8).</td></tr>
 <tr><td>Transferencia de ranking real-vs-sintético</td><td class="ok">Hecho</td><td><b>Medida, y con resultado negativo:</b> el mundo sintético pasa todos los umbrales de fidelidad y aun así <b>no ordena</b> las estrategias como el mercado (§2.9). Que esté "hecho" significa que la pregunta está respondida, no que la respuesta fuera la deseada — y esa respuesta es la que reordena el trabajo pendiente.</td></tr>
+<tr><td>Plataforma de ingesta de señales externas (esqueleto)</td><td class="ok">Hecho</td><td>Catálogo con <span class="mono">history_from</span> medido y <span class="mono">pit</span>, puerto de dos capas, archivo crudo append-only, captura y auditoría de cobertura (§4.3). «Hecho» es el <b>esqueleto</b>, no la ingesta: hoy hay <b>0 fuentes conectadas</b> y <b>0 con historia medida</b>, y las dos cifras se publican en vez de esconderse. La captura ya corre, que es lo único que no se puede recuperar después.</td></tr>
 <tr><td>Limpieza de consistencia (universo, anualización, reproducibilidad del diseñador)</td><td class="ok">Hecho</td><td>La anualización distingue clase de activo (252 sesiones / 365 días naturales) y se reporta; la no-reproducibilidad del diseñador está documentada y su petición ya no envía parámetros de muestreo retirados; MATIC/USDT queda fuera del universo operado y dentro del sintético, con el motivo escrito.</td></tr>
 </tbody></table>
 
@@ -1566,6 +1667,11 @@ de sobreajuste puro da PBO ≈ 1; probar más configuraciones sube el listón de
 gratis cuando el juez mejore; un juez malo contamina todo lo que puntúe mientras siga malo. Por eso el
 sustrato y el juez van delante de la cosecha. El paper trading en vivo se lanza en paralelo porque es lo
 único que compra tiempo de calendario, que no se puede comprimir después.</p>
+<p>A esta lista se le ha añadido, desde §4.3, un frente nuevo que no estaba: <b>conectar las fuentes de
+señal</b>. El esqueleto de ingesta ya está construido y vacío, así que el trabajo pendiente es escribir
+adaptadores —cada uno independiente del anterior— y, solo después, cablear las features a las estrategias.
+Va antes de dar el generador por perdido porque la transferencia de §2.9 se midió con estrategias que solo
+ven precio y volumen, y ese es un motivo suficiente para que no transfiera.</p>
 <table><thead><tr><th>#</th><th>Trabajo pendiente</th><th>Por qué está donde está</th></tr></thead><tbody>
 <tr><td>1</td><td>Mover el sustrato primario del ranking al histórico <b>real</b> (el sintético, a capa de estrés y veto)</td><td>Es la consecuencia directa de §2.9, y no admite interpretación porque el umbral estaba declarado antes de mirar. El generador pasa todos los umbrales de fidelidad y aun así no ordena; sin embargo el CEM, <span class="mono">sample_eval</span> y todo el <i>scoring</i> siguen puntuando exclusivamente sobre librerías sintéticas. Mientras eso no cambie, el sistema elige con un juez del que ya se sabe que no transfiere.</td></tr>
 <tr><td>2</td><td>Una configuración que no opera no puede ganar el ranking</td><td>Lo destapó el propio estudio de transferencia: en el lado real, Spearman(recompensa, operaciones) = −0,84. Una curva plana puntúa headline <b>cero exacto</b>, y en un periodo donde casi todo lo que arriesga pierde, ese cero gana y hasta aprueba el <i>gate</i>. No es un error de cálculo —no perder es legítimo— pero sí una regla de selección degenerada para un sistema cuyo propósito es operar, y contamina cualquier ranking que se mida encima.</td></tr>

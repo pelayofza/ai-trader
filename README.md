@@ -36,6 +36,7 @@ backtest/engine.py      Conduce el runner real sobre histórico; corre planes de
 backtest/validation.py  Geometría temporal: walk-forward, CPCV, purga, embargo, auditoría.
 scoring/multiwindow.py  Agrega las ventanas de una muestra en una distribución robusta.
 scoring/transfer_study.py  ¿Ordena el mundo sintético las estrategias como el real?
+signals/                Ingesta de señales externas: catálogo, puerto, archivo, auditoría.
 notifications/          Canal hacia el humano (Telegram) desacoplado del núcleo.
 data/                   Proveedores (Alpaca, CCXT, Polymarket) + caché parquet.
 shared/                 Vocabulario común + `clock.py`, la costura para el backtest.
@@ -360,6 +361,51 @@ en §3.3 de la documentación; se reproduce con:
 ```powershell
 .venv\Scripts\python.exe -m ai_trader.backtest.session_study            # descarga 1H y mide
 .venv\Scripts\python.exe -m ai_trader.backtest.session_study --offline  # solo caché
+```
+
+### Señales externas: el esqueleto (17 declaradas, 0 conectadas)
+
+Las estrategias solo ven **precio y volumen**. El único canal de contexto es el bloque de régimen,
+construido sobre las propias barras: no hay ninguna fuente externa a OHLCV en todo `src/`.
+`signals/` es el sitio donde enchufarlas, construido **sin conectar ninguna**: 17 fuentes
+declaradas que producirían 44 features, **0 con adaptador** y **0 backtesteables**.
+
+Que esa última cifra sea 0 es el diseño, no un hueco. Cada fuente declara `history_from` —la
+primera fecha con dato **comprobado por nosotros**, no la que promete el proveedor— y `pit`
+(*forward_capture* / *archive_revisable* / *derived_from_price*). Ninguna tiene todavía una fecha
+medida, así que ninguna puede entrar en un backtest, y lo que el proveedor anuncia vive en las notas
+del catálogo en prosa, donde ningún código puede confundirlo con una medición.
+
+**La captura arranca ya, antes que los adaptadores.** 6 de las 17 fuentes son *forward capture*:
+nadie publica el pasado de una cola de staking, de un libro P2P ni de la lista SDN de hace tres
+meses. Para ésas la profundidad histórica no depende de escribir mejor código después, sino del
+calendario. Cada día sin capturar es profundidad que no se recupera.
+
+Cuatro decisiones que se pagan caras si se toman al revés:
+
+- **El puerto tiene dos capas.** `fetch_raw` toca la red y devuelve el payload intacto;
+  `daily_from_raw` es una función **pura** que lo traduce. La parte que se equivoca es el mapeo, y
+  separadas corregirlo **re-deriva** en vez de re-descargar. La mitad frágil se testea sin red.
+- **El crudo va en `data/`, no en `.cache/`.** Append-only en
+  `data/signals_raw/<fuente>/<entidad>/<YYYY-MM>.jsonl.gz` con su `fetched_at`. No se re-deriva: se
+  **guarda** —el mismo principio que el `spec.json` de cada escenario sintético—. Una revisión del
+  proveedor añade una línea y no borra la anterior, que es la única forma de medir cuánto revisa.
+  Lo derivado vive en `.cache/signals/` y es desechable.
+- **El esquema diario es propio** (`shared/signals.py`): `(entidad, día) -> features + observed`.
+  No reutiliza `normalize_bars`, que deduplica con `keep='last'` y se comería tres emisores
+  publicando el mismo día. `observed` cuenta las observaciones detrás de cada celda: distingue
+  «vale 0» de «no hay dato».
+- **La entidad se deriva, y la tabla de overrides arranca vacía** (`shared/entities.py`). La regla
+  (`XYZ/USDT -> XYZ`) funciona el día que se añade un listado nuevo; cada `EntityRef` lleva su
+  procedencia (`rule` / `override` / `unmapped`) para que el cruce sea auditable. Sobre el universo
+  configurado: 24 símbolos → 24 entidades, **100 % por regla, 0 overrides**.
+
+Nada está cableado a las estrategias ni al runner.
+
+```powershell
+.venv\Scripts\python.exe -m ai_trader.cli signals catalog   # las 17 fuentes declaradas
+.venv\Scripts\python.exe -m ai_trader.cli signals capture   # archiva lo que haya (hoy, nada)
+.venv\Scripts\python.exe -m ai_trader.cli signals audit     # cobertura de entidades y archivo
 ```
 
 ### Costes de ejecución

@@ -37,7 +37,9 @@ from ai_trader.scoring.weight_calibration import (
     grid_point,
     load_calibration_report,
 )
+from ai_trader.config import load_config
 from ai_trader.shared import bars as bar_schema
+from ai_trader.shared.entities import ENTITY_OVERRIDES
 from ai_trader.synthetic.fidelity import (
     CROSS_CORR_KEY,
     FIDELITY_BASELINE_LIBRARY,
@@ -416,6 +418,51 @@ def _sessions() -> dict | None:
     }
 
 
+def _signals() -> dict:
+    """
+    El esqueleto de ingesta de senales (seccion 4.3): catalogo declarado y cobertura MEDIDA.
+
+    A diferencia de los demas bloques, este NO lee un informe: el catalogo es codigo y la
+    auditoria de entidades y de archivo es barata (no toca red y el archivo es local). Se
+    mide en el momento de generar, que ademas es lo unico coherente con lo que dice la
+    seccion: las cifras que importan son cuantas fuentes tienen historia medida y cuantas
+    estan conectadas, y las dos cambian escribiendo codigo, no re-corriendo un estudio.
+    """
+    from ai_trader.signals.audit import audit_archive, audit_entities
+    from ai_trader.signals.catalog import CATALOG, catalog_summary
+    from ai_trader.signals.source import connected_keys
+    from ai_trader.signals.store import SignalStore
+
+    universe = list(load_config(ROOT / "config" / "default.toml").runner.symbols)
+    entities = audit_entities(universe)
+    archive = audit_archive(SignalStore(ROOT / "data" / "signals_raw"))
+
+    return {
+        "summary": catalog_summary(),
+        "n_connected": len(connected_keys()),
+        "records": archive.records,
+        "entities": {
+            "n_symbols": entities.n_symbols,
+            "coverage_pct": round(entities.coverage_pct, 2),
+            "by_source": entities.by_source,
+            "n_entities": len({r.key for r in entities.refs if r.resolved}),
+            "n_overrides": len(ENTITY_OVERRIDES),
+        },
+        "rows": [
+            (
+                s.key,
+                s.tier,
+                s.scope,
+                s.cadence,
+                s.pit,
+                str(len(s.features)),
+                s.history_from.isoformat() if s.history_from else "—",
+            )
+            for s in CATALOG
+        ],
+    }
+
+
 def collect() -> dict:
     store = SyntheticStore(ROOT / "data" / "synthetic")
     facts: dict = {}
@@ -451,6 +498,7 @@ def collect() -> dict:
     facts["validation"] = _validation()
     facts["sessions"] = _sessions()
     facts["activity"] = _activity()
+    facts["signals"] = _signals()
 
     facts["mom_params"] = _params(CryptoMomentumStrategy().config)
     facts["mr_params"] = _params(MeanReversionStrategy().config)
