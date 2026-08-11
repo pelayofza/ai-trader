@@ -46,6 +46,7 @@ from ai_trader.scoring.transfer_study import (
     build_tasks,
     collect_side,
     config_bootstrap_rho,
+    eligibility_block,
     permutation_p_value,
     rank_discrepancies,
     real_windows,
@@ -215,8 +216,12 @@ def _row(
     *,
     failed: bool = False,
     num_trades: int = 1000,
+    per_fold: bool = True,
 ) -> dict:
-    return {
+    """Una unidad cruda. `per_fold=False` reproduce una corrida ANTERIOR a que se
+    instrumentaran las operaciones ventana a ventana, que es el caso degradado que el
+    estudio tiene que saber declarar en vez de inventarse la actividad."""
+    row = {
         "config_id": config_id,
         "side": side,
         "unit_id": unit,
@@ -230,6 +235,9 @@ def _row(
         "coverage": {},
         "num_trades": num_trades,
     }
+    if per_fold and scores:
+        row["trades_by_fold"] = [num_trades // len(scores)] * len(scores)
+    return row
 
 
 class TestCollectSide:
@@ -334,12 +342,15 @@ class TestVerdict:
         assert verdict_for(0.5, self._boot(False))["ci_excludes_zero"] is False
 
 
-def _side_rows(side: str, config_ids, blocks, rewards_by_config, trades=None) -> list[dict]:
+def _side_rows(
+    side: str, config_ids, blocks, rewards_by_config, trades=None, *, per_fold: bool = True
+) -> list[dict]:
     """Filas sinteticas con scores construidos para que el CVaR agregado sea el pedido."""
     return [
         _row(
             cid, side, block, [rewards_by_config[cid] + 0.01 * b] * 4,
             num_trades=1000 if trades is None else trades[cid],
+            per_fold=per_fold,
         )
         for cid in config_ids
         for b, block in enumerate(blocks)
@@ -425,6 +436,85 @@ class TestActivityControl:
         assert out["n_active"] == 0
         assert out["spearman_active"] is None
         assert out["bootstrap_active"] is None
+
+    def test_la_actividad_se_publica_ventana_a_ventana(self):
+        """Operaciones por ventana Y ventanas vacias: sin la segunda cifra no se distingue
+        'opera poco pero siempre' de 'opera a rafagas y desaparece'."""
+        busy = {c: 400 for c in self.CONFIGS}
+        rows, real, synth = self._sides(busy, busy)
+        out = activity_check(rows, real, synth, self.CONFIGS, alpha=DEFAULT_CVAR_ALPHA)
+
+        assert out["measured_per_window"] is True
+        stats = out["stats"]["c0"][SIDE_REAL]
+        assert stats["n_windows"] == 8  # 2 bloques x 4 ventanas
+        assert stats["trades_per_window"] == pytest.approx(100.0)
+        assert stats["zero_window_pct"] == 0.0
+
+    def test_sin_detalle_por_ventana_se_declara_el_criterio_degradado(self):
+        """Repartir el total del bloque entre sus folds daria una fraccion de ventanas
+        vacias INVENTADA, que es justo el dato que hace falta."""
+        busy = {c: 400 for c in self.CONFIGS}
+        rows = [
+            *_side_rows(SIDE_REAL, self.CONFIGS, ["w1"], {c: 1.0 for c in self.CONFIGS},
+                        busy, per_fold=False),
+            *_side_rows(SIDE_SYNTHETIC, self.CONFIGS, ["s1"], {c: 1.0 for c in self.CONFIGS},
+                        busy, per_fold=False),
+        ]
+        real = collect_side(rows, SIDE_REAL, self.CONFIGS)
+        synth = collect_side(rows, SIDE_SYNTHETIC, self.CONFIGS)
+        out = activity_check(rows, real, synth, self.CONFIGS, alpha=DEFAULT_CVAR_ALPHA)
+
+        assert out["measured_per_window"] is False
+        assert "no traen el detalle" in out["active_criterion"]
+        assert real.activity("c0") is None and not real.rankable("c0")
+
+
+class TestEligibility:
+    """El ranking se publica CON y SIN suelo, y si la eleccion cambia hay que decirlo."""
+
+    CONFIGS = [f"c{i}" for i in range(4)]
+
+    def _sides(self, trades: dict[str, int], levels: dict[str, float]):
+        rows = [
+            *_side_rows(SIDE_REAL, self.CONFIGS, ["w1", "w2"], levels, trades),
+            *_side_rows(SIDE_SYNTHETIC, self.CONFIGS, ["s1", "s2"], levels, trades),
+        ]
+        return (
+            collect_side(rows, SIDE_REAL, self.CONFIGS),
+            collect_side(rows, SIDE_SYNTHETIC, self.CONFIGS),
+        )
+
+    def test_el_suelo_que_cambia_al_ganador_lo_dice(self):
+        # c0 gana sin operar (una ventana de cada cuatro con una sola operacion).
+        trades = {"c0": 1, "c1": 400, "c2": 400, "c3": 400}
+        levels = {"c0": 0.0, "c1": -1.0, "c2": -2.0, "c3": -3.0}
+        real, synth = self._sides(trades, levels)
+        out = eligibility_block(real, synth, self.CONFIGS, alpha=DEFAULT_CVAR_ALPHA)
+        side = out["sides"][SIDE_REAL]
+
+        assert side["winner_all"] == "c0" and side["winner_rankable"] == "c1"
+        assert side["changes_winner"] is True
+        assert side["dropped"] == ["c0"] and side["reasons"]["c0"]
+
+    def test_si_no_cambia_la_eleccion_tambien_se_declara(self):
+        trades = {c: 400 for c in self.CONFIGS}
+        levels = {c: -float(i) for i, c in enumerate(self.CONFIGS)}
+        real, synth = self._sides(trades, levels)
+        out = eligibility_block(real, synth, self.CONFIGS, alpha=DEFAULT_CVAR_ALPHA)
+
+        assert out["sides"][SIDE_REAL]["changes_winner"] is False
+        assert out["sides"][SIDE_REAL]["n_rankable"] == len(self.CONFIGS)
+
+    def test_el_gate_pierde_a_las_que_aprobaban_por_no_jugar(self):
+        """La medicion de (c): cuantas dejan de aprobar al exigir actividad."""
+        trades = {"c0": 1, "c1": 400, "c2": 400, "c3": 400}
+        # Los baselines de `_row` puntuan 0.5: solo c0 (que no opera) los bate con su 1.0.
+        levels = {"c0": 1.0, "c1": -1.0, "c2": -2.0, "c3": -3.0}
+        real, synth = self._sides(trades, levels)
+        side = eligibility_block(real, synth, self.CONFIGS, alpha=DEFAULT_CVAR_ALPHA)["sides"]
+
+        assert side[SIDE_REAL]["approved_without_floor"] == ["c0"]
+        assert side[SIDE_REAL]["approved_with_floor"] == []
 
 
 class TestBootstrap:

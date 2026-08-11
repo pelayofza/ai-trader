@@ -22,6 +22,11 @@ from pathlib import Path
 import numpy as np
 
 from ai_trader.backtest.metrics import DEFAULT_HEADLINE_WEIGHTS
+from ai_trader.backtest.session_study import (
+    SESSIONS_REPORT,
+    US_KEY,
+    load_sessions_report,
+)
 from ai_trader.config import StrategySpec, load_config
 from ai_trader.data.backtest_source import HistoricalDataSource
 from ai_trader.execution.microstructure import BarLiquidityProvider
@@ -32,6 +37,10 @@ from ai_trader.scoring.baselines import BASELINE_LABELS, gate
 from ai_trader.scoring.overfit import (
     deflated_sharpe_ratio,
     probability_of_backtest_overfitting,
+)
+from ai_trader.scoring.activity_study import (
+    activity_report_path,
+    load_activity_report,
 )
 from ai_trader.scoring.sample_eval import evaluate_baselines, evaluate_sample_detailed
 from ai_trader.scoring.transfer_study import (
@@ -793,6 +802,7 @@ def collect_transfer() -> dict | None:
                 "trades_real": c["trades_per_fold"]["real"],
                 "trades_synthetic": c["trades_per_fold"]["synthetic"],
                 "active": c["active"],
+                "rankable_real": c.get("rankable_real"),
                 "approved_real": c["real"]["approved_pooled"],
                 "approved_synthetic": c["synthetic"]["approved_pooled"],
                 "n_real": c["real"]["n"],
@@ -801,6 +811,7 @@ def collect_transfer() -> dict | None:
             for c in sorted(configs, key=lambda c: c["rank_real"])
         ],
         "transfer": report["transfer"],
+        "eligibility": report.get("eligibility"),
         "verdict": report["verdict"],
         "caveats": report["caveats"],
         "baselines": report["baselines"],
@@ -913,6 +924,103 @@ def collect_validation() -> dict | None:
     }
 
 
+def collect_sessions() -> dict | None:
+    """Descomposicion por sesion horaria de la formacion de precio (data/sessions).
+
+    Se LEE del informe publicado; no se recalcula. El estudio descarga seis anos de barras
+    1H de 24 pares (algo mas de un millon de velas) y el dashboard tiene que seguir siendo
+    regenerable en minutos. El informe ya trae los veredictos leidos, asi que aqui no se
+    interpreta nada: se reempaqueta para el render."""
+    report = load_sessions_report(ROOT / SESSIONS_REPORT)
+    if not report:
+        logger.warning("Sin informe de sesiones: el panel de la ventana ciega saldra vacio")
+        return None
+
+    plan = report["plan"]
+    trend = report["trend"]
+    sessions = report["sessions"]
+    overall = report["overall"]["sessions"]
+
+    # El pico de cada reparto, ya resuelto: el render no deberia estar buscando maximos.
+    def leader(field: str) -> dict:
+        key = max(overall, key=lambda k: overall[k][field] or 0.0)
+        return {"key": key, "label": _session_label(sessions, key), "value": overall[key][field]}
+
+    return {
+        "window": plan["window"],
+        "exchange": plan["exchange"],
+        "timeframe": plan["timeframe"],
+        "thresholds": plan["thresholds"],
+        "latency_hours": plan["latency_hours"],
+        "min_days_per_year": plan["min_days_per_year"],
+        "sessions": sessions,
+        "overall": report["overall"],
+        "cohort_overall": report["cohort_overall"],
+        "cohort": report["cohort"],
+        "symbols": report["symbols"],
+        "omitted": report["omitted"],
+        "by_symbol_year": report["by_symbol_year"],
+        "gap": report["gap"],
+        "latency": report["latency"],
+        "trend": trend,
+        "verdicts": report["verdicts"],
+        "caveats": report["caveats"],
+        "leader_variance": leader("variance"),
+        "leader_sets_low": leader("sets_low"),
+        "us": overall[US_KEY],
+        "us_key": US_KEY,
+        "generated_at": report["generated_at"][:10],
+    }
+
+
+def _session_label(sessions: list[dict], key: str) -> str:
+    return next((s["label"] for s in sessions if s["key"] == key), key)
+
+
+def collect_activity() -> dict | None:
+    """El suelo de actividad y la evidencia con la que se eligio (data/activity).
+
+    Se LEE del informe publicado; no se recalcula. El estudio se apoya en las 208 unidades
+    del estudio de transferencia (15 ventanas de backtest real cada una) y el dashboard
+    tiene que seguir siendo regenerable en minutos. El informe ya trae la regla aplicada y
+    el umbral elegido: aqui no se decide nada, se reempaqueta para el render."""
+    report = load_activity_report(ROOT / activity_report_path(TRANSFER_LIBRARY))
+    if not report:
+        logger.warning("Sin informe de actividad: el panel del suelo saldra vacio")
+        return None
+
+    real = report["gate"]["real"]
+    return {
+        "library": report["source"]["library_id"],
+        "source": report["source"],
+        "floor": report["floor"],
+        "mechanism": report["mechanism"],
+        "decision": report["decision"],
+        "band": report["band"],
+        "sweep": report["sweep"],
+        "reproducibility": report["reproducibility"],
+        "gate": report["gate"],
+        "n_lost": real["n_lost"],
+        "lost": real["lost_detail"],
+        # Una fila por configuracion con las dos cifras que la hacen (o no) rankeable.
+        "rows": [
+            {
+                "config_id": c["config_id"],
+                "trades_per_window": c["real"]["trades_per_window"],
+                "median_trades_per_window": c["real"]["median_trades_per_window"],
+                "zero_window_pct": c["real"]["zero_window_pct"],
+                "reward": c["real"]["reward"],
+                "rankable": c["real"]["rankable"],
+                "trades_per_window_synthetic": c["synthetic"]["trades_per_window"],
+                "zero_window_pct_synthetic": c["synthetic"]["zero_window_pct"],
+                "rankable_synthetic": c["synthetic"]["rankable"],
+            }
+            for c in sorted(report["configs"], key=lambda c: -c["real"]["reward"])
+        ],
+        "generated_at": report["generated_at"][:10],
+    }
+
+
 def collect_roadmap() -> list[dict]:
     """Evoluciones pendientes, ordenadas por criticidad, con prompt para Claude Code."""
     from ai_trader.synthetic import retrofit  # noqa: F401  (asegura que el modulo existe)
@@ -936,6 +1044,8 @@ def build() -> None:
     fidelity = collect_fidelity()
     logger.info("Transferencia de ranking real vs sintetico (informe publicado)...")
     transfer = collect_transfer()
+    logger.info("Descomposicion por sesion horaria (informe publicado)...")
+    logger.info("Suelo de actividad del ranking (informe publicado)...")
     logger.info("Catalogo de estrategias...")
     strategies = collect_strategies()
     logger.info("Demo de señales...")
@@ -958,6 +1068,8 @@ def build() -> None:
         "ranking": ranking,
         "calibration": collect_calibration(),
         "validation": collect_validation(),
+        "sessions": collect_sessions(),
+        "activity": collect_activity(),
         "roadmap": collect_roadmap(),
         "roadmap_groups": ROADMAP_GROUPS,
     }
@@ -995,8 +1107,16 @@ def build() -> None:
 # a medir con el mismo instrumento. La hipotesis es testeable y la lista de ahora la sigue:
 # medir primero lo que ya se puede medir gratis (sesion horaria, suelo de actividad),
 # construir la plataforma de ingesta de senales, y re-correr la transferencia de forma
-# pareada. Sacar el sintetico del criterio de seleccion pasa a ser la CONTINGENCIA (rank
-# 17), no la conclusion automatica.
+# pareada. Sacar el sintetico del criterio de seleccion pasa a ser la CONTINGENCIA, no la
+# conclusion automatica.
+#
+# ACTUALIZACION 2026-08-11 (2): las dos mediciones baratas estan hechas y las dos cambiaron
+# algo. La ventana ciega resulto no tener ancho (el hueco cierre->open es 0,55 pb) pero la
+# LATENCIA si cuesta. Y el suelo de actividad destapo que el ranking real premiaba no
+# operar: Spearman(recompensa, operaciones) = -0,84, la ganadora no abria posiciones y aun
+# asi aprobaba el gate. Ya no: rankear exige operar (scoring.activity, evidencia en
+# data/activity/), el gate exige las dos cosas y el ranking se publica con y sin suelo.
+# Ninguna de las dos toca el generador, que sigue siendo el problema de fondo.
 #
 # DOS PUERTAS, y esta separacion es la que impide sobreajustar: las senales MECANICAS
 # (unlocks, colas de staking, mNAV<1, mapas de liquidacion) tienen muestras de decenas, asi
@@ -1018,10 +1138,11 @@ ROADMAP_GROUPS = [
         "subtitle": "El sustrato es fiel pero NO ordena (medido el 2026-08-11). La hipotesis "
                     "que se persigue antes de dar el generador por perdido es que el cuello de "
                     "botella no es el generador sino el ESPACIO DE INPUTS: hoy las estrategias "
-                    "solo ven precio y volumen. Asi que primero lo que se puede medir gratis "
-                    "-sesion horaria y suelo de actividad-, despues la plataforma de senales, y "
-                    "el reloj corriendo en paralelo. Nada de lo que se puntue mientras tanto vale "
-                    "mas que el juez que lo puntua.",
+                    "solo ven precio y volumen. Las dos mediciones baratas que condicionaban la "
+                    "lectura ya estan hechas -la ventana ciega (vista Sesiones) y el suelo de "
+                    "actividad del ranking (vista Actividad)-, asi que lo que queda aqui es la "
+                    "plataforma de senales y el reloj corriendo en paralelo. Nada de lo que se "
+                    "puntue mientras tanto vale mas que el juez que lo puntua.",
     },
     {
         "key": "despues",
@@ -1045,108 +1166,8 @@ ROADMAP_GROUPS = [
 
 ROADMAP = [
     {
-        "id": "session-decomposition",
-        "rank": 1,
-        "group": "ahora",
-        "priority": "critica",
-        "title": "Descomponer el retorno por sesion horaria (¿mide el backtest lo que creemos?)",
-        "line": "Medicion", "status": "pendiente", "impact": "alto", "effort": "bajo",
-        "evidence": "Sin medir. El backtest es cierre-contra-cierre diario y el fill se hace al "
-                    "OPEN del dia siguiente (backtest/engine.py::_run_window + "
-                    "execution/market_model.py::IntrabarMarketModel). Nadie ha comprobado que "
-                    "fraccion del movimiento y de la volatilidad cae dentro de la ventana en la "
-                    "que el sistema entra y sale a ciegas.",
-        "why": "Es lo mas barato del roadmap y lo unico que puede invalidar evidencia YA "
-               "PUBLICADA. Desde los ETF, la formacion de precio en cripto se ha desplazado hacia "
-               "el horario estadounidense de forma marcada. Si el grueso del movimiento ocurre en "
-               "una ventana que el sistema no ve, el backtest no esta midiendo la estrategia sino "
-               "la ELECCION DE HORA DE CORTE -- y eso afecta a fidelidad, calibracion de pesos, "
-               "validacion multiventana y transferencia por igual, no solo a lo que venga nuevo. "
-               "El dato ya esta disponible (barras 1h de los mismos simbolos via CCXT, misma "
-               "cache) y no depende de ninguna fuente nueva. Va primero porque condiciona la "
-               "lectura de todo lo demas.",
-        "prompt": (
-            "Proyecto ai-trader (Python). Todo el sistema es DIARIO: barras 1D, purga en dias, "
-            "anualizacion 365. El backtest decide con barras ya cerradas y llena al OPEN del dia "
-            "siguiente (execution/market_model.py::IntrabarMarketModel.entry_reference_price), y "
-            "comprueba stops contra el HIGH/LOW de la barra. Nadie ha medido nunca que fraccion "
-            "de la formacion de precio ocurre DENTRO de esa ventana ciega.\n"
-            "\n"
-            "TAREA: un estudio de descomposicion por sesion horaria, publicado en data/sessions/.\n"
-            "(a) Descarga barras 1H de los simbolos cripto del universo operable "
-            "(config/default.toml) via CCXT, reusando la cache de data/cache.py -- ojo: la clave "
-            "de cache lleva el prefijo 'crypto::' y el timeframe forma parte del nombre de "
-            "fichero, asi que 1H no pisa a 1D.\n"
-            "(b) Define TRES sesiones por UTC (asiatica, europea, estadounidense) y declara los "
-            "cortes en el codigo como constantes razonadas, no a ojo.\n"
-            "(c) Mide, por simbolo y POR ANO: fraccion del retorno absoluto acumulado en cada "
-            "sesion, fraccion de la volatilidad realizada, y fraccion del rango diario. Reporta "
-            "la tendencia temporal: la hipotesis es que el peso de la sesion estadounidense crece "
-            "tras enero de 2024.\n"
-            "(d) LA CIFRA QUE DECIDE: que fraccion del movimiento diario cae entre el cierre que "
-            "la estrategia ve y el open al que se llena. Es el hueco que el backtest no modela.\n"
-            "(e) Consecuencia declarada: si esa fraccion es grande, escribelo como limitacion en "
-            "docs/metodologia (seccion 3.3, la de la convencion intrabar) y en el README. NO "
-            "cambies el motor: primero se mide y se declara.\n"
-            "\n"
-            "Determinismo (ventana historica CERRADA, no 'hasta hoy'), tests, "
-            ".venv\\Scripts\\python.exe (poetry run esta roto) + ruff. Vista nueva o ampliacion "
-            "en el dashboard. Regenera dashboard y docs."
-        ),
-    },
-    {
-        "id": "activity-floor-in-score",
-        "rank": 2,
-        "group": "ahora",
-        "priority": "critica",
-        "title": "Una configuracion que no opera no puede ganar el ranking",
-        "line": "A", "status": "pendiente", "impact": "alto", "effort": "bajo",
-        "evidence": "MEDIDO: en el lado real, Spearman(recompensa, operaciones por ventana) = -0,84. "
-                    "La configuracion #1 del ranking real (mean_reversion#07) abre 0,07 operaciones "
-                    "por ventana OOS y puntua CVaR = 0,000 EXACTO -- y aprueba el gate, porque los "
-                    "baselines pasivos estan en -1,42. En el sintetico esa correlacion es -0,09.",
-        "why": "El headline de una curva plana es cero exacto (Sharpe 0, rotacion 0, caida 0), y en "
-               "un periodo donde casi todo lo que arriesga pierde, un cero gana. El CVaR, que puntua "
-               "por la cola mala, lo premia el doble. El resultado es que el ranking real de hoy es "
-               "en gran parte una lista de INACTIVIDAD: no distingue 'no perder' de 'encontrar un "
-               "edge'. No es un bug de calculo -- no perder es legitimo -- pero si es una regla de "
-               "seleccion degenerada para un sistema cuyo proposito es operar, y contamina "
-               "cualquier medicion de ranking que se haga encima, incluida la de transferencia.",
-        "prompt": (
-            "Proyecto ai-trader (Python). El estudio de transferencia "
-            "(data/transfer/report_ai_v3.json, bloque `transfer.activity`) destapo una propiedad "
-            "degenerada del ranking: en el lado real, Spearman(recompensa, operaciones por ventana "
-            "OOS) = -0,84. Cuanto MENOS opera una configuracion, mejor puntua. La causa es "
-            "aritmetica: una curva plana da Sharpe 0, turnover 0 y maxDD 0, luego headline 0 EXACTO "
-            "(backtest/metrics.py::headline_score), y el CVaR@25% de una lista de ceros es cero -- "
-            "que gana a cualquier configuracion que arriesgue y pierda. La ganadora del ranking real "
-            "hoy (mean_reversion#07) abre 0,07 operaciones por ventana y APRUEBA el gate de "
-            "baselines, porque los pasivos estan en -1,42.\n"
-            "\n"
-            "TAREA: que el ranking distinga 'no perder' de 'acertar', sin fingir que lo primero sea "
-            "malo.\n"
-            "(a) Reportar SIEMPRE la actividad junto al reward (operaciones por ventana OOS, y la "
-            "fraccion de folds con cero operaciones) en RewardStats / MultiWindowValidation y en "
-            "todo lo que publique un ranking. Hoy hay que ir a buscarla.\n"
-            "(b) Un suelo de actividad DECLARADO para que una configuracion sea rankeable, en la "
-            "linea de weight_calibration.filter_active_configs (que ya existe pero solo se usa como "
-            "chequeo de robustez del estudio de pesos) y de transfer_study."
-            "ACTIVE_MIN_TRADES_PER_FOLD. Elige el umbral con evidencia, no a ojo, y publica el "
-            "ranking con y sin el: si la eleccion cambia, hay que decirlo.\n"
-            "(c) Revisar el GATE: 'batir a los baselines' con una curva plana es batirlos por no "
-            "jugar. Decide y documenta si el gate exige ademas actividad minima, y mide cuantas "
-            "configuraciones dejan de aprobar.\n"
-            "(d) NO conviertas esto en una penalizacion por poca rotacion: eso ya lo hace lambda y "
-            "el estudio de pesos midio que penalizar no estabiliza nada (data/calibration/). Lo que "
-            "falta es un REQUISITO de elegibilidad, que es otra cosa.\n"
-            "\n"
-            "Tests + determinismo + .venv\\Scripts\\python.exe (poetry run esta roto) + ruff. "
-            "Regenera dashboard y docs."
-        ),
-    },
-    {
         "id": "signal-platform-skeleton",
-        "rank": 3,
+        "rank": 1,
         "group": "ahora",
         "priority": "critica",
         "title": "Plataforma de ingesta de senales: catalogo, puerto unico y captura hacia adelante",
@@ -1208,7 +1229,7 @@ ROADMAP = [
     },
     {
         "id": "signals-tier-b-batch",
-        "rank": 4,
+        "rank": 2,
         "group": "ahora",
         "priority": "alta",
         "title": "Lote barato de senales continuas (Tier B): diez fuentes sobre el mismo puerto",
@@ -1272,7 +1293,7 @@ ROADMAP = [
     },
     {
         "id": "signals-tier-a-eligibility",
-        "rank": 5,
+        "rank": 3,
         "group": "ahora",
         "priority": "critica",
         "title": "Senales mecanicas (Tier A) como ELEGIBILIDAD, nunca como alfa",
@@ -1343,7 +1364,7 @@ ROADMAP = [
     },
     {
         "id": "signal-radar-wiring",
-        "rank": 6,
+        "rank": 4,
         "group": "ahora",
         "priority": "alta",
         "title": "Radar de features y cableado en backtest Y en vivo (cierra el hueco del regimen)",
@@ -1405,7 +1426,7 @@ ROADMAP = [
     },
     {
         "id": "paper-trading-live",
-        "rank": 7,
+        "rank": 5,
         "group": "ahora",
         "priority": "alta",
         "title": "Poner el paper trading a correr en vivo (y la vista del dashboard que lo lea)",
@@ -1471,7 +1492,7 @@ ROADMAP = [
     },
     {
         "id": "signals-expensive-batch",
-        "rank": 9,
+        "rank": 7,
         "group": "despues",
         "priority": "media",
         "title": "Lote caro de senales: apalancamiento observable, opciones, atencion geografica y legal",
@@ -1523,7 +1544,7 @@ ROADMAP = [
     },
     {
         "id": "synthetic-signal-emission",
-        "rank": 8,
+        "rank": 6,
         "group": "despues",
         "priority": "critica",
         "title": "Que el generador emita las senales, y re-medir la transferencia de forma pareada",
@@ -1592,7 +1613,7 @@ ROADMAP = [
     },
     {
         "id": "dat-mnav-index",
-        "rank": 10,
+        "rank": 8,
         "group": "despues",
         "priority": "media",
         "title": "Indice de estres de vendedores forzados (mNAV de tesorerias cotizadas)",
@@ -1642,7 +1663,7 @@ ROADMAP = [
     },
     {
         "id": "line-d-cpcv-two-stage-cem",
-        "rank": 11,
+        "rank": 9,
         "group": "despues",
         "priority": "alta",
         "title": "CPCV en dos etapas dentro del optimizador (que el CEM deje de puntuar con el corte unico)",
@@ -1704,7 +1725,7 @@ ROADMAP = [
     },
     {
         "id": "validation-study-full-ensemble",
-        "rank": 12,
+        "rank": 10,
         "group": "despues",
         "priority": "media",
         "title": "Re-correr el estudio de validacion con el ensemble completo",
@@ -1737,7 +1758,7 @@ ROADMAP = [
     },
     {
         "id": "pbo-blocks-scenario-aligned",
-        "rank": 13,
+        "rank": 11,
         "group": "despues",
         "priority": "media",
         "title": "Alinear los bloques del PBO con las fronteras de escenario",
@@ -1776,7 +1797,7 @@ ROADMAP = [
     },
     {
         "id": "report-n-failed-with-reward",
-        "rank": 14,
+        "rank": 12,
         "group": "despues",
         "priority": "media",
         "title": "Reportar n_failed junto al reward (la penalizacion domina la cola)",
@@ -1810,7 +1831,7 @@ ROADMAP = [
     },
     {
         "id": "dsr-independent-trials-caveat",
-        "rank": 15,
+        "rank": 13,
         "group": "despues",
         "priority": "baja",
         "title": "Declarar que el DSR asume intentos independientes y el CEM no los produce",
@@ -1845,7 +1866,7 @@ ROADMAP = [
     },
     {
         "id": "fidelity-rank-corr-ordering",
-        "rank": 16,
+        "rank": 14,
         "group": "despues",
         "priority": "media",
         "title": "Ordenacion de colas y clustering entre activos: el eje que ai_v3 no arreglo",
@@ -1910,7 +1931,7 @@ ROADMAP = [
     },
     {
         "id": "real-substrate-primary-ranking",
-        "rank": 17,
+        "rank": 15,
         "group": "despues",
         "priority": "critica",
         "title": "CONTINGENCIA: mover el sustrato primario del ranking al historico REAL",
@@ -1975,12 +1996,12 @@ ROADMAP = [
     },
     {
         "id": "rl-full-run",
-        "rank": 18,
+        "rank": 16,
         "group": "despues",
         "priority": "alta",
         "title": "Optimizacion CEM completa, ya con el juez validado",
         "line": "RL", "status": "bloqueada", "impact": "alto", "effort": "medio",
-        "depends": 2,
+        "depends": 1,
         "evidence": "El harness CEM esta listo, pero cada backtest cuesta ~60 s con 35 activos y "
                     "hoy apuntaria al juez del corte unico.",
         "why": "Correr la optimizacion a escala solo tiene sentido cuando el objetivo que escala "
@@ -2010,13 +2031,58 @@ ROADMAP = [
         ),
     },
     {
+        "id": "execution-latency-budget",
+        "rank": 17,
+        "group": "despues",
+        "priority": "media",
+        "title": "Presupuesto de latencia: el backtest supone que se llena a las 00:00 UTC en punto",
+        "line": "Medicion", "status": "pendiente", "impact": "medio", "effort": "bajo",
+        "evidence": "MEDIDO (data/sessions/report.json): el hueco entre el cierre que la estrategia "
+                    "ve y el open al que se llena es CERO a efectos practicos -0,07% del rango "
+                    "diario, 0,55 pb-, asi que la convencion de llenado no sesga nada. Pero eso "
+                    "solo vale si la orden sale en el instante del open: con UNA hora de retraso el "
+                    "precio de llenado ya se ha desplazado 57,9 pb (9,2% del rango del dia), que "
+                    "son 3,9x el coste de entrada de referencia que el motor si cobra (15 pb).",
+        "why": "El estudio de sesiones cerro la pregunta que tenia abierta el backtest (la ventana "
+               "ciega no tiene ancho) y abrio otra que hoy no esta ni medida ni presupuestada: el "
+               "backtest describe un sistema PUNTUAL, y nada en el repo obliga al ciclo real a "
+               "serlo. No es un bug del motor -por eso no se toco- sino un requisito no escrito "
+               "que hay que convertir en presupuesto explicito: cuanto puede tardar el ciclo en "
+               "ejecutar antes de que el backtest deje de describirlo. Va en 'despues' y no en "
+               "'ahora' porque solo muerde cuando el paper trading corra en vivo (#6), que es "
+               "donde la latencia deja de ser hipotetica.",
+        "depends": 6,
+        "prompt": (
+            "Proyecto ai-trader (Python). El estudio de sesiones (data/sessions/report.json, "
+            "ai_trader/backtest/session_study.py) ya midio que el hueco cierre-visto -> "
+            "open-llenado es cero, pero que llegar UNA hora tarde desplaza el llenado 57,9 pb "
+            "(3,9x el coste de entrada de referencia). El backtest supone ejecucion instantanea al "
+            "open de las 00:00 UTC y nada obliga al ciclo real a cumplirlo.\n"
+            "\n"
+            "TAREA: convertir eso en un presupuesto de latencia explicito y comprobable.\n"
+            "(a) Instrumenta el runner para registrar el retraso real entre la frontera de la vela "
+            "diaria y el instante del fill, y persistelo con el resto del estado de ejecucion.\n"
+            "(b) Declara el presupuesto como constante razonada (cuanto retraso se acepta antes de "
+            "que el coste no modelado supere una fraccion declarada del coste de ejecucion que el "
+            "motor ya cobra) y derivalo de las cifras del informe de sesiones, no a ojo.\n"
+            "(c) Alerta cuando se incumpla, por el mismo canal que el resto de avisos operativos.\n"
+            "(d) NO cambies el modelo de mercado del backtest sin volver a medir: si se decide "
+            "cobrar la latencia, tiene que salir del informe de sesiones re-corrido, no de una "
+            "estimacion.\n"
+            "\n"
+            "Determinismo + tests + .venv\\Scripts\\python.exe (poetry run esta roto) + ruff. "
+            "Amplia la vista Sesiones del dashboard con lo medido en vivo. Regenera dashboard y "
+            "docs."
+        ),
+    },
+    {
         "id": "new-crypto-strategies",
-        "rank": 19,
+        "rank": 18,
         "group": "no-prioritario",
         "priority": "baja",
         "title": "Nuevas estrategias cripto (deliberadamente NO priorizada)",
         "line": "Estrategias", "status": "pendiente", "impact": "medio", "effort": "alto",
-        "depends": 2,
+        "depends": 1,
         "evidence": "Solo 6 de 32 filas aprueban el gate bajo CPCV. Eso admite dos lecturas -las "
                     "estrategias son flojas, o el juez es ruidoso- y hasta saber cual, anadir "
                     "candidatos multiplica el problema de multiples pruebas.",
@@ -2059,7 +2125,7 @@ ROADMAP = [
     },
     {
         "id": "weights-recalibrate-power",
-        "rank": 20,
+        "rank": 19,
         "group": "no-prioritario",
         "priority": "baja",
         "title": "Re-medir lambda y kappa con los costes nuevos y mas potencia estadistica",
@@ -2104,7 +2170,7 @@ ROADMAP = [
     },
     {
         "id": "designer-model-in-manifest",
-        "rank": 21,
+        "rank": 20,
         "group": "no-prioritario",
         "priority": "baja",
         "title": "Anotar el modelo de IA en el manifiesto de cada libreria",
@@ -2136,7 +2202,7 @@ ROADMAP = [
     },
     {
         "id": "equities-parked",
-        "rank": 22,
+        "rank": 21,
         "group": "segundo-plano",
         "priority": "aparcada",
         "title": "Renta variable: aparcada a proposito (no se activa la clase de activo)",
@@ -2183,7 +2249,7 @@ ROADMAP = [
     },
     {
         "id": "polymarket-parked",
-        "rank": 23,
+        "rank": 22,
         "group": "segundo-plano",
         "priority": "aparcada",
         "title": "Polymarket en el backtest: aparcado hasta tener historico propio",

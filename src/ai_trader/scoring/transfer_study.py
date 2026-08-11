@@ -47,6 +47,14 @@ Cinco decisiones que son las que hacen que la cifra signifique algo:
    BLOQUES enteros (una sub-ventana real, una muestra sintetica) con todos sus folds
    dentro.
 
+6. EL RANKING SE PUBLICA CON Y SIN SUELO DE ACTIVIDAD. Este estudio fue el que destapo que
+   el ranking real premiaba no operar (Spearman(recompensa, operaciones) = -0.84), asi que
+   ahora cada configuracion lleva su actividad al lado de su recompensa —operaciones por
+   ventana OOS y fraccion de ventanas vacias— y el informe saca las dos listas: la completa
+   y la de las configuraciones RANKEABLES (`scoring.activity`). Si el suelo cambia al
+   ganador, el bloque `eligibility` lo dice con esas palabras. El suelo no penaliza a
+   nadie: no resta puntos, decide quien compite.
+
 REGLA DE DECISION, declarada antes de mirar el resultado:
   rho >= +0.30  el generador es un PRE-CRIBADO legitimo, y el flujo definitivo es
                 "real como sustrato primario del ranking, sintetico como capa de estres
@@ -82,6 +90,12 @@ from ai_trader.backtest.engine import DEFAULT_STARTING_EQUITY
 from ai_trader.backtest.metrics import periods_per_year_for_symbols
 from ai_trader.backtest.validation import SCHEME_CPCV, resolve_embargo_days
 from ai_trader.config import AppConfig, StrategySpec, load_config
+from ai_trader.scoring.activity import (
+    DEFAULT_ACTIVITY_FLOOR,
+    MIN_MEDIAN_TRADES_PER_WINDOW,
+    ActivityStats,
+    measure_activity,
+)
 from ai_trader.scoring.aggregate import DEFAULT_CVAR_ALPHA, aggregate_reward
 from ai_trader.scoring.baselines import BASELINE_LABELS, gate
 from ai_trader.scoring.multiwindow import resolve_purge_days, validate_multiwindow
@@ -123,13 +137,12 @@ N_TEST_GROUPS = 2
 RHO_ACCEPT = 0.30
 TOP_K = 4  # cuantas "mejores del sintetico" se persiguen en el ranking real
 
-# Umbral de "configuracion que opera de verdad", en operaciones por ventana OOS. Una
-# ventana de fold dura ~180 dias, asi que 5 operaciones es una cada cinco semanas: por
-# debajo de eso el headline no mide criterio, mide inactividad —y una configuracion que no
-# abre posiciones puntua CVaR = 0 exacto, que gana a cualquier cosa que arriesgue y pierda.
-# Es el mismo control que `weight_calibration.filter_active_configs` hace en el estudio de
-# pesos, trasladado a la unidad de este (trades por fold, no por muestra).
-ACTIVE_MIN_TRADES_PER_FOLD = 5.0
+# Suelo de actividad. Este estudio fue el que destapo el problema (Spearman(recompensa,
+# operaciones) = -0.84 en el lado real), pero el umbral ya NO vive aqui: es un requisito de
+# elegibilidad de todo el sistema y su casa es `scoring.activity`, donde estan los dos
+# numeros, la evidencia con la que se eligieron y el estudio que los mide. Se conserva el
+# nombre antiguo porque es el que cita la documentacion publicada.
+ACTIVE_MIN_TRADES_PER_FOLD = MIN_MEDIAN_TRADES_PER_WINDOW
 
 BOOTSTRAP_SAMPLES = 2000
 PERMUTATION_SAMPLES = 20_000
@@ -520,6 +533,10 @@ def _run_task(task: tuple[str, str, str, int]) -> dict:
         "embargo_days": result.embargo_days,
         "coverage": result.coverage,
         "num_trades": sum(f.num_trades for f in result.folds),
+        # Operaciones FOLD A FOLD, en el mismo orden que `scores`. El total no basta: la
+        # fraccion de ventanas vacias -que es lo que delata un reward de 0 aritmetico- solo
+        # se puede reconstruir con el detalle. Ver `scoring.activity`.
+        "trades_by_fold": [f.num_trades for f in result.folds],
     }
 
 
@@ -659,6 +676,9 @@ class SideScores:
     baselines: dict[str, list[list[float]]]
     approvals: dict[str, list[bool]]
     dropped: list[str]
+    # Operaciones ventana a ventana, en la MISMA forma que `by_config`. Vacio solo si las
+    # filas vienen de una corrida anterior a que se instrumentara (`trades_by_fold`).
+    trades_by_config: dict[str, list[list[int]]] = dataclasses.field(default_factory=dict)
 
     @property
     def n_blocks(self) -> int:
@@ -667,11 +687,41 @@ class SideScores:
     def pooled(self, config_id: str) -> list[float]:
         return [s for block in self.by_config[config_id] for s in block]
 
+    def pooled_trades(self, config_id: str) -> list[int] | None:
+        blocks = self.trades_by_config.get(config_id)
+        if blocks is None:
+            return None
+        return [t for block in blocks for t in block]
+
     def reward(self, config_id: str, alpha: float) -> float:
         return _cvar(self.pooled(config_id), alpha)
 
+    def activity(self, config_id: str) -> ActivityStats | None:
+        """La actividad sobre EXACTAMENTE las mismas ventanas que producen `reward`."""
+        trades = self.pooled_trades(config_id)
+        return None if trades is None else measure_activity(trades)
 
-def collect_side(rows: Sequence[dict], side: str, config_ids: Sequence[str]) -> SideScores:
+    def rankable(self, config_id: str) -> bool:
+        return DEFAULT_ACTIVITY_FLOOR.eligible(self.activity(config_id))
+
+
+def _fold_trades(row: dict) -> list[int] | None:
+    """Operaciones ventana a ventana de una unidad, o None si esa unidad es de una corrida
+    anterior a la instrumentacion. Se exige que haya una cifra por score: media unidad
+    medida no es una unidad medida."""
+    trades = row.get("trades_by_fold")
+    if trades is None or len(trades) != len(row.get("scores", [])):
+        return None
+    return [int(t) for t in trades]
+
+
+def collect_side(
+    rows: Sequence[dict],
+    side: str,
+    config_ids: Sequence[str],
+    *,
+    alpha: float = DEFAULT_CVAR_ALPHA,
+) -> SideScores:
     """
     Ordena las filas crudas de un lado en la matriz (configuracion x bloque).
 
@@ -688,6 +738,7 @@ def collect_side(rows: Sequence[dict], side: str, config_ids: Sequence[str]) -> 
         indexed.setdefault(row["config_id"], {})[(row["unit_id"], row["path_index"])] = row
 
     by_config: dict[str, list[list[float]]] = {}
+    trades_by_config: dict[str, list[list[int]]] = {}
     approvals: dict[str, list[bool]] = {}
     dropped: list[str] = []
     for config_id in config_ids:
@@ -696,7 +747,25 @@ def collect_side(rows: Sequence[dict], side: str, config_ids: Sequence[str]) -> 
             dropped.append(config_id)
             continue
         by_config[config_id] = [list(cells[k]["scores"]) for k in block_ids]
-        approvals[config_id] = [bool(cells[k]["approved"]) for k in block_ids]
+        # La actividad se lee ventana a ventana o no se lee: repartir el total del bloque
+        # entre sus folds daria una media correcta y una fraccion de ventanas vacias
+        # INVENTADA, que es justo el dato que hace falta.
+        per_fold = [_fold_trades(cells[k]) for k in block_ids]
+        if all(t is not None for t in per_fold):
+            trades_by_config[config_id] = [list(t) for t in per_fold]
+        # El veredicto por bloque se RECALCULA aqui en vez de arrastrar el que la unidad
+        # guardo al correrse. Es la misma cuenta con los mismos datos, pero el gate depende
+        # del suelo de actividad vigente: un informe re-analizado no puede seguir
+        # publicando el veredicto de una version anterior del suelo sin decirlo.
+        approvals[config_id] = [
+            gate(
+                list(cells[k]["scores"]),
+                dict(cells[k].get("baseline_scores", {})),
+                alpha=alpha,
+                trades=_fold_trades(cells[k]),
+            ).approved
+            for k in block_ids
+        ]
 
     # Los baselines NO dependen de la configuracion (son carteras pasivas sobre las mismas
     # ventanas), asi que basta con quedarse con una copia por bloque. Si dos filas del
@@ -728,6 +797,13 @@ def collect_side(rows: Sequence[dict], side: str, config_ids: Sequence[str]) -> 
             "Lado %s: %d/%d configuraciones descartadas por unidades fallidas o incompletas: %s",
             side, len(dropped), len(config_ids), ", ".join(dropped),
         )
+    if by_config and not trades_by_config:
+        logger.warning(
+            "Lado %s: las unidades no traen operaciones fold a fold (`trades_by_fold`). Son "
+            "de una corrida anterior a la instrumentacion: el informe saldra SIN actividad "
+            "ni elegibilidad. Re-corre el estudio para tenerlas.",
+            side,
+        )
     return SideScores(
         side=side,
         block_ids=labels,
@@ -735,6 +811,7 @@ def collect_side(rows: Sequence[dict], side: str, config_ids: Sequence[str]) -> 
         baselines=baselines,
         approvals=approvals,
         dropped=dropped,
+        trades_by_config=trades_by_config,
     )
 
 
@@ -747,6 +824,7 @@ def pooled_gate(side: SideScores, config_id: str, alpha: float):
         {name: [s for block in blocks for s in block] for name, blocks in side.baselines.items()},
         alpha=alpha,
         missing=tuple(n for n in sorted(BASELINE_LABELS) if n not in side.baselines),
+        trades=side.pooled_trades(config_id),
     )
 
 
@@ -993,6 +1071,17 @@ def trades_per_fold(rows: Sequence[dict], side: str) -> dict[str, float]:
     return {c: float(np.median(v)) for c, v in per_config.items()}
 
 
+def side_activity(side: SideScores, config_ids: Sequence[str]) -> dict[str, ActivityStats]:
+    """Actividad ventana a ventana de cada configuracion en un lado. Vacio si las unidades
+    no traen el detalle por fold (corridas anteriores a la instrumentacion)."""
+    out: dict[str, ActivityStats] = {}
+    for config_id in config_ids:
+        stats = side.activity(config_id)
+        if stats is not None:
+            out[config_id] = stats
+    return out
+
+
 def activity_check(
     rows: Sequence[dict],
     real: SideScores,
@@ -1011,14 +1100,25 @@ def activity_check(
     EXACTO. Y un cero le gana a cualquier configuracion que arriesgue y pierda, asi que en
     un mercado que cae, la lista ordenada por CVaR premia la inactividad.
 
-    Se reportan dos cosas: la correlacion entre puesto y actividad (si es fuerte, el
-    ranking es una lista de inactividad disfrazada) y el rho restringido a las
-    configuraciones que operan de verdad en LOS DOS mundos, que es el unico subconjunto
-    sobre el que la pregunta original tiene sentido.
+    Se reportan tres cosas: la correlacion entre puesto y actividad (si es fuerte, el
+    ranking es una lista de inactividad disfrazada), la actividad completa de cada
+    configuracion —operaciones por ventana Y fraccion de ventanas vacias, que es la firma
+    aritmetica del problema— y el rho restringido a las configuraciones que operan de
+    verdad en LOS DOS mundos, que es el unico subconjunto sobre el que la pregunta original
+    tiene sentido.
+
+    Ojo con la diferencia entre este subconjunto "activo" y la ELEGIBILIDAD que publica
+    `eligibility_block`: aqui se exige actividad en los dos lados porque lo que se
+    correlaciona son dos rankings pareados. El suelo de elegibilidad de un ranking se
+    aplica sobre el lado que rankea, y solo sobre ese.
     """
     trades = {
         SIDE_REAL: trades_per_fold(rows, SIDE_REAL),
         SIDE_SYNTHETIC: trades_per_fold(rows, SIDE_SYNTHETIC),
+    }
+    activity = {
+        SIDE_REAL: side_activity(real, config_ids),
+        SIDE_SYNTHETIC: side_activity(synth, config_ids),
     }
     rewards = {
         SIDE_REAL: [real.reward(c, alpha) for c in config_ids],
@@ -1031,11 +1131,28 @@ def activity_check(
         for side in (SIDE_REAL, SIDE_SYNTHETIC)
     }
 
-    active = [
-        c for c in config_ids
-        if trades[SIDE_REAL].get(c, 0.0) >= min_trades_per_fold
-        and trades[SIDE_SYNTHETIC].get(c, 0.0) >= min_trades_per_fold
-    ]
+    # "Opera de verdad" tiene UNA sola definicion en todo el sistema: el suelo de
+    # `scoring.activity`, aplicado aqui a los dos mundos porque lo que se correlaciona es
+    # un ranking pareado. Solo si las unidades no traen el detalle por ventana se cae al
+    # criterio antiguo (mediana de operaciones por bloque), y el informe dice cual se uso.
+    if activity[SIDE_REAL] and activity[SIDE_SYNTHETIC]:
+        active = [c for c in config_ids if real.rankable(c) and synth.rankable(c)]
+        criterion = (
+            "suelo de actividad de scoring.activity, exigido en los dos mundos "
+            f"(>= {DEFAULT_ACTIVITY_FLOOR.min_median_trades_per_window:.0f} operaciones en "
+            f"la ventana mediana y <= "
+            f"{DEFAULT_ACTIVITY_FLOOR.max_zero_window_pct:.0f}% de ventanas vacias)"
+        )
+    else:
+        active = [
+            c for c in config_ids
+            if trades[SIDE_REAL].get(c, 0.0) >= min_trades_per_fold
+            and trades[SIDE_SYNTHETIC].get(c, 0.0) >= min_trades_per_fold
+        ]
+        criterion = (
+            f"mediana de operaciones por bloque >= {min_trades_per_fold:.0f} (las unidades "
+            "no traen el detalle por ventana)"
+        )
     rho_active = float("nan")
     boot_active: dict | None = None
     perm_active: dict | None = None
@@ -1055,6 +1172,8 @@ def activity_check(
         )
     return {
         "min_trades_per_fold": min_trades_per_fold,
+        "active_criterion": criterion,
+        "floor": DEFAULT_ACTIVITY_FLOOR.as_dict(),
         "bootstrap_active": boot_active,
         "permutation_active": perm_active,
         "reward_vs_activity_real": None if corr[SIDE_REAL] != corr[SIDE_REAL]
@@ -1071,7 +1190,81 @@ def activity_check(
             }
             for c in config_ids
         },
+        "measured_per_window": bool(activity[SIDE_REAL] and activity[SIDE_SYNTHETIC]),
+        "stats": {
+            c: {
+                side: (activity[side][c].as_dict() if c in activity[side] else None)
+                for side in (SIDE_REAL, SIDE_SYNTHETIC)
+            }
+            for c in config_ids
+        },
     }
+
+
+def _count(items: Sequence | None) -> str:
+    """Cuantos, o 'n/d' si la lista es None (no medido). Un hueco no es un cero."""
+    return "n/d" if items is None else str(len(items))
+
+
+def eligibility_block(
+    real: SideScores,
+    synth: SideScores,
+    config_ids: Sequence[str],
+    *,
+    alpha: float,
+) -> dict:
+    """
+    El ranking CON y SIN el suelo de actividad, y que cambia entre uno y otro.
+
+    Publicar los dos no es un adorno: el suelo es una decision de diseno, y una decision de
+    diseno que cambia al ganador tiene que enseñar el ganador que descarta. Se reporta por
+    lado (cada mundo rankea con su propia actividad), mas el efecto sobre el gate de
+    baselines, que es la otra cosa que el suelo modifica.
+
+    `changes_winner` es la pregunta corta: ¿elegiriamos otra configuracion? Si la respuesta
+    es si, hay que decirlo en la primera linea del informe, y por eso viaja en el bloque y
+    no en un pie de pagina.
+    """
+    out: dict = {"floor": DEFAULT_ACTIVITY_FLOOR.as_dict(), "sides": {}}
+    for side, scores in ((SIDE_REAL, real), (SIDE_SYNTHETIC, synth)):
+        rewards = {c: scores.reward(c, alpha) for c in config_ids}
+        activity = side_activity(scores, config_ids)
+        measured = len(activity) == len(config_ids)
+        rankable = [c for c in config_ids if scores.rankable(c)] if measured else []
+        gates = {c: pooled_gate(scores, c, alpha) for c in config_ids}
+
+        def order(subset: Sequence[str]) -> list[str]:
+            return sorted(subset, key=lambda c: (-rewards[c], c))
+
+        full_order = order(config_ids)
+        floor_order = order(rankable)
+        out["sides"][side] = {
+            "measured": measured,
+            "n_configs": len(config_ids),
+            "n_rankable": len(rankable),
+            "dropped": [c for c in config_ids if c not in rankable],
+            "ranking_all": full_order,
+            "ranking_rankable": floor_order,
+            "winner_all": full_order[0] if full_order else None,
+            "winner_rankable": floor_order[0] if floor_order else None,
+            "changes_winner": bool(
+                measured and floor_order and full_order and floor_order[0] != full_order[0]
+            ) if measured else None,
+            # El gate ya incorpora el suelo (`gate.approved`), asi que "sin suelo" es su
+            # componente `beats_baselines`: exactamente el veredicto de antes. Sin actividad
+            # medida el lado "con suelo" es None y no una lista vacia: "no aprueba ninguna"
+            # y "no se pudo comprobar" no son el mismo hecho.
+            "approved_without_floor": sorted(c for c in config_ids if gates[c].beats_baselines),
+            "approved_with_floor": (
+                sorted(c for c in config_ids if gates[c].approved) if measured else None
+            ),
+            "reasons": {
+                c: list(DEFAULT_ACTIVITY_FLOOR.reasons(activity.get(c)))
+                for c in config_ids
+                if c not in rankable
+            },
+        }
+    return out
 
 
 def verdict_for(rho: float, bootstrap: dict) -> dict:
@@ -1116,8 +1309,8 @@ def analyze(rows: Sequence[dict], plan: dict, specs: Sequence[StrategySpec]) -> 
     config_ids = [s.id for s in specs]
     by_id = {s.id: s for s in specs}
 
-    real = collect_side(rows, SIDE_REAL, config_ids)
-    synth = collect_side(rows, SIDE_SYNTHETIC, config_ids)
+    real = collect_side(rows, SIDE_REAL, config_ids, alpha=alpha)
+    synth = collect_side(rows, SIDE_SYNTHETIC, config_ids, alpha=alpha)
     kept = [c for c in config_ids if c in real.by_config and c in synth.by_config]
     dropped = sorted(set(real.dropped) | set(synth.dropped))
     if len(kept) < 3:
@@ -1148,6 +1341,16 @@ def analyze(rows: Sequence[dict], plan: dict, specs: Sequence[StrategySpec]) -> 
         activity["reward_vs_activity_real"], activity["reward_vs_activity_synthetic"],
         activity["n_active"], len(kept), activity["spearman_active"],
     )
+    eligibility = eligibility_block(real, synth, kept, alpha=alpha)
+    real_elig = eligibility["sides"][SIDE_REAL]
+    logger.info(
+        "Elegibilidad (lado real): %d/%d rankeables | ganador sin suelo=%s, con suelo=%s "
+        "(%s) | aprueban el gate %d -> %d",
+        real_elig["n_rankable"], real_elig["n_configs"], real_elig["winner_all"],
+        real_elig["winner_rankable"],
+        "CAMBIA LA ELECCION" if real_elig["changes_winner"] else "misma eleccion",
+        len(real_elig["approved_without_floor"]), _count(real_elig["approved_with_floor"]),
+    )
 
     def side_row(side: SideScores, config_id: str) -> dict:
         pooled = side.pooled(config_id)
@@ -1173,6 +1376,9 @@ def analyze(rows: Sequence[dict], plan: dict, specs: Sequence[StrategySpec]) -> 
             "reward_real": round(real_rewards[i], 4),
             "reward_synthetic": round(synth_rewards[i], 4),
             "trades_per_fold": activity["trades_per_fold"][config_id],
+            "activity": activity["stats"][config_id],
+            "rankable_real": real.rankable(config_id),
+            "rankable_synthetic": synth.rankable(config_id),
             "active": config_id in activity["active_configs"],
             "real": side_row(real, config_id),
             "synthetic": side_row(synth, config_id),
@@ -1202,7 +1408,12 @@ def analyze(rows: Sequence[dict], plan: dict, specs: Sequence[StrategySpec]) -> 
             "synthetic": [
                 c["config_id"] for c in sorted(configs, key=lambda c: c["rank_synthetic"])
             ],
+            # El mismo orden, quitando las que no superan el suelo de actividad. Los dos se
+            # publican: si la eleccion cambia, se ve sin tener que recalcular nada.
+            "real_rankable": eligibility["sides"][SIDE_REAL]["ranking_rankable"],
+            "synthetic_rankable": eligibility["sides"][SIDE_SYNTHETIC]["ranking_rankable"],
         },
+        "eligibility": eligibility,
         "transfer": {
             "spearman": None if rho != rho else round(float(rho), 4),
             "n_configs": len(kept),
@@ -1220,7 +1431,7 @@ def analyze(rows: Sequence[dict], plan: dict, specs: Sequence[StrategySpec]) -> 
             "activity": activity,
         },
         "verdict": verdict_for(rho, bootstrap),
-        "caveats": caveats(plan, real, synth, activity),
+        "caveats": caveats(plan, real, synth, activity, eligibility),
         "leakage": {
             "folds_audited": sum(len(r.get("scores", [])) for r in rows if not r["failed"]),
             "clean": all(r.get("leakage_ok", True) for r in rows if not r["failed"]),
@@ -1266,7 +1477,13 @@ def _activity_reading(activity: dict) -> str:
     )
 
 
-def caveats(plan: dict, real: SideScores, synth: SideScores, activity: dict) -> list[dict]:
+def caveats(
+    plan: dict,
+    real: SideScores,
+    synth: SideScores,
+    activity: dict,
+    eligibility: dict,
+) -> list[dict]:
     """Los limites del estudio, EN el informe y no en una nota al pie que nadie lee.
 
     Van aqui y no en la prosa del dashboard porque el consumidor de esta cifra es quien
@@ -1274,20 +1491,31 @@ def caveats(plan: dict, real: SideScores, synth: SideScores, activity: dict) -> 
     empuja cada sesgo."""
     real_plan = plan["real"]
     n_omitted = len(real_plan["symbols_omitted"])
+    elig = eligibility["sides"][SIDE_REAL]
+    floor = eligibility["floor"]
     return [
         {
             "key": "inactividad_premiada",
-            "title": "El CVaR premia no operar, y eso contamina los dos rankings",
+            "title": "El CVaR premia no operar, y por eso el ranking tiene un suelo",
             "text": (
                 "Una configuracion que apenas abre posiciones deja la curva plana: Sharpe 0, "
                 "rotacion 0, caida 0, headline 0 EXACTO. En un periodo en el que casi todo lo "
                 "que arriesga pierde, ese cero gana. La correlacion entre recompensa y "
                 f"operaciones por ventana lo mide: {activity['reward_vs_activity_real']} en el "
-                f"real y {activity['reward_vs_activity_synthetic']} en el sintetico. Por eso el "
-                "estudio publica ademas el rho restringido a las "
-                f"{activity['n_active']} configuraciones que operan de verdad en los dos mundos "
-                f"(>= {activity['min_trades_per_fold']:.0f} operaciones por ventana OOS): "
-                f"{activity['spearman_active']}. " + _activity_reading(activity)
+                f"real y {activity['reward_vs_activity_synthetic']} en el sintetico. La "
+                "respuesta NO es penalizar la baja rotacion (eso ya lo hace lambda, y el "
+                "estudio de pesos midio que no estabiliza nada) sino un REQUISITO DE "
+                "ELEGIBILIDAD: para entrar en el ranking hay que operar al menos "
+                f"{floor['min_median_trades_per_window']:.0f} veces en la ventana mediana y "
+                f"tener como mucho un {floor['max_zero_window_pct']:.0f}% de ventanas vacias "
+                f"(ver scoring.activity). En el lado real eso deja {elig['n_rankable']} de "
+                f"{elig['n_configs']} configuraciones, cambia al ganador de "
+                f"{elig['winner_all']} a {elig['winner_rankable']} y reduce los aprobados del "
+                f"gate de {len(elig['approved_without_floor'])} a "
+                f"{_count(elig['approved_with_floor'])}. Las que caen conservan su recompensa "
+                "publicada: no se les resta nada, se les niega competir. El rho restringido a "
+                f"las {activity['n_active']} configuraciones que operan de verdad en los dos "
+                f"mundos es {activity['spearman_active']}. " + _activity_reading(activity)
             ),
         },
         {
@@ -1565,11 +1793,18 @@ def _print_report(report: dict) -> None:
         f"{plan['synthetic']['n_samples']} muestras | {plan['validation']['n_folds']} folds CPCV "
         f"(purga {plan['validation']['purge_days']}d, embargo {plan['validation']['embargo_days']}d)"
     )
-    print(f"\n{'config':<22}{'real':>9}{'sint.':>9}{'r.real':>8}{'r.sint':>8}{'delta':>7}")
+    print(
+        f"\n{'config':<22}{'real':>9}{'sint.':>9}{'r.real':>8}{'r.sint':>8}{'delta':>7}"
+        f"{'ops/vent':>10}{'vacias%':>9}{'rank?':>7}"
+    )
     for row in sorted(report["configs"], key=lambda c: c["rank_real"]):
+        act = (row.get("activity") or {}).get("real") or {}
         print(
             f"{row['config_id']:<22}{row['reward_real']:>9.3f}{row['reward_synthetic']:>9.3f}"
             f"{row['rank_real']:>8}{row['rank_synthetic']:>8}{row['rank_delta']:>+7}"
+            f"{act.get('trades_per_window', float('nan')):>10.1f}"
+            f"{act.get('zero_window_pct', float('nan')):>9.0f}"
+            f"{('si' if row.get('rankable_real') else 'NO'):>7}"
         )
 
     b, cb, p = t["bootstrap_blocks"], t["bootstrap_configs"], t["permutation"]
@@ -1607,6 +1842,22 @@ def _print_report(report: dict) -> None:
             f" | IC{ba['ci_pct']:.0f}% [{ba['lo']:+.3f}, {ba['hi']:+.3f}] | p = {pa['p_value']}"
             if ba and pa else ""
         )
+    )
+    e = report["eligibility"]["sides"][SIDE_REAL]
+    f = report["eligibility"]["floor"]
+    print(
+        f"\n  SUELO DE ACTIVIDAD (>= {f['min_median_trades_per_window']:.0f} ops en la "
+        f"ventana mediana, <= {f['max_zero_window_pct']:.0f}% de ventanas vacias): "
+        f"{e['n_rankable']}/{e['n_configs']} rankeables en el lado real"
+    )
+    print(
+        f"  ganador sin suelo: {e['winner_all']} | con suelo: {e['winner_rankable']} -> "
+        + ("LA ELECCION CAMBIA" if e["changes_winner"] else "misma eleccion")
+    )
+    print(
+        f"  gate de baselines: aprueban {len(e['approved_without_floor'])} sin suelo y "
+        f"{_count(e['approved_with_floor'])} con suelo "
+        f"({', '.join(e['approved_with_floor'] or []) or 'ninguna'})"
     )
     print(f"\n  VEREDICTO: {v['key'].upper()} ({v['decision']})")
     print(f"  FLUJO: {v['flow']}")

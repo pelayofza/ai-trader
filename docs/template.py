@@ -84,6 +84,243 @@ def _n(value, decimals=2):
     return f"{value:,.{decimals}f}".replace(",", " ").replace(".", ",")
 
 
+def _pc(value, decimals=2):
+    """Fraccion -> porcentaje con coma decimal."""
+    return "—" if value is None else _n(100.0 * float(value), decimals) + " %"
+
+
+def _ratio(numerator, denominator):
+    if not numerator or not denominator:
+        return None
+    return float(numerator) / float(denominator)
+
+
+def _activity_block(a):
+    """Seccion 5.6b: el suelo de actividad, sus dos condiciones y de donde sale cada una.
+
+    Va pegada al gate (§5.6) y no en una seccion suelta porque es la segunda mitad del
+    mismo veredicto: sin ella, "batir a los baselines" se puede conseguir sin operar."""
+    if not a:
+        return (
+            "<div class=\"note\"><b>Suelo de actividad sin evidencia publicada.</b> El informe "
+            "(<span class=\"mono\">data/activity/</span>) no está en este árbol, así que este "
+            "documento no puede citar de dónde sale el umbral. Regenéralo con "
+            "<span class=\"mono\">python -m ai_trader.scoring.activity_study</span>.</div>"
+        )
+    f, dec, m = a["floor"], a["decision"], a["mechanism"]["sides"]["real"]
+    g, rep, band = a["gate"]["real"], a["reproducibility"]["sides"]["real"], a["band"]["real"]
+    rows = "".join(
+        f"<tr><td class=mono>{r['config_id']}</td>"
+        f"<td class='n mono'>{_n(r['reward'], 3)}</td>"
+        f"<td class='n mono'>{_n(r['trades_per_window'], 2)}</td>"
+        f"<td class='n mono'>{_n(r['zero_window_pct'], 0)} %</td>"
+        f"<td>{'sí' if r['rankable'] else '<b>no</b>'}</td></tr>"
+        for r in a["rows"]
+    )
+    sweep = "".join(
+        f"<tr><td class='n mono'>{_n(s['threshold'], 0)}"
+        f"{' ←' if s['threshold'] == dec['chosen'] else ''}</td>"
+        f"<td class='n mono'>{s['sides']['real']['n_eligible']}</td>"
+        f"<td class='n mono'>{s['disagreements']}</td>"
+        f"<td class=mono>{s['sides']['real']['winner'] or '—'}</td>"
+        f"<td class='n mono'>{len(s['sides']['real']['approved'])}</td></tr>"
+        for s in a["sweep"]
+    )
+    lost = ", ".join(f"<span class='mono'>{c}</span>" for c in g["lost"]) or "ninguna"
+    return f"""
+<h3>5.6b · El suelo de actividad: quién puede ganar el ranking</h3>
+<p>El headline de una ventana en la que la estrategia <b>no abre ninguna posición</b> es
+<b>0 exacto</b>: la curva es una recta, luego Sharpe 0, rotación 0 y caída 0. No es una nota mala ni
+buena, es la <i>ausencia</i> de nota — y sin embargo entra en la distribución como un número más. Como
+la recompensa es el CVaR (la media del peor cuartil) y un cero le gana a cualquier cosa que arriesgue y
+pierda, en un periodo donde casi todo lo que se juega pierde <b>el ranking se ordena por inactividad</b>.
+Medido sobre el material del §2.9: Spearman(recompensa, operaciones por ventana) =
+<b>{_n(m["spearman_reward_activity"], 2)}</b> en el lado real, y
+{_n(m["cvar_tail_empty_pct"], 1)} % de las ventanas que <i>fijan</i> la recompensa estaban vacías.</p>
+<div class="why"><b>Por qué un requisito y no una penalización.</b> Penalizar la baja rotación ya existe
+—es λ (§5.2b)— y el estudio de pesos midió que <b>no estabiliza nada</b>: el rank IC es máximo sin
+penalizar. Restar más puntos por operar poco sería cobrar dos veces la misma factura y degradar el
+ranking. Lo que faltaba no era un descuento sino una <b>condición de entrada</b>: no perder es legítimo,
+lo que no lo es es ganar un ranking de estrategias sin haber jugado. Por eso la recompensa de una
+configuración inelegible <b>no se toca</b> —se calcula, se publica y se compara igual—; lo único que
+pierde es competir y aprobar el gate.</div>
+<p>Una configuración es <b>rankeable</b> si cumple las dos condiciones. Una está derivada y la otra
+medida:</p>
+<table><thead><tr><th>Condición</th><th class=n>valor</th><th>de dónde sale</th></tr></thead><tbody>
+<tr><td>Ventanas vacías</td><td class='n mono'>≤ {_n(f["max_zero_window_pct"], 0)} %</td>
+  <td><b>Derivada.</b> Es α, la fracción de cola que <i>es</i> la recompensa (CVaR@{_n(f["max_zero_window_pct"], 0)}%).
+  Por encima de ella, el cuartil que promedia el CVaR puede estar hecho de ceros estructurales.</td></tr>
+<tr><td>Operaciones en la ventana mediana</td>
+  <td class='n mono'>≥ {_n(f["min_median_trades_per_window"], 0)}</td>
+  <td><b>Medida.</b> Regla declarada antes de mirar: el valor de la rejilla
+  {{{", ".join(_n(x, 0) for x in dec["grid"])}}} que reproduce con menos desacuerdos la condición
+  derivada; a igualdad, el mayor. Resultado: {_n(dec["chosen"], 0)}, con {dec["disagreements"]}
+  desacuerdo{"" if dec["disagreements"] == 1 else "s"}.</td></tr>
+</tbody></table>
+<p>El barrido completo, publicado entero porque un umbral que solo se sostiene enseñando su resultado y
+escondiendo los de al lado no se sostiene:</p>
+<table><thead><tr><th class=n>umbral</th><th class=n>rankeables</th><th class=n>desacuerdos</th>
+<th>ganador del ranking real</th><th class=n>aprueban el gate</th></tr></thead><tbody>{sweep}</tbody></table>
+<p>Y la elección del número casi no importa, que es la mejor noticia posible sobre un umbral: con
+{"/".join(_n(x, 0) for x in band["same_partition"])} operaciones por ventana sale <b>exactamente el
+mismo conjunto rankeable</b> en el lado real ({band["n_rankable"]} de {len(a["rows"])}), porque a esa
+escala quien excluye es la condición derivada. En esta rejilla la condición medida solo muerde una vez
+—una configuración del mundo sintético que se queda fuera con el 25,0 % justo de ventanas vacías— y se
+mantiene porque cubre un modo de fallo que estas configuraciones no contienen: operar poquísimo pero con
+regularidad, sin dejar ni una ventana vacía. Lo que está en discusión es la partición, no el decimal.</p>
+<div class="note"><b>El control que parecía obvio y habría elegido al revés.</b> La <i>reproducibilidad</i>
+del ranking entre mitades del histórico sale <b>más alta</b> con las inactivas dentro
+({_n(rep["all_configs"], 3)}) que sin ellas ({_n(rep["rankable_only"], 3)}; subconjuntos aleatorios del
+mismo tamaño: {_n(rep["random_same_size_mean"], 3)}). Se entiende en cuanto se mide: una configuración
+que no opera puntúa 0 en todos los bloques y su puesto no se mueve jamás. Es estabilidad de cementerio,
+así que la reproducibilidad se publica como <b>control</b> y no como criterio.</div>
+<p>Efecto sobre el gate en el material del §2.9: de <b>{len(g["approved_without_floor"])}</b>
+configuraciones aprobadas se pasa a <b>{len(g["approved_with_floor"])}</b>. Pierden la aprobación
+{g["n_lost"]}: {lost} — todas ellas por no operar, no por puntuar peor.</p>
+<div class="note"><b>Dónde NO cambia nada, que delimita el alcance.</b> El estudio de validación
+multiventana (§3.7) se re-corrió entero con el suelo puesto y sus veredictos salieron
+<b>idénticos</b> (7 aprobadas en walk-forward, 6 en CPCV, sobre 32 unidades): allí las cuatro
+configuraciones operan de sobra. El requisito no recorta aprobaciones en general — muerde
+exactamente donde la inactividad estaba ganando.</div>
+<table><thead><tr><th>Configuración</th><th class=n>recompensa real</th><th class=n>ops/ventana</th>
+<th class=n>vacías</th><th>rankeable</th></tr></thead><tbody>{rows}</tbody></table>
+<p class="meta">Evidencia: <span class="mono">data/activity/report_{a["library"]}.json</span> ·
+código: <span class="mono">scoring/activity.py</span> y
+<span class="mono">scoring/activity_study.py</span>.</p>"""
+
+
+def _sessions_block(s):
+    """La limitacion MEDIDA de la convencion intrabar (§3.3).
+
+    Va dentro de la 3.3 y no en una seccion propia a proposito: es la evidencia que
+    sostiene -o corrige- la convencion que esa seccion describe, y separarlas dejaria la
+    convencion justificada solo por prudencia, que es como estaba antes de medirla."""
+    if not s:
+        return (
+            "<div class=\"note\"><b>Limitación no cuantificada.</b> La fracción de formación de "
+            "precio que cae en la ventana entre el cierre con el que se decide y el open al que se "
+            "llena <b>no está medida</b> en esta copia del repositorio. Se mide con "
+            "<span class=\"mono\">python -m ai_trader.backtest.session_study</span> y se publica en "
+            "<span class=\"mono\">data/sessions/report.json</span>.</div>"
+        )
+
+    gap, trend, us = s["gap"], s["trend"], s["us"]
+    lat = s["latency_1h"] or {}
+    by_key = {x["key"]: x for x in s["sessions"]}
+    us_session = by_key[s["us_key"]]
+
+    session_rows = "".join(
+        f"<tr><td><b>{x['label']}</b></td>"
+        f"<td class='n mono'>{x['start_hour']:02d}–{x['end_hour']:02d}</td>"
+        f"<td class='n mono'>{_pc(x['clock_share'], 1)}</td>"
+        f"<td class='n mono'>{_pc(s['overall'][x['key']]['abs_return'], 1)}</td>"
+        f"<td class='n mono'>{_pc(s['overall'][x['key']]['variance'], 1)}</td>"
+        f"<td class='n mono'><b>{_n(s['overall'][x['key']]['variance_intensity'], 2)}</b></td>"
+        f"<td class='n mono'>{_pc(s['overall'][x['key']]['sets_low'], 1)}</td></tr>"
+        for x in s["sessions"]
+    )
+    latency_rows = "".join(
+        f"<tr><td class=mono>+{r['hours']} h</td>"
+        f"<td class='n mono'>{_pc(r['slip_share_of_range_median'], 2)}</td>"
+        f"<td class='n mono'>{_n(r['slip_bps_median'], 1)}</td>"
+        f"<td class='n mono'>{_pc(r['path_share_of_range_median'], 1)}</td></tr>"
+        for r in s["latency_rows"]
+    )
+
+    material = s["verdicts"]["gap"]["material"]
+    limitation = (
+        f"<div class=\"note\"><b>Limitación declarada: el hueco entre el cierre visto y el open "
+        f"llenado.</b> Medido sobre {s['n_symbols']} pares y "
+        f"{_n(s['n_days'], 0)} días-símbolo de barras 1H de {s['exchange']} "
+        f"({s['window']['start']} → {s['window']['end']}), ese hueco vale "
+        f"<b>{_pc(gap['share_of_range']['median'], 3)}</b> del rango del día en mediana "
+        f"({_n(gap['bps']['median'], 2)} pb; p99 {_pc(gap['share_of_range']['p99'], 2)}), frente al "
+        f"umbral declarado del {_pc(s['thresholds']['gap_material_share'], 0)}. "
+        + (
+            "<b>Está por encima del umbral:</b> el motor ignora un tramo de formación de precio "
+            "que importa, y la convención de llenar al open deja de ser conservadora."
+            if material
+            else
+            "En un mercado 24/7 la vela de las 00:00 UTC empieza donde terminó la de ayer: la "
+            "ventana ciega <b>no tiene ancho</b> y la convención de llenar al open no introduce "
+            "sesgo. Es un resultado, no una ausencia de resultado — y desplaza la pregunta."
+        )
+        + " <b>Lo que sí queda sin modelar es la latencia:</b> llenar «al open» solo es exacto si la "
+        f"orden sale en ese instante. Con una hora de retraso el precio de llenado ya se ha "
+        f"desplazado <b>{_pc(lat.get('slip_share_of_range_median'), 2)}</b> del rango del día "
+        f"({_n(lat.get('slip_bps_median'), 1)} pb) y se ha gastado "
+        f"{_pc(lat.get('path_share_of_range_median'), 1)} de ese rango. Esa fracción de rango parece "
+        "modesta, pero es el denominador equivocado: frente al coste de entrada que el motor "
+        f"<i>sí</i> cobra ({_n(s['reference_cost_bps'], 1)} pb de referencia, §3.4), llegar una hora "
+        f"tarde cuesta <b>{_n(_ratio(lat.get('slip_bps_median'), s['reference_cost_bps']), 1)}×</b>. "
+        "El backtest supone ejecución instantánea a las 00:00 UTC: la suposición no sesga el precio "
+        "—el hueco es cero— pero pone un <b>techo a la puntualidad</b> con la que el ciclo real tiene "
+        "que ejecutar para que el backtest siga describiéndolo.</div>"
+    )
+
+    direction = {
+        "us_crece": "<b>se sostiene</b>",
+        "us_decrece": "<b>sale al revés</b>",
+    }.get(trend["verdict"], "<b>no se sostiene</b>")
+    sign = "+" if (trend["mean_delta_variance"] or 0) >= 0 else ""
+    years = trend["pre_split_years"]
+    mechanism = (
+        f" Su <b>mecanismo, en cambio, no</b>: la cuota ya venía subiendo antes del corte "
+        f"(Spearman año-cuota = {_n(trend['pre_split_spearman'], 2)} sobre "
+        f"{years[0]}–{years[-1]}, por encima del umbral declarado de "
+        f"{_n(trend['pre_trend_rho_threshold'], 2)}) y el escalón que cruza el corte es "
+        f"{_pc(trend['step_at_split'], 2)}. Es una <b>deriva de varios años</b> que el corte parte "
+        "por la mitad, no un salto atribuible a lo que pasó en enero de 2024. Leer el contraste "
+        "pre/post como efecto del mecanismo sería atribuirle crédito ajeno."
+        if trend["shape"] == "deriva_previa" and years
+        else (
+            f" Y su <b>mecanismo encaja</b>: antes del corte no había pendiente (Spearman = "
+            f"{_n(trend['pre_split_spearman'], 2)}) y el escalón en el corte vale "
+            f"{_pc(trend['step_at_split'], 2)}."
+            if trend["shape"] == "salto_en_el_corte"
+            else " La <b>forma</b> del cambio queda sin contrastar con esta evidencia."
+        )
+    )
+    trend_text = (
+        f"La <b>dirección</b> de la hipótesis declarada antes de medir —que el peso de la sesión "
+        f"estadounidense crece tras enero de 2024, por los ETF al contado— {direction}: la cuota "
+        f"estadounidense de varianza cambia {sign}{_pc(trend['mean_delta_variance'], 2)} entre el "
+        f"antes y el después de {trend['split']}, en {trend['n_positive']} de {trend['n_symbols']} "
+        f"pares de la cohorte equilibrada (test de signos exacto, p = "
+        f"{_n(trend['sign_test_p'], 4)}; umbral declarado {_pc(trend['threshold'], 0)}).{mechanism}"
+    )
+
+    return f"""{limitation}
+<p>La medición sale de abrir la vela diaria con barras <b>1H</b> y repartir el día UTC en tres
+sesiones. Los cortes <b>no son redondos</b>: cada frontera es la hora de una apertura de mercado real,
+tomada en su versión más temprana del año (los mercados de referencia cambian de hora UTC dos veces al
+año; la rejilla de velas del exchange, no). Se elige la más temprana para que una sesión nunca contenga
+la apertura de la siguiente.</p>
+<table><thead><tr><th>Sesión</th><th class="n">UTC</th><th class="n">reloj</th>
+<th class="n">|retorno|</th><th class="n">varianza</th><th class="n">intensidad</th>
+<th class="n">fija el mínimo</th></tr></thead><tbody>{session_rows}</tbody></table>
+<p><b>Intensidad</b> = cuota de varianza ÷ fracción de reloj: 1,00 es neutro. Es la única lectura
+comparable, porque las tres sesiones no duran lo mismo ({', '.join(f"{x['hours']} h" for x in s['sessions'])}).
+La sesión estadounidense concentra <b>{_pc(us['variance'], 1)}</b> de la varianza realizada en el
+{_pc(us_session['clock_share'], 1)} del reloj (intensidad {_n(us['variance_intensity'], 2)}).</p>
+<div class="why"><b>Por qué importa la columna «fija el mínimo».</b> La convención pesimista de arriba
+—si en la misma barra se tocan stop y objetivo, gana el stop— se apoya en no saber en qué orden
+ocurrieron. Esta columna dice dónde cae el extremo del día, y por tanto en qué tramo muerde esa
+ambigüedad. No la resuelve: la localiza, que es el paso previo a poder resolverla con datos 1H si
+algún día se decide modelar el camino intrabar.</div>
+<p>Coste de la latencia de ejecución, en fracción del rango del día:</p>
+<table><thead><tr><th>Retraso sobre el open</th><th class="n">desplazamiento / rango</th>
+<th class="n">pb</th><th class="n">rango ya gastado</th></tr></thead>
+<tbody>{latency_rows}</tbody></table>
+<p>{trend_text} La tendencia se mide sobre una <b>cohorte equilibrada</b> ({s['n_cohort']} pares
+presentes en todos los años): con el universo completo, la serie mediría qué se listó cuándo.</p>
+<div class="note"><b>El motor no se ha tocado.</b> Este estudio mide y declara; no cambia ni una línea
+de <span class="mono">execution/market_model.py</span>. Cambiar la convención antes de tener la cifra
+habría sido sustituir una suposición por otra. Evidencia completa en
+<span class="mono">data/sessions/report.json</span> · reproducible con
+<span class="mono">python -m ai_trader.backtest.session_study --offline</span> ({s['generated_at']}).</div>"""
+
+
 def _ic_grid(c):
     """Tabla λ×κ del rank IC: la evidencia cruda del barrido, para poder auditarla sin
     abrir el JSON."""
@@ -743,6 +980,8 @@ def render_html(f: dict) -> str:
         "FIDELITY": _fidelity_block(f.get("fidelity")),
         "TRANSFER": _transfer_block(f.get("transfer")),
         "VALIDATION": _validation_block(f.get("validation")),
+        "SESSIONS": _sessions_block(f.get("sessions")),
+        "ACTIVITY": _activity_block(f.get("activity")),
         "LAMBDA": _n((f.get("calibration") or {}).get("lambda", 0.5), 2),
         "KAPPA": _n((f.get("calibration") or {}).get("kappa", 1.0), 1),
     }
@@ -1011,6 +1250,11 @@ siguiente</b> (no al cierre con el que se decidió).</li>
 </ul>
 <div class="why"><b>Por qué pesimista.</b> Un backtest optimista es peligroso. Ante la ambigüedad
 intrabar, preferimos <b>subestimar</b> el resultado: si una estrategia parece buena aquí, tiene margen.</div>
+<p>Toda esa convención trata las <b>24 horas</b> de la vela como un bloque opaco, y durante mucho tiempo
+se justificó solo por prudencia. Prudente no es lo mismo que <i>medido</i>: la pregunta de cuánta
+formación de precio cae en la ventana que el motor no ve tiene una respuesta numérica, y aquí está.</p>
+
+%%SESSIONS%%
 
 <h3>3.4 · Costes de ejecución: spread, volatilidad e impacto</h3>
 <p>Cada ejecución paga comisiones y deslizamiento (<i>slippage</i>). El deslizamiento <b>no es una
@@ -1220,6 +1464,10 @@ cualquiera <b>sin hacer nada</b>. Sobre cada muestra se construyen tres alternat
 <b>mismas comisiones y slippage</b> en ambas patas. El veredicto <b>aprueba / no aprueba</b> compara
 recompensas agregadas: el CVaR@25% de la estrategia contra el del <b>mejor</b> baseline, sobre las
 muestras de validación — batir baselines en escenarios que el optimizador ya vio no probaría nada.</p>
+<p>Y exige una segunda condición, añadida después de medir que la primera sola no bastaba: la estrategia
+tiene que ser <b>rankeable</b>, es decir, superar el suelo de actividad de §5.6b. Una curva plana puntúa
+0 exacto y bate a los pasivos en cualquier periodo bajista sin haber abierto una posición; eso no es
+batirlos, es no haber jugado.</p>
 <div class="why"><b>Por qué en la cola y no en la media.</b> El gate se juega con el mismo estadístico
 con el que se optimiza. Una estrategia con mejor media pero peor cuartil malo <b>no</b> aprueba: si la
 recompensa es la cola, el listón también tiene que serlo. El porcentaje de muestras en las que gana se
@@ -1227,7 +1475,9 @@ reporta como información, pero no decide.</div>
 <div class="note"><b>Sin rival no hay aprobado.</b> Si un baseline no se puede construir (por ejemplo,
 SPY en un universo solo cripto), no se sustituye ni se rellena: se declara como ausente. Y si no hay
 ningún baseline disponible, el veredicto es <b>no aprueba</b> — un filtro que no se puede evaluar no es
-un filtro superado.</div>
+un filtro superado. Lo mismo vale para la actividad: si no se ha medido, no se da por buena.</div>
+
+%%ACTIVITY%%
 
 <h3>5.7 · Descuento del sobreajuste por múltiples pruebas</h3>
 <p>Buscar sobre un espacio de parámetros garantiza encontrar algo que brilla <i>aunque no haya nada que

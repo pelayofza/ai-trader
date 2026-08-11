@@ -1,0 +1,1031 @@
+{
+ "generated_at": "2026-08-11T16:45:15.314685+00:00",
+ "source": {
+  "units": "data\\transfer\\units_ai_v3.json",
+  "library_id": "ai_v3",
+  "n_configs": 16,
+  "cvar_alpha": 0.25,
+  "blocks": {
+   "real": 5,
+   "synthetic": 8
+  },
+  "windows_per_block": 15
+ },
+ "floor": {
+  "min_median_trades_per_window": 3.0,
+  "max_zero_window_pct": 25.0,
+  "derived": {
+   "max_zero_window_pct": "es alpha en porcentaje: por encima de esa fraccion de ventanas vacias, el cuartil que promedia el CVaR puede estar hecho de ceros estructurales"
+  }
+ },
+ "mechanism": {
+  "sides": {
+   "real": {
+    "windows": 1200,
+    "empty_windows": 307,
+    "empty_windows_scoring_exactly_zero": 307,
+    "non_empty_windows_scoring_exactly_zero": 0,
+    "holds": true,
+    "cvar_tail_windows": 304,
+    "cvar_tail_empty_windows": 37,
+    "cvar_tail_empty_pct": 12.17,
+    "spearman_reward_activity": -0.8353
+   },
+   "synthetic": {
+    "windows": 1920,
+    "empty_windows": 256,
+    "empty_windows_scoring_exactly_zero": 256,
+    "non_empty_windows_scoring_exactly_zero": 0,
+    "holds": true,
+    "cvar_tail_windows": 480,
+    "cvar_tail_empty_windows": 1,
+    "cvar_tail_empty_pct": 0.21,
+    "spearman_reward_activity": -0.1206
+   }
+  }
+ },
+ "configs": [
+  {
+   "config_id": "crypto_momentum#00",
+   "real": {
+    "n_windows": 75,
+    "trades": 2442,
+    "trades_per_window": 32.56,
+    "median_trades_per_window": 33.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.3106,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 4222,
+    "trades_per_window": 35.183,
+    "median_trades_per_window": 33.5,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.8318,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "crypto_momentum#01",
+   "real": {
+    "n_windows": 75,
+    "trades": 570,
+    "trades_per_window": 7.6,
+    "median_trades_per_window": 5.0,
+    "zero_windows": 9,
+    "zero_window_pct": 12.0,
+    "reward": -1.4543,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 1004,
+    "trades_per_window": 8.367,
+    "median_trades_per_window": 8.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.7081,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "crypto_momentum#02",
+   "real": {
+    "n_windows": 75,
+    "trades": 3541,
+    "trades_per_window": 47.213,
+    "median_trades_per_window": 44.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.6469,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 4623,
+    "trades_per_window": 38.525,
+    "median_trades_per_window": 34.5,
+    "zero_windows": 1,
+    "zero_window_pct": 0.83,
+    "reward": -2.1236,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "crypto_momentum#03",
+   "real": {
+    "n_windows": 75,
+    "trades": 2963,
+    "trades_per_window": 39.507,
+    "median_trades_per_window": 37.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.6542,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 4991,
+    "trades_per_window": 41.592,
+    "median_trades_per_window": 39.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.4689,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "crypto_momentum#04",
+   "real": {
+    "n_windows": 75,
+    "trades": 2798,
+    "trades_per_window": 37.307,
+    "median_trades_per_window": 37.0,
+    "zero_windows": 1,
+    "zero_window_pct": 1.33,
+    "reward": -1.992,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 4215,
+    "trades_per_window": 35.125,
+    "median_trades_per_window": 30.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.7879,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "crypto_momentum#05",
+   "real": {
+    "n_windows": 75,
+    "trades": 2457,
+    "trades_per_window": 32.76,
+    "median_trades_per_window": 31.0,
+    "zero_windows": 1,
+    "zero_window_pct": 1.33,
+    "reward": -2.2634,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 4059,
+    "trades_per_window": 33.825,
+    "median_trades_per_window": 30.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.6357,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "crypto_momentum#06",
+   "real": {
+    "n_windows": 75,
+    "trades": 190,
+    "trades_per_window": 2.533,
+    "median_trades_per_window": 1.0,
+    "zero_windows": 27,
+    "zero_window_pct": 36.0,
+    "reward": -1.1276,
+    "rankable": false,
+    "informative": false
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 220,
+    "trades_per_window": 1.833,
+    "median_trades_per_window": 1.0,
+    "zero_windows": 32,
+    "zero_window_pct": 26.67,
+    "reward": -1.739,
+    "rankable": false,
+    "informative": false
+   }
+  },
+  {
+   "config_id": "crypto_momentum#07",
+   "real": {
+    "n_windows": 75,
+    "trades": 1804,
+    "trades_per_window": 24.053,
+    "median_trades_per_window": 21.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.9306,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 4036,
+    "trades_per_window": 33.633,
+    "median_trades_per_window": 31.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.7363,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "mean_reversion#00",
+   "real": {
+    "n_windows": 75,
+    "trades": 58,
+    "trades_per_window": 0.773,
+    "median_trades_per_window": 0.0,
+    "zero_windows": 51,
+    "zero_window_pct": 68.0,
+    "reward": -0.8258,
+    "rankable": false,
+    "informative": false
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 235,
+    "trades_per_window": 1.958,
+    "median_trades_per_window": 1.0,
+    "zero_windows": 30,
+    "zero_window_pct": 25.0,
+    "reward": -1.6658,
+    "rankable": false,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "mean_reversion#01",
+   "real": {
+    "n_windows": 75,
+    "trades": 205,
+    "trades_per_window": 2.733,
+    "median_trades_per_window": 2.0,
+    "zero_windows": 19,
+    "zero_window_pct": 25.33,
+    "reward": -1.8229,
+    "rankable": false,
+    "informative": false
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 536,
+    "trades_per_window": 4.467,
+    "median_trades_per_window": 4.0,
+    "zero_windows": 7,
+    "zero_window_pct": 5.83,
+    "reward": -1.9416,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "mean_reversion#02",
+   "real": {
+    "n_windows": 75,
+    "trades": 55,
+    "trades_per_window": 0.733,
+    "median_trades_per_window": 0.0,
+    "zero_windows": 44,
+    "zero_window_pct": 58.67,
+    "reward": -0.889,
+    "rankable": false,
+    "informative": false
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 140,
+    "trades_per_window": 1.167,
+    "median_trades_per_window": 1.0,
+    "zero_windows": 43,
+    "zero_window_pct": 35.83,
+    "reward": -1.8528,
+    "rankable": false,
+    "informative": false
+   }
+  },
+  {
+   "config_id": "mean_reversion#03",
+   "real": {
+    "n_windows": 75,
+    "trades": 700,
+    "trades_per_window": 9.333,
+    "median_trades_per_window": 10.0,
+    "zero_windows": 1,
+    "zero_window_pct": 1.33,
+    "reward": -1.6335,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 1495,
+    "trades_per_window": 12.458,
+    "median_trades_per_window": 12.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.8636,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "mean_reversion#04",
+   "real": {
+    "n_windows": 75,
+    "trades": 20,
+    "trades_per_window": 0.267,
+    "median_trades_per_window": 0.0,
+    "zero_windows": 56,
+    "zero_window_pct": 74.67,
+    "reward": -0.528,
+    "rankable": false,
+    "informative": false
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 75,
+    "trades_per_window": 0.625,
+    "median_trades_per_window": 1.0,
+    "zero_windows": 59,
+    "zero_window_pct": 49.17,
+    "reward": -1.7071,
+    "rankable": false,
+    "informative": false
+   }
+  },
+  {
+   "config_id": "mean_reversion#05",
+   "real": {
+    "n_windows": 75,
+    "trades": 220,
+    "trades_per_window": 2.933,
+    "median_trades_per_window": 2.0,
+    "zero_windows": 28,
+    "zero_window_pct": 37.33,
+    "reward": -1.215,
+    "rankable": false,
+    "informative": false
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 696,
+    "trades_per_window": 5.8,
+    "median_trades_per_window": 4.0,
+    "zero_windows": 3,
+    "zero_window_pct": 2.5,
+    "reward": -1.8355,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "mean_reversion#06",
+   "real": {
+    "n_windows": 75,
+    "trades": 971,
+    "trades_per_window": 12.947,
+    "median_trades_per_window": 12.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.2237,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 2841,
+    "trades_per_window": 23.675,
+    "median_trades_per_window": 24.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.2394,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "mean_reversion#07",
+   "real": {
+    "n_windows": 75,
+    "trades": 5,
+    "trades_per_window": 0.067,
+    "median_trades_per_window": 0.0,
+    "zero_windows": 70,
+    "zero_window_pct": 93.33,
+    "reward": 0.0,
+    "rankable": false,
+    "informative": false
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 45,
+    "trades_per_window": 0.375,
+    "median_trades_per_window": 0.0,
+    "zero_windows": 81,
+    "zero_window_pct": 67.5,
+    "reward": -1.0958,
+    "rankable": false,
+    "informative": false
+   }
+  }
+ ],
+ "sweep": [
+  {
+   "threshold": 1.0,
+   "sides": {
+    "real": {
+     "n_eligible": 9,
+     "eligible": [
+      "crypto_momentum#00",
+      "crypto_momentum#01",
+      "mean_reversion#03",
+      "crypto_momentum#02",
+      "crypto_momentum#07",
+      "crypto_momentum#04",
+      "mean_reversion#06",
+      "crypto_momentum#05",
+      "crypto_momentum#03"
+     ],
+     "winner": "crypto_momentum#00",
+     "winner_changes": true,
+     "approved": [
+      "crypto_momentum#00"
+     ],
+     "spearman_reward_activity": -0.45,
+     "max_zero_window_pct_eligible": 12.0,
+     "disagreements": [
+      "crypto_momentum#06",
+      "mean_reversion#01",
+      "mean_reversion#05"
+     ]
+    },
+    "synthetic": {
+     "n_eligible": 12,
+     "eligible": [
+      "mean_reversion#06",
+      "crypto_momentum#03",
+      "crypto_momentum#05",
+      "mean_reversion#00",
+      "crypto_momentum#01",
+      "crypto_momentum#07",
+      "crypto_momentum#04",
+      "crypto_momentum#00",
+      "mean_reversion#05",
+      "mean_reversion#03",
+      "mean_reversion#01",
+      "crypto_momentum#02"
+     ],
+     "winner": "mean_reversion#06",
+     "winner_changes": true,
+     "approved": [],
+     "spearman_reward_activity": 0.0909,
+     "max_zero_window_pct_eligible": 25.0,
+     "disagreements": [
+      "crypto_momentum#06",
+      "mean_reversion#02",
+      "mean_reversion#04"
+     ]
+    }
+   },
+   "disagreements": 6
+  },
+  {
+   "threshold": 2.0,
+   "sides": {
+    "real": {
+     "n_eligible": 9,
+     "eligible": [
+      "crypto_momentum#00",
+      "crypto_momentum#01",
+      "mean_reversion#03",
+      "crypto_momentum#02",
+      "crypto_momentum#07",
+      "crypto_momentum#04",
+      "mean_reversion#06",
+      "crypto_momentum#05",
+      "crypto_momentum#03"
+     ],
+     "winner": "crypto_momentum#00",
+     "winner_changes": true,
+     "approved": [
+      "crypto_momentum#00"
+     ],
+     "spearman_reward_activity": -0.45,
+     "max_zero_window_pct_eligible": 12.0,
+     "disagreements": [
+      "mean_reversion#01",
+      "mean_reversion#05"
+     ]
+    },
+    "synthetic": {
+     "n_eligible": 11,
+     "eligible": [
+      "mean_reversion#06",
+      "crypto_momentum#03",
+      "crypto_momentum#05",
+      "crypto_momentum#01",
+      "crypto_momentum#07",
+      "crypto_momentum#04",
+      "crypto_momentum#00",
+      "mean_reversion#05",
+      "mean_reversion#03",
+      "mean_reversion#01",
+      "crypto_momentum#02"
+     ],
+     "winner": "mean_reversion#06",
+     "winner_changes": true,
+     "approved": [],
+     "spearman_reward_activity": 0.2091,
+     "max_zero_window_pct_eligible": 5.83,
+     "disagreements": [
+      "mean_reversion#00"
+     ]
+    }
+   },
+   "disagreements": 3
+  },
+  {
+   "threshold": 3.0,
+   "sides": {
+    "real": {
+     "n_eligible": 9,
+     "eligible": [
+      "crypto_momentum#00",
+      "crypto_momentum#01",
+      "mean_reversion#03",
+      "crypto_momentum#02",
+      "crypto_momentum#07",
+      "crypto_momentum#04",
+      "mean_reversion#06",
+      "crypto_momentum#05",
+      "crypto_momentum#03"
+     ],
+     "winner": "crypto_momentum#00",
+     "winner_changes": true,
+     "approved": [
+      "crypto_momentum#00"
+     ],
+     "spearman_reward_activity": -0.45,
+     "max_zero_window_pct_eligible": 12.0,
+     "disagreements": []
+    },
+    "synthetic": {
+     "n_eligible": 11,
+     "eligible": [
+      "mean_reversion#06",
+      "crypto_momentum#03",
+      "crypto_momentum#05",
+      "crypto_momentum#01",
+      "crypto_momentum#07",
+      "crypto_momentum#04",
+      "crypto_momentum#00",
+      "mean_reversion#05",
+      "mean_reversion#03",
+      "mean_reversion#01",
+      "crypto_momentum#02"
+     ],
+     "winner": "mean_reversion#06",
+     "winner_changes": true,
+     "approved": [],
+     "spearman_reward_activity": 0.2091,
+     "max_zero_window_pct_eligible": 5.83,
+     "disagreements": [
+      "mean_reversion#00"
+     ]
+    }
+   },
+   "disagreements": 1
+  },
+  {
+   "threshold": 5.0,
+   "sides": {
+    "real": {
+     "n_eligible": 9,
+     "eligible": [
+      "crypto_momentum#00",
+      "crypto_momentum#01",
+      "mean_reversion#03",
+      "crypto_momentum#02",
+      "crypto_momentum#07",
+      "crypto_momentum#04",
+      "mean_reversion#06",
+      "crypto_momentum#05",
+      "crypto_momentum#03"
+     ],
+     "winner": "crypto_momentum#00",
+     "winner_changes": true,
+     "approved": [
+      "crypto_momentum#00"
+     ],
+     "spearman_reward_activity": -0.45,
+     "max_zero_window_pct_eligible": 12.0,
+     "disagreements": []
+    },
+    "synthetic": {
+     "n_eligible": 9,
+     "eligible": [
+      "mean_reversion#06",
+      "crypto_momentum#03",
+      "crypto_momentum#05",
+      "crypto_momentum#01",
+      "crypto_momentum#07",
+      "crypto_momentum#04",
+      "crypto_momentum#00",
+      "mean_reversion#03",
+      "crypto_momentum#02"
+     ],
+     "winner": "mean_reversion#06",
+     "winner_changes": true,
+     "approved": [],
+     "spearman_reward_activity": -0.1333,
+     "max_zero_window_pct_eligible": 0.83,
+     "disagreements": [
+      "mean_reversion#00",
+      "mean_reversion#01",
+      "mean_reversion#05"
+     ]
+    }
+   },
+   "disagreements": 3
+  },
+  {
+   "threshold": 8.0,
+   "sides": {
+    "real": {
+     "n_eligible": 8,
+     "eligible": [
+      "crypto_momentum#00",
+      "mean_reversion#03",
+      "crypto_momentum#02",
+      "crypto_momentum#07",
+      "crypto_momentum#04",
+      "mean_reversion#06",
+      "crypto_momentum#05",
+      "crypto_momentum#03"
+     ],
+     "winner": "crypto_momentum#00",
+     "winner_changes": true,
+     "approved": [
+      "crypto_momentum#00"
+     ],
+     "spearman_reward_activity": -0.3095,
+     "max_zero_window_pct_eligible": 1.33,
+     "disagreements": [
+      "crypto_momentum#01"
+     ]
+    },
+    "synthetic": {
+     "n_eligible": 9,
+     "eligible": [
+      "mean_reversion#06",
+      "crypto_momentum#03",
+      "crypto_momentum#05",
+      "crypto_momentum#01",
+      "crypto_momentum#07",
+      "crypto_momentum#04",
+      "crypto_momentum#00",
+      "mean_reversion#03",
+      "crypto_momentum#02"
+     ],
+     "winner": "mean_reversion#06",
+     "winner_changes": true,
+     "approved": [],
+     "spearman_reward_activity": -0.1333,
+     "max_zero_window_pct_eligible": 0.83,
+     "disagreements": [
+      "mean_reversion#00",
+      "mean_reversion#01",
+      "mean_reversion#05"
+     ]
+    }
+   },
+   "disagreements": 4
+  },
+  {
+   "threshold": 13.0,
+   "sides": {
+    "real": {
+     "n_eligible": 6,
+     "eligible": [
+      "crypto_momentum#00",
+      "crypto_momentum#02",
+      "crypto_momentum#07",
+      "crypto_momentum#04",
+      "crypto_momentum#05",
+      "crypto_momentum#03"
+     ],
+     "winner": "crypto_momentum#00",
+     "winner_changes": true,
+     "approved": [
+      "crypto_momentum#00"
+     ],
+     "spearman_reward_activity": -0.2571,
+     "max_zero_window_pct_eligible": 1.33,
+     "disagreements": [
+      "crypto_momentum#01",
+      "mean_reversion#03",
+      "mean_reversion#06"
+     ]
+    },
+    "synthetic": {
+     "n_eligible": 7,
+     "eligible": [
+      "mean_reversion#06",
+      "crypto_momentum#03",
+      "crypto_momentum#05",
+      "crypto_momentum#07",
+      "crypto_momentum#04",
+      "crypto_momentum#00",
+      "crypto_momentum#02"
+     ],
+     "winner": "mean_reversion#06",
+     "winner_changes": true,
+     "approved": [],
+     "spearman_reward_activity": -0.4286,
+     "max_zero_window_pct_eligible": 0.83,
+     "disagreements": [
+      "crypto_momentum#01",
+      "mean_reversion#00",
+      "mean_reversion#01",
+      "mean_reversion#03",
+      "mean_reversion#05"
+     ]
+    }
+   },
+   "disagreements": 8
+  },
+  {
+   "threshold": 21.0,
+   "sides": {
+    "real": {
+     "n_eligible": 6,
+     "eligible": [
+      "crypto_momentum#00",
+      "crypto_momentum#02",
+      "crypto_momentum#07",
+      "crypto_momentum#04",
+      "crypto_momentum#05",
+      "crypto_momentum#03"
+     ],
+     "winner": "crypto_momentum#00",
+     "winner_changes": true,
+     "approved": [
+      "crypto_momentum#00"
+     ],
+     "spearman_reward_activity": -0.2571,
+     "max_zero_window_pct_eligible": 1.33,
+     "disagreements": [
+      "crypto_momentum#01",
+      "mean_reversion#03",
+      "mean_reversion#06"
+     ]
+    },
+    "synthetic": {
+     "n_eligible": 7,
+     "eligible": [
+      "mean_reversion#06",
+      "crypto_momentum#03",
+      "crypto_momentum#05",
+      "crypto_momentum#07",
+      "crypto_momentum#04",
+      "crypto_momentum#00",
+      "crypto_momentum#02"
+     ],
+     "winner": "mean_reversion#06",
+     "winner_changes": true,
+     "approved": [],
+     "spearman_reward_activity": -0.4286,
+     "max_zero_window_pct_eligible": 0.83,
+     "disagreements": [
+      "crypto_momentum#01",
+      "mean_reversion#00",
+      "mean_reversion#01",
+      "mean_reversion#03",
+      "mean_reversion#05"
+     ]
+    }
+   },
+   "disagreements": 8
+  }
+ ],
+ "decision": {
+  "rule": "el valor de la rejilla que reproduce con menos desacuerdos la condicion derivada (<= 25% de ventanas vacias, que es alpha); a igualdad, el mayor",
+  "grid": [
+   1.0,
+   2.0,
+   3.0,
+   5.0,
+   8.0,
+   13.0,
+   21.0
+  ],
+  "chosen": 3.0,
+  "disagreements": 1,
+  "tied": [
+   3.0
+  ],
+  "published": 3.0,
+  "matches_published": true
+ },
+ "band": {
+  "real": {
+   "medians": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    2.0,
+    2.0,
+    5.0,
+    10.0,
+    12.0,
+    21.0,
+    31.0,
+    33.0,
+    37.0,
+    37.0,
+    44.0
+   ],
+   "largest_gap": 10.0,
+   "gap_between": [
+    21.0,
+    31.0
+   ],
+   "same_partition": [
+    1.0,
+    2.0,
+    3.0,
+    5.0
+   ],
+   "n_rankable": 9,
+   "note": "con 1/2/3/5 operaciones por ventana sale el MISMO conjunto rankeable en este lado"
+  },
+  "synthetic": {
+   "medians": [
+    0.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    4.0,
+    4.0,
+    8.0,
+    12.0,
+    24.0,
+    30.0,
+    30.0,
+    31.0,
+    33.5,
+    34.5,
+    39.0
+   ],
+   "largest_gap": 12.0,
+   "gap_between": [
+    12.0,
+    24.0
+   ],
+   "same_partition": [
+    2.0,
+    3.0
+   ],
+   "n_rankable": 11,
+   "note": "con 2/3 operaciones por ventana sale el MISMO conjunto rankeable en este lado"
+  }
+ },
+ "reproducibility": {
+  "draws": 300,
+  "seed": 20260811,
+  "sides": {
+   "real": {
+    "all_configs": 0.3899,
+    "rankable_only": 0.2817,
+    "random_same_size_mean": 0.3555,
+    "random_same_size_std": 0.164,
+    "z_vs_random": -0.45,
+    "inactivity_inflates_stability": true
+   },
+   "synthetic": {
+    "all_configs": -0.1269,
+    "rankable_only": 0.047,
+    "random_same_size_mean": -0.1109,
+    "random_same_size_std": 0.1693,
+    "z_vs_random": 0.9328,
+    "inactivity_inflates_stability": false
+   }
+  },
+  "used_as_criterion": false,
+  "why_not": "Sale MAS ALTA con las inactivas dentro: una configuracion que no opera puntua 0 en todos los bloques y su puesto no se mueve nunca. Elegir el suelo por estabilidad habria premiado exactamente lo que el suelo quita."
+ },
+ "gate": {
+  "real": {
+   "approved_without_floor": [
+    "crypto_momentum#00",
+    "crypto_momentum#06",
+    "mean_reversion#00",
+    "mean_reversion#02",
+    "mean_reversion#04",
+    "mean_reversion#05",
+    "mean_reversion#07"
+   ],
+   "approved_with_floor": [
+    "crypto_momentum#00"
+   ],
+   "lost": [
+    "crypto_momentum#06",
+    "mean_reversion#00",
+    "mean_reversion#02",
+    "mean_reversion#04",
+    "mean_reversion#05",
+    "mean_reversion#07"
+   ],
+   "n_lost": 6,
+   "lost_detail": [
+    {
+     "config_id": "crypto_momentum#06",
+     "trades_per_window": 2.53,
+     "zero_window_pct": 36.0,
+     "reward": -1.1276,
+     "reasons": [
+      "la ventana mediana tiene 1.00 operaciones (< 3)",
+      "36.0% de ventanas vacias (> 25%)"
+     ]
+    },
+    {
+     "config_id": "mean_reversion#00",
+     "trades_per_window": 0.77,
+     "zero_window_pct": 68.0,
+     "reward": -0.8258,
+     "reasons": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "68.0% de ventanas vacias (> 25%)"
+     ]
+    },
+    {
+     "config_id": "mean_reversion#02",
+     "trades_per_window": 0.73,
+     "zero_window_pct": 58.7,
+     "reward": -0.889,
+     "reasons": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "58.7% de ventanas vacias (> 25%)"
+     ]
+    },
+    {
+     "config_id": "mean_reversion#04",
+     "trades_per_window": 0.27,
+     "zero_window_pct": 74.7,
+     "reward": -0.528,
+     "reasons": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "74.7% de ventanas vacias (> 25%)"
+     ]
+    },
+    {
+     "config_id": "mean_reversion#05",
+     "trades_per_window": 2.93,
+     "zero_window_pct": 37.3,
+     "reward": -1.215,
+     "reasons": [
+      "la ventana mediana tiene 2.00 operaciones (< 3)",
+      "37.3% de ventanas vacias (> 25%)"
+     ]
+    },
+    {
+     "config_id": "mean_reversion#07",
+     "trades_per_window": 0.07,
+     "zero_window_pct": 93.3,
+     "reward": 0.0,
+     "reasons": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "93.3% de ventanas vacias (> 25%)"
+     ]
+    }
+   ]
+  },
+  "synthetic": {
+   "approved_without_floor": [],
+   "approved_with_floor": [],
+   "lost": [],
+   "n_lost": 0,
+   "lost_detail": []
+  }
+ }
+}

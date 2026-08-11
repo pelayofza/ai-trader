@@ -485,6 +485,14 @@ def filter_active_configs(
     "viva vs muerta" y no el arbitraje entre Sharpe, rotacion y caida que lambda y kappa
     existen para resolver. Se reporta el barrido sobre ambos conjuntos; si la conclusion
     cambia entre uno y otro, la conclusion no es solida.
+
+    NO es el suelo de elegibilidad del sistema. Ese vive en `scoring.activity`, se midio
+    aparte (`scoring.activity_study`, evidencia en `data/activity/`) y decide quien puede
+    ganar un ranking o aprobar el gate. Este filtro responde otra pregunta —"¿la conclusion
+    del estudio de pesos aguanta si quito las inactivas?"— sobre otra unidad (la muestra
+    entera, no la ventana de un fold) y con un umbral distinto elegido para ese uso. Se
+    conserva tal cual: cambiarlo aqui movería cifras ya publicadas en `data/calibration/`
+    sin responder mejor a ninguna de las dos preguntas.
     """
     trades: dict[str, list[int]] = {}
     for sample in samples:

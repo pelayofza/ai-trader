@@ -65,7 +65,8 @@ poetry run ai-trader backtest --start 2025-12-20 --end 2026-06-01 --validation c
 Reproduce las estrategias configuradas sobre histórico, conduciendo el **mismo runner**
 que opera en vivo con un reloj simulado y datos con anti look-ahead. La decisión se toma
 con la barra ya cerrada, la entrada se llena al open del día siguiente y los stop-loss /
-take-profit se comprueban intrabar contra high/low. Dimensiona por fracción del equity
+take-profit se comprueban intrabar contra high/low (lo que esa convención ve y lo que no,
+medido: *Dentro de la barra diaria*). Dimensiona por fracción del equity
 (compounding real) y separa train (in-sample) de test (out-of-sample); la métrica
 cabecera es el **Sharpe out-of-sample penalizado**, `Sharpe − λ·turnover − κ·maxDD`
 (`backtest/metrics.py`), pensada para el scoring de estrategias por RL. Sustituyó al
@@ -234,6 +235,8 @@ actividad lo confirma — **−0,84** en el lado real frente a −0,09 en el sin
 2018-2025 premió no operar y el mundo sintético no. Al quitar las inactivas el acuerdo no
 aparece; se vuelve **negativo**. Es un subconjunto *post-hoc* de 9 puntos y su intervalo cruza
 el cero, así que es señal fuerte y no prueba, pero descarta que el ρ nulo sea un artefacto.
+Ese hallazgo abrió el apartado siguiente: hoy el ranking se publica con y sin **suelo de
+actividad**, y con él la ganadora del lado real ya no es la que no operaba.
 
 Se reproduce con (usa la caché de barras ya descargada; verifica determinismo re-corriendo
 unidades en procesos nuevos):
@@ -249,6 +252,115 @@ supervivencia** en el lado real que juega *en contra* de la hipótesis que se qu
 pares del universo operable se omiten por histórico insuficiente (se declaran, no se rellenan),
 y 16 configuraciones de dos familias distinguen "ordena como el mercado" de "no ordena", no
 0,35 de 0,45. Evidencia completa en `data/transfer/` y documentación en §2.9.
+
+### Un ranking que exige operar (suelo de actividad)
+
+El estudio anterior destapó una propiedad degenerada del ranking, y esta es la respuesta.
+El headline de una ventana en la que la estrategia **no abre ninguna posición** es **0
+exacto**: la curva es una recta, luego Sharpe 0, rotación 0 y caída 0. No es una nota mala ni
+buena, es la *ausencia* de nota — y sin embargo entra en la distribución como un número más.
+Como la recompensa es el CVaR@25 % (la media del peor cuartil), en un periodo donde casi todo
+lo que se juega pierde **ese cero gana**: la ganadora del ranking real era `mean_reversion#07`,
+con el **93 % de sus ventanas vacías**, un CVaR de 0,0000 exacto y el gate **aprobado** (los
+pasivos estaban en −1,42).
+
+La respuesta **no** es penalizar la baja rotación: eso ya lo hace λ y el estudio de pesos midió
+que penalizar *no* estabiliza nada. Lo que faltaba era un **requisito de elegibilidad**
+(`scoring/activity.py`), que es otra cosa: una configuración inelegible conserva su recompensa
+publicada intacta y sigue apareciendo en todas las tablas; lo único que pierde es **competir** y
+**aprobar el gate**. No perder es legítimo; ganar un ranking de estrategias sin haber jugado, no.
+
+Ahora la actividad viaja **pegada** a la recompensa —en `RewardStats`, en
+`MultiWindowValidation`, en el gate y en todo lo que publique un ranking— con dos cifras:
+operaciones por ventana OOS y **fracción de ventanas vacías**. Y para ser *rankeable* hay que
+superar un suelo de dos condiciones:
+
+| Condición | Valor | De dónde sale |
+|---|---|---|
+| Ventanas vacías | ≤ **25 %** | **Derivada.** Es α, la fracción de cola que *es* la recompensa (CVaR@25 %). Por encima de ella, el cuartil que fija el CVaR puede estar hecho de ceros estructurales. |
+| Operaciones en la ventana mediana | ≥ **3** | **Medida** (`scoring/activity_study.py`). Regla declarada antes de mirar: el valor de la rejilla {1, 2, 3, 5, 8, 13, 21} que reproduce con menos desacuerdos la condición derivada; a igualdad, el mayor. |
+
+El umbral **3** gana con 1 desacuerdo (frente a 6 del 1, 3 del 2, 3 del 5 y 4 del 8). Y la
+elección del número casi no importa, que es la mejor noticia posible sobre un umbral: con 1, 2,
+3 o 5 operaciones por ventana sale **el mismo conjunto rankeable** en el lado real (9 de 16),
+porque a esa escala quien excluye es la condición derivada. La aritmética que sostiene todo esto
+no se razona, se comprueba: de las 1 200 ventanas reales, **307 están vacías y las 307 puntúan 0
+exacto**; ninguna ventana con operaciones puntúa 0. Y el **12,2 %** de las ventanas que *fijan*
+la recompensa estaban vacías.
+
+Lo que cambia, medido sobre las mismas 16 configuraciones:
+
+| | sin suelo | con suelo |
+|---|---|---|
+| Ganadora del ranking real | `mean_reversion#07` (0,07 ops/ventana) | **`crypto_momentum#00`** (32,6 ops/ventana) |
+| Configuraciones rankeables | 16 | **9** |
+| Aprueban el gate de baselines | 7 | **1** |
+
+Las 6 que pierden la aprobación abren entre 0,1 y 2,9 operaciones por ventana: aprobaban por no
+jugar. **La elección cambia, y por eso se publican las dos listas** (`rankings.real` y
+`rankings.real_rankable` en `data/transfer/report_ai_v3.json`).
+
+Y el contraste que delimita el alcance: al re-correr el **estudio de validación multiventana**
+—donde las cuatro configuraciones operan de sobra— el suelo no mueve **ni un veredicto** (7 y 6
+aprobadas, idénticas). El requisito no recorta aprobaciones en general; muerde exactamente donde
+la inactividad estaba ganando.
+
+Un control merece mención aparte porque parecía *la* métrica obvia y habría elegido justo al
+revés: la **reproducibilidad** del ranking entre mitades del histórico sale **más alta** con las
+inactivas dentro (0,39) que sin ellas (0,28; subconjuntos aleatorios del mismo tamaño, 0,36).
+Se entiende en cuanto se mide — una configuración que no opera puntúa 0 en todos los bloques y
+su puesto no se mueve jamás. Es estabilidad de cementerio, así que se publica como control y no
+como criterio.
+
+```powershell
+.venv\Scripts\python.exe -m ai_trader.scoring.activity_study    # evidencia -> data/activity/
+```
+
+### Dentro de la barra diaria: sesiones y la ventana ciega
+
+La convención de arriba —decidir con la barra cerrada, llenar al open del día siguiente,
+comprobar stops contra high/low— trata las **24 horas** de la vela como un bloque opaco.
+Durante mucho tiempo se justificó solo por prudencia; ahora está **medida**, abriendo la
+vela diaria con barras **1H** de 24 pares cripto sobre una ventana cerrada
+(2020-01-01 → 2026-01-01, 43 196 días-símbolo). El día UTC se parte en tres sesiones cuyos
+cortes **no son redondos**: cada frontera es la hora de una apertura de mercado real en su
+versión más temprana del año (asiática 00–07, europea 07–13, estadounidense 13–24 UTC).
+
+**La cifra que decide: el hueco entre el cierre que la estrategia ve y el open al que se
+llena vale 0,07 % del rango del día en mediana (0,55 pb; p99 3,2 %).** En un mercado 24/7
+la vela de las 00:00 UTC empieza donde terminó la de ayer: **la ventana ciega no tiene
+ancho** y la convención de llenar al open no introduce sesgo. Es un resultado, no una
+ausencia de resultado, y desplaza la pregunta.
+
+Limitaciones que sí quedan declaradas:
+
+- **Latencia de ejecución.** Llenar «al open» solo es exacto si la orden sale en ese
+  instante. Una hora tarde, el precio de llenado ya se ha desplazado **57,9 pb** (9,2 % del
+  rango del día) y se ha gastado el 22,6 % de ese rango. Frente al coste de entrada que el
+  motor sí cobra (15 pb de referencia: comisión + deslizamiento plano), llegar una hora
+  tarde cuesta **3,9×**. No sesga el precio modelado, pero pone un **techo a la puntualidad**
+  con la que el ciclo real debe ejecutar para que el backtest siga describiéndolo.
+- **Asimetría entre sesiones.** La sesión estadounidense concentra el 48,9 % de la varianza
+  realizada en el 45,8 % del reloj (intensidad 1,07) y **fija el mínimo del día el 47,7 %**
+  de las veces. Ahí es donde muerde la convención pesimista de los stops: el motor no sabe
+  en qué orden se tocaron stop y objetivo, y ahora al menos se sabe *dónde* cae la ambigüedad.
+
+Sobre la tendencia temporal, la hipótesis declarada antes de medir era que el peso de la
+sesión estadounidense crece tras enero de 2024 (ETF al contado de bitcoin). **La dirección
+se sostiene y el mecanismo no:** la cuota sube +7,64 puntos entre el antes y el después del
+corte, en 10 de 10 pares de la cohorte equilibrada (test de signos exacto, p = 0,002), pero
+la serie año a año enseña que ya venía subiendo desde 2020 (Spearman año-cuota = 0,80 *solo*
+en los años previos) y el escalón que cruza el corte es **−2,29 puntos**. Lo que el contraste
+pre/post mide es una deriva de varios años partida por la mitad, no un efecto de enero de
+2024.
+
+**El motor no se ha tocado:** primero se mide y se declara. Evidencia en `data/sessions/` y
+en §3.3 de la documentación; se reproduce con:
+
+```powershell
+.venv\Scripts\python.exe -m ai_trader.backtest.session_study            # descarga 1H y mide
+.venv\Scripts\python.exe -m ai_trader.backtest.session_study --offline  # solo caché
+```
 
 ### Costes de ejecución
 
@@ -291,9 +403,13 @@ poetry run ruff check .  # linter
 
 - `data/runtime_state.json` es **estado de ejecución mutable**, no fuente. No se versiona.
 - `.cache/bars/` es caché de barras en parquet; se puede borrar sin consecuencias, se regenera.
-- `data/calibration/`, `data/fidelity/`, `data/validation/` y `data/transfer/` **sí** se versionan:
-  son la evidencia publicada de los estudios (pesos del headline, fidelidad sintético-vs-real,
-  partición temporal y transferencia de ranking) que consumen dashboard y documentación.
+  El timeframe va en el nombre del fichero (`CRYPTO__BTC_USDT_1D.parquet` /
+  `..._1H.parquet`), así que las barras horarias del estudio de sesiones **no pisan** el
+  histórico diario que consumen el backtest y el resto de estudios.
+- `data/calibration/`, `data/fidelity/`, `data/validation/`, `data/transfer/` y
+  `data/sessions/` **sí** se versionan: son la evidencia publicada de los estudios (pesos del
+  headline, fidelidad sintético-vs-real, partición temporal, transferencia de ranking y
+  descomposición por sesión horaria) que consumen dashboard y documentación.
 - **El universo sintético y el operado no son el mismo, a propósito.** `config/default.toml` es lo
   que se opera en vivo y solo lleva símbolos vivos; `config/synthetic.toml` tiene que coincidir
   símbolo a símbolo con `DEFAULT_UNIVERSE` del generador o habría activos sin barras. De ahí que

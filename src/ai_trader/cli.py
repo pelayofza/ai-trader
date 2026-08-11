@@ -123,6 +123,7 @@ def _run_multiwindow(config, bars, start, end, args: argparse.Namespace) -> int:
     una distribucion robusta en vez de en un unico numero."""
     import json
 
+    from ai_trader.scoring.activity import DEFAULT_ACTIVITY_FLOOR
     from ai_trader.scoring.multiwindow import validate_multiwindow
 
     result = validate_multiwindow(
@@ -159,6 +160,19 @@ def _run_multiwindow(config, bars, start, end, args: argparse.Namespace) -> int:
     print(f"  RECOMPENSA (CVaR@{s.alpha:.0%} de las ventanas): {s.reward:+.4f}")
     print(f"  mediana {result.median:+.4f} | media {s.mean:+.4f} | std {s.std:.4f} "
           f"| peor {s.worst:+.4f} | mejor {s.best:+.4f}")
+    # La actividad va PEGADA a la recompensa: un CVaR de 0 puede ser "no perdio" o "no
+    # jugo", y solo esta linea lo distingue. Ver ai_trader.scoring.activity.
+    a = result.activity
+    if a is not None:
+        floor = DEFAULT_ACTIVITY_FLOOR
+        print(f"  ACTIVIDAD: {a.trades_per_window:.1f} operaciones por ventana "
+              f"(mediana {a.median_trades_per_window:.0f}) | "
+              f"{a.zero_windows}/{a.n_windows} ventanas vacias ({a.zero_window_pct:.0f}%)")
+        print(f"  Rankeable: {'SI' if result.rankable else 'NO'} "
+              f"(suelo: >= {floor.min_median_trades_per_window:.0f} ops en la ventana "
+              f"mediana, <= {floor.max_zero_window_pct:.0f}% vacias)"
+              + ("" if result.rankable
+                 else " -> " + "; ".join(floor.reasons(a))))
     if result.single_split_score is not None:
         print(f"  Corte unico 70/30 de referencia: {result.single_split_score:+.4f} "
               f"-> optimismo {result.optimism:+.4f}")
@@ -166,6 +180,9 @@ def _run_multiwindow(config, bars, start, end, args: argparse.Namespace) -> int:
         g = result.baseline_gate
         print(f"  Gate: {'APROBADO' if g.approved else 'RECHAZADO'} "
               f"(mejor baseline {g.best_name} {g.best_reward:+.4f}, margen {g.margin:+.4f})")
+        if g.beats_baselines and not g.eligible:
+            print("        bate a los baselines pero NO es rankeable: batirlos sin operar "
+                  "es batirlos por no jugar")
     return 0
 
 

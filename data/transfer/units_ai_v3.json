@@ -71,94 +71,94 @@
    "symbols_omitted": [
     {
      "symbol": "AAVE/USDT",
-     "n_bars": 115,
-     "first_bar": "2025-09-08",
+     "n_bars": 1904,
+     "first_bar": "2020-10-15",
      "last_bar": "2025-12-31",
-     "reason": "115 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     "reason": "sin contraparte en la libreria sintetica"
     },
     {
      "symbol": "APT/USDT",
-     "n_bars": 115,
-     "first_bar": "2025-09-08",
+     "n_bars": 1170,
+     "first_bar": "2022-10-19",
      "last_bar": "2025-12-31",
-     "reason": "115 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     "reason": "sin contraparte en la libreria sintetica"
     },
     {
      "symbol": "ARB/USDT",
-     "n_bars": 115,
-     "first_bar": "2025-09-08",
+     "n_bars": 1015,
+     "first_bar": "2023-03-23",
      "last_bar": "2025-12-31",
-     "reason": "115 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     "reason": "sin contraparte en la libreria sintetica"
     },
     {
      "symbol": "ATOM/USDT",
-     "n_bars": 115,
-     "first_bar": "2025-09-08",
+     "n_bars": 2439,
+     "first_bar": "2019-04-29",
      "last_bar": "2025-12-31",
-     "reason": "115 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     "reason": "sin contraparte en la libreria sintetica"
     },
     {
      "symbol": "ETC/USDT",
-     "n_bars": 115,
-     "first_bar": "2025-09-08",
+     "n_bars": 2760,
+     "first_bar": "2018-06-12",
      "last_bar": "2025-12-31",
-     "reason": "115 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     "reason": "sin contraparte en la libreria sintetica"
     },
     {
      "symbol": "FIL/USDT",
-     "n_bars": 115,
-     "first_bar": "2025-09-08",
+     "n_bars": 1904,
+     "first_bar": "2020-10-15",
      "last_bar": "2025-12-31",
-     "reason": "115 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     "reason": "sin contraparte en la libreria sintetica"
     },
     {
      "symbol": "INJ/USDT",
-     "n_bars": 115,
-     "first_bar": "2025-09-08",
+     "n_bars": 1898,
+     "first_bar": "2020-10-21",
      "last_bar": "2025-12-31",
-     "reason": "115 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     "reason": "sin contraparte en la libreria sintetica"
     },
     {
      "symbol": "NEAR/USDT",
-     "n_bars": 115,
-     "first_bar": "2025-09-08",
+     "n_bars": 1905,
+     "first_bar": "2020-10-14",
      "last_bar": "2025-12-31",
-     "reason": "115 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     "reason": "sin contraparte en la libreria sintetica"
     },
     {
      "symbol": "OP/USDT",
-     "n_bars": 115,
-     "first_bar": "2025-09-08",
+     "n_bars": 1310,
+     "first_bar": "2022-06-01",
      "last_bar": "2025-12-31",
-     "reason": "115 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     "reason": "sin contraparte en la libreria sintetica"
     },
     {
      "symbol": "SEI/USDT",
-     "n_bars": 115,
-     "first_bar": "2025-09-08",
+     "n_bars": 870,
+     "first_bar": "2023-08-15",
      "last_bar": "2025-12-31",
-     "reason": "115 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     "reason": "sin contraparte en la libreria sintetica"
     },
     {
      "symbol": "SUI/USDT",
-     "n_bars": 115,
-     "first_bar": "2025-09-08",
+     "n_bars": 974,
+     "first_bar": "2023-05-03",
      "last_bar": "2025-12-31",
-     "reason": "115 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     "reason": "sin contraparte en la libreria sintetica"
     },
     {
      "symbol": "TIA/USDT",
-     "n_bars": 115,
-     "first_bar": "2025-09-08",
+     "n_bars": 793,
+     "first_bar": "2023-10-31",
      "last_bar": "2025-12-31",
-     "reason": "115 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     "reason": "sin contraparte en la libreria sintetica"
     },
     {
      "symbol": "UNI/USDT",
-     "n_bars": 115,
-     "first_bar": "2025-09-08",
+     "n_bars": 1932,
+     "first_bar": "2020-09-17",
      "last_bar": "2025-12-31",
-     "reason": "115 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     "reason": "sin contraparte en la libreria sintetica"
     }
    ]
   },
@@ -265,7 +265,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 294
+   "num_trades": 294,
+   "trades_by_fold": [
+    4,
+    25,
+    21,
+    4,
+    9,
+    27,
+    23,
+    6,
+    11,
+    43,
+    27,
+    32,
+    23,
+    28,
+    11
+   ]
   },
   {
    "config_id": "crypto_momentum#01",
@@ -326,7 +343,7 @@
      -0.843852
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -335,7 +352,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 55
+   "num_trades": 55,
+   "trades_by_fold": [
+    0,
+    5,
+    6,
+    0,
+    0,
+    5,
+    6,
+    0,
+    0,
+    11,
+    5,
+    5,
+    6,
+    6,
+    0
+   ]
   },
   {
    "config_id": "crypto_momentum#02",
@@ -405,7 +439,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 473
+   "num_trades": 473,
+   "trades_by_fold": [
+    8,
+    40,
+    38,
+    3,
+    18,
+    42,
+    40,
+    5,
+    20,
+    70,
+    37,
+    52,
+    35,
+    50,
+    15
+   ]
   },
   {
    "config_id": "crypto_momentum#03",
@@ -475,7 +526,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 354
+   "num_trades": 354,
+   "trades_by_fold": [
+    1,
+    27,
+    36,
+    1,
+    6,
+    28,
+    37,
+    2,
+    7,
+    62,
+    28,
+    33,
+    37,
+    42,
+    7
+   ]
   },
   {
    "config_id": "crypto_momentum#04",
@@ -545,7 +613,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 300
+   "num_trades": 300,
+   "trades_by_fold": [
+    4,
+    25,
+    26,
+    0,
+    5,
+    29,
+    30,
+    4,
+    9,
+    51,
+    25,
+    30,
+    26,
+    31,
+    5
+   ]
   },
   {
    "config_id": "crypto_momentum#05",
@@ -615,7 +700,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 284
+   "num_trades": 284,
+   "trades_by_fold": [
+    1,
+    24,
+    27,
+    0,
+    5,
+    25,
+    28,
+    1,
+    6,
+    50,
+    24,
+    29,
+    27,
+    32,
+    5
+   ]
   },
   {
    "config_id": "crypto_momentum#06",
@@ -676,7 +778,7 @@
      -0.843852
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -685,7 +787,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 10
+   "num_trades": 10,
+   "trades_by_fold": [
+    0,
+    0,
+    2,
+    0,
+    0,
+    0,
+    2,
+    0,
+    0,
+    2,
+    0,
+    0,
+    2,
+    2,
+    0
+   ]
   },
   {
    "config_id": "crypto_momentum#07",
@@ -755,7 +874,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 225
+   "num_trades": 225,
+   "trades_by_fold": [
+    3,
+    20,
+    17,
+    4,
+    5,
+    21,
+    18,
+    5,
+    6,
+    35,
+    22,
+    23,
+    19,
+    20,
+    7
+   ]
   },
   {
    "config_id": "mean_reversion#00",
@@ -816,7 +952,7 @@
      -0.843852
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -825,7 +961,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 0
+   "num_trades": 0,
+   "trades_by_fold": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "mean_reversion#01",
@@ -895,7 +1048,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 10
+   "num_trades": 10,
+   "trades_by_fold": [
+    0,
+    1,
+    0,
+    0,
+    1,
+    1,
+    0,
+    0,
+    1,
+    1,
+    1,
+    2,
+    0,
+    1,
+    1
+   ]
   },
   {
    "config_id": "mean_reversion#02",
@@ -956,7 +1126,7 @@
      -0.843852
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -965,7 +1135,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 5
+   "num_trades": 5,
+   "trades_by_fold": [
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1,
+    1,
+    0
+   ]
   },
   {
    "config_id": "mean_reversion#03",
@@ -1035,7 +1222,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 95
+   "num_trades": 95,
+   "trades_by_fold": [
+    1,
+    4,
+    10,
+    0,
+    4,
+    5,
+    11,
+    1,
+    5,
+    14,
+    4,
+    8,
+    10,
+    14,
+    4
+   ]
   },
   {
    "config_id": "mean_reversion#04",
@@ -1096,7 +1300,7 @@
      -0.843852
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -1105,7 +1309,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 0
+   "num_trades": 0,
+   "trades_by_fold": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "mean_reversion#05",
@@ -1166,7 +1387,7 @@
      -0.843852
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -1175,7 +1396,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 20
+   "num_trades": 20,
+   "trades_by_fold": [
+    0,
+    0,
+    4,
+    0,
+    0,
+    0,
+    4,
+    0,
+    0,
+    4,
+    0,
+    0,
+    4,
+    4,
+    0
+   ]
   },
   {
    "config_id": "mean_reversion#06",
@@ -1245,7 +1483,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 125
+   "num_trades": 125,
+   "trades_by_fold": [
+    13,
+    4,
+    13,
+    3,
+    4,
+    11,
+    20,
+    10,
+    11,
+    11,
+    1,
+    2,
+    10,
+    11,
+    1
+   ]
   },
   {
    "config_id": "mean_reversion#07",
@@ -1306,7 +1561,7 @@
      -0.843852
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -1315,7 +1570,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 0
+   "num_trades": 0,
+   "trades_by_fold": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "crypto_momentum#00",
@@ -1385,7 +1657,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 779
+   "num_trades": 779,
+   "trades_by_fold": [
+    41,
+    41,
+    57,
+    57,
+    37,
+    45,
+    61,
+    61,
+    41,
+    59,
+    60,
+    40,
+    75,
+    56,
+    48
+   ]
   },
   {
    "config_id": "crypto_momentum#01",
@@ -1455,7 +1744,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 260
+   "num_trades": 260,
+   "trades_by_fold": [
+    6,
+    2,
+    18,
+    20,
+    6,
+    8,
+    24,
+    26,
+    12,
+    20,
+    22,
+    8,
+    38,
+    24,
+    26
+   ]
   },
   {
    "config_id": "crypto_momentum#02",
@@ -1525,7 +1831,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 1179
+   "num_trades": 1179,
+   "trades_by_fold": [
+    59,
+    64,
+    78,
+    99,
+    49,
+    67,
+    81,
+    102,
+    52,
+    86,
+    107,
+    57,
+    119,
+    71,
+    88
+   ]
   },
   {
    "config_id": "crypto_momentum#03",
@@ -1595,7 +1918,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 992
+   "num_trades": 992,
+   "trades_by_fold": [
+    45,
+    48,
+    63,
+    77,
+    46,
+    53,
+    68,
+    82,
+    51,
+    71,
+    85,
+    54,
+    101,
+    69,
+    79
+   ]
   },
   {
    "config_id": "crypto_momentum#04",
@@ -1665,7 +2005,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 1004
+   "num_trades": 1004,
+   "trades_by_fold": [
+    48,
+    43,
+    69,
+    83,
+    43,
+    49,
+    75,
+    89,
+    49,
+    70,
+    84,
+    44,
+    108,
+    70,
+    80
+   ]
   },
   {
    "config_id": "crypto_momentum#05",
@@ -1735,7 +2092,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 851
+   "num_trades": 851,
+   "trades_by_fold": [
+    34,
+    37,
+    56,
+    70,
+    34,
+    41,
+    60,
+    74,
+    38,
+    63,
+    77,
+    41,
+    96,
+    60,
+    70
+   ]
   },
   {
    "config_id": "crypto_momentum#06",
@@ -1805,7 +2179,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 100
+   "num_trades": 100,
+   "trades_by_fold": [
+    0,
+    1,
+    5,
+    11,
+    3,
+    1,
+    5,
+    11,
+    3,
+    6,
+    12,
+    4,
+    16,
+    8,
+    14
+   ]
   },
   {
    "config_id": "crypto_momentum#07",
@@ -1875,7 +2266,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 634
+   "num_trades": 634,
+   "trades_by_fold": [
+    24,
+    20,
+    50,
+    44,
+    21,
+    28,
+    58,
+    52,
+    29,
+    54,
+    48,
+    25,
+    77,
+    55,
+    49
+   ]
   },
   {
    "config_id": "mean_reversion#00",
@@ -1945,7 +2353,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 5
+   "num_trades": 5,
+   "trades_by_fold": [
+    0,
+    1,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "mean_reversion#01",
@@ -2015,7 +2440,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 80
+   "num_trades": 80,
+   "trades_by_fold": [
+    1,
+    3,
+    8,
+    1,
+    3,
+    4,
+    9,
+    2,
+    4,
+    11,
+    4,
+    6,
+    9,
+    11,
+    4
+   ]
   },
   {
    "config_id": "mean_reversion#02",
@@ -2085,7 +2527,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 5
+   "num_trades": 5,
+   "trades_by_fold": [
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+    1,
+    1
+   ]
   },
   {
    "config_id": "mean_reversion#03",
@@ -2155,7 +2614,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 175
+   "num_trades": 175,
+   "trades_by_fold": [
+    15,
+    7,
+    12,
+    17,
+    8,
+    10,
+    15,
+    20,
+    11,
+    7,
+    12,
+    3,
+    17,
+    8,
+    13
+   ]
   },
   {
    "config_id": "mean_reversion#04",
@@ -2225,7 +2701,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 5
+   "num_trades": 5,
+   "trades_by_fold": [
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1,
+    1,
+    0
+   ]
   },
   {
    "config_id": "mean_reversion#05",
@@ -2295,7 +2788,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 130
+   "num_trades": 130,
+   "trades_by_fold": [
+    0,
+    4,
+    5,
+    11,
+    6,
+    4,
+    5,
+    11,
+    6,
+    9,
+    15,
+    10,
+    16,
+    11,
+    17
+   ]
   },
   {
    "config_id": "mean_reversion#06",
@@ -2365,7 +2875,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 195
+   "num_trades": 195,
+   "trades_by_fold": [
+    10,
+    10,
+    13,
+    4,
+    18,
+    12,
+    15,
+    6,
+    20,
+    15,
+    6,
+    20,
+    9,
+    23,
+    14
+   ]
   },
   {
    "config_id": "mean_reversion#07",
@@ -2435,7 +2962,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 0
+   "num_trades": 0,
+   "trades_by_fold": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "crypto_momentum#00",
@@ -2505,7 +3049,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 375
+   "num_trades": 375,
+   "trades_by_fold": [
+    44,
+    34,
+    26,
+    42,
+    33,
+    26,
+    18,
+    34,
+    25,
+    8,
+    24,
+    15,
+    16,
+    7,
+    23
+   ]
   },
   {
    "config_id": "crypto_momentum#01",
@@ -2566,7 +3127,7 @@
      0.216163
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -2575,7 +3136,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 70
+   "num_trades": 70,
+   "trades_by_fold": [
+    12,
+    10,
+    9,
+    9,
+    10,
+    4,
+    3,
+    3,
+    4,
+    1,
+    1,
+    2,
+    0,
+    1,
+    1
+   ]
   },
   {
    "config_id": "crypto_momentum#02",
@@ -2645,7 +3223,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 445
+   "num_trades": 445,
+   "trades_by_fold": [
+    58,
+    47,
+    38,
+    54,
+    44,
+    29,
+    20,
+    36,
+    26,
+    9,
+    25,
+    15,
+    16,
+    6,
+    22
+   ]
   },
   {
    "config_id": "crypto_momentum#03",
@@ -2715,7 +3310,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 375
+   "num_trades": 375,
+   "trades_by_fold": [
+    48,
+    34,
+    35,
+    44,
+    38,
+    20,
+    21,
+    30,
+    24,
+    7,
+    16,
+    10,
+    17,
+    11,
+    20
+   ]
   },
   {
    "config_id": "crypto_momentum#04",
@@ -2785,7 +3397,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 375
+   "num_trades": 375,
+   "trades_by_fold": [
+    53,
+    41,
+    36,
+    46,
+    43,
+    22,
+    17,
+    27,
+    24,
+    5,
+    15,
+    12,
+    10,
+    7,
+    17
+   ]
   },
   {
    "config_id": "crypto_momentum#05",
@@ -2855,7 +3484,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 288
+   "num_trades": 288,
+   "trades_by_fold": [
+    40,
+    29,
+    27,
+    36,
+    32,
+    17,
+    15,
+    24,
+    20,
+    2,
+    11,
+    7,
+    9,
+    5,
+    14
+   ]
   },
   {
    "config_id": "crypto_momentum#06",
@@ -2916,7 +3562,7 @@
      0.216163
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -2925,7 +3571,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 30
+   "num_trades": 30,
+   "trades_by_fold": [
+    5,
+    4,
+    4,
+    4,
+    5,
+    1,
+    1,
+    1,
+    2,
+    0,
+    0,
+    1,
+    0,
+    1,
+    1
+   ]
   },
   {
    "config_id": "crypto_momentum#07",
@@ -2995,7 +3658,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 290
+   "num_trades": 290,
+   "trades_by_fold": [
+    41,
+    30,
+    26,
+    35,
+    30,
+    19,
+    15,
+    24,
+    19,
+    4,
+    13,
+    8,
+    9,
+    4,
+    13
+   ]
   },
   {
    "config_id": "mean_reversion#00",
@@ -3056,7 +3736,7 @@
      0.216163
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -3065,7 +3745,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 10
+   "num_trades": 10,
+   "trades_by_fold": [
+    2,
+    0,
+    0,
+    0,
+    0,
+    2,
+    2,
+    2,
+    2,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "mean_reversion#01",
@@ -3126,7 +3823,7 @@
      0.216163
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -3135,7 +3832,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 35
+   "num_trades": 35,
+   "trades_by_fold": [
+    6,
+    6,
+    5,
+    5,
+    5,
+    2,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "mean_reversion#02",
@@ -3196,7 +3910,7 @@
      0.216163
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -3205,7 +3919,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 25
+   "num_trades": 25,
+   "trades_by_fold": [
+    3,
+    3,
+    1,
+    1,
+    1,
+    4,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "mean_reversion#03",
@@ -3275,7 +4006,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 135
+   "num_trades": 135,
+   "trades_by_fold": [
+    15,
+    13,
+    8,
+    10,
+    13,
+    12,
+    7,
+    9,
+    12,
+    5,
+    7,
+    10,
+    2,
+    5,
+    7
+   ]
   },
   {
    "config_id": "mean_reversion#04",
@@ -3336,7 +4084,7 @@
      0.216163
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -3345,7 +4093,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 10
+   "num_trades": 10,
+   "trades_by_fold": [
+    1,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    2,
+    0,
+    0,
+    1,
+    0,
+    1,
+    1
+   ]
   },
   {
    "config_id": "mean_reversion#05",
@@ -3406,7 +4171,7 @@
      0.216163
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -3415,7 +4180,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 35
+   "num_trades": 35,
+   "trades_by_fold": [
+    7,
+    5,
+    5,
+    5,
+    5,
+    2,
+    2,
+    2,
+    2,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "mean_reversion#06",
@@ -3485,7 +4267,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 225
+   "num_trades": 225,
+   "trades_by_fold": [
+    27,
+    6,
+    6,
+    7,
+    19,
+    23,
+    23,
+    24,
+    36,
+    2,
+    3,
+    15,
+    3,
+    15,
+    16
+   ]
   },
   {
    "config_id": "mean_reversion#07",
@@ -3546,7 +4345,7 @@
      0.216163
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -3555,7 +4354,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 5
+   "num_trades": 5,
+   "trades_by_fold": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "crypto_momentum#00",
@@ -3625,7 +4441,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 564
+   "num_trades": 564,
+   "trades_by_fold": [
+    36,
+    36,
+    60,
+    52,
+    33,
+    19,
+    44,
+    36,
+    17,
+    44,
+    36,
+    17,
+    60,
+    41,
+    33
+   ]
   },
   {
    "config_id": "crypto_momentum#01",
@@ -3695,7 +4528,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 100
+   "num_trades": 100,
+   "trades_by_fold": [
+    3,
+    5,
+    15,
+    6,
+    3,
+    2,
+    12,
+    3,
+    0,
+    14,
+    5,
+    2,
+    15,
+    12,
+    3
+   ]
   },
   {
    "config_id": "crypto_momentum#02",
@@ -3765,7 +4615,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 834
+   "num_trades": 834,
+   "trades_by_fold": [
+    43,
+    42,
+    88,
+    68,
+    37,
+    30,
+    76,
+    56,
+    25,
+    74,
+    54,
+    23,
+    100,
+    69,
+    49
+   ]
   },
   {
    "config_id": "crypto_momentum#03",
@@ -3835,7 +4702,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 659
+   "num_trades": 659,
+   "trades_by_fold": [
+    32,
+    32,
+    62,
+    62,
+    36,
+    18,
+    48,
+    48,
+    22,
+    48,
+    48,
+    22,
+    77,
+    52,
+    52
+   ]
   },
   {
    "config_id": "crypto_momentum#04",
@@ -3905,7 +4789,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 594
+   "num_trades": 594,
+   "trades_by_fold": [
+    29,
+    28,
+    70,
+    55,
+    28,
+    12,
+    54,
+    39,
+    12,
+    52,
+    37,
+    10,
+    79,
+    52,
+    37
+   ]
   },
   {
    "config_id": "crypto_momentum#05",
@@ -3975,7 +4876,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 575
+   "num_trades": 575,
+   "trades_by_fold": [
+    28,
+    29,
+    64,
+    55,
+    27,
+    13,
+    48,
+    39,
+    11,
+    49,
+    40,
+    12,
+    75,
+    47,
+    38
+   ]
   },
   {
    "config_id": "crypto_momentum#06",
@@ -4045,7 +4963,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 30
+   "num_trades": 30,
+   "trades_by_fold": [
+    2,
+    2,
+    5,
+    3,
+    2,
+    0,
+    3,
+    1,
+    0,
+    3,
+    1,
+    0,
+    4,
+    3,
+    1
+   ]
   },
   {
    "config_id": "crypto_momentum#07",
@@ -4115,7 +5050,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 365
+   "num_trades": 365,
+   "trades_by_fold": [
+    16,
+    14,
+    36,
+    31,
+    12,
+    12,
+    34,
+    29,
+    10,
+    32,
+    27,
+    8,
+    49,
+    30,
+    25
+   ]
   },
   {
    "config_id": "mean_reversion#00",
@@ -4185,7 +5137,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 33
+   "num_trades": 33,
+   "trades_by_fold": [
+    0,
+    0,
+    4,
+    3,
+    0,
+    0,
+    4,
+    3,
+    0,
+    4,
+    3,
+    0,
+    5,
+    4,
+    3
+   ]
   },
   {
    "config_id": "mean_reversion#01",
@@ -4255,7 +5224,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 60
+   "num_trades": 60,
+   "trades_by_fold": [
+    6,
+    6,
+    7,
+    8,
+    5,
+    2,
+    3,
+    4,
+    1,
+    3,
+    4,
+    1,
+    5,
+    2,
+    3
+   ]
   },
   {
    "config_id": "mean_reversion#02",
@@ -4325,7 +5311,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 20
+   "num_trades": 20,
+   "trades_by_fold": [
+    1,
+    1,
+    4,
+    1,
+    1,
+    0,
+    3,
+    0,
+    0,
+    3,
+    0,
+    0,
+    3,
+    3,
+    0
+   ]
   },
   {
    "config_id": "mean_reversion#03",
@@ -4395,7 +5398,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 165
+   "num_trades": 165,
+   "trades_by_fold": [
+    7,
+    7,
+    11,
+    14,
+    14,
+    4,
+    8,
+    11,
+    11,
+    8,
+    11,
+    11,
+    15,
+    15,
+    18
+   ]
   },
   {
    "config_id": "mean_reversion#04",
@@ -4456,7 +5476,7 @@
      0.421983
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -4465,7 +5485,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 0
+   "num_trades": 0,
+   "trades_by_fold": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "mean_reversion#05",
@@ -4526,7 +5563,7 @@
      0.421983
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -4535,7 +5572,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 25
+   "num_trades": 25,
+   "trades_by_fold": [
+    1,
+    2,
+    2,
+    3,
+    1,
+    1,
+    1,
+    2,
+    0,
+    2,
+    3,
+    1,
+    3,
+    1,
+    2
+   ]
   },
   {
    "config_id": "mean_reversion#06",
@@ -4605,7 +5659,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 241
+   "num_trades": 241,
+   "trades_by_fold": [
+    12,
+    1,
+    9,
+    9,
+    18,
+    13,
+    21,
+    21,
+    30,
+    10,
+    10,
+    19,
+    14,
+    27,
+    27
+   ]
   },
   {
    "config_id": "mean_reversion#07",
@@ -4666,7 +5737,7 @@
      0.421983
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -4675,7 +5746,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 0
+   "num_trades": 0,
+   "trades_by_fold": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "crypto_momentum#00",
@@ -4745,7 +5833,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 430
+   "num_trades": 430,
+   "trades_by_fold": [
+    41,
+    11,
+    17,
+    35,
+    10,
+    38,
+    44,
+    62,
+    37,
+    14,
+    32,
+    7,
+    38,
+    13,
+    31
+   ]
   },
   {
    "config_id": "crypto_momentum#01",
@@ -4815,7 +5920,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 85
+   "num_trades": 85,
+   "trades_by_fold": [
+    13,
+    1,
+    0,
+    2,
+    1,
+    14,
+    13,
+    15,
+    14,
+    1,
+    3,
+    2,
+    2,
+    1,
+    3
+   ]
   },
   {
    "config_id": "crypto_momentum#02",
@@ -4885,7 +6007,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 610
+   "num_trades": 610,
+   "trades_by_fold": [
+    63,
+    9,
+    27,
+    44,
+    15,
+    54,
+    72,
+    89,
+    60,
+    18,
+    35,
+    6,
+    53,
+    24,
+    41
+   ]
   },
   {
    "config_id": "crypto_momentum#03",
@@ -4955,7 +6094,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 583
+   "num_trades": 583,
+   "trades_by_fold": [
+    46,
+    18,
+    21,
+    39,
+    11,
+    51,
+    59,
+    77,
+    49,
+    31,
+    49,
+    21,
+    51,
+    24,
+    36
+   ]
   },
   {
    "config_id": "crypto_momentum#04",
@@ -5025,7 +6181,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 525
+   "num_trades": 525,
+   "trades_by_fold": [
+    45,
+    9,
+    19,
+    45,
+    11,
+    42,
+    52,
+    78,
+    44,
+    16,
+    42,
+    8,
+    52,
+    18,
+    44
+   ]
   },
   {
    "config_id": "crypto_momentum#05",
@@ -5095,7 +6268,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 459
+   "num_trades": 459,
+   "trades_by_fold": [
+    39,
+    9,
+    13,
+    31,
+    8,
+    43,
+    48,
+    66,
+    43,
+    18,
+    36,
+    13,
+    40,
+    17,
+    35
+   ]
   },
   {
    "config_id": "crypto_momentum#06",
@@ -5156,7 +6346,7 @@
      -0.174177
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -5165,7 +6355,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 20
+   "num_trades": 20,
+   "trades_by_fold": [
+    4,
+    0,
+    0,
+    0,
+    0,
+    4,
+    4,
+    4,
+    4,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "crypto_momentum#07",
@@ -5235,7 +6442,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 290
+   "num_trades": 290,
+   "trades_by_fold": [
+    29,
+    5,
+    10,
+    20,
+    6,
+    28,
+    33,
+    43,
+    29,
+    9,
+    19,
+    5,
+    24,
+    10,
+    20
+   ]
   },
   {
    "config_id": "mean_reversion#00",
@@ -5296,7 +6520,7 @@
      -0.174177
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -5305,7 +6529,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 10
+   "num_trades": 10,
+   "trades_by_fold": [
+    2,
+    0,
+    0,
+    0,
+    0,
+    2,
+    2,
+    2,
+    2,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "mean_reversion#01",
@@ -5366,7 +6607,7 @@
      -0.174177
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -5375,7 +6616,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 20
+   "num_trades": 20,
+   "trades_by_fold": [
+    4,
+    0,
+    0,
+    0,
+    0,
+    4,
+    4,
+    4,
+    4,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "mean_reversion#02",
@@ -5436,7 +6694,7 @@
      -0.174177
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -5445,7 +6703,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 0
+   "num_trades": 0,
+   "trades_by_fold": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "mean_reversion#03",
@@ -5515,7 +6790,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 130
+   "num_trades": 130,
+   "trades_by_fold": [
+    10,
+    5,
+    8,
+    11,
+    4,
+    9,
+    12,
+    15,
+    8,
+    7,
+    10,
+    3,
+    13,
+    6,
+    9
+   ]
   },
   {
    "config_id": "mean_reversion#04",
@@ -5576,7 +6868,7 @@
      -0.174177
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -5585,7 +6877,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 5
+   "num_trades": 5,
+   "trades_by_fold": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "mean_reversion#05",
@@ -5655,7 +6964,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 10
+   "num_trades": 10,
+   "trades_by_fold": [
+    2,
+    0,
+    0,
+    0,
+    0,
+    2,
+    2,
+    2,
+    2,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "mean_reversion#06",
@@ -5725,7 +7051,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 185
+   "num_trades": 185,
+   "trades_by_fold": [
+    12,
+    19,
+    12,
+    14,
+    16,
+    13,
+    6,
+    8,
+    10,
+    13,
+    15,
+    17,
+    8,
+    10,
+    12
+   ]
   },
   {
    "config_id": "mean_reversion#07",
@@ -5786,7 +7129,7 @@
      -0.174177
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -5795,7 +7138,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 0
+   "num_trades": 0,
+   "trades_by_fold": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "crypto_momentum#00",
@@ -5865,7 +7225,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 552
+   "num_trades": 552,
+   "trades_by_fold": [
+    25,
+    29,
+    32,
+    39,
+    26,
+    34,
+    37,
+    44,
+    31,
+    41,
+    48,
+    35,
+    51,
+    38,
+    42
+   ]
   },
   {
    "config_id": "crypto_momentum#01",
@@ -5935,7 +7312,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 130
+   "num_trades": 130,
+   "trades_by_fold": [
+    6,
+    7,
+    9,
+    9,
+    7,
+    7,
+    9,
+    9,
+    7,
+    10,
+    10,
+    8,
+    12,
+    10,
+    10
+   ]
   },
   {
    "config_id": "crypto_momentum#02",
@@ -6005,7 +7399,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 518
+   "num_trades": 518,
+   "trades_by_fold": [
+    30,
+    29,
+    36,
+    50,
+    27,
+    25,
+    32,
+    46,
+    23,
+    31,
+    45,
+    22,
+    52,
+    29,
+    41
+   ]
   },
   {
    "config_id": "crypto_momentum#03",
@@ -6075,7 +7486,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 587
+   "num_trades": 587,
+   "trades_by_fold": [
+    29,
+    25,
+    33,
+    39,
+    32,
+    34,
+    42,
+    48,
+    41,
+    37,
+    44,
+    37,
+    52,
+    45,
+    49
+   ]
   },
   {
    "config_id": "crypto_momentum#04",
@@ -6145,7 +7573,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 452
+   "num_trades": 452,
+   "trades_by_fold": [
+    19,
+    21,
+    27,
+    33,
+    15,
+    28,
+    34,
+    40,
+    22,
+    36,
+    42,
+    24,
+    48,
+    30,
+    33
+   ]
   },
   {
    "config_id": "crypto_momentum#05",
@@ -6215,7 +7660,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 467
+   "num_trades": 467,
+   "trades_by_fold": [
+    20,
+    19,
+    26,
+    33,
+    20,
+    27,
+    34,
+    41,
+    28,
+    32,
+    40,
+    27,
+    47,
+    34,
+    39
+   ]
   },
   {
    "config_id": "crypto_momentum#06",
@@ -6285,7 +7747,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 15
+   "num_trades": 15,
+   "trades_by_fold": [
+    0,
+    1,
+    1,
+    0,
+    1,
+    1,
+    1,
+    0,
+    1,
+    2,
+    1,
+    2,
+    1,
+    2,
+    1
+   ]
   },
   {
    "config_id": "crypto_momentum#07",
@@ -6355,7 +7834,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 457
+   "num_trades": 457,
+   "trades_by_fold": [
+    19,
+    29,
+    21,
+    33,
+    22,
+    32,
+    24,
+    36,
+    25,
+    33,
+    46,
+    35,
+    38,
+    27,
+    37
+   ]
   },
   {
    "config_id": "mean_reversion#00",
@@ -6425,7 +7921,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 50
+   "num_trades": 50,
+   "trades_by_fold": [
+    0,
+    4,
+    5,
+    1,
+    0,
+    4,
+    5,
+    1,
+    0,
+    9,
+    5,
+    4,
+    6,
+    5,
+    1
+   ]
   },
   {
    "config_id": "mean_reversion#01",
@@ -6495,7 +8008,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 69
+   "num_trades": 69,
+   "trades_by_fold": [
+    0,
+    1,
+    4,
+    4,
+    5,
+    1,
+    4,
+    4,
+    5,
+    5,
+    5,
+    6,
+    8,
+    9,
+    8
+   ]
   },
   {
    "config_id": "mean_reversion#02",
@@ -6565,7 +8095,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 15
+   "num_trades": 15,
+   "trades_by_fold": [
+    0,
+    1,
+    0,
+    1,
+    1,
+    1,
+    0,
+    1,
+    1,
+    1,
+    2,
+    2,
+    1,
+    1,
+    2
+   ]
   },
   {
    "config_id": "mean_reversion#03",
@@ -6635,7 +8182,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 170
+   "num_trades": 170,
+   "trades_by_fold": [
+    8,
+    14,
+    4,
+    8,
+    8,
+    18,
+    8,
+    12,
+    12,
+    14,
+    18,
+    18,
+    8,
+    8,
+    12
+   ]
   },
   {
    "config_id": "mean_reversion#04",
@@ -6705,7 +8269,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 15
+   "num_trades": 15,
+   "trades_by_fold": [
+    0,
+    1,
+    1,
+    1,
+    0,
+    1,
+    1,
+    1,
+    0,
+    2,
+    2,
+    1,
+    2,
+    1,
+    1
+   ]
   },
   {
    "config_id": "mean_reversion#05",
@@ -6775,7 +8356,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 60
+   "num_trades": 60,
+   "trades_by_fold": [
+    0,
+    3,
+    4,
+    4,
+    1,
+    3,
+    4,
+    4,
+    1,
+    7,
+    7,
+    4,
+    8,
+    5,
+    5
+   ]
   },
   {
    "config_id": "mean_reversion#06",
@@ -6845,7 +8443,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 427
+   "num_trades": 427,
+   "trades_by_fold": [
+    25,
+    23,
+    27,
+    21,
+    30,
+    28,
+    32,
+    26,
+    35,
+    29,
+    24,
+    33,
+    26,
+    37,
+    31
+   ]
   },
   {
    "config_id": "mean_reversion#07",
@@ -6915,7 +8530,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 5
+   "num_trades": 5,
+   "trades_by_fold": [
+    0,
+    1,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "crypto_momentum#00",
@@ -6985,7 +8617,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 612
+   "num_trades": 612,
+   "trades_by_fold": [
+    46,
+    44,
+    21,
+    27,
+    25,
+    70,
+    47,
+    53,
+    51,
+    45,
+    51,
+    49,
+    25,
+    26,
+    32
+   ]
   },
   {
    "config_id": "crypto_momentum#01",
@@ -7055,7 +8704,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 140
+   "num_trades": 140,
+   "trades_by_fold": [
+    10,
+    10,
+    5,
+    3,
+    4,
+    18,
+    13,
+    11,
+    12,
+    13,
+    11,
+    12,
+    6,
+    7,
+    5
+   ]
   },
   {
    "config_id": "crypto_momentum#02",
@@ -7125,7 +8791,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 879
+   "num_trades": 879,
+   "trades_by_fold": [
+    64,
+    64,
+    43,
+    42,
+    29,
+    96,
+    76,
+    75,
+    62,
+    73,
+    72,
+    59,
+    48,
+    38,
+    38
+   ]
   },
   {
    "config_id": "crypto_momentum#03",
@@ -7195,7 +8878,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 804
+   "num_trades": 804,
+   "trades_by_fold": [
+    59,
+    51,
+    27,
+    47,
+    28,
+    85,
+    62,
+    82,
+    63,
+    52,
+    72,
+    53,
+    45,
+    29,
+    49
+   ]
   },
   {
    "config_id": "crypto_momentum#04",
@@ -7265,7 +8965,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 790
+   "num_trades": 790,
+   "trades_by_fold": [
+    59,
+    48,
+    26,
+    35,
+    23,
+    91,
+    69,
+    78,
+    66,
+    58,
+    67,
+    55,
+    40,
+    33,
+    42
+   ]
   },
   {
    "config_id": "crypto_momentum#05",
@@ -7335,7 +9052,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 696
+   "num_trades": 696,
+   "trades_by_fold": [
+    50,
+    41,
+    21,
+    37,
+    19,
+    77,
+    57,
+    73,
+    55,
+    48,
+    64,
+    46,
+    40,
+    26,
+    42
+   ]
   },
   {
    "config_id": "crypto_momentum#06",
@@ -7405,7 +9139,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 20
+   "num_trades": 20,
+   "trades_by_fold": [
+    1,
+    0,
+    1,
+    0,
+    2,
+    1,
+    2,
+    1,
+    3,
+    1,
+    0,
+    2,
+    1,
+    3,
+    2
+   ]
   },
   {
    "config_id": "crypto_momentum#07",
@@ -7475,7 +9226,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 605
+   "num_trades": 605,
+   "trades_by_fold": [
+    45,
+    46,
+    18,
+    25,
+    23,
+    73,
+    45,
+    52,
+    50,
+    46,
+    53,
+    51,
+    25,
+    23,
+    30
+   ]
   },
   {
    "config_id": "mean_reversion#00",
@@ -7545,7 +9313,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 10
+   "num_trades": 10,
+   "trades_by_fold": [
+    1,
+    1,
+    0,
+    0,
+    0,
+    2,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "mean_reversion#01",
@@ -7615,7 +9400,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 65
+   "num_trades": 65,
+   "trades_by_fold": [
+    7,
+    5,
+    3,
+    4,
+    2,
+    8,
+    6,
+    7,
+    5,
+    4,
+    5,
+    3,
+    3,
+    1,
+    2
+   ]
   },
   {
    "config_id": "mean_reversion#02",
@@ -7685,7 +9487,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 5
+   "num_trades": 5,
+   "trades_by_fold": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "mean_reversion#03",
@@ -7755,7 +9574,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 200
+   "num_trades": 200,
+   "trades_by_fold": [
+    11,
+    11,
+    2,
+    8,
+    16,
+    18,
+    9,
+    15,
+    23,
+    9,
+    15,
+    23,
+    6,
+    14,
+    20
+   ]
   },
   {
    "config_id": "mean_reversion#04",
@@ -7825,7 +9661,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 0
+   "num_trades": 0,
+   "trades_by_fold": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "mean_reversion#05",
@@ -7895,7 +9748,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 110
+   "num_trades": 110,
+   "trades_by_fold": [
+    9,
+    13,
+    5,
+    7,
+    4,
+    14,
+    6,
+    8,
+    5,
+    10,
+    12,
+    9,
+    4,
+    1,
+    3
+   ]
   },
   {
    "config_id": "mean_reversion#06",
@@ -7965,7 +9835,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 298
+   "num_trades": 298,
+   "trades_by_fold": [
+    17,
+    22,
+    20,
+    12,
+    18,
+    24,
+    23,
+    15,
+    21,
+    24,
+    20,
+    26,
+    18,
+    24,
+    14
+   ]
   },
   {
    "config_id": "mean_reversion#07",
@@ -8035,7 +9922,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 5
+   "num_trades": 5,
+   "trades_by_fold": [
+    0,
+    1,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "crypto_momentum#00",
@@ -8105,7 +10009,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 390
+   "num_trades": 390,
+   "trades_by_fold": [
+    33,
+    31,
+    25,
+    21,
+    36,
+    30,
+    24,
+    20,
+    35,
+    22,
+    18,
+    33,
+    12,
+    27,
+    23
+   ]
   },
   {
    "config_id": "crypto_momentum#01",
@@ -8175,7 +10096,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 105
+   "num_trades": 105,
+   "trades_by_fold": [
+    11,
+    6,
+    6,
+    4,
+    10,
+    9,
+    9,
+    7,
+    13,
+    4,
+    2,
+    8,
+    2,
+    8,
+    6
+   ]
   },
   {
    "config_id": "crypto_momentum#02",
@@ -8245,7 +10183,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 328
+   "num_trades": 328,
+   "trades_by_fold": [
+    15,
+    10,
+    20,
+    5,
+    34,
+    17,
+    27,
+    12,
+    41,
+    20,
+    5,
+    34,
+    15,
+    44,
+    29
+   ]
   },
   {
    "config_id": "crypto_momentum#03",
@@ -8315,7 +10270,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 525
+   "num_trades": 525,
+   "trades_by_fold": [
+    44,
+    41,
+    35,
+    27,
+    50,
+    39,
+    33,
+    25,
+    48,
+    30,
+    22,
+    45,
+    16,
+    39,
+    31
+   ]
   },
   {
    "config_id": "crypto_momentum#04",
@@ -8385,7 +10357,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 340
+   "num_trades": 340,
+   "trades_by_fold": [
+    32,
+    23,
+    20,
+    13,
+    32,
+    29,
+    26,
+    19,
+    38,
+    17,
+    10,
+    29,
+    7,
+    26,
+    19
+   ]
   },
   {
    "config_id": "crypto_momentum#05",
@@ -8455,7 +10444,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 365
+   "num_trades": 365,
+   "trades_by_fold": [
+    32,
+    27,
+    22,
+    16,
+    36,
+    29,
+    24,
+    18,
+    38,
+    19,
+    13,
+    33,
+    8,
+    28,
+    22
+   ]
   },
   {
    "config_id": "crypto_momentum#06",
@@ -8525,7 +10531,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 30
+   "num_trades": 30,
+   "trades_by_fold": [
+    6,
+    2,
+    2,
+    2,
+    2,
+    4,
+    4,
+    4,
+    4,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "crypto_momentum#07",
@@ -8595,7 +10618,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 430
+   "num_trades": 430,
+   "trades_by_fold": [
+    41,
+    36,
+    33,
+    25,
+    39,
+    33,
+    30,
+    22,
+    36,
+    25,
+    17,
+    31,
+    14,
+    28,
+    20
+   ]
   },
   {
    "config_id": "mean_reversion#00",
@@ -8665,7 +10705,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 25
+   "num_trades": 25,
+   "trades_by_fold": [
+    1,
+    2,
+    1,
+    0,
+    1,
+    3,
+    2,
+    1,
+    2,
+    3,
+    2,
+    3,
+    1,
+    2,
+    1
+   ]
   },
   {
    "config_id": "mean_reversion#01",
@@ -8735,7 +10792,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 25
+   "num_trades": 25,
+   "trades_by_fold": [
+    2,
+    1,
+    0,
+    0,
+    2,
+    3,
+    2,
+    2,
+    4,
+    1,
+    1,
+    3,
+    0,
+    2,
+    2
+   ]
   },
   {
    "config_id": "mean_reversion#02",
@@ -8805,7 +10879,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 15
+   "num_trades": 15,
+   "trades_by_fold": [
+    0,
+    0,
+    1,
+    0,
+    2,
+    0,
+    1,
+    0,
+    2,
+    1,
+    0,
+    2,
+    1,
+    3,
+    2
+   ]
   },
   {
    "config_id": "mean_reversion#03",
@@ -8875,7 +10966,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 200
+   "num_trades": 200,
+   "trades_by_fold": [
+    18,
+    16,
+    15,
+    13,
+    14,
+    16,
+    15,
+    13,
+    14,
+    13,
+    11,
+    12,
+    10,
+    11,
+    9
+   ]
   },
   {
    "config_id": "mean_reversion#04",
@@ -8936,7 +11044,7 @@
      -0.445027
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -8945,7 +11053,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 15
+   "num_trades": 15,
+   "trades_by_fold": [
+    0,
+    1,
+    0,
+    0,
+    2,
+    1,
+    0,
+    0,
+    2,
+    1,
+    1,
+    3,
+    0,
+    2,
+    2
+   ]
   },
   {
    "config_id": "mean_reversion#05",
@@ -9015,7 +11140,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 44
+   "num_trades": 44,
+   "trades_by_fold": [
+    2,
+    4,
+    3,
+    1,
+    2,
+    5,
+    4,
+    2,
+    3,
+    5,
+    3,
+    4,
+    2,
+    3,
+    1
+   ]
   },
   {
    "config_id": "mean_reversion#06",
@@ -9085,7 +11227,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 454
+   "num_trades": 454,
+   "trades_by_fold": [
+    39,
+    36,
+    30,
+    39,
+    35,
+    31,
+    25,
+    34,
+    30,
+    22,
+    31,
+    27,
+    25,
+    21,
+    29
+   ]
   },
   {
    "config_id": "mean_reversion#07",
@@ -9155,7 +11314,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 10
+   "num_trades": 10,
+   "trades_by_fold": [
+    0,
+    0,
+    0,
+    0,
+    2,
+    0,
+    0,
+    0,
+    2,
+    0,
+    0,
+    2,
+    0,
+    2,
+    2
+   ]
   },
   {
    "config_id": "crypto_momentum#00",
@@ -9225,7 +11401,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 817
+   "num_trades": 817,
+   "trades_by_fold": [
+    54,
+    66,
+    44,
+    55,
+    41,
+    70,
+    50,
+    61,
+    47,
+    62,
+    73,
+    59,
+    51,
+    37,
+    47
+   ]
   },
   {
    "config_id": "crypto_momentum#01",
@@ -9295,7 +11488,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 209
+   "num_trades": 209,
+   "trades_by_fold": [
+    19,
+    21,
+    12,
+    10,
+    8,
+    26,
+    17,
+    15,
+    13,
+    19,
+    17,
+    15,
+    8,
+    6,
+    3
+   ]
   },
   {
    "config_id": "crypto_momentum#02",
@@ -9365,7 +11575,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 861
+   "num_trades": 861,
+   "trades_by_fold": [
+    63,
+    84,
+    43,
+    87,
+    47,
+    71,
+    30,
+    74,
+    34,
+    51,
+    95,
+    55,
+    54,
+    14,
+    59
+   ]
   },
   {
    "config_id": "crypto_momentum#03",
@@ -9435,7 +11662,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 1051
+   "num_trades": 1051,
+   "trades_by_fold": [
+    82,
+    87,
+    64,
+    76,
+    58,
+    89,
+    68,
+    80,
+    62,
+    73,
+    85,
+    67,
+    61,
+    44,
+    55
+   ]
   },
   {
    "config_id": "crypto_momentum#04",
@@ -9505,7 +11749,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 933
+   "num_trades": 933,
+   "trades_by_fold": [
+    69,
+    81,
+    45,
+    63,
+    40,
+    95,
+    59,
+    77,
+    54,
+    70,
+    88,
+    65,
+    51,
+    29,
+    47
+   ]
   },
   {
    "config_id": "crypto_momentum#05",
@@ -9575,7 +11836,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 897
+   "num_trades": 897,
+   "trades_by_fold": [
+    66,
+    73,
+    47,
+    61,
+    45,
+    82,
+    57,
+    71,
+    55,
+    63,
+    78,
+    62,
+    52,
+    36,
+    49
+   ]
   },
   {
    "config_id": "crypto_momentum#06",
@@ -9645,7 +11923,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 60
+   "num_trades": 60,
+   "trades_by_fold": [
+    7,
+    6,
+    3,
+    2,
+    2,
+    9,
+    6,
+    5,
+    5,
+    5,
+    4,
+    4,
+    1,
+    1,
+    0
+   ]
   },
   {
    "config_id": "crypto_momentum#07",
@@ -9715,7 +12010,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 834
+   "num_trades": 834,
+   "trades_by_fold": [
+    63,
+    71,
+    52,
+    49,
+    36,
+    82,
+    63,
+    60,
+    47,
+    71,
+    68,
+    55,
+    49,
+    36,
+    32
+   ]
   },
   {
    "config_id": "mean_reversion#00",
@@ -9785,7 +12097,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 60
+   "num_trades": 60,
+   "trades_by_fold": [
+    10,
+    2,
+    2,
+    3,
+    3,
+    8,
+    8,
+    9,
+    9,
+    0,
+    1,
+    1,
+    1,
+    1,
+    2
+   ]
   },
   {
    "config_id": "mean_reversion#01",
@@ -9855,7 +12184,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 119
+   "num_trades": 119,
+   "trades_by_fold": [
+    8,
+    6,
+    4,
+    12,
+    5,
+    9,
+    7,
+    15,
+    8,
+    4,
+    12,
+    5,
+    10,
+    3,
+    11
+   ]
   },
   {
    "config_id": "mean_reversion#02",
@@ -9925,7 +12271,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 35
+   "num_trades": 35,
+   "trades_by_fold": [
+    5,
+    0,
+    0,
+    1,
+    1,
+    5,
+    5,
+    6,
+    6,
+    0,
+    1,
+    1,
+    1,
+    1,
+    2
+   ]
   },
   {
    "config_id": "mean_reversion#03",
@@ -9995,7 +12358,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 240
+   "num_trades": 240,
+   "trades_by_fold": [
+    18,
+    9,
+    11,
+    10,
+    16,
+    19,
+    21,
+    20,
+    26,
+    12,
+    11,
+    17,
+    13,
+    19,
+    18
+   ]
   },
   {
    "config_id": "mean_reversion#04",
@@ -10065,7 +12445,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 10
+   "num_trades": 10,
+   "trades_by_fold": [
+    1,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    2,
+    0,
+    0,
+    1,
+    0,
+    1,
+    1
+   ]
   },
   {
    "config_id": "mean_reversion#05",
@@ -10135,7 +12532,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 198
+   "num_trades": 198,
+   "trades_by_fold": [
+    20,
+    9,
+    5,
+    12,
+    6,
+    23,
+    19,
+    26,
+    20,
+    8,
+    15,
+    9,
+    10,
+    5,
+    11
+   ]
   },
   {
    "config_id": "mean_reversion#06",
@@ -10205,7 +12619,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 314
+   "num_trades": 314,
+   "trades_by_fold": [
+    17,
+    9,
+    27,
+    10,
+    24,
+    14,
+    32,
+    15,
+    29,
+    23,
+    7,
+    21,
+    25,
+    39,
+    22
+   ]
   },
   {
    "config_id": "mean_reversion#07",
@@ -10275,7 +12706,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 10
+   "num_trades": 10,
+   "trades_by_fold": [
+    1,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    2,
+    0,
+    0,
+    1,
+    0,
+    1,
+    1
+   ]
   },
   {
    "config_id": "crypto_momentum#00",
@@ -10345,7 +12793,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 430
+   "num_trades": 430,
+   "trades_by_fold": [
+    16,
+    22,
+    19,
+    36,
+    33,
+    18,
+    15,
+    32,
+    29,
+    21,
+    38,
+    35,
+    35,
+    32,
+    49
+   ]
   },
   {
    "config_id": "crypto_momentum#01",
@@ -10415,7 +12880,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 80
+   "num_trades": 80,
+   "trades_by_fold": [
+    5,
+    6,
+    7,
+    10,
+    8,
+    1,
+    2,
+    5,
+    3,
+    3,
+    6,
+    4,
+    7,
+    5,
+    8
+   ]
   },
   {
    "config_id": "crypto_momentum#02",
@@ -10485,7 +12967,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 435
+   "num_trades": 435,
+   "trades_by_fold": [
+    18,
+    25,
+    26,
+    47,
+    43,
+    7,
+    8,
+    29,
+    25,
+    15,
+    36,
+    32,
+    37,
+    33,
+    54
+   ]
   },
   {
    "config_id": "crypto_momentum#03",
@@ -10555,7 +13054,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 460
+   "num_trades": 460,
+   "trades_by_fold": [
+    30,
+    36,
+    34,
+    57,
+    47,
+    10,
+    8,
+    31,
+    21,
+    14,
+    37,
+    27,
+    35,
+    25,
+    48
+   ]
   },
   {
    "config_id": "crypto_momentum#04",
@@ -10625,7 +13141,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 415
+   "num_trades": 415,
+   "trades_by_fold": [
+    16,
+    23,
+    25,
+    43,
+    40,
+    7,
+    9,
+    27,
+    24,
+    16,
+    34,
+    31,
+    36,
+    33,
+    51
+   ]
   },
   {
    "config_id": "crypto_momentum#05",
@@ -10695,7 +13228,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 425
+   "num_trades": 425,
+   "trades_by_fold": [
+    26,
+    29,
+    30,
+    50,
+    42,
+    9,
+    10,
+    30,
+    22,
+    13,
+    33,
+    25,
+    34,
+    26,
+    46
+   ]
   },
   {
    "config_id": "crypto_momentum#06",
@@ -10765,7 +13315,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 25
+   "num_trades": 25,
+   "trades_by_fold": [
+    4,
+    4,
+    5,
+    4,
+    4,
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1,
+    1,
+    0
+   ]
   },
   {
    "config_id": "crypto_momentum#07",
@@ -10835,7 +13402,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 380
+   "num_trades": 380,
+   "trades_by_fold": [
+    19,
+    19,
+    18,
+    34,
+    30,
+    16,
+    15,
+    31,
+    27,
+    15,
+    31,
+    27,
+    30,
+    26,
+    42
+   ]
   },
   {
    "config_id": "mean_reversion#00",
@@ -10896,7 +13480,7 @@
      1.637343
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -10905,7 +13489,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 25
+   "num_trades": 25,
+   "trades_by_fold": [
+    0,
+    0,
+    2,
+    0,
+    3,
+    0,
+    2,
+    0,
+    3,
+    2,
+    0,
+    3,
+    2,
+    5,
+    3
+   ]
   },
   {
    "config_id": "mean_reversion#01",
@@ -10975,7 +13576,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 49
+   "num_trades": 49,
+   "trades_by_fold": [
+    2,
+    4,
+    3,
+    4,
+    5,
+    2,
+    1,
+    2,
+    3,
+    3,
+    4,
+    5,
+    2,
+    4,
+    5
+   ]
   },
   {
    "config_id": "mean_reversion#02",
@@ -11045,7 +13663,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 15
+   "num_trades": 15,
+   "trades_by_fold": [
+    0,
+    0,
+    1,
+    1,
+    1,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    2,
+    2,
+    2
+   ]
   },
   {
    "config_id": "mean_reversion#03",
@@ -11115,7 +13750,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 160
+   "num_trades": 160,
+   "trades_by_fold": [
+    14,
+    11,
+    15,
+    12,
+    12,
+    9,
+    13,
+    10,
+    10,
+    10,
+    7,
+    7,
+    11,
+    11,
+    8
+   ]
   },
   {
    "config_id": "mean_reversion#04",
@@ -11185,7 +13837,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 10
+   "num_trades": 10,
+   "trades_by_fold": [
+    1,
+    0,
+    1,
+    0,
+    0,
+    1,
+    2,
+    1,
+    1,
+    1,
+    0,
+    0,
+    1,
+    1,
+    0
+   ]
   },
   {
    "config_id": "mean_reversion#05",
@@ -11255,7 +13924,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 50
+   "num_trades": 50,
+   "trades_by_fold": [
+    1,
+    2,
+    2,
+    4,
+    5,
+    1,
+    1,
+    3,
+    4,
+    2,
+    4,
+    5,
+    4,
+    5,
+    7
+   ]
   },
   {
    "config_id": "mean_reversion#06",
@@ -11325,7 +14011,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 393
+   "num_trades": 393,
+   "trades_by_fold": [
+    25,
+    35,
+    22,
+    16,
+    21,
+    39,
+    27,
+    21,
+    26,
+    36,
+    31,
+    36,
+    18,
+    23,
+    17
+   ]
   },
   {
    "config_id": "mean_reversion#07",
@@ -11395,7 +14098,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 5
+   "num_trades": 5,
+   "trades_by_fold": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "crypto_momentum#00",
@@ -11465,7 +14185,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 637
+   "num_trades": 637,
+   "trades_by_fold": [
+    24,
+    27,
+    40,
+    53,
+    48,
+    19,
+    32,
+    45,
+    40,
+    35,
+    48,
+    43,
+    61,
+    56,
+    66
+   ]
   },
   {
    "config_id": "crypto_momentum#01",
@@ -11535,7 +14272,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 160
+   "num_trades": 160,
+   "trades_by_fold": [
+    4,
+    5,
+    10,
+    11,
+    14,
+    3,
+    8,
+    9,
+    12,
+    9,
+    10,
+    13,
+    15,
+    18,
+    19
+   ]
   },
   {
    "config_id": "crypto_momentum#02",
@@ -11605,7 +14359,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 836
+   "num_trades": 836,
+   "trades_by_fold": [
+    45,
+    44,
+    48,
+    76,
+    71,
+    30,
+    34,
+    62,
+    57,
+    34,
+    62,
+    57,
+    66,
+    61,
+    89
+   ]
   },
   {
    "config_id": "crypto_momentum#03",
@@ -11675,7 +14446,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 594
+   "num_trades": 594,
+   "trades_by_fold": [
+    21,
+    15,
+    33,
+    52,
+    46,
+    12,
+    30,
+    49,
+    43,
+    24,
+    43,
+    37,
+    60,
+    55,
+    74
+   ]
   },
   {
    "config_id": "crypto_momentum#04",
@@ -11745,7 +14533,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 616
+   "num_trades": 616,
+   "trades_by_fold": [
+    24,
+    23,
+    37,
+    56,
+    55,
+    11,
+    25,
+    44,
+    43,
+    24,
+    43,
+    42,
+    57,
+    56,
+    76
+   ]
   },
   {
    "config_id": "crypto_momentum#05",
@@ -11815,7 +14620,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 516
+   "num_trades": 516,
+   "trades_by_fold": [
+    15,
+    11,
+    30,
+    45,
+    38,
+    8,
+    27,
+    42,
+    35,
+    23,
+    38,
+    31,
+    57,
+    50,
+    66
+   ]
   },
   {
    "config_id": "crypto_momentum#06",
@@ -11885,7 +14707,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 10
+   "num_trades": 10,
+   "trades_by_fold": [
+    0,
+    0,
+    1,
+    1,
+    0,
+    0,
+    1,
+    1,
+    0,
+    1,
+    1,
+    0,
+    2,
+    1,
+    1
+   ]
   },
   {
    "config_id": "crypto_momentum#07",
@@ -11955,7 +14794,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 609
+   "num_trades": 609,
+   "trades_by_fold": [
+    30,
+    32,
+    52,
+    58,
+    54,
+    10,
+    30,
+    36,
+    32,
+    32,
+    38,
+    34,
+    58,
+    54,
+    59
+   ]
   },
   {
    "config_id": "mean_reversion#00",
@@ -12025,7 +14881,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 20
+   "num_trades": 20,
+   "trades_by_fold": [
+    1,
+    1,
+    1,
+    4,
+    1,
+    0,
+    0,
+    3,
+    0,
+    0,
+    3,
+    0,
+    3,
+    0,
+    3
+   ]
   },
   {
    "config_id": "mean_reversion#01",
@@ -12095,7 +14968,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 90
+   "num_trades": 90,
+   "trades_by_fold": [
+    4,
+    3,
+    5,
+    13,
+    5,
+    1,
+    3,
+    11,
+    3,
+    2,
+    10,
+    2,
+    12,
+    4,
+    12
+   ]
   },
   {
    "config_id": "mean_reversion#02",
@@ -12165,7 +15055,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 20
+   "num_trades": 20,
+   "trades_by_fold": [
+    1,
+    1,
+    1,
+    4,
+    1,
+    0,
+    0,
+    3,
+    0,
+    0,
+    3,
+    0,
+    3,
+    0,
+    3
+   ]
   },
   {
    "config_id": "mean_reversion#03",
@@ -12235,7 +15142,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 135
+   "num_trades": 135,
+   "trades_by_fold": [
+    3,
+    5,
+    8,
+    14,
+    9,
+    2,
+    5,
+    11,
+    6,
+    7,
+    13,
+    8,
+    16,
+    11,
+    17
+   ]
   },
   {
    "config_id": "mean_reversion#04",
@@ -12305,7 +15229,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 5
+   "num_trades": 5,
+   "trades_by_fold": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "mean_reversion#05",
@@ -12375,7 +15316,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 100
+   "num_trades": 100,
+   "trades_by_fold": [
+    3,
+    3,
+    7,
+    12,
+    7,
+    0,
+    4,
+    9,
+    4,
+    4,
+    9,
+    4,
+    13,
+    8,
+    13
+   ]
   },
   {
    "config_id": "mean_reversion#06",
@@ -12445,7 +15403,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 194
+   "num_trades": 194,
+   "trades_by_fold": [
+    2,
+    6,
+    18,
+    9,
+    11,
+    6,
+    18,
+    9,
+    11,
+    17,
+    11,
+    13,
+    22,
+    25,
+    16
+   ]
   },
   {
    "config_id": "mean_reversion#07",
@@ -12515,7 +15490,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 0
+   "num_trades": 0,
+   "trades_by_fold": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "crypto_momentum#00",
@@ -12585,7 +15577,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 414
+   "num_trades": 414,
+   "trades_by_fold": [
+    16,
+    13,
+    22,
+    17,
+    22,
+    26,
+    35,
+    30,
+    35,
+    31,
+    26,
+    31,
+    35,
+    40,
+    35
+   ]
   },
   {
    "config_id": "crypto_momentum#01",
@@ -12655,7 +15664,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 105
+   "num_trades": 105,
+   "trades_by_fold": [
+    6,
+    1,
+    6,
+    4,
+    4,
+    7,
+    12,
+    10,
+    10,
+    7,
+    5,
+    5,
+    10,
+    10,
+    8
+   ]
   },
   {
    "config_id": "crypto_momentum#02",
@@ -12725,7 +15751,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 397
+   "num_trades": 397,
+   "trades_by_fold": [
+    13,
+    12,
+    14,
+    16,
+    25,
+    25,
+    27,
+    29,
+    38,
+    26,
+    28,
+    37,
+    27,
+    39,
+    41
+   ]
   },
   {
    "config_id": "crypto_momentum#03",
@@ -12795,7 +15838,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 456
+   "num_trades": 456,
+   "trades_by_fold": [
+    20,
+    11,
+    22,
+    27,
+    16,
+    29,
+    40,
+    45,
+    34,
+    31,
+    36,
+    25,
+    45,
+    36,
+    39
+   ]
   },
   {
    "config_id": "crypto_momentum#04",
@@ -12865,7 +15925,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 339
+   "num_trades": 339,
+   "trades_by_fold": [
+    15,
+    9,
+    15,
+    14,
+    15,
+    24,
+    30,
+    29,
+    30,
+    24,
+    23,
+    24,
+    28,
+    30,
+    29
+   ]
   },
   {
    "config_id": "crypto_momentum#05",
@@ -12935,7 +16012,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 343
+   "num_trades": 343,
+   "trades_by_fold": [
+    14,
+    8,
+    18,
+    19,
+    13,
+    21,
+    31,
+    32,
+    26,
+    24,
+    25,
+    19,
+    34,
+    29,
+    30
+   ]
   },
   {
    "config_id": "crypto_momentum#06",
@@ -13005,7 +16099,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 45
+   "num_trades": 45,
+   "trades_by_fold": [
+    1,
+    0,
+    4,
+    2,
+    2,
+    1,
+    5,
+    3,
+    3,
+    4,
+    2,
+    2,
+    6,
+    6,
+    4
+   ]
   },
   {
    "config_id": "crypto_momentum#07",
@@ -13075,7 +16186,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 381
+   "num_trades": 381,
+   "trades_by_fold": [
+    18,
+    10,
+    19,
+    18,
+    15,
+    27,
+    36,
+    35,
+    32,
+    27,
+    26,
+    23,
+    34,
+    32,
+    29
+   ]
   },
   {
    "config_id": "mean_reversion#00",
@@ -13145,7 +16273,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 35
+   "num_trades": 35,
+   "trades_by_fold": [
+    3,
+    1,
+    0,
+    1,
+    2,
+    4,
+    3,
+    4,
+    5,
+    1,
+    2,
+    3,
+    1,
+    2,
+    3
+   ]
   },
   {
    "config_id": "mean_reversion#01",
@@ -13215,7 +16360,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 80
+   "num_trades": 80,
+   "trades_by_fold": [
+    2,
+    3,
+    2,
+    5,
+    4,
+    5,
+    4,
+    7,
+    6,
+    5,
+    8,
+    7,
+    7,
+    6,
+    9
+   ]
   },
   {
    "config_id": "mean_reversion#02",
@@ -13285,7 +16447,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 20
+   "num_trades": 20,
+   "trades_by_fold": [
+    3,
+    0,
+    0,
+    0,
+    1,
+    3,
+    3,
+    3,
+    4,
+    0,
+    0,
+    1,
+    0,
+    1,
+    1
+   ]
   },
   {
    "config_id": "mean_reversion#03",
@@ -13355,7 +16534,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 195
+   "num_trades": 195,
+   "trades_by_fold": [
+    9,
+    8,
+    8,
+    9,
+    9,
+    15,
+    15,
+    16,
+    16,
+    14,
+    15,
+    15,
+    15,
+    15,
+    16
+   ]
   },
   {
    "config_id": "mean_reversion#04",
@@ -13425,7 +16621,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 15
+   "num_trades": 15,
+   "trades_by_fold": [
+    1,
+    1,
+    0,
+    0,
+    1,
+    2,
+    1,
+    1,
+    2,
+    1,
+    1,
+    2,
+    0,
+    1,
+    1
+   ]
   },
   {
    "config_id": "mean_reversion#05",
@@ -13495,7 +16708,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 70
+   "num_trades": 70,
+   "trades_by_fold": [
+    2,
+    3,
+    1,
+    5,
+    3,
+    5,
+    3,
+    7,
+    5,
+    4,
+    8,
+    6,
+    6,
+    4,
+    8
+   ]
   },
   {
    "config_id": "mean_reversion#06",
@@ -13565,7 +16795,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 365
+   "num_trades": 365,
+   "trades_by_fold": [
+    18,
+    14,
+    25,
+    13,
+    7,
+    30,
+    41,
+    29,
+    23,
+    37,
+    25,
+    19,
+    36,
+    30,
+    18
+   ]
   },
   {
    "config_id": "mean_reversion#07",
@@ -13635,7 +16882,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 5
+   "num_trades": 5,
+   "trades_by_fold": [
+    0,
+    1,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "crypto_momentum#00",
@@ -13705,7 +16969,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 370
+   "num_trades": 370,
+   "trades_by_fold": [
+    22,
+    22,
+    38,
+    25,
+    35,
+    10,
+    26,
+    13,
+    23,
+    26,
+    13,
+    23,
+    29,
+    39,
+    26
+   ]
   },
   {
    "config_id": "crypto_momentum#01",
@@ -13775,7 +17056,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 75
+   "num_trades": 75,
+   "trades_by_fold": [
+    5,
+    5,
+    9,
+    6,
+    6,
+    2,
+    6,
+    3,
+    3,
+    6,
+    3,
+    3,
+    7,
+    7,
+    4
+   ]
   },
   {
    "config_id": "crypto_momentum#02",
@@ -13845,7 +17143,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 369
+   "num_trades": 369,
+   "trades_by_fold": [
+    24,
+    24,
+    50,
+    35,
+    37,
+    0,
+    26,
+    11,
+    13,
+    26,
+    11,
+    13,
+    37,
+    39,
+    23
+   ]
   },
   {
    "config_id": "crypto_momentum#03",
@@ -13915,7 +17230,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 514
+   "num_trades": 514,
+   "trades_by_fold": [
+    39,
+    32,
+    50,
+    38,
+    51,
+    18,
+    36,
+    24,
+    37,
+    28,
+    16,
+    29,
+    34,
+    47,
+    35
+   ]
   },
   {
    "config_id": "crypto_momentum#04",
@@ -13985,7 +17317,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 330
+   "num_trades": 330,
+   "trades_by_fold": [
+    25,
+    23,
+    39,
+    25,
+    34,
+    8,
+    24,
+    10,
+    19,
+    22,
+    8,
+    17,
+    24,
+    33,
+    19
+   ]
   },
   {
    "config_id": "crypto_momentum#05",
@@ -14055,7 +17404,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 350
+   "num_trades": 350,
+   "trades_by_fold": [
+    24,
+    25,
+    39,
+    26,
+    36,
+    9,
+    23,
+    10,
+    20,
+    24,
+    11,
+    21,
+    25,
+    35,
+    22
+   ]
   },
   {
    "config_id": "crypto_momentum#06",
@@ -14116,7 +17482,7 @@
      0.285505
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -14125,7 +17491,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 15
+   "num_trades": 15,
+   "trades_by_fold": [
+    2,
+    3,
+    2,
+    2,
+    2,
+    1,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    0,
+    0,
+    0
+   ]
   },
   {
    "config_id": "crypto_momentum#07",
@@ -14195,7 +17578,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 340
+   "num_trades": 340,
+   "trades_by_fold": [
+    20,
+    15,
+    29,
+    21,
+    31,
+    11,
+    25,
+    17,
+    27,
+    20,
+    12,
+    22,
+    26,
+    36,
+    28
+   ]
   },
   {
    "config_id": "mean_reversion#00",
@@ -14256,7 +17656,7 @@
      0.285505
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -14265,7 +17665,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 10
+   "num_trades": 10,
+   "trades_by_fold": [
+    1,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    2,
+    0,
+    0,
+    1,
+    0,
+    1,
+    1
+   ]
   },
   {
    "config_id": "mean_reversion#01",
@@ -14326,7 +17743,7 @@
      0.285505
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -14335,7 +17752,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 39
+   "num_trades": 39,
+   "trades_by_fold": [
+    0,
+    0,
+    5,
+    1,
+    2,
+    0,
+    5,
+    1,
+    2,
+    5,
+    1,
+    2,
+    6,
+    7,
+    2
+   ]
   },
   {
    "config_id": "mean_reversion#02",
@@ -14396,7 +17830,7 @@
      0.285505
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -14405,7 +17839,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 15
+   "num_trades": 15,
+   "trades_by_fold": [
+    0,
+    0,
+    2,
+    0,
+    1,
+    0,
+    2,
+    0,
+    1,
+    2,
+    0,
+    1,
+    2,
+    3,
+    1
+   ]
   },
   {
    "config_id": "mean_reversion#03",
@@ -14475,7 +17926,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 195
+   "num_trades": 195,
+   "trades_by_fold": [
+    12,
+    11,
+    14,
+    9,
+    17,
+    11,
+    14,
+    9,
+    17,
+    13,
+    8,
+    16,
+    11,
+    19,
+    14
+   ]
   },
   {
    "config_id": "mean_reversion#04",
@@ -14545,7 +18013,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 5
+   "num_trades": 5,
+   "trades_by_fold": [
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+    1,
+    1
+   ]
   },
   {
    "config_id": "mean_reversion#05",
@@ -14606,7 +18091,7 @@
      0.285505
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -14615,7 +18100,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 64
+   "num_trades": 64,
+   "trades_by_fold": [
+    4,
+    4,
+    8,
+    6,
+    7,
+    0,
+    4,
+    2,
+    3,
+    4,
+    2,
+    3,
+    6,
+    7,
+    4
+   ]
   },
   {
    "config_id": "mean_reversion#06",
@@ -14685,7 +18187,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 396
+   "num_trades": 396,
+   "trades_by_fold": [
+    30,
+    17,
+    15,
+    21,
+    25,
+    32,
+    31,
+    37,
+    41,
+    18,
+    24,
+    28,
+    20,
+    26,
+    31
+   ]
   },
   {
    "config_id": "mean_reversion#07",
@@ -14746,7 +18265,7 @@
      0.285505
     ]
    },
-   "approved": true,
+   "approved": false,
    "leakage_ok": true,
    "embargo_days": 5,
    "coverage": {
@@ -14755,7 +18274,24 @@
     "evaluated_days": 2720,
     "reuse_factor": 5.0
    },
-   "num_trades": 5
+   "num_trades": 5,
+   "trades_by_fold": [
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+    1,
+    1
+   ]
   }
  ]
 }

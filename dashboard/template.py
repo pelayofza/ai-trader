@@ -411,6 +411,53 @@ function foldStrip(host, folds, opts={}){
   draw();RECHART.push(draw);
 }
 
+function stackedBars(host, rows, opts={}){
+  // rows: [{label, sub, parts:[{name,value,color}]}] -> barras horizontales apiladas al 100%.
+  // Es la forma correcta para cuotas que suman 1: el ojo compara segmentos contiguos sobre
+  // una longitud fija, no alturas sueltas, y el total queda garantizado por construcción.
+  // `opts.refs` dibuja las referencias de RELOJ (dónde caería cada corte si la actividad
+  // fuese uniforme): sin ellas, una cuota grande no se distingue de una sesión larga.
+  opts=Object.assign({rowH:38,pad:{t:10,r:16,b:26,l:104},refs:[]},opts);
+  const draw=()=>{
+    host.innerHTML='';
+    const W=host.clientWidth||680,p=opts.pad,H=p.t+p.b+opts.rowH*rows.length;
+    const X=f=>p.l+(W-p.l-p.r)*f;
+    const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,width:'100%',height:H});
+    for(let g=0;g<=4;g++){const x=X(g/4);
+      svg.appendChild(el('line',{x1:x,y1:p.t-2,x2:x,y2:H-p.b+2,stroke:cssv('--grid'),'stroke-width':1}));
+      const t=el('text',{x,y:H-p.b+16,'text-anchor':'middle',fill:cssv('--muted'),'font-size':10});
+      t.textContent=(g*25)+'%';svg.appendChild(t);}
+    const tt=tip();
+    rows.forEach((r,i)=>{
+      const y=p.t+opts.rowH*i, h=opts.rowH-14;
+      const lab=el('text',{x:p.l-9,y:y+h/2+1,'text-anchor':'end',fill:cssv('--ink'),'font-size':12});
+      lab.textContent=r.label;svg.appendChild(lab);
+      if(r.sub){const s=el('text',{x:p.l-9,y:y+h/2+13,'text-anchor':'end',fill:cssv('--muted'),'font-size':10});
+        s.textContent=r.sub;svg.appendChild(s);}
+      let acc=0;
+      r.parts.forEach(part=>{
+        const v=part.value||0, x0=X(acc), x1=X(acc+v);
+        const rect=el('rect',{x:x0,y,width:Math.max(0.5,x1-x0),height:h,fill:part.color,opacity:.92});
+        rect.addEventListener('mousemove',ev=>{tt.style.display='block';tt.style.left=(ev.clientX+12)+'px';
+          tt.style.top=(ev.clientY-10)+'px';
+          tt.innerHTML=`<b>${esc(r.label)}</b><br><span style="color:${part.color}">■</span> ${esc(part.name)}: <b>${fmt(100*v,1)}%</b>`
+            +(part.note?`<br><span style="opacity:.75">${esc(part.note)}</span>`:'');});
+        rect.addEventListener('mouseleave',()=>tt.style.display='none');
+        svg.appendChild(rect);
+        if(x1-x0>36){const t=el('text',{x:(x0+x1)/2,y:y+h/2+4,'text-anchor':'middle',fill:'#fff','font-size':11,'font-weight':600});
+          t.textContent=fmt(100*v,0)+'%';svg.appendChild(t);}
+        acc+=v;});
+    });
+    // Referencias de reloj: encima de todas las barras, para leerlas de un vistazo.
+    opts.refs.forEach(ref=>{
+      svg.appendChild(el('line',{x1:X(ref.x),y1:p.t-2,x2:X(ref.x),y2:H-p.b+2,
+        stroke:cssv('--ink'),'stroke-width':1.4,'stroke-dasharray':'3 3',opacity:.75}));
+    });
+    host.appendChild(svg);
+  };
+  draw();RECHART.push(draw);
+}
+
 function miniBar(v,max,cls=''){const w=Math.max(2,Math.round(100*Math.abs(v)/(max||1)));return `<span class="mbar ${cls}" style="width:${w}px"></span>`;}
 function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
@@ -434,7 +481,9 @@ function renderOverview(){
     ['D','Validación multiventana (CPCV/walk-forward): construida y medida','hecho'],
     ['E','Limpieza de consistencia (universo, anualización, diseñador)','hecho'],
     ['B','Hueco de fidelidad cerrado y aceptado: colas, clustering y correlación → ai_v3','hecho'],
-    ['B/D','Transferencia de ranking real-vs-sintético (el bucle que sigue abierto)','pendiente'],
+    ['B/D','Transferencia de ranking real-vs-sintético: medida, y el sintético NO ordena','hecho'],
+    ['Medición','La ventana ciega del backtest diario, medida por sesión horaria','hecho'],
+    ['A','Suelo de actividad: el ranking ya no lo gana quien no opera','hecho'],
     ['D','Cablear el CPCV en el optimizador (juez en dos etapas)','pendiente'],
     ['Live','Paper trading corriendo en vivo (compra tiempo de calendario)','pendiente'],
   ];
@@ -737,7 +786,8 @@ function renderTransfer(){
     return;
   }
   const X=T.transfer, V=T.verdict, B=X.bootstrap_blocks, CB=X.bootstrap_configs,
-        P=X.permutation, K=X.top_k, DS=X.discrepancies, VAL=T.validation, ACT=X.activity;
+        P=X.permutation, K=X.top_k, DS=X.discrepancies, VAL=T.validation, ACT=X.activity,
+        EL=T.eligibility?T.eligibility.sides.real:null;
   const rho=X.spearman, n=T.n_configs;
   const ci=`[${fmt(B.lo,2)}, ${fmt(B.hi,2)}]`;
   const chip=V.transfers?'hecho':(V.key==='ordenacion_invertida'?'pend':'pendiente');
@@ -849,6 +899,21 @@ function renderTransfer(){
       (p = ${fmt(ACT.permutation_active.p_value,3)}). Es una señal fuerte, no una prueba; lo que sí
       descarta es que el ρ ≈ 0 de arriba sea un artefacto de la inactividad, porque al quitarla el
       acuerdo no aparece.`:''}</div>`:''}
+
+    ${EL?`<div class="card">
+      <h3>El ranking, con y sin suelo de actividad
+        <span class="chip ${EL.changes_winner?'pend':'hecho'}">${EL.changes_winner
+          ?'la elección cambia':'misma elección'}</span></h3>
+      <p class="lead" style="margin:8px 0">Desde que se midió esto, una configuración solo entra en el
+        ranking si <b>opera</b> (vista <b>Actividad</b>). Las dos listas se publican: sin suelo ganaba
+        <span class="mono">${esc(EL.winner_all||'—')}</span>, con suelo gana
+        <span class="mono">${esc(EL.winner_rankable||'—')}</span>, y quedan
+        <b>${EL.n_rankable}/${EL.n_configs}</b> configuraciones rankeables en el lado real. El gate pasa
+        de <b>${EL.approved_without_floor.length}</b> aprobadas a <b>${EL.approved_with_floor?EL.approved_with_floor.length:"n/d"}</b>.
+        El suelo <i>no</i> cambia ninguna recompensa ni el ρ de arriba: cambia quién compite.</p>
+      <p class="tag">Fuera del ranking real: ${EL.dropped.length
+        ? EL.dropped.map(c=>`<span class="mono">${esc(c)}</span>`).join(', ')
+        : 'ninguna'}.</p></div>`:''}
 
     <h2>Configuración a configuración</h2>
     <p class="lead">Cada punto es una de las ${n} configuraciones: en el eje X su puesto en el ranking
@@ -1265,6 +1330,402 @@ function renderValidation(){
   }
 }
 
+function renderActivity(){
+  const host=$('#activity'),A=D.activity;
+  if(!A){
+    host.innerHTML=`<h1>Actividad: quién puede ganar el ranking</h1>
+      <div class="card"><p class="tag">No hay informe publicado. Genéralo con
+      <span class="mono">python -m ai_trader.scoring.activity_study</span>.</p></div>`;
+    return;
+  }
+  const F=A.floor, M=A.mechanism.sides.real, DEC=A.decision, G=A.gate.real,
+        REP=A.reproducibility.sides.real, BAND=A.band.real;
+  const nRank=A.rows.filter(r=>r.rankable).length, n=A.rows.length;
+  const winnerAll=A.rows[0], winnerRank=A.rows.find(r=>r.rankable);
+  const tiles=[
+    ['ρ(recompensa, operaciones)',fmt(M.spearman_reward_activity,2),
+      'en el lado real · negativo = cuanto menos opera, mejor puntúa'],
+    ['Ventanas vacías',fmt(100*M.empty_windows/M.windows,0)+'%',
+      `${M.empty_windows.toLocaleString('es')} de ${M.windows.toLocaleString('es')} · todas puntúan 0 exacto`],
+    ['Rankeables',nRank+'/'+n,
+      `≥ ${fmt(F.min_median_trades_per_window,0)} ops en la ventana mediana y ≤ ${fmt(F.max_zero_window_pct,0)}% vacías`],
+    ['Ganador del ranking real',esc(winnerRank?winnerRank.config_id:'—'),
+      winnerAll&&winnerRank&&winnerAll.config_id!==winnerRank.config_id
+        ? `sin suelo ganaba ${esc(winnerAll.config_id)} con ${fmt(winnerAll.trades_per_window,2)} ops/ventana`
+        : 'el suelo no cambia la elección'],
+    ['Gate de baselines',G.approved_without_floor.length+' → '+G.approved_with_floor.length,
+      `${G.n_lost} dejan de aprobar al exigir actividad`],
+  ];
+  host.innerHTML=`
+    <h1>Actividad: quién puede ganar el ranking</h1>
+    <p class="lead">El headline de una ventana es <span class="mono">Sharpe − λ·rotación − κ·maxDD</span>.
+      Si una configuración <b>no abre ninguna posición</b>, la curva es una recta: Sharpe 0, rotación 0,
+      caída 0 → headline <b>0 exacto</b>. Y como la recompensa es el <b>CVaR@25%</b> (la media del peor
+      cuartil), en un periodo donde casi todo lo que arriesga pierde, <b>ese cero gana</b>. El ranking
+      real medido era en buena parte una lista de <i>inactividad</i>: ρ(recompensa, operaciones) =
+      <b>${fmt(M.spearman_reward_activity,2)}</b>.</p>
+    <div class="grid tiles">${tiles.map(t=>`<div class="card tile"><div class="k">${t[0]}</div>
+      <div class="v">${t[1]}</div><div class="s">${t[2]}</div></div>`).join('')}</div>
+
+    <div class="note"><b>Esto NO es una penalización por rotar poco.</b> Esa ya existe
+      (<span class="mono">λ_turnover</span>) y el estudio de pesos midió que penalizar
+      <i>no estabiliza nada</i> (vista <b>Ranking</b>). Lo que falta no es restar puntos, es un
+      <b>requisito de elegibilidad</b>: una configuración que no supera el suelo conserva su recompensa
+      publicada intacta y aparece en todas las tablas —lo único que no puede es competir ni aprobar el
+      gate—. No perder es legítimo; lo que no es legítimo es <i>ganar un ranking de estrategias</i> por
+      no haber jugado.</div>
+
+    <h2>La aritmética, comprobada sobre los datos</h2>
+    <p class="lead">La afirmación «sin operaciones → headline 0 exacto» es comprobable, así que el
+      estudio la comprueba en los dos mundos en vez de razonarla.</p>
+    <div class="card"><div class="tblwrap"><table>
+      <thead><tr><th>lado</th><th class="num">ventanas</th><th class="num">vacías</th>
+        <th class="num">vacías que puntúan 0 exacto</th><th class="num">no vacías que puntúan 0</th>
+        <th class="num">cola del CVaR vacía</th><th>ρ(recompensa, ops)</th></tr></thead><tbody>
+      ${['real','synthetic'].map(s=>{const m=A.mechanism.sides[s];return `<tr>
+        <td><b>${s==='real'?'mercado real':'sintético'}</b></td>
+        <td class="num">${m.windows.toLocaleString('es')}</td>
+        <td class="num">${m.empty_windows.toLocaleString('es')}</td>
+        <td class="num">${m.empty_windows_scoring_exactly_zero.toLocaleString('es')}</td>
+        <td class="num">${m.non_empty_windows_scoring_exactly_zero}</td>
+        <td class="num">${fmt(m.cvar_tail_empty_pct,1)}%</td>
+        <td class="num">${fmt(m.spearman_reward_activity,3)}</td></tr>`;}).join('')}
+      </tbody></table></div>
+      <p class="tag">La última columna es la firma del problema y la penúltima es dónde duele: el
+        cuartil que <i>fija</i> la recompensa hecho de ceros estructurales.</p></div>
+
+    <h2>Las ${n} configuraciones, con su actividad al lado de su recompensa</h2>
+    <p class="lead">Es el cambio de fondo: la actividad ya no hay que ir a buscarla. Viaja con la
+      recompensa en <span class="mono">RewardStats</span>, en
+      <span class="mono">MultiWindowValidation</span> y en todo lo que publique un ranking.</p>
+    <div class="card"><div class="tblwrap"><table>
+      <thead><tr><th>configuración</th><th class="num">recompensa real</th>
+        <th class="num">ops/ventana</th><th class="num">mediana</th><th class="num">vacías</th>
+        <th class="num">ops/ventana (sint.)</th><th>rankeable</th></tr></thead><tbody>
+      ${A.rows.map(r=>`<tr>
+        <td class="mono">${esc(r.config_id)}</td>
+        <td class="num">${fmt(r.reward,3)}</td>
+        <td class="num">${fmt(r.trades_per_window,2)}</td>
+        <td class="num">${fmt(r.median_trades_per_window,0)}</td>
+        <td class="num">${fmt(r.zero_window_pct,0)}%</td>
+        <td class="num">${fmt(r.trades_per_window_synthetic,2)}</td>
+        <td><span class="chip ${r.rankable?'hecho':'pend'}">${r.rankable?'sí':'no'}</span></td>
+        </tr>`).join('')}
+      </tbody></table></div>
+      <p class="tag">Ordenadas por recompensa real. Las de arriba sin marca verde son las que ganaban
+        el ranking sin haber operado.</p></div>
+
+    <h2>De dónde sale el umbral (y no de dónde no sale)</h2>
+    <p class="lead">El suelo tiene dos condiciones. Una está <b>derivada</b> y la otra hay que
+      <b>medirla</b>.</p>
+    <div class="grid cards">
+      <div class="card"><h3>≤ ${fmt(F.max_zero_window_pct,0)}% de ventanas vacías</h3>
+        <p class="lead" style="margin:8px 0">Derivada, no elegida: es <b>α</b>, la fracción de cola que
+          <i>es</i> la recompensa (CVaR@${fmt(F.max_zero_window_pct,0)}%). Por encima de ella, el
+          cuartil que promedia el CVaR puede estar hecho de ceros estructurales, y entonces la cifra no
+          es una medición.</p></div>
+      <div class="card"><h3>≥ ${fmt(F.min_median_trades_per_window,0)} operaciones en la ventana mediana</h3>
+        <p class="lead" style="margin:8px 0">Medida. Regla declarada antes de mirar: el valor de la
+          rejilla ${DEC.grid.map(g=>fmt(g,0)).join(', ')} que reproduce con <b>menos desacuerdos</b> la
+          condición derivada; a igualdad, el mayor. Resultado:
+          <b>${fmt(DEC.chosen,0)}</b> (desacuerdos: ${DEC.disagreements}).</p></div>
+    </div>
+    <div class="card">
+      <div class="tblwrap"><table>
+        <thead><tr><th class="num">umbral</th><th class="num">rankeables (real)</th>
+          <th class="num">desacuerdos</th><th>ganador del ranking real</th>
+          <th class="num">aprueban el gate</th><th class="num">máx. vacías entre elegibles</th></tr></thead>
+        <tbody>${A.sweep.map(s=>{const r=s.sides.real;const sel=s.threshold===DEC.chosen;return `<tr${sel?' style="font-weight:600"':''}>
+          <td class="num">${fmt(s.threshold,0)}${sel?' ←':''}</td>
+          <td class="num">${r.n_eligible}</td><td class="num">${s.disagreements}</td>
+          <td class="mono">${esc(r.winner||'—')}</td>
+          <td class="num">${r.approved.length}</td>
+          <td class="num">${fmt(r.max_zero_window_pct_eligible,0)}%</td></tr>`;}).join('')}
+        </tbody></table></div>
+      <p class="tag">El barrido se publica <b>entero</b>: un umbral que solo se puede defender enseñando
+        su resultado y escondiendo los de al lado no es un umbral defendible. Y la elección del número
+        casi no importa —con <b>${BAND.same_partition.map(t=>fmt(t,0)).join('/')}</b> operaciones por
+        ventana sale <b>exactamente el mismo conjunto rankeable</b> (${BAND.n_rankable} de ${n})—, porque
+        a esta escala quien excluye es la condición derivada. La condición medida solo muerde una vez en
+        toda la rejilla: una configuración del mundo sintético que se queda fuera con el 25,0 % justo de
+        ventanas vacías. Se mantiene porque cubre un modo de fallo que estas 16 no contienen: operar
+        poquísimo pero con regularidad, sin dejar ni una ventana vacía.</p></div>
+
+    <h2>El control que parecía obvio y habría elegido al revés</h2>
+    <div class="card">
+      <h3>Reproducibilidad del ranking entre mitades del histórico</h3>
+      <p class="lead" style="margin:8px 0">Con las ${n} configuraciones sale
+        <b>${fmt(REP.all_configs,3)}</b>; solo con las rankeables, <b>${fmt(REP.rankable_only,3)}</b>; y
+        en subconjuntos <i>aleatorios</i> del mismo tamaño, ${fmt(REP.random_same_size_mean,3)} (el
+        control necesario: un ranking de ${nRank} y otro de ${n} no tienen la misma varianza por azar).
+        Es decir: la estabilidad <b>sube</b> al meter las inactivas. Y se entiende en cuanto se ve —una
+        configuración que no opera puntúa 0 en todos los bloques y su puesto no se mueve jamás—: es
+        estabilidad de cementerio. ${esc(A.reproducibility.why_not)}</p>
+      <p class="tag">Por eso se publica como control y <b>no</b> como criterio.</p></div>
+
+    <h2>El gate: batir a los pasivos sin jugar no es batirlos</h2>
+    <p class="lead">El gate exige ahora <b>dos</b> cosas: batir al mejor baseline pasivo y ser
+      rankeable. Los pasivos del periodo real están en torno a <b>−1,4</b>, así que una curva plana
+      (0,000) los batía con margen sin haber abierto una posición.</p>
+    <div class="card">
+      <h3>${G.approved_without_floor.length} → ${G.approved_with_floor.length} aprobadas
+        <span class="chip ${G.n_lost?'pend':'hecho'}">${G.n_lost} pierden la aprobación</span></h3>
+      ${A.lost.length?`<div class="tblwrap"><table>
+        <thead><tr><th>configuración</th><th class="num">recompensa</th><th class="num">ops/ventana</th>
+          <th class="num">vacías</th><th>por qué no es rankeable</th></tr></thead><tbody>
+        ${A.lost.map(l=>`<tr><td class="mono">${esc(l.config_id)}</td>
+          <td class="num">${fmt(l.reward,3)}</td><td class="num">${fmt(l.trades_per_window,2)}</td>
+          <td class="num">${fmt(l.zero_window_pct,0)}%</td>
+          <td class="tag">${esc(l.reasons.join(' · '))}</td></tr>`).join('')}
+        </tbody></table></div>`:'<p class="tag">Ninguna configuración perdía la aprobación.</p>'}
+      <p class="tag">Las que caen conservan su recompensa publicada: el suelo no resta nada, decide
+        quién compite.</p></div>
+    <p class="tag">Evidencia completa: <span class="mono">data/activity/report_${esc(A.library)}.json</span> ·
+      unidades: <span class="mono">${esc(A.source.units)}</span> ·
+      código: <span class="mono">scoring/activity.py</span>,
+      <span class="mono">scoring/activity_study.py</span> · ${esc(A.generated_at)}</p>`;
+}
+
+// Un color por sesión, estable en las dos vistas donde aparecen (descomposición y
+// tendencia): si el ámbar es Asia en un gráfico, lo es en todos.
+const SESSION_COLOR={asia:'--s5',europe:'--s1',us:'--s6'};
+function sessionParts(shares,field,sessions,note){
+  return sessions.map(s=>({name:s.label,value:shares[s.key][field],
+    color:cssv(SESSION_COLOR[s.key]),note:note?note(s):''}));
+}
+
+function renderSessions(){
+  const host=$('#sessions'),S=D.sessions;
+  if(!S){
+    host.innerHTML=`<h1>Sesiones: la ventana ciega</h1>
+      <div class="card"><p class="tag">No hay informe publicado. Genéralo con
+      <span class="mono">python -m ai_trader.backtest.session_study --offline</span>.</p></div>`;
+    return;
+  }
+  const SS=S.sessions, G=S.gap, L=S.latency, T=S.trend, V=S.verdicts, O=S.overall.sessions;
+  const l1=L.rows.find(r=>r.hours===1)||{};
+  const pct=(v,d=1)=>v===null||v===undefined?'-':fmt(100*v,d)+'%';
+  // Referencias de reloj: los cortes acumulados, para ver si una cuota supera a su duración.
+  let acc=0; const refs=SS.slice(0,-1).map(s=>{acc+=s.clock_share;return {x:acc};});
+  const tiles=[
+    ['Hueco cierre → open',pct(G.share_of_range.median,2),
+      `del rango del día (mediana) · ${fmt(G.bps.median,1)} pb · umbral ${pct(G.threshold,0)}`],
+    ['Con 1 h de retraso',pct(l1.slip_share_of_range_median),
+      `desplazamiento del precio de llenado · ${fmt(l1.slip_bps_median,0)} pb`],
+    ['Cuota EE.UU. (varianza)',pct(O[S.us_key].variance),
+      `en ${fmt(100*SS.find(s=>s.key===S.us_key).clock_share,0)}% del reloj · intensidad ${fmt(O[S.us_key].variance_intensity,2)}`],
+    ['Δ EE.UU. tras '+T.split.slice(0,4),(T.mean_delta_variance>=0?'+':'')+pct(T.mean_delta_variance,2),
+      `${T.n_positive}/${T.n_symbols} pares al alza · signos p ${fmt(T.sign_test_p,3)}`],
+    ['Fija el mínimo del día',S.leader_sets_low.label,
+      `${pct(S.leader_sets_low.value)} de los días · ahí muerde la convención pesimista`],
+  ];
+
+  host.innerHTML=`
+    <h1>Sesiones: dónde se forma el precio dentro de la barra diaria</h1>
+    <p class="lead">Todo el sistema es <b>diario</b>: decide con velas 1D ya cerradas, llena al
+      <b>open</b> del día siguiente y comprueba los stops contra el <b>máximo/mínimo</b> de la barra
+      (§ vista <b>Validación</b> y metodología 3.3). Esa convención trata las 24 horas de la vela como
+      un bloque opaco. Este estudio la abre con barras <b>1H</b> de ${S.overall.n_symbols} pares y
+      ${S.timeframe==='1H'?'':''}${S.window.start} → ${S.window.end} (ventana cerrada, no «hasta hoy»),
+      y responde a una pregunta que nadie había medido: <b>¿cuánto de la formación de precio cae en el
+      hueco que el backtest no ve?</b></p>
+    <div class="grid tiles">${tiles.map(t=>`<div class="card tile"><div class="k">${t[0]}</div>
+      <div class="v">${t[1]}</div><div class="s">${t[2]}</div></div>`).join('')}</div>
+
+    <h2>La cifra que decide</h2>
+    <p class="lead">La estrategia ve el <b>cierre de ayer</b>; el motor llena al <b>open de hoy</b>.
+      Entre esos dos precios hay una ventana que el backtest no modela. Medirla es medir si la
+      convención de llenado regala o cobra de más.</p>
+    <div class="card">
+      <h3>${pct(G.share_of_range.median,2)} del rango diario
+        <span class="chip ${V.gap.material?'pend':'hecho'}">${V.gap.material?'hueco material':'hueco inmaterial'}</span></h3>
+      <p class="lead" style="margin:8px 0">${esc(V.gap.text)}</p>
+      <div class="tblwrap"><table>
+        <thead><tr><th>|hueco| medido contra</th><th class="num">mediana</th><th class="num">media</th>
+          <th class="num">p90</th><th class="num">p99</th><th>qué dice</th></tr></thead><tbody>
+        <tr><td>el <b>rango</b> del día (máx − mín)</td><td class="num">${pct(G.share_of_range.median,3)}</td>
+          <td class="num">${pct(G.share_of_range.mean,3)}</td><td class="num">${pct(G.share_of_range.p90,3)}</td>
+          <td class="num">${pct(G.share_of_range.p99,3)}</td>
+          <td class="tag">qué parte del recorrido del día se pierde el motor</td></tr>
+        <tr><td>el <b>movimiento</b> del día (cierre a cierre)</td>
+          <td class="num">${pct(G.share_of_daily_move.median,3)}</td>
+          <td class="num">${pct(G.share_of_daily_move.mean,3)}</td>
+          <td class="num">${pct(G.share_of_daily_move.p90,3)}</td><td class="num">—</td>
+          <td class="tag">qué parte del resultado se decide ahí</td></tr>
+        <tr><td>el precio, en <b>puntos básicos</b></td><td class="num">${fmt(G.bps.median,2)}</td>
+          <td class="num">${fmt(G.bps.mean,2)}</td><td class="num">${fmt(G.bps.p90,2)}</td>
+          <td class="num">${fmt(G.bps.p99,2)}</td>
+          <td class="tag">comparable con el coste de ejecución que el motor sí cobra</td></tr>
+        </tbody></table></div>
+      <p class="tag">${G.n_days.toLocaleString('es')} días-símbolo. Días con el hueco por encima del
+        umbral declarado (${pct(G.threshold,0)} del rango): <b>${fmt(G.days_above_threshold_pct,2)}%</b>.
+        La cola importa tanto como la mediana: un motor puede estar bien de media y tener un problema
+        puntual.</p>
+    </div>
+
+    <h2>Lo que sí queda sin modelar: la latencia</h2>
+    <p class="lead">Que el hueco valga cero significa que llenar «al open» es exacto <i>si la orden se
+      manda en el instante del open</i>. El backtest lo supone; un ciclo real, no. Cada fila responde a
+      cuánto cuesta llegar tarde.</p>
+    <div class="card"><div class="tblwrap"><table>
+      <thead><tr><th>retraso sobre el open</th><th>cae en la sesión</th>
+        <th class="num">desplazamiento / rango</th><th class="num">p90</th><th class="num">pb</th>
+        <th class="num">rango ya gastado</th></tr></thead>
+      <tbody>${L.rows.map(r=>`<tr>
+        <td><b>+${r.hours} h</b></td><td class="tag">${esc(_sessLabel(SS,r.session))}</td>
+        <td class="num">${pct(r.slip_share_of_range_median)}</td>
+        <td class="num">${pct(r.slip_share_of_range_p90)}</td>
+        <td class="num">${fmt(r.slip_bps_median,1)}</td>
+        <td class="num">${pct(r.path_share_of_range_median)}</td></tr>`).join('')}
+      </tbody></table></div>
+      <p class="lead" style="margin:10px 0 0">${esc(V.latency.text)}</p></div>
+    <div class="note"><b>Primero se mide, después se declara, y solo entonces se toca el motor.</b>
+      Este estudio no cambia ni una línea de <span class="mono">execution/market_model.py</span>. Lo que
+      hace es convertir una convención que se daba por buena en una cifra con umbral declarado, y dejar
+      escrita la limitación en la metodología (3.3) y en el README. Cambiar el motor antes de tener la
+      cifra habría sido sustituir una suposición por otra.</div>
+
+    <h2>Descomposición por sesión</h2>
+    <p class="lead">Tres tramos del día UTC, y los cortes no son redondos: cada frontera es la hora de
+      una <b>apertura de mercado real</b>, tomada en su versión más temprana del año. Como no duran lo
+      mismo, la línea de puntos marca dónde caería cada corte si la actividad fuese uniforme: lo que
+      sobresale de ella es exceso <i>real</i>, no duración.</p>
+    <div class="card">
+      <div class="legend">${SS.map(s=>`<span><span class="swatch" style="background:var(${SESSION_COLOR[s.key]})"></span>${esc(s.label)}
+        <span class="tag">${String(s.start_hour).padStart(2,'0')}–${String(s.end_hour).padStart(2,'0')} UTC · ${s.hours} h</span></span>`).join('')}
+        <span class="tag">· línea de puntos = reparto por reloj</span></div>
+      <div id="sesschart"></div>
+    </div>
+    <div class="card" style="margin-top:12px"><div class="tblwrap"><table>
+      <thead><tr><th>Sesión</th><th>UTC</th><th class="num">reloj</th><th class="num">|retorno|</th>
+        <th class="num">varianza</th><th class="num">rango</th><th class="num">intensidad</th>
+        <th class="num">cubre del rango diario</th><th class="num">fija el máximo</th>
+        <th class="num">fija el mínimo</th></tr></thead>
+      <tbody>${SS.map(s=>{const r=O[s.key];return `<tr>
+        <td><span class="swatch" style="background:var(${SESSION_COLOR[s.key]})"></span> <b>${esc(s.label)}</b></td>
+        <td class="mono">${String(s.start_hour).padStart(2,'0')}–${String(s.end_hour).padStart(2,'0')}</td>
+        <td class="num tag">${pct(s.clock_share,1)}</td>
+        <td class="num">${pct(r.abs_return)}</td><td class="num">${pct(r.variance)}</td>
+        <td class="num">${pct(r.range)}</td>
+        <td class="num"><b>${fmt(r.variance_intensity,2)}</b></td>
+        <td class="num">${pct(r.range_vs_daily)}</td>
+        <td class="num">${pct(r.sets_high)}</td><td class="num">${pct(r.sets_low)}</td></tr>`;}).join('')}
+      </tbody></table></div>
+      <p class="tag"><b>intensidad</b> = cuota de varianza ÷ fracción de reloj; 1,00 es neutro y es lo
+        único comparable entre tramos de distinta duración. <b>cubre del rango diario</b> no suma 1 a
+        propósito: mide solape con el rango del día, no reparto. <b>fija el máximo/mínimo</b> es la
+        probabilidad de que el extremo del día caiga en ese tramo, y es la lectura que le importa a la
+        convención pesimista de los stops.</p></div>
+    ${_sessionRationale(SS)}
+
+    <h2>Tendencia: ¿crece el peso de EE.UU. tras enero de 2024?</h2>
+    <p class="lead">La hipótesis se declaró <b>antes</b> de mirar, con su mecanismo
+      (${esc(T.mechanism)}) y su umbral (<span class="mono">US_SHARE_GROWTH_MIN =
+      ${pct(T.threshold,0)}</span>). Se mide sobre una <b>cohorte equilibrada</b>: los
+      ${T.cohort.length} pares presentes en todos los años. Con el universo completo, la serie
+      mediría qué se listó cuándo, no dónde se mueve el precio.</p>
+    <div class="card">
+      <div class="legend">${SS.map(s=>`<span><span class="swatch" style="background:var(${SESSION_COLOR[s.key]})"></span>${esc(s.label)}</span>`).join('')}
+        <span class="tag">· cuota de varianza realizada, año a año</span></div>
+      <div id="trendchart"></div>
+      <h3 style="margin-top:14px">${(T.mean_delta_variance>=0?'+':'')+pct(T.mean_delta_variance,2)}
+        <span class="chip ${T.verdict==='us_crece'?'hecho':(T.verdict==='us_decrece'?'pend':'pendiente')}">
+        ${T.verdict==='us_crece'?'dirección: se sostiene':(T.verdict==='us_decrece'?'sale al revés':'no se sostiene')}</span>
+        <span class="chip ${T.shape==='salto_en_el_corte'?'hecho':'pendiente'}">
+        ${T.shape==='salto_en_el_corte'?'mecanismo: encaja':(T.shape==='deriva_previa'?'mecanismo: NO':'mecanismo: sin contrastar')}</span></h3>
+      <p class="lead" style="margin:8px 0">${esc(V.trend.text)}</p>
+      <div class="tblwrap"><table>
+        <thead><tr><th>Contraste</th><th class="num">valor</th><th>qué dice</th></tr></thead><tbody>
+        <tr><td>Δ cuota EE.UU. de varianza (post − pre ${T.split})</td>
+          <td class="num">${(T.mean_delta_variance>=0?'+':'')+pct(T.mean_delta_variance,2)}</td>
+          <td class="tag">media pareada sobre ${T.n_symbols} pares · desv. ${pct(T.sd_delta_variance,2)}</td></tr>
+        <tr><td>Pares que suben</td><td class="num">${T.n_positive}/${T.n_symbols}</td>
+          <td class="tag">test de signos exacto, p = ${fmt(T.sign_test_p,4)} · sin scipy y sin
+            aproximación normal: con una decena de pares correlacionados, una t fingiría precisión</td></tr>
+        <tr><td>t pareada (descriptivo)</td><td class="num">${fmt(T.t_stat,2)}</td>
+          <td class="tag">se publica como descriptivo, <b>no</b> como prueba: los pares no son
+            independientes entre sí</td></tr>
+        <tr><td>Spearman(año, cuota EE.UU.) · toda la ventana</td>
+          <td class="num">${fmt(T.spearman_year_vs_us_variance,2)}</td>
+          <td class="tag">la cuota sube año a año a lo largo de toda la ventana</td></tr>
+        <tr><td>Spearman(año, cuota EE.UU.) · <b>solo antes del corte</b></td>
+          <td class="num">${fmt(T.pre_split_spearman,2)}</td>
+          <td class="tag">${T.pre_split_years.length?`sobre ${T.pre_split_years[0]}–${T.pre_split_years[T.pre_split_years.length-1]} · `:''}umbral
+            declarado ${fmt(T.pre_trend_rho_threshold,2)}: por encima, la cuota <b>ya venía
+            subiendo</b> y el mecanismo no puede reclamar el crédito</td></tr>
+        <tr><td>Escalón en el corte (último año previo → primero posterior)</td>
+          <td class="num">${(T.step_at_split>=0?'+':'')+pct(T.step_at_split,2)}</td>
+          <td class="tag">lo que un salto atribuible a enero de 2024 tendría que haber sido:
+            <b>positivo y grande</b></td></tr>
+        </tbody></table></div>
+    </div>
+    ${T.shape==='deriva_previa'?`
+    <div class="note"><b>Dirección sí, mecanismo no.</b> El contraste pre/post sale limpio
+      (${T.n_positive}/${T.n_symbols} pares, p = ${fmt(T.sign_test_p,3)}), pero la serie año a año
+      enseña por qué eso no basta: la cuota estadounidense sube de forma sostenida <i>desde
+      ${T.pre_split_years[0]}</i> (Spearman ${fmt(T.pre_split_spearman,2)} solo en los años previos) y
+      el escalón que cruza el corte es <b>${(T.step_at_split>=0?'+':'')+pct(T.step_at_split,2)}</b> —
+      negativo. Lo que el contraste pre/post mide es la <b>pendiente acumulada</b> de varios años
+      partida por la mitad, no un efecto de enero de 2024. La hipótesis acierta en la dirección y falla
+      en la causa, y las dos cosas hay que decirlas por separado.</div>`:''}
+    <div class="card" style="margin-top:12px"><div class="tblwrap"><table>
+      <thead><tr><th>Par</th><th class="num">EE.UU. antes</th><th class="num">EE.UU. después</th>
+        <th class="num">Δ varianza</th><th class="num">Δ |retorno|</th><th class="num">días</th></tr></thead>
+      <tbody>${T.per_symbol.map(r=>`<tr>
+        <td class="mono">${esc(r.symbol)}</td><td class="num">${pct(r.us_variance_pre)}</td>
+        <td class="num">${pct(r.us_variance_post)}</td>
+        <td class="num"><b style="color:${r.delta_variance>=0?'var(--good)':'var(--crit)'}">${(r.delta_variance>=0?'+':'')+pct(r.delta_variance,2)}</b></td>
+        <td class="num">${(r.delta_abs>=0?'+':'')+pct(r.delta_abs,2)}</td>
+        <td class="num tag">${r.n_days_pre.toLocaleString('es')} / ${r.n_days_post.toLocaleString('es')}</td></tr>`).join('')}
+      </tbody></table></div>
+      <p class="tag">Comparación <b>pareada</b>: cada par consigo mismo, así que el nivel de cada
+        símbolo —que varía mucho— se cancela y lo que queda es el desplazamiento.</p></div>
+
+    <h2>Cobertura de los datos</h2>
+    <div class="card"><div class="tblwrap"><table>
+      <thead><tr><th>Par</th><th class="num">barras 1H</th><th class="num">días utilizables</th>
+        <th class="num">días descartados</th><th>desde</th><th>hasta</th><th>cohorte</th></tr></thead>
+      <tbody>${S.symbols.map(s=>`<tr><td class="mono">${esc(s.symbol)}</td>
+        <td class="num">${s.n_bars.toLocaleString('es')}</td>
+        <td class="num">${s.n_days.toLocaleString('es')}</td>
+        <td class="num tag">${s.n_days_dropped.toLocaleString('es')}</td>
+        <td class="tag">${esc(s.first_day)}</td><td class="tag">${esc(s.last_day)}</td>
+        <td>${s.in_cohort?'<span class="chip hecho">sí</span>':'<span class="chip placeholder">no</span>'}</td></tr>`).join('')}
+      </tbody></table></div>
+      <p class="tag">Un día entra solo si tiene sus 24 barras <b>y</b> existe la de las 23:00 del día
+        anterior: sin ella no hay retorno para la hora 0 y la sesión asiática saldría infravalorada de
+        forma sistemática. Los días incompletos se caen enteros; rellenarlos inventaría justo el dato
+        que se quiere medir.${S.omitted.length?' Omitidos: '+S.omitted.map(o=>esc(o.symbol)).join(', ')+'.':''}</p></div>
+
+    <h2>Lo que esta cifra no es</h2>
+    ${S.caveats.map(c=>`<div class="note"><b>${esc(c.title)}.</b> ${esc(c.text)}</div>`).join('')}
+    <p class="tag">Evidencia completa: <span class="mono">data/sessions/report.json</span> ·
+      reproducible con <span class="mono">python -m ai_trader.backtest.session_study --offline</span>
+      (${S.exchange} 1H, ${S.overall.n_days.toLocaleString('es')} días-símbolo;
+      ${esc(S.generated_at)}).</p>`;
+
+  stackedBars($('#sesschart'),[
+    {label:'|retorno| acumulado',sub:'cuánto camino recorre',
+     parts:sessionParts(O,'abs_return',SS,s=>`intensidad ${fmt(O[s.key].abs_intensity,2)}`)},
+    {label:'varianza realizada',sub:'suma de r² · la volatilidad',
+     parts:sessionParts(O,'variance',SS,s=>`intensidad ${fmt(O[s.key].variance_intensity,2)}`)},
+    {label:'rango',sub:'media de cuotas diarias',parts:sessionParts(O,'range',SS)},
+  ],{refs:refs});
+
+  stackedBars($('#trendchart'),T.yearly.map(y=>({
+    label:String(y.year),sub:`${y.n_symbols} pares`,
+    parts:SS.map(s=>({name:s.label,value:y[s.key].variance,color:cssv(SESSION_COLOR[s.key]),
+      note:`${y.n_days.toLocaleString('es')} días`})),
+  })),{refs:refs,rowH:34});
+}
+function _sessLabel(sessions,key){const s=sessions.find(x=>x.key===key);return s?s.label:key;}
+function _sessionRationale(sessions){
+  return `<div class="grid cards">${sessions.map(s=>`<div class="card">
+    <h3><span class="swatch" style="background:var(${SESSION_COLOR[s.key]})"></span>
+      ${esc(s.label)} <span class="tag">${String(s.start_hour).padStart(2,'0')}:00–${String(s.end_hour).padStart(2,'0')}:00 UTC</span></h3>
+    <p class="lead" style="margin:6px 0">${esc(s.rationale)}</p></div>`).join('')}</div>`;
+}
+
 function renderPaper(){
   $('#paper').innerHTML=`
     <h1>Paper trading</h1>
@@ -1336,7 +1797,7 @@ window.copyPrompt=copyPrompt;
 function main(){
   initTheme();initNav();
   renderOverview();renderSynthetic();renderFidelity();renderTransfer();renderStrategies();
-  renderRanking();renderValidation();renderPaper();renderRoadmap();
+  renderRanking();renderActivity();renderValidation();renderSessions();renderPaper();renderRoadmap();
   addEventListener('resize',()=>{clearTimeout(window._rt);window._rt=setTimeout(rerenderCharts,150);});
 }
 main();
@@ -1353,7 +1814,9 @@ SHELL = """
       <li><button data-sec="transfer">Transferencia</button></li>
       <li><button data-sec="strategies">Estrategias</button></li>
       <li><button data-sec="ranking">Ranking</button></li>
+      <li><button data-sec="activity">Actividad</button></li>
       <li><button data-sec="validation">Validación</button></li>
+      <li><button data-sec="sessions">Sesiones</button></li>
       <li><button data-sec="paper">Paper trading</button></li>
       <li><button data-sec="roadmap">Evoluciones</button></li>
     </ul>
@@ -1366,7 +1829,9 @@ SHELL = """
     <section id="transfer" class="section"></section>
     <section id="strategies" class="section"></section>
     <section id="ranking" class="section"></section>
+    <section id="activity" class="section"></section>
     <section id="validation" class="section"></section>
+    <section id="sessions" class="section"></section>
     <section id="paper" class="section"></section>
     <section id="roadmap" class="section"></section>
   </main>

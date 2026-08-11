@@ -14,6 +14,11 @@ Cada baseline se puntua con el MISMO headline score (Sharpe - lambda*turnover -
 kappa*maxDD), asi que la comparacion es homogenea: los baselines tambien pagan sus dos
 patas de comisiones y su drawdown. Un baseline cuyo simbolo no esta en las barras de la
 muestra no se inventa: simplemente no aparece, y quien reporta dice cual falto.
+
+El gate tiene DOS condiciones desde que se midio que una sola no bastaba: batir al mejor
+baseline y superar el suelo de actividad (`scoring.activity`). Una curva plana bate a los
+pasivos en un mercado que cae sin haber operado nunca, y eso no es batirlos. Ver
+`BaselineGate`.
 """
 from __future__ import annotations
 
@@ -31,6 +36,11 @@ from ai_trader.backtest.metrics import (
     compute_metrics,
     headline_score,
     periods_per_year_for_symbols,
+)
+from ai_trader.scoring.activity import (
+    DEFAULT_ACTIVITY_FLOOR,
+    ActivityFloor,
+    ActivityStats,
 )
 from ai_trader.scoring.aggregate import DEFAULT_CVAR_ALPHA, RewardStats, aggregate_reward
 from ai_trader.shared import bars as bar_schema
@@ -82,8 +92,30 @@ class BaselineGate:
     """
     Veredicto del gate sobre la DISTRIBUCION de muestras.
 
-    `approved` compara recompensas agregadas (CVaR@25%), no medias ni un path suelto:
-    la estrategia aprueba si su cola mala es mejor que la cola mala del MEJOR baseline.
+    Aprobar exige DOS cosas, y por eso el veredicto se publica descompuesto:
+
+    - `beats_baselines`: la recompensa agregada (CVaR@25%, no una media ni un path suelto)
+      es mejor que la del MEJOR baseline sobre exactamente las mismas ventanas.
+    - `eligible`: la estrategia supera el suelo de actividad (`scoring.activity`), es
+      decir, es rankeable.
+
+    La segunda condicion se anadio despues de medirla, no por prudencia abstracta. Una
+    configuracion que no abre posiciones deja la curva plana y puntua 0 EXACTO en cada
+    ventana; su CVaR es 0, y 0 le gana a los baselines pasivos en cualquier periodo en el
+    que el mercado caiga —en la evidencia publicada (`data/transfer/`) los pasivos estaban
+    en -1.42 y -1.39, asi que NO HACER NADA aprobaba con margen—. Batir a los baselines por
+    no jugar no es batirlos: el gate pregunta si la estrategia aporta algo sobre comprar y
+    esperar, y una curva plana no ha respondido a esa pregunta, la ha esquivado. Medido
+    sobre esa misma rejilla: de 16 configuraciones aprobaban 7 y aprueban 1 al exigir
+    actividad; las 6 que caen abren entre 0 y 2 operaciones por ventana OOS.
+
+    Lo que el suelo NO hace: cambiar ninguna recompensa. Una configuracion inelegible
+    conserva su cifra y sigue publicandose; lo que no puede es aprobar. Ver `scoring.activity`.
+
+    Y no se le aplica a los baselines: un `btc_hold` hace dos operaciones por ventana por
+    definicion. El baseline es el LISTON, no un candidato al ranking, asi que no tiene que
+    demostrar actividad -tiene que demostrar exposicion, y la tiene toda-.
+
     `win_rate_pct` es informativo (en cuantas muestras gana), no decide.
     """
 
@@ -95,10 +127,30 @@ class BaselineGate:
     win_rate_pct: float
     margin: float
     missing: tuple[str, ...]
+    beats_baselines: bool = False
+    activity: ActivityStats | None = None
+    activity_floor: ActivityFloor = DEFAULT_ACTIVITY_FLOOR
+    ineligible_reasons: tuple[str, ...] = ()
+
+    @property
+    def eligible(self) -> bool:
+        """¿Supera el suelo de actividad? Sin actividad medida es False y se declara en
+        `activity_checked`: un requisito que no se ha comprobado no se da por bueno."""
+        return not self.ineligible_reasons
+
+    @property
+    def activity_checked(self) -> bool:
+        return self.activity is not None
 
     def as_dict(self) -> dict:
         return {
             "approved": self.approved,
+            "beats_baselines": self.beats_baselines,
+            "eligible": self.eligible,
+            "activity_checked": self.activity_checked,
+            "ineligible_reasons": list(self.ineligible_reasons),
+            "activity": None if self.activity is None else self.activity.as_dict(),
+            "activity_floor": self.activity_floor.as_dict(),
             "strategy_reward": round(self.strategy_reward, 4),
             "best_baseline": self.best_name,
             "best_baseline_reward": round(self.best_reward, 4),
@@ -165,20 +217,29 @@ def gate(
     *,
     alpha: float = DEFAULT_CVAR_ALPHA,
     missing: Sequence[str] = (),
+    trades: Sequence[int] | None = None,
+    activity_floor: ActivityFloor = DEFAULT_ACTIVITY_FLOOR,
 ) -> BaselineGate:
     """
     Decide si la estrategia APRUEBA: su recompensa agregada debe superar la del mejor
-    baseline sobre exactamente las mismas muestras.
+    baseline sobre exactamente las mismas muestras Y superar el suelo de actividad.
 
-    Sin ningun baseline disponible no se puede aprobar nada: el veredicto es `False` y
+    `trades` son las operaciones de cada una de esas mismas ventanas (mismo orden que
+    `strategy_scores`). Todos los llamantes del repositorio lo pasan; si no se pasa, la
+    elegibilidad NO se da por buena: el gate queda en `approved=False` con
+    `activity_checked=False`, para que un requisito sin comprobar no pueda colarse como
+    comprobado.
+
+    Sin ningun baseline disponible tampoco se puede aprobar nada: el veredicto es `False` y
     `best_name` es None. Un gate que no puede evaluarse no es un gate superado.
     """
-    strategy = aggregate_reward(strategy_scores, alpha=alpha)
+    strategy = aggregate_reward(strategy_scores, alpha=alpha, trades=trades)
     stats = {
         name: aggregate_reward(scores, alpha=alpha)
         for name, scores in baseline_scores.items()
         if len(scores) > 0
     }
+    reasons = activity_floor.reasons(strategy.activity)
 
     if not stats:
         return BaselineGate(
@@ -190,6 +251,10 @@ def gate(
             win_rate_pct=0.0,
             margin=0.0,
             missing=tuple(missing),
+            beats_baselines=False,
+            activity=strategy.activity,
+            activity_floor=activity_floor,
+            ineligible_reasons=reasons,
         )
 
     # Desempate por nombre para que el mejor baseline sea determinista.
@@ -200,15 +265,20 @@ def gate(
     wins = sum(1 for s, b in zip(strategy_scores, per_sample_best) if s > b)
     win_rate = (wins / len(per_sample_best) * 100.0) if per_sample_best else 0.0
 
+    beats = strategy.reward > best_reward
     return BaselineGate(
         strategy_reward=strategy.reward,
         baselines=stats,
         best_name=best_name,
         best_reward=best_reward,
-        approved=strategy.reward > best_reward,
+        approved=beats and not reasons,
         win_rate_pct=win_rate,
         margin=strategy.reward - best_reward,
         missing=tuple(missing),
+        beats_baselines=beats,
+        activity=strategy.activity,
+        activity_floor=activity_floor,
+        ineligible_reasons=reasons,
     )
 
 

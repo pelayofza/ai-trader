@@ -70,6 +70,7 @@ from ai_trader.backtest.validation import (
     coverage,
 )
 from ai_trader.config import AppConfig, StrategySpec
+from ai_trader.scoring.activity import DEFAULT_ACTIVITY_FLOOR, ActivityStats
 from ai_trader.scoring.aggregate import DEFAULT_CVAR_ALPHA, RewardStats, aggregate_reward
 from ai_trader.scoring.baselines import (
     BASELINE_LABELS,
@@ -126,6 +127,11 @@ class MultiWindowValidation:
     rankea el resto del sistema) de los headline scores de todos los folds. `reward` es
     la cifra con la que comparar; `mean`, `std`, `worst` y `best` describen la forma que
     el corte unico no podia mostrar.
+
+    Junto a la recompensa viaja SIEMPRE la actividad (`stats.activity`, y el atajo
+    `activity`): operaciones por ventana OOS y cuantas de esas ventanas estuvieron vacias.
+    Sin ella un reward de 0 es ambiguo —"no perdio" y "no jugo" se escriben igual— y el
+    ranking se puede ordenar por inactividad sin que nadie lo vea. Ver `scoring.activity`.
     """
 
     scheme: str
@@ -148,6 +154,22 @@ class MultiWindowValidation:
     @property
     def scores(self) -> list[float]:
         return [f.score for f in self.folds]
+
+    @property
+    def trades(self) -> list[int]:
+        """Operaciones de cada fold, en el mismo orden que `scores`."""
+        return [f.num_trades for f in self.folds]
+
+    @property
+    def activity(self) -> ActivityStats | None:
+        """Atajo a `stats.activity`: la actividad medida sobre estas mismas ventanas."""
+        return self.stats.activity
+
+    @property
+    def rankable(self) -> bool:
+        """¿Supera el suelo de actividad declarado? Una configuracion que no lo supera se
+        sigue midiendo y publicando; lo que no hace es competir. Ver `scoring.activity`."""
+        return DEFAULT_ACTIVITY_FLOOR.eligible(self.activity)
 
     @property
     def median(self) -> float:
@@ -179,6 +201,9 @@ class MultiWindowValidation:
             "coverage": self.coverage,
             "headline_weights": self.headline_weights.as_dict(),
             "stats": self.stats.as_dict(),
+            "activity": None if self.activity is None else self.activity.as_dict(),
+            "rankable": self.rankable,
+            "activity_floor": DEFAULT_ACTIVITY_FLOOR.as_dict(),
             "median": round(self.median, 4),
             "single_split_score": (
                 None if self.single_split_score is None else round(self.single_split_score, 4)
@@ -253,7 +278,10 @@ def validate_multiwindow(
     results = engine.run_folds(folds, run_train=run_train, block_cache=block_cache)
 
     scores = tuple(_fold_score(r) for r in results)
-    stats = aggregate_reward([s.score for s in scores], alpha=cvar_alpha)
+    # La actividad se mide sobre EXACTAMENTE las mismas ventanas que la recompensa, y por
+    # eso entra aqui y no en un paso posterior que pudiera usar otro conjunto de folds.
+    fold_trades = [s.num_trades for s in scores]
+    stats = aggregate_reward([s.score for s in scores], alpha=cvar_alpha, trades=fold_trades)
 
     baseline_series: dict[str, list[float]] = {}
     baseline_stats: dict[str, RewardStats] = {}
@@ -270,6 +298,9 @@ def validate_multiwindow(
         }
         baseline_gate = gate(
             [s.score for s in scores], baseline_series, alpha=cvar_alpha,
+            # El gate exige ademas actividad: batir a los pasivos con una curva plana es
+            # batirlos por no jugar. Ver `baselines.BaselineGate`.
+            trades=fold_trades,
             # Un baseline que no se pudo construir (p.ej. SPY en un universo solo cripto)
             # se DECLARA; el gate no puede aprobar contra una lista silenciosamente corta.
             missing=tuple(n for n in sorted(BASELINE_LABELS) if n not in baseline_series),
@@ -296,10 +327,16 @@ def validate_multiwindow(
         baseline_gate=baseline_gate,
         single_split_score=single,
     )
+    activity = validation.activity
     logger.info(
         "Validacion %s | %d folds | reward(CVaR)=%+.4f | mediana=%+.4f | std=%.4f "
-        "| peor=%+.4f | corte unico=%s | optimismo=%s",
+        "| peor=%+.4f | ops/ventana=%.1f (mediana %.0f, %.0f%% vacias)%s | corte unico=%s "
+        "| optimismo=%s",
         scheme, len(scores), stats.reward, validation.median, stats.std, stats.worst,
+        activity.trades_per_window if activity else float("nan"),
+        activity.median_trades_per_window if activity else float("nan"),
+        activity.zero_window_pct if activity else float("nan"),
+        "" if validation.rankable else " NO RANKEABLE",
         "n/a" if single is None else f"{single:+.4f}",
         "n/a" if validation.optimism is None else f"{validation.optimism:+.4f}",
     )

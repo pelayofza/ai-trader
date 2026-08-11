@@ -1,5 +1,14 @@
 from __future__ import annotations
 
+from ai_trader.scoring.activity import (
+    DEFAULT_ACTIVITY_FLOOR,
+    MAX_ZERO_WINDOW_PCT,
+    MIN_MEDIAN_TRADES_PER_WINDOW,
+    ActivityFloor,
+    ActivityStats,
+    eligibility_dict,
+    measure_activity,
+)
 from ai_trader.scoring.aggregate import DEFAULT_CVAR_ALPHA, RewardStats, aggregate_reward
 from ai_trader.scoring.baselines import (
     Baseline,
@@ -49,6 +58,13 @@ from ai_trader.scoring.weight_calibration import (
 )
 
 __all__ = [
+    "DEFAULT_ACTIVITY_FLOOR",
+    "MAX_ZERO_WINDOW_PCT",
+    "MIN_MEDIAN_TRADES_PER_WINDOW",
+    "ActivityFloor",
+    "ActivityStats",
+    "eligibility_dict",
+    "measure_activity",
     "DEFAULT_CVAR_ALPHA",
     "RewardStats",
     "aggregate_reward",

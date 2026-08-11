@@ -64,8 +64,8 @@ figure{margin:14px 0}
 <h1>AI-Trader — Documentación funcional</h1>
 <div class="sub">Cómo funciona la herramienta, con el detalle necesario para replicarla y auditarla.
 Cada decisión de diseño va justificada.</div>
-<div class="meta">Documento vivo · generado desde el commit <span class="mono">35244eb</span>
-(77 commits)2026-08-11 · se regenera con <span class="mono">python -m docs.build_docs</span>.
+<div class="meta">Documento vivo · generado desde el commit <span class="mono">48b6e97</span>
+(78 commits)2026-08-11 · se regenera con <span class="mono">python -m docs.build_docs</span>.
 Las cifras marcadas son extraídas del repositorio en el momento de generar este documento.</div>
 
 <div class="toc noprint">
@@ -489,7 +489,7 @@ que el ρ ≈ 0 de la tabla sea un artefacto de la inactividad: al quitarla, el 
 <p class="tag">Δ = puesto real − puesto sintético. Positivo = el sintético la coloca mejor de lo que
 merece. 3120 folds auditados,
 sin fuga temporal.</p>
-<div class="note"><b>Lo que esta cifra no es.</b><ul><li><b>El CVaR premia no operar, y eso contamina los dos rankings.</b> Una configuracion que apenas abre posiciones deja la curva plana: Sharpe 0, rotacion 0, caida 0, headline 0 EXACTO. En un periodo en el que casi todo lo que arriesga pierde, ese cero gana. La correlacion entre recompensa y operaciones por ventana lo mide: -0.8447 en el real y -0.0868 en el sintetico. Por eso el estudio publica ademas el rho restringido a las 9 configuraciones que operan de verdad en los dos mundos (>= 5 operaciones por ventana OOS): -0.6667. Al quitar la inactividad el acuerdo no aparece: se vuelve NEGATIVO. Entre configuraciones que actuan de verdad, el sintetico tiende a invertir el orden del mercado, asi que el veredicto de arriba no es un artefacto de las inactivas —es, si acaso, mas benigno que la realidad. Es un subconjunto POST-HOC y pequeno, y su intervalo por bloques [-0.8833, 0.2333] cruza el cero: senal fuerte, no prueba.</li><li><b>El lado real es UN camino, no un ensemble.</b> El sintetico son 8 mundos distintos; el real son 5 tramos del MISMO pasado. Ese lado no tiene ensemble y su unica fuente de dispersion son los folds del CPCV, que ademas reusan calendario. Por eso el intervalo es un bootstrap por bloques y no iid: con 5 bloques reales sale ancho, y esa anchura es la verdad disponible, no un defecto del metodo.</li><li><b>Sesgo de supervivencia en el lado real.</b> Los simbolos son los que cotizan HOY en el universo operable: los pares deslistados o muertos entre 2018 y 2025 no estan en ninguna parte, y el generador sintetico no tiene ese filtro. El sesgo juega A FAVOR del lado real (su historia esta seleccionada por haber sobrevivido) y por tanto EN CONTRA de la hipotesis que este estudio quiere validar: introduce una diferencia sistematica entre los dos mundos que solo puede bajar el rho.</li><li><b>Simbolos omitidos por historico insuficiente.</b> 13 pares del universo operable quedan fuera y 11 entran. El criterio no es a ojo: hacen falta 270 dias de barras dentro de la ventana (calentamiento de la estrategia mas un grupo de CPCV), porque por debajo de eso el par no llega a operarse ni en una sola ventana OOS. Los omitidos se DECLARAN con su recuento y sus fechas; no se rellenan ni se sustituyen, porque un par listado hace unos meses no tiene 2018 y fabricarselo seria inventar el dato que se quiere medir.</li><li><b>El universo real crece con el tiempo; el sintetico no.</b> Varios de los pares que si entran empiezan a cotizar a mitad de la ventana, asi que las sub-ventanas antiguas se operan con menos activos que las recientes. En el mundo sintetico los 11 activos existen desde el primer dia. Es una diferencia estructural entre los dos lados que no se puede eliminar sin tirar la mitad del historico.</li><li><b>16 configuraciones, y de solo dos familias.</b> Una correlacion de rangos sobre 16 puntos tiene un error de muestreo grande: sirve para distinguir 'ordena como el mercado' de 'no ordena', no para comparar 0,35 con 0,45. Ademas la rejilla es un hipercubo latino sobre el espacio de busqueda, no la distribucion que el CEM visita de verdad al converger; la transferencia medida es la del espacio, no la de la region final del optimizador.</li><li><b>Los folds de CPCV no son independientes.</b> C(6, 2) = 15 ventanas salen de reusar los mismos tramos de calendario en combinaciones distintas. Cuentan como evidencia sobre la estabilidad del resultado, no como observaciones independientes; el bootstrap por bloques es justo lo que impide tratarlas como tales.</li><li><b>La cabecera del historico se descarta.</b> 324 dias iniciales no completan una sub-ventana del tamano de un camino sintetico y quedan fuera. El corte se hace por el principio a proposito (es el tramo con menos pares vivos), y se declara porque cambia que anos entran en la comparacion.</li></ul></div>
+<div class="note"><b>Lo que esta cifra no es.</b><ul><li><b>El CVaR premia no operar, y por eso el ranking tiene un suelo.</b> Una configuracion que apenas abre posiciones deja la curva plana: Sharpe 0, rotacion 0, caida 0, headline 0 EXACTO. En un periodo en el que casi todo lo que arriesga pierde, ese cero gana. La correlacion entre recompensa y operaciones por ventana lo mide: -0.8447 en el real y -0.0868 en el sintetico. La respuesta NO es penalizar la baja rotacion (eso ya lo hace lambda, y el estudio de pesos midio que no estabiliza nada) sino un REQUISITO DE ELEGIBILIDAD: para entrar en el ranking hay que operar al menos 3 veces en la ventana mediana y tener como mucho un 25% de ventanas vacias (ver scoring.activity). En el lado real eso deja 9 de 16 configuraciones, cambia al ganador de mean_reversion#07 a crypto_momentum#00 y reduce los aprobados del gate de 7 a 1. Las que caen conservan su recompensa publicada: no se les resta nada, se les niega competir. El rho restringido a las 9 configuraciones que operan de verdad en los dos mundos es -0.6667. Al quitar la inactividad el acuerdo no aparece: se vuelve NEGATIVO. Entre configuraciones que actuan de verdad, el sintetico tiende a invertir el orden del mercado, asi que el veredicto de arriba no es un artefacto de las inactivas —es, si acaso, mas benigno que la realidad. Es un subconjunto POST-HOC y pequeno, y su intervalo por bloques [-0.8833, 0.2333] cruza el cero: senal fuerte, no prueba.</li><li><b>El lado real es UN camino, no un ensemble.</b> El sintetico son 8 mundos distintos; el real son 5 tramos del MISMO pasado. Ese lado no tiene ensemble y su unica fuente de dispersion son los folds del CPCV, que ademas reusan calendario. Por eso el intervalo es un bootstrap por bloques y no iid: con 5 bloques reales sale ancho, y esa anchura es la verdad disponible, no un defecto del metodo.</li><li><b>Sesgo de supervivencia en el lado real.</b> Los simbolos son los que cotizan HOY en el universo operable: los pares deslistados o muertos entre 2018 y 2025 no estan en ninguna parte, y el generador sintetico no tiene ese filtro. El sesgo juega A FAVOR del lado real (su historia esta seleccionada por haber sobrevivido) y por tanto EN CONTRA de la hipotesis que este estudio quiere validar: introduce una diferencia sistematica entre los dos mundos que solo puede bajar el rho.</li><li><b>Simbolos omitidos por historico insuficiente.</b> 13 pares del universo operable quedan fuera y 11 entran. El criterio no es a ojo: hacen falta 270 dias de barras dentro de la ventana (calentamiento de la estrategia mas un grupo de CPCV), porque por debajo de eso el par no llega a operarse ni en una sola ventana OOS. Los omitidos se DECLARAN con su recuento y sus fechas; no se rellenan ni se sustituyen, porque un par listado hace unos meses no tiene 2018 y fabricarselo seria inventar el dato que se quiere medir.</li><li><b>El universo real crece con el tiempo; el sintetico no.</b> Varios de los pares que si entran empiezan a cotizar a mitad de la ventana, asi que las sub-ventanas antiguas se operan con menos activos que las recientes. En el mundo sintetico los 11 activos existen desde el primer dia. Es una diferencia estructural entre los dos lados que no se puede eliminar sin tirar la mitad del historico.</li><li><b>16 configuraciones, y de solo dos familias.</b> Una correlacion de rangos sobre 16 puntos tiene un error de muestreo grande: sirve para distinguir 'ordena como el mercado' de 'no ordena', no para comparar 0,35 con 0,45. Ademas la rejilla es un hipercubo latino sobre el espacio de busqueda, no la distribucion que el CEM visita de verdad al converger; la transferencia medida es la del espacio, no la de la region final del optimizador.</li><li><b>Los folds de CPCV no son independientes.</b> C(6, 2) = 15 ventanas salen de reusar los mismos tramos de calendario en combinaciones distintas. Cuentan como evidencia sobre la estabilidad del resultado, no como observaciones independientes; el bootstrap por bloques es justo lo que impide tratarlas como tales.</li><li><b>La cabecera del historico se descarta.</b> 324 dias iniciales no completan una sub-ventana del tamano de un camino sintetico y quedan fuera. El corte se hace por el principio a proposito (es el tramo con menos pares vivos), y se declara porque cambia que anos entran en la comparacion.</li></ul></div>
 <p class="tag">Evidencia completa: <span class="mono">data/transfer/report_ai_v3.json</span> ·
 reproducible con <span class="mono">python -m ai_trader.scoring.transfer_study --offline</span>
 (5 sub-ventanas reales + 8 muestras de
@@ -521,6 +521,39 @@ siguiente</b> (no al cierre con el que se decidió).</li>
 </ul>
 <div class="why"><b>Por qué pesimista.</b> Un backtest optimista es peligroso. Ante la ambigüedad
 intrabar, preferimos <b>subestimar</b> el resultado: si una estrategia parece buena aquí, tiene margen.</div>
+<p>Toda esa convención trata las <b>24 horas</b> de la vela como un bloque opaco, y durante mucho tiempo
+se justificó solo por prudencia. Prudente no es lo mismo que <i>medido</i>: la pregunta de cuánta
+formación de precio cae en la ventana que el motor no ve tiene una respuesta numérica, y aquí está.</p>
+
+<div class="note"><b>Limitación declarada: el hueco entre el cierre visto y el open llenado.</b> Medido sobre 24 pares y 43 196 días-símbolo de barras 1H de binance (2020-01-01 → 2026-01-01), ese hueco vale <b>0,068 %</b> del rango del día en mediana (0,55 pb; p99 3,23 %), frente al umbral declarado del 5 %. En un mercado 24/7 la vela de las 00:00 UTC empieza donde terminó la de ayer: la ventana ciega <b>no tiene ancho</b> y la convención de llenar al open no introduce sesgo. Es un resultado, no una ausencia de resultado — y desplaza la pregunta. <b>Lo que sí queda sin modelar es la latencia:</b> llenar «al open» solo es exacto si la orden sale en ese instante. Con una hora de retraso el precio de llenado ya se ha desplazado <b>9,18 %</b> del rango del día (57,9 pb) y se ha gastado 22,6 % de ese rango. Esa fracción de rango parece modesta, pero es el denominador equivocado: frente al coste de entrada que el motor <i>sí</i> cobra (15,0 pb de referencia, §3.4), llegar una hora tarde cuesta <b>3,9×</b>. El backtest supone ejecución instantánea a las 00:00 UTC: la suposición no sesga el precio —el hueco es cero— pero pone un <b>techo a la puntualidad</b> con la que el ciclo real tiene que ejecutar para que el backtest siga describiéndolo.</div>
+<p>La medición sale de abrir la vela diaria con barras <b>1H</b> y repartir el día UTC en tres
+sesiones. Los cortes <b>no son redondos</b>: cada frontera es la hora de una apertura de mercado real,
+tomada en su versión más temprana del año (los mercados de referencia cambian de hora UTC dos veces al
+año; la rejilla de velas del exchange, no). Se elige la más temprana para que una sesión nunca contenga
+la apertura de la siguiente.</p>
+<table><thead><tr><th>Sesión</th><th class="n">UTC</th><th class="n">reloj</th>
+<th class="n">|retorno|</th><th class="n">varianza</th><th class="n">intensidad</th>
+<th class="n">fija el mínimo</th></tr></thead><tbody><tr><td><b>Asiática</b></td><td class='n mono'>00–07</td><td class='n mono'>29,2 %</td><td class='n mono'>28,5 %</td><td class='n mono'>27,9 %</td><td class='n mono'><b>0,96</b></td><td class='n mono'>37,3 %</td></tr><tr><td><b>Europea</b></td><td class='n mono'>07–13</td><td class='n mono'>25,0 %</td><td class='n mono'>23,6 %</td><td class='n mono'>23,2 %</td><td class='n mono'><b>0,93</b></td><td class='n mono'>15,1 %</td></tr><tr><td><b>Estadounidense</b></td><td class='n mono'>13–24</td><td class='n mono'>45,8 %</td><td class='n mono'>47,9 %</td><td class='n mono'>48,9 %</td><td class='n mono'><b>1,07</b></td><td class='n mono'>47,7 %</td></tr></tbody></table>
+<p><b>Intensidad</b> = cuota de varianza ÷ fracción de reloj: 1,00 es neutro. Es la única lectura
+comparable, porque las tres sesiones no duran lo mismo (7 h, 6 h, 11 h).
+La sesión estadounidense concentra <b>48,9 %</b> de la varianza realizada en el
+45,8 % del reloj (intensidad 1,07).</p>
+<div class="why"><b>Por qué importa la columna «fija el mínimo».</b> La convención pesimista de arriba
+—si en la misma barra se tocan stop y objetivo, gana el stop— se apoya en no saber en qué orden
+ocurrieron. Esta columna dice dónde cae el extremo del día, y por tanto en qué tramo muerde esa
+ambigüedad. No la resuelve: la localiza, que es el paso previo a poder resolverla con datos 1H si
+algún día se decide modelar el camino intrabar.</div>
+<p>Coste de la latencia de ejecución, en fracción del rango del día:</p>
+<table><thead><tr><th>Retraso sobre el open</th><th class="n">desplazamiento / rango</th>
+<th class="n">pb</th><th class="n">rango ya gastado</th></tr></thead>
+<tbody><tr><td class=mono>+1 h</td><td class='n mono'>9,18 %</td><td class='n mono'>57,9</td><td class='n mono'>22,6 %</td></tr><tr><td class=mono>+2 h</td><td class='n mono'>12,12 %</td><td class='n mono'>76,7</td><td class='n mono'>31,3 %</td></tr><tr><td class=mono>+4 h</td><td class='n mono'>15,87 %</td><td class='n mono'>97,8</td><td class='n mono'>41,8 %</td></tr><tr><td class=mono>+8 h</td><td class='n mono'>20,92 %</td><td class='n mono'>128,4</td><td class='n mono'>56,3 %</td></tr></tbody></table>
+<p>La <b>dirección</b> de la hipótesis declarada antes de medir —que el peso de la sesión estadounidense crece tras enero de 2024, por los ETF al contado— <b>se sostiene</b>: la cuota estadounidense de varianza cambia +7,64 % entre el antes y el después de 2024-01-01, en 10 de 10 pares de la cohorte equilibrada (test de signos exacto, p = 0,0020; umbral declarado 2 %). Su <b>mecanismo, en cambio, no</b>: la cuota ya venía subiendo antes del corte (Spearman año-cuota = 0,80 sobre 2020–2023, por encima del umbral declarado de 0,60) y el escalón que cruza el corte es -2,29 %. Es una <b>deriva de varios años</b> que el corte parte por la mitad, no un salto atribuible a lo que pasó en enero de 2024. Leer el contraste pre/post como efecto del mecanismo sería atribuirle crédito ajeno. La tendencia se mide sobre una <b>cohorte equilibrada</b> (10 pares
+presentes en todos los años): con el universo completo, la serie mediría qué se listó cuándo.</p>
+<div class="note"><b>El motor no se ha tocado.</b> Este estudio mide y declara; no cambia ni una línea
+de <span class="mono">execution/market_model.py</span>. Cambiar la convención antes de tener la cifra
+habría sido sustituir una suposición por otra. Evidencia completa en
+<span class="mono">data/sessions/report.json</span> · reproducible con
+<span class="mono">python -m ai_trader.backtest.session_study --offline</span> (2026-08-11).</div>
 
 <h3>3.4 · Costes de ejecución: spread, volatilidad e impacto</h3>
 <p>Cada ejecución paga comisiones y deslizamiento (<i>slippage</i>). El deslizamiento <b>no es una
@@ -688,7 +721,7 @@ entra en varios folds), así que la dispersión medida no son observaciones inde
 como un error estándar. Y el camino que usa el optimizador (§5.5) sigue puntuando cada muestra con el
 corte único: cablear ahí el esquema multiventana es la evolución pendiente. Los
 640 folds ejecutados pasaron la auditoría de fuga temporal. Evidencia completa
-en <span class="mono">data/validation/report_ai_v2.json</span> (2026-08-10); un backtest
+en <span class="mono">data/validation/report_ai_v2.json</span> (2026-08-11); un backtest
 suelto se corre con <span class="mono">ai-trader backtest --validation cpcv</span>.</div>
 
 <h3>3.8 · El motor de riesgo como puerta única</h3>
@@ -933,6 +966,10 @@ cualquiera <b>sin hacer nada</b>. Sobre cada muestra se construyen tres alternat
 <b>mismas comisiones y slippage</b> en ambas patas. El veredicto <b>aprueba / no aprueba</b> compara
 recompensas agregadas: el CVaR@25% de la estrategia contra el del <b>mejor</b> baseline, sobre las
 muestras de validación — batir baselines en escenarios que el optimizador ya vio no probaría nada.</p>
+<p>Y exige una segunda condición, añadida después de medir que la primera sola no bastaba: la estrategia
+tiene que ser <b>rankeable</b>, es decir, superar el suelo de actividad de §5.6b. Una curva plana puntúa
+0 exacto y bate a los pasivos en cualquier periodo bajista sin haber abierto una posición; eso no es
+batirlos, es no haber jugado.</p>
 <div class="why"><b>Por qué en la cola y no en la media.</b> El gate se juega con el mismo estadístico
 con el que se optimiza. Una estrategia con mejor media pero peor cuartil malo <b>no</b> aprueba: si la
 recompensa es la cola, el listón también tiene que serlo. El porcentaje de muestras en las que gana se
@@ -940,7 +977,68 @@ reporta como información, pero no decide.</div>
 <div class="note"><b>Sin rival no hay aprobado.</b> Si un baseline no se puede construir (por ejemplo,
 SPY en un universo solo cripto), no se sustituye ni se rellena: se declara como ausente. Y si no hay
 ningún baseline disponible, el veredicto es <b>no aprueba</b> — un filtro que no se puede evaluar no es
-un filtro superado.</div>
+un filtro superado. Lo mismo vale para la actividad: si no se ha medido, no se da por buena.</div>
+
+
+<h3>5.6b · El suelo de actividad: quién puede ganar el ranking</h3>
+<p>El headline de una ventana en la que la estrategia <b>no abre ninguna posición</b> es
+<b>0 exacto</b>: la curva es una recta, luego Sharpe 0, rotación 0 y caída 0. No es una nota mala ni
+buena, es la <i>ausencia</i> de nota — y sin embargo entra en la distribución como un número más. Como
+la recompensa es el CVaR (la media del peor cuartil) y un cero le gana a cualquier cosa que arriesgue y
+pierda, en un periodo donde casi todo lo que se juega pierde <b>el ranking se ordena por inactividad</b>.
+Medido sobre el material del §2.9: Spearman(recompensa, operaciones por ventana) =
+<b>-0,84</b> en el lado real, y
+12,2 % de las ventanas que <i>fijan</i> la recompensa estaban vacías.</p>
+<div class="why"><b>Por qué un requisito y no una penalización.</b> Penalizar la baja rotación ya existe
+—es λ (§5.2b)— y el estudio de pesos midió que <b>no estabiliza nada</b>: el rank IC es máximo sin
+penalizar. Restar más puntos por operar poco sería cobrar dos veces la misma factura y degradar el
+ranking. Lo que faltaba no era un descuento sino una <b>condición de entrada</b>: no perder es legítimo,
+lo que no lo es es ganar un ranking de estrategias sin haber jugado. Por eso la recompensa de una
+configuración inelegible <b>no se toca</b> —se calcula, se publica y se compara igual—; lo único que
+pierde es competir y aprobar el gate.</div>
+<p>Una configuración es <b>rankeable</b> si cumple las dos condiciones. Una está derivada y la otra
+medida:</p>
+<table><thead><tr><th>Condición</th><th class=n>valor</th><th>de dónde sale</th></tr></thead><tbody>
+<tr><td>Ventanas vacías</td><td class='n mono'>≤ 25 %</td>
+  <td><b>Derivada.</b> Es α, la fracción de cola que <i>es</i> la recompensa (CVaR@25%).
+  Por encima de ella, el cuartil que promedia el CVaR puede estar hecho de ceros estructurales.</td></tr>
+<tr><td>Operaciones en la ventana mediana</td>
+  <td class='n mono'>≥ 3</td>
+  <td><b>Medida.</b> Regla declarada antes de mirar: el valor de la rejilla
+  {1, 2, 3, 5, 8, 13, 21} que reproduce con menos desacuerdos la condición
+  derivada; a igualdad, el mayor. Resultado: 3, con 1
+  desacuerdo.</td></tr>
+</tbody></table>
+<p>El barrido completo, publicado entero porque un umbral que solo se sostiene enseñando su resultado y
+escondiendo los de al lado no se sostiene:</p>
+<table><thead><tr><th class=n>umbral</th><th class=n>rankeables</th><th class=n>desacuerdos</th>
+<th>ganador del ranking real</th><th class=n>aprueban el gate</th></tr></thead><tbody><tr><td class='n mono'>1</td><td class='n mono'>9</td><td class='n mono'>6</td><td class=mono>crypto_momentum#00</td><td class='n mono'>1</td></tr><tr><td class='n mono'>2</td><td class='n mono'>9</td><td class='n mono'>3</td><td class=mono>crypto_momentum#00</td><td class='n mono'>1</td></tr><tr><td class='n mono'>3 ←</td><td class='n mono'>9</td><td class='n mono'>1</td><td class=mono>crypto_momentum#00</td><td class='n mono'>1</td></tr><tr><td class='n mono'>5</td><td class='n mono'>9</td><td class='n mono'>3</td><td class=mono>crypto_momentum#00</td><td class='n mono'>1</td></tr><tr><td class='n mono'>8</td><td class='n mono'>8</td><td class='n mono'>4</td><td class=mono>crypto_momentum#00</td><td class='n mono'>1</td></tr><tr><td class='n mono'>13</td><td class='n mono'>6</td><td class='n mono'>8</td><td class=mono>crypto_momentum#00</td><td class='n mono'>1</td></tr><tr><td class='n mono'>21</td><td class='n mono'>6</td><td class='n mono'>8</td><td class=mono>crypto_momentum#00</td><td class='n mono'>1</td></tr></tbody></table>
+<p>Y la elección del número casi no importa, que es la mejor noticia posible sobre un umbral: con
+1/2/3/5 operaciones por ventana sale <b>exactamente el
+mismo conjunto rankeable</b> en el lado real (9 de 16), porque a esa
+escala quien excluye es la condición derivada. En esta rejilla la condición medida solo muerde una vez
+—una configuración del mundo sintético que se queda fuera con el 25,0 % justo de ventanas vacías— y se
+mantiene porque cubre un modo de fallo que estas configuraciones no contienen: operar poquísimo pero con
+regularidad, sin dejar ni una ventana vacía. Lo que está en discusión es la partición, no el decimal.</p>
+<div class="note"><b>El control que parecía obvio y habría elegido al revés.</b> La <i>reproducibilidad</i>
+del ranking entre mitades del histórico sale <b>más alta</b> con las inactivas dentro
+(0,390) que sin ellas (0,282; subconjuntos aleatorios del
+mismo tamaño: 0,355). Se entiende en cuanto se mide: una configuración
+que no opera puntúa 0 en todos los bloques y su puesto no se mueve jamás. Es estabilidad de cementerio,
+así que la reproducibilidad se publica como <b>control</b> y no como criterio.</div>
+<p>Efecto sobre el gate en el material del §2.9: de <b>7</b>
+configuraciones aprobadas se pasa a <b>1</b>. Pierden la aprobación
+6: <span class='mono'>crypto_momentum#06</span>, <span class='mono'>mean_reversion#00</span>, <span class='mono'>mean_reversion#02</span>, <span class='mono'>mean_reversion#04</span>, <span class='mono'>mean_reversion#05</span>, <span class='mono'>mean_reversion#07</span> — todas ellas por no operar, no por puntuar peor.</p>
+<div class="note"><b>Dónde NO cambia nada, que delimita el alcance.</b> El estudio de validación
+multiventana (§3.7) se re-corrió entero con el suelo puesto y sus veredictos salieron
+<b>idénticos</b> (7 aprobadas en walk-forward, 6 en CPCV, sobre 32 unidades): allí las cuatro
+configuraciones operan de sobra. El requisito no recorta aprobaciones en general — muerde
+exactamente donde la inactividad estaba ganando.</div>
+<table><thead><tr><th>Configuración</th><th class=n>recompensa real</th><th class=n>ops/ventana</th>
+<th class=n>vacías</th><th>rankeable</th></tr></thead><tbody><tr><td class=mono>mean_reversion#07</td><td class='n mono'>0,000</td><td class='n mono'>0,07</td><td class='n mono'>93 %</td><td><b>no</b></td></tr><tr><td class=mono>mean_reversion#04</td><td class='n mono'>-0,528</td><td class='n mono'>0,27</td><td class='n mono'>75 %</td><td><b>no</b></td></tr><tr><td class=mono>mean_reversion#00</td><td class='n mono'>-0,826</td><td class='n mono'>0,77</td><td class='n mono'>68 %</td><td><b>no</b></td></tr><tr><td class=mono>mean_reversion#02</td><td class='n mono'>-0,889</td><td class='n mono'>0,73</td><td class='n mono'>59 %</td><td><b>no</b></td></tr><tr><td class=mono>crypto_momentum#06</td><td class='n mono'>-1,128</td><td class='n mono'>2,53</td><td class='n mono'>36 %</td><td><b>no</b></td></tr><tr><td class=mono>mean_reversion#05</td><td class='n mono'>-1,215</td><td class='n mono'>2,93</td><td class='n mono'>37 %</td><td><b>no</b></td></tr><tr><td class=mono>crypto_momentum#00</td><td class='n mono'>-1,311</td><td class='n mono'>32,56</td><td class='n mono'>0 %</td><td>sí</td></tr><tr><td class=mono>crypto_momentum#01</td><td class='n mono'>-1,454</td><td class='n mono'>7,60</td><td class='n mono'>12 %</td><td>sí</td></tr><tr><td class=mono>mean_reversion#03</td><td class='n mono'>-1,633</td><td class='n mono'>9,33</td><td class='n mono'>1 %</td><td>sí</td></tr><tr><td class=mono>crypto_momentum#02</td><td class='n mono'>-1,647</td><td class='n mono'>47,21</td><td class='n mono'>0 %</td><td>sí</td></tr><tr><td class=mono>mean_reversion#01</td><td class='n mono'>-1,823</td><td class='n mono'>2,73</td><td class='n mono'>25 %</td><td><b>no</b></td></tr><tr><td class=mono>crypto_momentum#07</td><td class='n mono'>-1,931</td><td class='n mono'>24,05</td><td class='n mono'>0 %</td><td>sí</td></tr><tr><td class=mono>crypto_momentum#04</td><td class='n mono'>-1,992</td><td class='n mono'>37,31</td><td class='n mono'>1 %</td><td>sí</td></tr><tr><td class=mono>mean_reversion#06</td><td class='n mono'>-2,224</td><td class='n mono'>12,95</td><td class='n mono'>0 %</td><td>sí</td></tr><tr><td class=mono>crypto_momentum#05</td><td class='n mono'>-2,263</td><td class='n mono'>32,76</td><td class='n mono'>1 %</td><td>sí</td></tr><tr><td class=mono>crypto_momentum#03</td><td class='n mono'>-2,654</td><td class='n mono'>39,51</td><td class='n mono'>0 %</td><td>sí</td></tr></tbody></table>
+<p class="meta">Evidencia: <span class="mono">data/activity/report_ai_v3.json</span> ·
+código: <span class="mono">scoring/activity.py</span> y
+<span class="mono">scoring/activity_study.py</span>.</p>
 
 <h3>5.7 · Descuento del sobreajuste por múltiples pruebas</h3>
 <p>Buscar sobre un espacio de parámetros garantiza encontrar algo que brilla <i>aunque no haya nada que
@@ -961,7 +1059,7 @@ corrigiendo además por asimetría y colas gruesas de los retornos.</p>
 número sino un método.</div>
 
 <h2 id="s6">6 · Tests y garantías</h2>
-<p>La base cuenta con <b>502 tests</b> automatizados y <i>linting</i> (ruff) sobre todo el
+<p>La base cuenta con <b>563 tests</b> automatizados y <i>linting</i> (ruff) sobre todo el
 código. Más allá del número, importa <b>qué</b> se garantiza. Los tests se agrupan por invariante:</p>
 <ul>
 <li><b>Determinismo:</b> la misma semilla produce las mismas velas y las mismas curvas de equity.</li>
@@ -1099,5 +1197,5 @@ correlación serial de los retornos no filtre el test en el entrenamiento poster
 <li><b>Stylized facts:</b> propiedades estadísticas robustas de los mercados reales (colas gruesas,
 agrupamiento de volatilidad, autocorrelación) que un buen simulador debe reproducir.</li>
 </ul>
-<p class="meta">Fin del documento · AI-Trader · commit <span class="mono">35244eb</span>.</p>
+<p class="meta">Fin del documento · AI-Trader · commit <span class="mono">48b6e97</span>.</p>
 </div></body></html>

@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-08-11T12:18:52.040506+00:00",
+ "generated_at": "2026-08-11T16:46:53.507166+00:00",
  "plan": {
   "library_id": "ai_v3",
   "library_is_fallback": false,
@@ -72,94 +72,94 @@
    "symbols_omitted": [
     {
      "symbol": "AAVE/USDT",
-     "n_bars": 115,
-     "first_bar": "2025-09-08",
+     "n_bars": 1904,
+     "first_bar": "2020-10-15",
      "last_bar": "2025-12-31",
-     "reason": "115 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     "reason": "sin contraparte en la libreria sintetica"
     },
     {
      "symbol": "APT/USDT",
-     "n_bars": 115,
-     "first_bar": "2025-09-08",
+     "n_bars": 1170,
+     "first_bar": "2022-10-19",
      "last_bar": "2025-12-31",
-     "reason": "115 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     "reason": "sin contraparte en la libreria sintetica"
     },
     {
      "symbol": "ARB/USDT",
-     "n_bars": 115,
-     "first_bar": "2025-09-08",
+     "n_bars": 1015,
+     "first_bar": "2023-03-23",
      "last_bar": "2025-12-31",
-     "reason": "115 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     "reason": "sin contraparte en la libreria sintetica"
     },
     {
      "symbol": "ATOM/USDT",
-     "n_bars": 115,
-     "first_bar": "2025-09-08",
+     "n_bars": 2439,
+     "first_bar": "2019-04-29",
      "last_bar": "2025-12-31",
-     "reason": "115 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     "reason": "sin contraparte en la libreria sintetica"
     },
     {
      "symbol": "ETC/USDT",
-     "n_bars": 115,
-     "first_bar": "2025-09-08",
+     "n_bars": 2760,
+     "first_bar": "2018-06-12",
      "last_bar": "2025-12-31",
-     "reason": "115 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     "reason": "sin contraparte en la libreria sintetica"
     },
     {
      "symbol": "FIL/USDT",
-     "n_bars": 115,
-     "first_bar": "2025-09-08",
+     "n_bars": 1904,
+     "first_bar": "2020-10-15",
      "last_bar": "2025-12-31",
-     "reason": "115 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     "reason": "sin contraparte en la libreria sintetica"
     },
     {
      "symbol": "INJ/USDT",
-     "n_bars": 115,
-     "first_bar": "2025-09-08",
+     "n_bars": 1898,
+     "first_bar": "2020-10-21",
      "last_bar": "2025-12-31",
-     "reason": "115 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     "reason": "sin contraparte en la libreria sintetica"
     },
     {
      "symbol": "NEAR/USDT",
-     "n_bars": 115,
-     "first_bar": "2025-09-08",
+     "n_bars": 1905,
+     "first_bar": "2020-10-14",
      "last_bar": "2025-12-31",
-     "reason": "115 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     "reason": "sin contraparte en la libreria sintetica"
     },
     {
      "symbol": "OP/USDT",
-     "n_bars": 115,
-     "first_bar": "2025-09-08",
+     "n_bars": 1310,
+     "first_bar": "2022-06-01",
      "last_bar": "2025-12-31",
-     "reason": "115 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     "reason": "sin contraparte en la libreria sintetica"
     },
     {
      "symbol": "SEI/USDT",
-     "n_bars": 115,
-     "first_bar": "2025-09-08",
+     "n_bars": 870,
+     "first_bar": "2023-08-15",
      "last_bar": "2025-12-31",
-     "reason": "115 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     "reason": "sin contraparte en la libreria sintetica"
     },
     {
      "symbol": "SUI/USDT",
-     "n_bars": 115,
-     "first_bar": "2025-09-08",
+     "n_bars": 974,
+     "first_bar": "2023-05-03",
      "last_bar": "2025-12-31",
-     "reason": "115 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     "reason": "sin contraparte en la libreria sintetica"
     },
     {
      "symbol": "TIA/USDT",
-     "n_bars": 115,
-     "first_bar": "2025-09-08",
+     "n_bars": 793,
+     "first_bar": "2023-10-31",
      "last_bar": "2025-12-31",
-     "reason": "115 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     "reason": "sin contraparte en la libreria sintetica"
     },
     {
      "symbol": "UNI/USDT",
-     "n_bars": 115,
-     "first_bar": "2025-09-08",
+     "n_bars": 1932,
+     "first_bar": "2020-09-17",
      "last_bar": "2025-12-31",
-     "reason": "115 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     "reason": "sin contraparte en la libreria sintetica"
     }
    ]
   },
@@ -223,6 +223,26 @@
     "real": 28.67,
     "synthetic": 32.73
    },
+   "activity": {
+    "real": {
+     "n_windows": 75,
+     "trades": 2442,
+     "trades_per_window": 32.56,
+     "median_trades_per_window": 33.0,
+     "zero_windows": 0,
+     "zero_window_pct": 0.0
+    },
+    "synthetic": {
+     "n_windows": 120,
+     "trades": 4222,
+     "trades_per_window": 35.183,
+     "median_trades_per_window": 33.5,
+     "zero_windows": 0,
+     "zero_window_pct": 0.0
+    }
+   },
+   "rankable_real": true,
+   "rankable_synthetic": true,
    "active": true,
    "real": {
     "reward": -1.3106,
@@ -234,11 +254,28 @@
     "worst": -4.3194,
     "n": 75,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 5,
     "approved_blocks": 3,
     "approved_pooled": true,
     "gate": {
      "approved": true,
+     "beats_baselines": true,
+     "eligible": true,
+     "activity_checked": true,
+     "ineligible_reasons": [],
+     "activity": {
+      "n_windows": 75,
+      "trades": 2442,
+      "trades_per_window": 32.56,
+      "median_trades_per_window": 33.0,
+      "zero_windows": 0,
+      "zero_window_pct": 0.0
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -1.3106,
      "best_baseline": "equal_weight",
      "best_baseline_reward": -1.3904,
@@ -257,7 +294,8 @@
        "best": 5.0218,
        "worst": -2.8132,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.3904,
@@ -268,7 +306,8 @@
        "best": 4.9451,
        "worst": -2.4343,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -370,11 +409,28 @@
     "worst": -2.8432,
     "n": 120,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 8,
     "approved_blocks": 1,
     "approved_pooled": false,
     "gate": {
      "approved": false,
+     "beats_baselines": false,
+     "eligible": true,
+     "activity_checked": true,
+     "ineligible_reasons": [],
+     "activity": {
+      "n_windows": 120,
+      "trades": 4222,
+      "trades_per_window": 35.183,
+      "median_trades_per_window": 33.5,
+      "zero_windows": 0,
+      "zero_window_pct": 0.0
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -1.8318,
      "best_baseline": "btc_hold",
      "best_baseline_reward": -1.008,
@@ -393,7 +449,8 @@
        "best": 3.9256,
        "worst": -3.2736,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.0564,
@@ -404,7 +461,8 @@
        "best": 4.9361,
        "worst": -3.127,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -573,6 +631,26 @@
     "real": 5.67,
     "synthetic": 7.83
    },
+   "activity": {
+    "real": {
+     "n_windows": 75,
+     "trades": 570,
+     "trades_per_window": 7.6,
+     "median_trades_per_window": 5.0,
+     "zero_windows": 9,
+     "zero_window_pct": 12.0
+    },
+    "synthetic": {
+     "n_windows": 120,
+     "trades": 1004,
+     "trades_per_window": 8.367,
+     "median_trades_per_window": 8.0,
+     "zero_windows": 0,
+     "zero_window_pct": 0.0
+    }
+   },
+   "rankable_real": true,
+   "rankable_synthetic": true,
    "active": true,
    "real": {
     "reward": -1.4543,
@@ -584,11 +662,28 @@
     "worst": -2.6979,
     "n": 75,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 5,
-    "approved_blocks": 2,
+    "approved_blocks": 1,
     "approved_pooled": false,
     "gate": {
      "approved": false,
+     "beats_baselines": false,
+     "eligible": true,
+     "activity_checked": true,
+     "ineligible_reasons": [],
+     "activity": {
+      "n_windows": 75,
+      "trades": 570,
+      "trades_per_window": 7.6,
+      "median_trades_per_window": 5.0,
+      "zero_windows": 9,
+      "zero_window_pct": 12.0
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -1.4543,
      "best_baseline": "equal_weight",
      "best_baseline_reward": -1.3904,
@@ -607,7 +702,8 @@
        "best": 5.0218,
        "worst": -2.8132,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.3904,
@@ -618,7 +714,8 @@
        "best": 4.9451,
        "worst": -2.4343,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -720,11 +817,28 @@
     "worst": -3.2824,
     "n": 120,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 8,
     "approved_blocks": 2,
     "approved_pooled": false,
     "gate": {
      "approved": false,
+     "beats_baselines": false,
+     "eligible": true,
+     "activity_checked": true,
+     "ineligible_reasons": [],
+     "activity": {
+      "n_windows": 120,
+      "trades": 1004,
+      "trades_per_window": 8.367,
+      "median_trades_per_window": 8.0,
+      "zero_windows": 0,
+      "zero_window_pct": 0.0
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -1.7081,
      "best_baseline": "btc_hold",
      "best_baseline_reward": -1.008,
@@ -743,7 +857,8 @@
        "best": 3.9256,
        "worst": -3.2736,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.0564,
@@ -754,7 +869,8 @@
        "best": 4.9361,
        "worst": -3.127,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -923,6 +1039,26 @@
     "real": 40.67,
     "synthetic": 31.77
    },
+   "activity": {
+    "real": {
+     "n_windows": 75,
+     "trades": 3541,
+     "trades_per_window": 47.213,
+     "median_trades_per_window": 44.0,
+     "zero_windows": 0,
+     "zero_window_pct": 0.0
+    },
+    "synthetic": {
+     "n_windows": 120,
+     "trades": 4623,
+     "trades_per_window": 38.525,
+     "median_trades_per_window": 34.5,
+     "zero_windows": 1,
+     "zero_window_pct": 0.83
+    }
+   },
+   "rankable_real": true,
+   "rankable_synthetic": true,
    "active": true,
    "real": {
     "reward": -1.6469,
@@ -934,11 +1070,28 @@
     "worst": -3.914,
     "n": 75,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 5,
     "approved_blocks": 1,
     "approved_pooled": false,
     "gate": {
      "approved": false,
+     "beats_baselines": false,
+     "eligible": true,
+     "activity_checked": true,
+     "ineligible_reasons": [],
+     "activity": {
+      "n_windows": 75,
+      "trades": 3541,
+      "trades_per_window": 47.213,
+      "median_trades_per_window": 44.0,
+      "zero_windows": 0,
+      "zero_window_pct": 0.0
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -1.6469,
      "best_baseline": "equal_weight",
      "best_baseline_reward": -1.3904,
@@ -957,7 +1110,8 @@
        "best": 5.0218,
        "worst": -2.8132,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.3904,
@@ -968,7 +1122,8 @@
        "best": 4.9451,
        "worst": -2.4343,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -1070,11 +1225,28 @@
     "worst": -4.6652,
     "n": 120,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 8,
     "approved_blocks": 0,
     "approved_pooled": false,
     "gate": {
      "approved": false,
+     "beats_baselines": false,
+     "eligible": true,
+     "activity_checked": true,
+     "ineligible_reasons": [],
+     "activity": {
+      "n_windows": 120,
+      "trades": 4623,
+      "trades_per_window": 38.525,
+      "median_trades_per_window": 34.5,
+      "zero_windows": 1,
+      "zero_window_pct": 0.83
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -2.1236,
      "best_baseline": "btc_hold",
      "best_baseline_reward": -1.008,
@@ -1093,7 +1265,8 @@
        "best": 3.9256,
        "worst": -3.2736,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.0564,
@@ -1104,7 +1277,8 @@
        "best": 4.9361,
        "worst": -3.127,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -1273,6 +1447,26 @@
     "real": 38.87,
     "synthetic": 37.07
    },
+   "activity": {
+    "real": {
+     "n_windows": 75,
+     "trades": 2963,
+     "trades_per_window": 39.507,
+     "median_trades_per_window": 37.0,
+     "zero_windows": 0,
+     "zero_window_pct": 0.0
+    },
+    "synthetic": {
+     "n_windows": 120,
+     "trades": 4991,
+     "trades_per_window": 41.592,
+     "median_trades_per_window": 39.0,
+     "zero_windows": 0,
+     "zero_window_pct": 0.0
+    }
+   },
+   "rankable_real": true,
+   "rankable_synthetic": true,
    "active": true,
    "real": {
     "reward": -2.6542,
@@ -1284,11 +1478,28 @@
     "worst": -5.5148,
     "n": 75,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 5,
     "approved_blocks": 1,
     "approved_pooled": false,
     "gate": {
      "approved": false,
+     "beats_baselines": false,
+     "eligible": true,
+     "activity_checked": true,
+     "ineligible_reasons": [],
+     "activity": {
+      "n_windows": 75,
+      "trades": 2963,
+      "trades_per_window": 39.507,
+      "median_trades_per_window": 37.0,
+      "zero_windows": 0,
+      "zero_window_pct": 0.0
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -2.6542,
      "best_baseline": "equal_weight",
      "best_baseline_reward": -1.3904,
@@ -1307,7 +1518,8 @@
        "best": 5.0218,
        "worst": -2.8132,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.3904,
@@ -1318,7 +1530,8 @@
        "best": 4.9451,
        "worst": -2.4343,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -1420,11 +1633,28 @@
     "worst": -2.9499,
     "n": 120,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 8,
     "approved_blocks": 2,
     "approved_pooled": false,
     "gate": {
      "approved": false,
+     "beats_baselines": false,
+     "eligible": true,
+     "activity_checked": true,
+     "ineligible_reasons": [],
+     "activity": {
+      "n_windows": 120,
+      "trades": 4991,
+      "trades_per_window": 41.592,
+      "median_trades_per_window": 39.0,
+      "zero_windows": 0,
+      "zero_window_pct": 0.0
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -1.4689,
      "best_baseline": "btc_hold",
      "best_baseline_reward": -1.008,
@@ -1443,7 +1673,8 @@
        "best": 3.9256,
        "worst": -3.2736,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.0564,
@@ -1454,7 +1685,8 @@
        "best": 4.9361,
        "worst": -3.127,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -1623,6 +1855,26 @@
     "real": 35.0,
     "synthetic": 28.9
    },
+   "activity": {
+    "real": {
+     "n_windows": 75,
+     "trades": 2798,
+     "trades_per_window": 37.307,
+     "median_trades_per_window": 37.0,
+     "zero_windows": 1,
+     "zero_window_pct": 1.33
+    },
+    "synthetic": {
+     "n_windows": 120,
+     "trades": 4215,
+     "trades_per_window": 35.125,
+     "median_trades_per_window": 30.0,
+     "zero_windows": 0,
+     "zero_window_pct": 0.0
+    }
+   },
+   "rankable_real": true,
+   "rankable_synthetic": true,
    "active": true,
    "real": {
     "reward": -1.992,
@@ -1634,11 +1886,28 @@
     "worst": -3.4812,
     "n": 75,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 5,
     "approved_blocks": 2,
     "approved_pooled": false,
     "gate": {
      "approved": false,
+     "beats_baselines": false,
+     "eligible": true,
+     "activity_checked": true,
+     "ineligible_reasons": [],
+     "activity": {
+      "n_windows": 75,
+      "trades": 2798,
+      "trades_per_window": 37.307,
+      "median_trades_per_window": 37.0,
+      "zero_windows": 1,
+      "zero_window_pct": 1.33
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -1.992,
      "best_baseline": "equal_weight",
      "best_baseline_reward": -1.3904,
@@ -1657,7 +1926,8 @@
        "best": 5.0218,
        "worst": -2.8132,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.3904,
@@ -1668,7 +1938,8 @@
        "best": 4.9451,
        "worst": -2.4343,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -1770,11 +2041,28 @@
     "worst": -3.5375,
     "n": 120,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 8,
     "approved_blocks": 1,
     "approved_pooled": false,
     "gate": {
      "approved": false,
+     "beats_baselines": false,
+     "eligible": true,
+     "activity_checked": true,
+     "ineligible_reasons": [],
+     "activity": {
+      "n_windows": 120,
+      "trades": 4215,
+      "trades_per_window": 35.125,
+      "median_trades_per_window": 30.0,
+      "zero_windows": 0,
+      "zero_window_pct": 0.0
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -1.7879,
      "best_baseline": "btc_hold",
      "best_baseline_reward": -1.008,
@@ -1793,7 +2081,8 @@
        "best": 3.9256,
        "worst": -3.2736,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.0564,
@@ -1804,7 +2093,8 @@
        "best": 4.9361,
        "worst": -3.127,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -1973,6 +2263,26 @@
     "real": 30.6,
     "synthetic": 29.73
    },
+   "activity": {
+    "real": {
+     "n_windows": 75,
+     "trades": 2457,
+     "trades_per_window": 32.76,
+     "median_trades_per_window": 31.0,
+     "zero_windows": 1,
+     "zero_window_pct": 1.33
+    },
+    "synthetic": {
+     "n_windows": 120,
+     "trades": 4059,
+     "trades_per_window": 33.825,
+     "median_trades_per_window": 30.0,
+     "zero_windows": 0,
+     "zero_window_pct": 0.0
+    }
+   },
+   "rankable_real": true,
+   "rankable_synthetic": true,
    "active": true,
    "real": {
     "reward": -2.2634,
@@ -1984,11 +2294,28 @@
     "worst": -3.8639,
     "n": 75,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 5,
     "approved_blocks": 2,
     "approved_pooled": false,
     "gate": {
      "approved": false,
+     "beats_baselines": false,
+     "eligible": true,
+     "activity_checked": true,
+     "ineligible_reasons": [],
+     "activity": {
+      "n_windows": 75,
+      "trades": 2457,
+      "trades_per_window": 32.76,
+      "median_trades_per_window": 31.0,
+      "zero_windows": 1,
+      "zero_window_pct": 1.33
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -2.2634,
      "best_baseline": "equal_weight",
      "best_baseline_reward": -1.3904,
@@ -2007,7 +2334,8 @@
        "best": 5.0218,
        "worst": -2.8132,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.3904,
@@ -2018,7 +2346,8 @@
        "best": 4.9451,
        "worst": -2.4343,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -2120,11 +2449,28 @@
     "worst": -3.3703,
     "n": 120,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 8,
     "approved_blocks": 1,
     "approved_pooled": false,
     "gate": {
      "approved": false,
+     "beats_baselines": false,
+     "eligible": true,
+     "activity_checked": true,
+     "ineligible_reasons": [],
+     "activity": {
+      "n_windows": 120,
+      "trades": 4059,
+      "trades_per_window": 33.825,
+      "median_trades_per_window": 30.0,
+      "zero_windows": 0,
+      "zero_window_pct": 0.0
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -1.6357,
      "best_baseline": "btc_hold",
      "best_baseline_reward": -1.008,
@@ -2143,7 +2489,8 @@
        "best": 3.9256,
        "worst": -3.2736,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.0564,
@@ -2154,7 +2501,8 @@
        "best": 4.9361,
        "worst": -3.127,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -2323,6 +2671,26 @@
     "real": 2.0,
     "synthetic": 1.5
    },
+   "activity": {
+    "real": {
+     "n_windows": 75,
+     "trades": 190,
+     "trades_per_window": 2.533,
+     "median_trades_per_window": 1.0,
+     "zero_windows": 27,
+     "zero_window_pct": 36.0
+    },
+    "synthetic": {
+     "n_windows": 120,
+     "trades": 220,
+     "trades_per_window": 1.833,
+     "median_trades_per_window": 1.0,
+     "zero_windows": 32,
+     "zero_window_pct": 26.67
+    }
+   },
+   "rankable_real": false,
+   "rankable_synthetic": false,
    "active": false,
    "real": {
     "reward": -1.1276,
@@ -2334,11 +2702,31 @@
     "worst": -2.203,
     "n": 75,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 5,
-    "approved_blocks": 3,
-    "approved_pooled": true,
+    "approved_blocks": 0,
+    "approved_pooled": false,
     "gate": {
-     "approved": true,
+     "approved": false,
+     "beats_baselines": true,
+     "eligible": false,
+     "activity_checked": true,
+     "ineligible_reasons": [
+      "la ventana mediana tiene 1.00 operaciones (< 3)",
+      "36.0% de ventanas vacias (> 25%)"
+     ],
+     "activity": {
+      "n_windows": 75,
+      "trades": 190,
+      "trades_per_window": 2.533,
+      "median_trades_per_window": 1.0,
+      "zero_windows": 27,
+      "zero_window_pct": 36.0
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -1.1276,
      "best_baseline": "equal_weight",
      "best_baseline_reward": -1.3904,
@@ -2357,7 +2745,8 @@
        "best": 5.0218,
        "worst": -2.8132,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.3904,
@@ -2368,7 +2757,8 @@
        "best": 4.9451,
        "worst": -2.4343,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -2470,11 +2860,31 @@
     "worst": -2.4657,
     "n": 120,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 8,
-    "approved_blocks": 1,
+    "approved_blocks": 0,
     "approved_pooled": false,
     "gate": {
      "approved": false,
+     "beats_baselines": false,
+     "eligible": false,
+     "activity_checked": true,
+     "ineligible_reasons": [
+      "la ventana mediana tiene 1.00 operaciones (< 3)",
+      "26.7% de ventanas vacias (> 25%)"
+     ],
+     "activity": {
+      "n_windows": 120,
+      "trades": 220,
+      "trades_per_window": 1.833,
+      "median_trades_per_window": 1.0,
+      "zero_windows": 32,
+      "zero_window_pct": 26.67
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -1.739,
      "best_baseline": "btc_hold",
      "best_baseline_reward": -1.008,
@@ -2493,7 +2903,8 @@
        "best": 3.9256,
        "worst": -3.2736,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.0564,
@@ -2504,7 +2915,8 @@
        "best": 4.9361,
        "worst": -3.127,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -2673,6 +3085,26 @@
     "real": 19.33,
     "synthetic": 29.57
    },
+   "activity": {
+    "real": {
+     "n_windows": 75,
+     "trades": 1804,
+     "trades_per_window": 24.053,
+     "median_trades_per_window": 21.0,
+     "zero_windows": 0,
+     "zero_window_pct": 0.0
+    },
+    "synthetic": {
+     "n_windows": 120,
+     "trades": 4036,
+     "trades_per_window": 33.633,
+     "median_trades_per_window": 31.0,
+     "zero_windows": 0,
+     "zero_window_pct": 0.0
+    }
+   },
+   "rankable_real": true,
+   "rankable_synthetic": true,
    "active": true,
    "real": {
     "reward": -1.9306,
@@ -2684,11 +3116,28 @@
     "worst": -4.8063,
     "n": 75,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 5,
     "approved_blocks": 2,
     "approved_pooled": false,
     "gate": {
      "approved": false,
+     "beats_baselines": false,
+     "eligible": true,
+     "activity_checked": true,
+     "ineligible_reasons": [],
+     "activity": {
+      "n_windows": 75,
+      "trades": 1804,
+      "trades_per_window": 24.053,
+      "median_trades_per_window": 21.0,
+      "zero_windows": 0,
+      "zero_window_pct": 0.0
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -1.9306,
      "best_baseline": "equal_weight",
      "best_baseline_reward": -1.3904,
@@ -2707,7 +3156,8 @@
        "best": 5.0218,
        "worst": -2.8132,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.3904,
@@ -2718,7 +3168,8 @@
        "best": 4.9451,
        "worst": -2.4343,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -2820,11 +3271,28 @@
     "worst": -3.6283,
     "n": 120,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 8,
     "approved_blocks": 1,
     "approved_pooled": false,
     "gate": {
      "approved": false,
+     "beats_baselines": false,
+     "eligible": true,
+     "activity_checked": true,
+     "ineligible_reasons": [],
+     "activity": {
+      "n_windows": 120,
+      "trades": 4036,
+      "trades_per_window": 33.633,
+      "median_trades_per_window": 31.0,
+      "zero_windows": 0,
+      "zero_window_pct": 0.0
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -1.7363,
      "best_baseline": "btc_hold",
      "best_baseline_reward": -1.008,
@@ -2843,7 +3311,8 @@
        "best": 3.9256,
        "worst": -3.2736,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.0564,
@@ -2854,7 +3323,8 @@
        "best": 4.9361,
        "worst": -3.127,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -3021,6 +3491,26 @@
     "real": 0.67,
     "synthetic": 1.67
    },
+   "activity": {
+    "real": {
+     "n_windows": 75,
+     "trades": 58,
+     "trades_per_window": 0.773,
+     "median_trades_per_window": 0.0,
+     "zero_windows": 51,
+     "zero_window_pct": 68.0
+    },
+    "synthetic": {
+     "n_windows": 120,
+     "trades": 235,
+     "trades_per_window": 1.958,
+     "median_trades_per_window": 1.0,
+     "zero_windows": 30,
+     "zero_window_pct": 25.0
+    }
+   },
+   "rankable_real": false,
+   "rankable_synthetic": false,
    "active": false,
    "real": {
     "reward": -0.8258,
@@ -3032,11 +3522,31 @@
     "worst": -1.7133,
     "n": 75,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 5,
-    "approved_blocks": 3,
-    "approved_pooled": true,
+    "approved_blocks": 0,
+    "approved_pooled": false,
     "gate": {
-     "approved": true,
+     "approved": false,
+     "beats_baselines": true,
+     "eligible": false,
+     "activity_checked": true,
+     "ineligible_reasons": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "68.0% de ventanas vacias (> 25%)"
+     ],
+     "activity": {
+      "n_windows": 75,
+      "trades": 58,
+      "trades_per_window": 0.773,
+      "median_trades_per_window": 0.0,
+      "zero_windows": 51,
+      "zero_window_pct": 68.0
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -0.8258,
      "best_baseline": "equal_weight",
      "best_baseline_reward": -1.3904,
@@ -3055,7 +3565,8 @@
        "best": 5.0218,
        "worst": -2.8132,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.3904,
@@ -3066,7 +3577,8 @@
        "best": 4.9451,
        "worst": -2.4343,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -3168,11 +3680,30 @@
     "worst": -3.756,
     "n": 120,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 8,
-    "approved_blocks": 2,
+    "approved_blocks": 0,
     "approved_pooled": false,
     "gate": {
      "approved": false,
+     "beats_baselines": false,
+     "eligible": false,
+     "activity_checked": true,
+     "ineligible_reasons": [
+      "la ventana mediana tiene 1.00 operaciones (< 3)"
+     ],
+     "activity": {
+      "n_windows": 120,
+      "trades": 235,
+      "trades_per_window": 1.958,
+      "median_trades_per_window": 1.0,
+      "zero_windows": 30,
+      "zero_window_pct": 25.0
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -1.6658,
      "best_baseline": "btc_hold",
      "best_baseline_reward": -1.008,
@@ -3191,7 +3722,8 @@
        "best": 3.9256,
        "worst": -3.2736,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.0564,
@@ -3202,7 +3734,8 @@
        "best": 4.9361,
        "worst": -3.127,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -3369,6 +3902,26 @@
     "real": 2.33,
     "synthetic": 4.47
    },
+   "activity": {
+    "real": {
+     "n_windows": 75,
+     "trades": 205,
+     "trades_per_window": 2.733,
+     "median_trades_per_window": 2.0,
+     "zero_windows": 19,
+     "zero_window_pct": 25.33
+    },
+    "synthetic": {
+     "n_windows": 120,
+     "trades": 536,
+     "trades_per_window": 4.467,
+     "median_trades_per_window": 4.0,
+     "zero_windows": 7,
+     "zero_window_pct": 5.83
+    }
+   },
+   "rankable_real": false,
+   "rankable_synthetic": true,
    "active": false,
    "real": {
     "reward": -1.8229,
@@ -3380,11 +3933,31 @@
     "worst": -2.503,
     "n": 75,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 5,
-    "approved_blocks": 2,
+    "approved_blocks": 0,
     "approved_pooled": false,
     "gate": {
      "approved": false,
+     "beats_baselines": false,
+     "eligible": false,
+     "activity_checked": true,
+     "ineligible_reasons": [
+      "la ventana mediana tiene 2.00 operaciones (< 3)",
+      "25.3% de ventanas vacias (> 25%)"
+     ],
+     "activity": {
+      "n_windows": 75,
+      "trades": 205,
+      "trades_per_window": 2.733,
+      "median_trades_per_window": 2.0,
+      "zero_windows": 19,
+      "zero_window_pct": 25.33
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -1.8229,
      "best_baseline": "equal_weight",
      "best_baseline_reward": -1.3904,
@@ -3403,7 +3976,8 @@
        "best": 5.0218,
        "worst": -2.8132,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.3904,
@@ -3414,7 +3988,8 @@
        "best": 4.9451,
        "worst": -2.4343,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -3516,11 +4091,28 @@
     "worst": -2.8254,
     "n": 120,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 8,
-    "approved_blocks": 1,
+    "approved_blocks": 0,
     "approved_pooled": false,
     "gate": {
      "approved": false,
+     "beats_baselines": false,
+     "eligible": true,
+     "activity_checked": true,
+     "ineligible_reasons": [],
+     "activity": {
+      "n_windows": 120,
+      "trades": 536,
+      "trades_per_window": 4.467,
+      "median_trades_per_window": 4.0,
+      "zero_windows": 7,
+      "zero_window_pct": 5.83
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -1.9416,
      "best_baseline": "btc_hold",
      "best_baseline_reward": -1.008,
@@ -3539,7 +4131,8 @@
        "best": 3.9256,
        "worst": -3.2736,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.0564,
@@ -3550,7 +4143,8 @@
        "best": 4.9361,
        "worst": -3.127,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -3717,6 +4311,26 @@
     "real": 0.33,
     "synthetic": 1.0
    },
+   "activity": {
+    "real": {
+     "n_windows": 75,
+     "trades": 55,
+     "trades_per_window": 0.733,
+     "median_trades_per_window": 0.0,
+     "zero_windows": 44,
+     "zero_window_pct": 58.67
+    },
+    "synthetic": {
+     "n_windows": 120,
+     "trades": 140,
+     "trades_per_window": 1.167,
+     "median_trades_per_window": 1.0,
+     "zero_windows": 43,
+     "zero_window_pct": 35.83
+    }
+   },
+   "rankable_real": false,
+   "rankable_synthetic": false,
    "active": false,
    "real": {
     "reward": -0.889,
@@ -3728,11 +4342,31 @@
     "worst": -2.0267,
     "n": 75,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 5,
-    "approved_blocks": 3,
-    "approved_pooled": true,
+    "approved_blocks": 0,
+    "approved_pooled": false,
     "gate": {
-     "approved": true,
+     "approved": false,
+     "beats_baselines": true,
+     "eligible": false,
+     "activity_checked": true,
+     "ineligible_reasons": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "58.7% de ventanas vacias (> 25%)"
+     ],
+     "activity": {
+      "n_windows": 75,
+      "trades": 55,
+      "trades_per_window": 0.733,
+      "median_trades_per_window": 0.0,
+      "zero_windows": 44,
+      "zero_window_pct": 58.67
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -0.889,
      "best_baseline": "equal_weight",
      "best_baseline_reward": -1.3904,
@@ -3751,7 +4385,8 @@
        "best": 5.0218,
        "worst": -2.8132,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.3904,
@@ -3762,7 +4397,8 @@
        "best": 4.9451,
        "worst": -2.4343,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -3864,11 +4500,31 @@
     "worst": -2.9705,
     "n": 120,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 8,
-    "approved_blocks": 1,
+    "approved_blocks": 0,
     "approved_pooled": false,
     "gate": {
      "approved": false,
+     "beats_baselines": false,
+     "eligible": false,
+     "activity_checked": true,
+     "ineligible_reasons": [
+      "la ventana mediana tiene 1.00 operaciones (< 3)",
+      "35.8% de ventanas vacias (> 25%)"
+     ],
+     "activity": {
+      "n_windows": 120,
+      "trades": 140,
+      "trades_per_window": 1.167,
+      "median_trades_per_window": 1.0,
+      "zero_windows": 43,
+      "zero_window_pct": 35.83
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -1.8528,
      "best_baseline": "btc_hold",
      "best_baseline_reward": -1.008,
@@ -3887,7 +4543,8 @@
        "best": 3.9256,
        "worst": -3.2736,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.0564,
@@ -3898,7 +4555,8 @@
        "best": 4.9361,
        "worst": -3.127,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -4065,6 +4723,26 @@
     "real": 9.0,
     "synthetic": 13.0
    },
+   "activity": {
+    "real": {
+     "n_windows": 75,
+     "trades": 700,
+     "trades_per_window": 9.333,
+     "median_trades_per_window": 10.0,
+     "zero_windows": 1,
+     "zero_window_pct": 1.33
+    },
+    "synthetic": {
+     "n_windows": 120,
+     "trades": 1495,
+     "trades_per_window": 12.458,
+     "median_trades_per_window": 12.0,
+     "zero_windows": 0,
+     "zero_window_pct": 0.0
+    }
+   },
+   "rankable_real": true,
+   "rankable_synthetic": true,
    "active": true,
    "real": {
     "reward": -1.6335,
@@ -4076,11 +4754,28 @@
     "worst": -3.33,
     "n": 75,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 5,
     "approved_blocks": 2,
     "approved_pooled": false,
     "gate": {
      "approved": false,
+     "beats_baselines": false,
+     "eligible": true,
+     "activity_checked": true,
+     "ineligible_reasons": [],
+     "activity": {
+      "n_windows": 75,
+      "trades": 700,
+      "trades_per_window": 9.333,
+      "median_trades_per_window": 10.0,
+      "zero_windows": 1,
+      "zero_window_pct": 1.33
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -1.6335,
      "best_baseline": "equal_weight",
      "best_baseline_reward": -1.3904,
@@ -4099,7 +4794,8 @@
        "best": 5.0218,
        "worst": -2.8132,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.3904,
@@ -4110,7 +4806,8 @@
        "best": 4.9451,
        "worst": -2.4343,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -4212,11 +4909,28 @@
     "worst": -3.7271,
     "n": 120,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 8,
     "approved_blocks": 1,
     "approved_pooled": false,
     "gate": {
      "approved": false,
+     "beats_baselines": false,
+     "eligible": true,
+     "activity_checked": true,
+     "ineligible_reasons": [],
+     "activity": {
+      "n_windows": 120,
+      "trades": 1495,
+      "trades_per_window": 12.458,
+      "median_trades_per_window": 12.0,
+      "zero_windows": 0,
+      "zero_window_pct": 0.0
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -1.8636,
      "best_baseline": "btc_hold",
      "best_baseline_reward": -1.008,
@@ -4235,7 +4949,8 @@
        "best": 3.9256,
        "worst": -3.2736,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.0564,
@@ -4246,7 +4961,8 @@
        "best": 4.9361,
        "worst": -3.127,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -4413,6 +5129,26 @@
     "real": 0.33,
     "synthetic": 0.67
    },
+   "activity": {
+    "real": {
+     "n_windows": 75,
+     "trades": 20,
+     "trades_per_window": 0.267,
+     "median_trades_per_window": 0.0,
+     "zero_windows": 56,
+     "zero_window_pct": 74.67
+    },
+    "synthetic": {
+     "n_windows": 120,
+     "trades": 75,
+     "trades_per_window": 0.625,
+     "median_trades_per_window": 1.0,
+     "zero_windows": 59,
+     "zero_window_pct": 49.17
+    }
+   },
+   "rankable_real": false,
+   "rankable_synthetic": false,
    "active": false,
    "real": {
     "reward": -0.528,
@@ -4424,11 +5160,31 @@
     "worst": -1.4425,
     "n": 75,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 5,
-    "approved_blocks": 4,
-    "approved_pooled": true,
+    "approved_blocks": 0,
+    "approved_pooled": false,
     "gate": {
-     "approved": true,
+     "approved": false,
+     "beats_baselines": true,
+     "eligible": false,
+     "activity_checked": true,
+     "ineligible_reasons": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "74.7% de ventanas vacias (> 25%)"
+     ],
+     "activity": {
+      "n_windows": 75,
+      "trades": 20,
+      "trades_per_window": 0.267,
+      "median_trades_per_window": 0.0,
+      "zero_windows": 56,
+      "zero_window_pct": 74.67
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -0.528,
      "best_baseline": "equal_weight",
      "best_baseline_reward": -1.3904,
@@ -4447,7 +5203,8 @@
        "best": 5.0218,
        "worst": -2.8132,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.3904,
@@ -4458,7 +5215,8 @@
        "best": 4.9451,
        "worst": -2.4343,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -4560,11 +5318,31 @@
     "worst": -2.585,
     "n": 120,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 8,
-    "approved_blocks": 1,
+    "approved_blocks": 0,
     "approved_pooled": false,
     "gate": {
      "approved": false,
+     "beats_baselines": false,
+     "eligible": false,
+     "activity_checked": true,
+     "ineligible_reasons": [
+      "la ventana mediana tiene 1.00 operaciones (< 3)",
+      "49.2% de ventanas vacias (> 25%)"
+     ],
+     "activity": {
+      "n_windows": 120,
+      "trades": 75,
+      "trades_per_window": 0.625,
+      "median_trades_per_window": 1.0,
+      "zero_windows": 59,
+      "zero_window_pct": 49.17
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -1.7071,
      "best_baseline": "btc_hold",
      "best_baseline_reward": -1.008,
@@ -4583,7 +5361,8 @@
        "best": 3.9256,
        "worst": -3.2736,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.0564,
@@ -4594,7 +5373,8 @@
        "best": 4.9361,
        "worst": -3.127,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -4761,6 +5541,26 @@
     "real": 1.67,
     "synthetic": 4.47
    },
+   "activity": {
+    "real": {
+     "n_windows": 75,
+     "trades": 220,
+     "trades_per_window": 2.933,
+     "median_trades_per_window": 2.0,
+     "zero_windows": 28,
+     "zero_window_pct": 37.33
+    },
+    "synthetic": {
+     "n_windows": 120,
+     "trades": 696,
+     "trades_per_window": 5.8,
+     "median_trades_per_window": 4.0,
+     "zero_windows": 3,
+     "zero_window_pct": 2.5
+    }
+   },
+   "rankable_real": false,
+   "rankable_synthetic": true,
    "active": false,
    "real": {
     "reward": -1.215,
@@ -4772,11 +5572,31 @@
     "worst": -3.3058,
     "n": 75,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 5,
-    "approved_blocks": 3,
-    "approved_pooled": true,
+    "approved_blocks": 0,
+    "approved_pooled": false,
     "gate": {
-     "approved": true,
+     "approved": false,
+     "beats_baselines": true,
+     "eligible": false,
+     "activity_checked": true,
+     "ineligible_reasons": [
+      "la ventana mediana tiene 2.00 operaciones (< 3)",
+      "37.3% de ventanas vacias (> 25%)"
+     ],
+     "activity": {
+      "n_windows": 75,
+      "trades": 220,
+      "trades_per_window": 2.933,
+      "median_trades_per_window": 2.0,
+      "zero_windows": 28,
+      "zero_window_pct": 37.33
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -1.215,
      "best_baseline": "equal_weight",
      "best_baseline_reward": -1.3904,
@@ -4795,7 +5615,8 @@
        "best": 5.0218,
        "worst": -2.8132,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.3904,
@@ -4806,7 +5627,8 @@
        "best": 4.9451,
        "worst": -2.4343,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -4908,11 +5730,28 @@
     "worst": -2.9701,
     "n": 120,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 8,
     "approved_blocks": 1,
     "approved_pooled": false,
     "gate": {
      "approved": false,
+     "beats_baselines": false,
+     "eligible": true,
+     "activity_checked": true,
+     "ineligible_reasons": [],
+     "activity": {
+      "n_windows": 120,
+      "trades": 696,
+      "trades_per_window": 5.8,
+      "median_trades_per_window": 4.0,
+      "zero_windows": 3,
+      "zero_window_pct": 2.5
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -1.8355,
      "best_baseline": "btc_hold",
      "best_baseline_reward": -1.008,
@@ -4931,7 +5770,8 @@
        "best": 3.9256,
        "worst": -3.2736,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.0564,
@@ -4942,7 +5782,8 @@
        "best": 4.9361,
        "worst": -3.127,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -5109,6 +5950,26 @@
     "real": 13.0,
     "synthetic": 25.27
    },
+   "activity": {
+    "real": {
+     "n_windows": 75,
+     "trades": 971,
+     "trades_per_window": 12.947,
+     "median_trades_per_window": 12.0,
+     "zero_windows": 0,
+     "zero_window_pct": 0.0
+    },
+    "synthetic": {
+     "n_windows": 120,
+     "trades": 2841,
+     "trades_per_window": 23.675,
+     "median_trades_per_window": 24.0,
+     "zero_windows": 0,
+     "zero_window_pct": 0.0
+    }
+   },
+   "rankable_real": true,
+   "rankable_synthetic": true,
    "active": true,
    "real": {
     "reward": -2.2237,
@@ -5120,11 +5981,28 @@
     "worst": -3.1193,
     "n": 75,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 5,
     "approved_blocks": 1,
     "approved_pooled": false,
     "gate": {
      "approved": false,
+     "beats_baselines": false,
+     "eligible": true,
+     "activity_checked": true,
+     "ineligible_reasons": [],
+     "activity": {
+      "n_windows": 75,
+      "trades": 971,
+      "trades_per_window": 12.947,
+      "median_trades_per_window": 12.0,
+      "zero_windows": 0,
+      "zero_window_pct": 0.0
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -2.2237,
      "best_baseline": "equal_weight",
      "best_baseline_reward": -1.3904,
@@ -5143,7 +6021,8 @@
        "best": 5.0218,
        "worst": -2.8132,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.3904,
@@ -5154,7 +6033,8 @@
        "best": 4.9451,
        "worst": -2.4343,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -5256,11 +6136,28 @@
     "worst": -2.8461,
     "n": 120,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 8,
     "approved_blocks": 3,
     "approved_pooled": false,
     "gate": {
      "approved": false,
+     "beats_baselines": false,
+     "eligible": true,
+     "activity_checked": true,
+     "ineligible_reasons": [],
+     "activity": {
+      "n_windows": 120,
+      "trades": 2841,
+      "trades_per_window": 23.675,
+      "median_trades_per_window": 24.0,
+      "zero_windows": 0,
+      "zero_window_pct": 0.0
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -1.2394,
      "best_baseline": "btc_hold",
      "best_baseline_reward": -1.008,
@@ -5279,7 +6176,8 @@
        "best": 3.9256,
        "worst": -3.2736,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.0564,
@@ -5290,7 +6188,8 @@
        "best": 4.9361,
        "worst": -3.127,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -5457,6 +6356,26 @@
     "real": 0.0,
     "synthetic": 0.33
    },
+   "activity": {
+    "real": {
+     "n_windows": 75,
+     "trades": 5,
+     "trades_per_window": 0.067,
+     "median_trades_per_window": 0.0,
+     "zero_windows": 70,
+     "zero_window_pct": 93.33
+    },
+    "synthetic": {
+     "n_windows": 120,
+     "trades": 45,
+     "trades_per_window": 0.375,
+     "median_trades_per_window": 0.0,
+     "zero_windows": 81,
+     "zero_window_pct": 67.5
+    }
+   },
+   "rankable_real": false,
+   "rankable_synthetic": false,
    "active": false,
    "real": {
     "reward": 0.0,
@@ -5468,11 +6387,31 @@
     "worst": 0.0,
     "n": 75,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 5,
-    "approved_blocks": 4,
-    "approved_pooled": true,
+    "approved_blocks": 0,
+    "approved_pooled": false,
     "gate": {
-     "approved": true,
+     "approved": false,
+     "beats_baselines": true,
+     "eligible": false,
+     "activity_checked": true,
+     "ineligible_reasons": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "93.3% de ventanas vacias (> 25%)"
+     ],
+     "activity": {
+      "n_windows": 75,
+      "trades": 5,
+      "trades_per_window": 0.067,
+      "median_trades_per_window": 0.0,
+      "zero_windows": 70,
+      "zero_window_pct": 93.33
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": 0.0,
      "best_baseline": "equal_weight",
      "best_baseline_reward": -1.3904,
@@ -5491,7 +6430,8 @@
        "best": 5.0218,
        "worst": -2.8132,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.3904,
@@ -5502,7 +6442,8 @@
        "best": 4.9451,
        "worst": -2.4343,
        "n": 75,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -5604,11 +6545,31 @@
     "worst": -2.239,
     "n": 120,
     "alpha": 0.25,
+    "activity": null,
     "n_blocks": 8,
-    "approved_blocks": 1,
+    "approved_blocks": 0,
     "approved_pooled": false,
     "gate": {
      "approved": false,
+     "beats_baselines": false,
+     "eligible": false,
+     "activity_checked": true,
+     "ineligible_reasons": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "67.5% de ventanas vacias (> 25%)"
+     ],
+     "activity": {
+      "n_windows": 120,
+      "trades": 45,
+      "trades_per_window": 0.375,
+      "median_trades_per_window": 0.0,
+      "zero_windows": 81,
+      "zero_window_pct": 67.5
+     },
+     "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+     },
      "strategy_reward": -1.0958,
      "best_baseline": "btc_hold",
      "best_baseline_reward": -1.008,
@@ -5627,7 +6588,8 @@
        "best": 3.9256,
        "worst": -3.2736,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       },
       "equal_weight": {
        "reward": -1.0564,
@@ -5638,7 +6600,8 @@
        "best": 4.9361,
        "worst": -3.127,
        "n": 120,
-       "alpha": 0.25
+       "alpha": 0.25,
+       "activity": null
       }
      }
     },
@@ -5852,7 +6815,196 @@
    "mean_reversion#03",
    "mean_reversion#01",
    "crypto_momentum#02"
+  ],
+  "real_rankable": [
+   "crypto_momentum#00",
+   "crypto_momentum#01",
+   "mean_reversion#03",
+   "crypto_momentum#02",
+   "crypto_momentum#07",
+   "crypto_momentum#04",
+   "mean_reversion#06",
+   "crypto_momentum#05",
+   "crypto_momentum#03"
+  ],
+  "synthetic_rankable": [
+   "mean_reversion#06",
+   "crypto_momentum#03",
+   "crypto_momentum#05",
+   "crypto_momentum#01",
+   "crypto_momentum#07",
+   "crypto_momentum#04",
+   "crypto_momentum#00",
+   "mean_reversion#05",
+   "mean_reversion#03",
+   "mean_reversion#01",
+   "crypto_momentum#02"
   ]
+ },
+ "eligibility": {
+  "floor": {
+   "min_median_trades_per_window": 3.0,
+   "max_zero_window_pct": 25.0
+  },
+  "sides": {
+   "real": {
+    "measured": true,
+    "n_configs": 16,
+    "n_rankable": 9,
+    "dropped": [
+     "crypto_momentum#06",
+     "mean_reversion#00",
+     "mean_reversion#01",
+     "mean_reversion#02",
+     "mean_reversion#04",
+     "mean_reversion#05",
+     "mean_reversion#07"
+    ],
+    "ranking_all": [
+     "mean_reversion#07",
+     "mean_reversion#04",
+     "mean_reversion#00",
+     "mean_reversion#02",
+     "crypto_momentum#06",
+     "mean_reversion#05",
+     "crypto_momentum#00",
+     "crypto_momentum#01",
+     "mean_reversion#03",
+     "crypto_momentum#02",
+     "mean_reversion#01",
+     "crypto_momentum#07",
+     "crypto_momentum#04",
+     "mean_reversion#06",
+     "crypto_momentum#05",
+     "crypto_momentum#03"
+    ],
+    "ranking_rankable": [
+     "crypto_momentum#00",
+     "crypto_momentum#01",
+     "mean_reversion#03",
+     "crypto_momentum#02",
+     "crypto_momentum#07",
+     "crypto_momentum#04",
+     "mean_reversion#06",
+     "crypto_momentum#05",
+     "crypto_momentum#03"
+    ],
+    "winner_all": "mean_reversion#07",
+    "winner_rankable": "crypto_momentum#00",
+    "changes_winner": true,
+    "approved_without_floor": [
+     "crypto_momentum#00",
+     "crypto_momentum#06",
+     "mean_reversion#00",
+     "mean_reversion#02",
+     "mean_reversion#04",
+     "mean_reversion#05",
+     "mean_reversion#07"
+    ],
+    "approved_with_floor": [
+     "crypto_momentum#00"
+    ],
+    "reasons": {
+     "crypto_momentum#06": [
+      "la ventana mediana tiene 1.00 operaciones (< 3)",
+      "36.0% de ventanas vacias (> 25%)"
+     ],
+     "mean_reversion#00": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "68.0% de ventanas vacias (> 25%)"
+     ],
+     "mean_reversion#01": [
+      "la ventana mediana tiene 2.00 operaciones (< 3)",
+      "25.3% de ventanas vacias (> 25%)"
+     ],
+     "mean_reversion#02": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "58.7% de ventanas vacias (> 25%)"
+     ],
+     "mean_reversion#04": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "74.7% de ventanas vacias (> 25%)"
+     ],
+     "mean_reversion#05": [
+      "la ventana mediana tiene 2.00 operaciones (< 3)",
+      "37.3% de ventanas vacias (> 25%)"
+     ],
+     "mean_reversion#07": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "93.3% de ventanas vacias (> 25%)"
+     ]
+    }
+   },
+   "synthetic": {
+    "measured": true,
+    "n_configs": 16,
+    "n_rankable": 11,
+    "dropped": [
+     "crypto_momentum#06",
+     "mean_reversion#00",
+     "mean_reversion#02",
+     "mean_reversion#04",
+     "mean_reversion#07"
+    ],
+    "ranking_all": [
+     "mean_reversion#07",
+     "mean_reversion#06",
+     "crypto_momentum#03",
+     "crypto_momentum#05",
+     "mean_reversion#00",
+     "mean_reversion#04",
+     "crypto_momentum#01",
+     "crypto_momentum#07",
+     "crypto_momentum#06",
+     "crypto_momentum#04",
+     "crypto_momentum#00",
+     "mean_reversion#05",
+     "mean_reversion#02",
+     "mean_reversion#03",
+     "mean_reversion#01",
+     "crypto_momentum#02"
+    ],
+    "ranking_rankable": [
+     "mean_reversion#06",
+     "crypto_momentum#03",
+     "crypto_momentum#05",
+     "crypto_momentum#01",
+     "crypto_momentum#07",
+     "crypto_momentum#04",
+     "crypto_momentum#00",
+     "mean_reversion#05",
+     "mean_reversion#03",
+     "mean_reversion#01",
+     "crypto_momentum#02"
+    ],
+    "winner_all": "mean_reversion#07",
+    "winner_rankable": "mean_reversion#06",
+    "changes_winner": true,
+    "approved_without_floor": [],
+    "approved_with_floor": [],
+    "reasons": {
+     "crypto_momentum#06": [
+      "la ventana mediana tiene 1.00 operaciones (< 3)",
+      "26.7% de ventanas vacias (> 25%)"
+     ],
+     "mean_reversion#00": [
+      "la ventana mediana tiene 1.00 operaciones (< 3)"
+     ],
+     "mean_reversion#02": [
+      "la ventana mediana tiene 1.00 operaciones (< 3)",
+      "35.8% de ventanas vacias (> 25%)"
+     ],
+     "mean_reversion#04": [
+      "la ventana mediana tiene 1.00 operaciones (< 3)",
+      "49.2% de ventanas vacias (> 25%)"
+     ],
+     "mean_reversion#07": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "67.5% de ventanas vacias (> 25%)"
+     ]
+    }
+   }
+  }
  },
  "transfer": {
   "spearman": -0.0382,
@@ -5955,7 +7107,12 @@
    ]
   },
   "activity": {
-   "min_trades_per_fold": 5.0,
+   "min_trades_per_fold": 3.0,
+   "active_criterion": "suelo de actividad de scoring.activity, exigido en los dos mundos (>= 3 operaciones en la ventana mediana y <= 25% de ventanas vacias)",
+   "floor": {
+    "min_median_trades_per_window": 3.0,
+    "max_zero_window_pct": 25.0
+   },
    "bootstrap_active": {
     "method": "bootstrap por bloques (sub-ventana real / muestra sintetica entera)",
     "n_samples": 2000,
@@ -6055,6 +7212,297 @@
      "real": 0.0,
      "synthetic": 0.33
     }
+   },
+   "measured_per_window": true,
+   "stats": {
+    "crypto_momentum#00": {
+     "real": {
+      "n_windows": 75,
+      "trades": 2442,
+      "trades_per_window": 32.56,
+      "median_trades_per_window": 33.0,
+      "zero_windows": 0,
+      "zero_window_pct": 0.0
+     },
+     "synthetic": {
+      "n_windows": 120,
+      "trades": 4222,
+      "trades_per_window": 35.183,
+      "median_trades_per_window": 33.5,
+      "zero_windows": 0,
+      "zero_window_pct": 0.0
+     }
+    },
+    "crypto_momentum#01": {
+     "real": {
+      "n_windows": 75,
+      "trades": 570,
+      "trades_per_window": 7.6,
+      "median_trades_per_window": 5.0,
+      "zero_windows": 9,
+      "zero_window_pct": 12.0
+     },
+     "synthetic": {
+      "n_windows": 120,
+      "trades": 1004,
+      "trades_per_window": 8.367,
+      "median_trades_per_window": 8.0,
+      "zero_windows": 0,
+      "zero_window_pct": 0.0
+     }
+    },
+    "crypto_momentum#02": {
+     "real": {
+      "n_windows": 75,
+      "trades": 3541,
+      "trades_per_window": 47.213,
+      "median_trades_per_window": 44.0,
+      "zero_windows": 0,
+      "zero_window_pct": 0.0
+     },
+     "synthetic": {
+      "n_windows": 120,
+      "trades": 4623,
+      "trades_per_window": 38.525,
+      "median_trades_per_window": 34.5,
+      "zero_windows": 1,
+      "zero_window_pct": 0.83
+     }
+    },
+    "crypto_momentum#03": {
+     "real": {
+      "n_windows": 75,
+      "trades": 2963,
+      "trades_per_window": 39.507,
+      "median_trades_per_window": 37.0,
+      "zero_windows": 0,
+      "zero_window_pct": 0.0
+     },
+     "synthetic": {
+      "n_windows": 120,
+      "trades": 4991,
+      "trades_per_window": 41.592,
+      "median_trades_per_window": 39.0,
+      "zero_windows": 0,
+      "zero_window_pct": 0.0
+     }
+    },
+    "crypto_momentum#04": {
+     "real": {
+      "n_windows": 75,
+      "trades": 2798,
+      "trades_per_window": 37.307,
+      "median_trades_per_window": 37.0,
+      "zero_windows": 1,
+      "zero_window_pct": 1.33
+     },
+     "synthetic": {
+      "n_windows": 120,
+      "trades": 4215,
+      "trades_per_window": 35.125,
+      "median_trades_per_window": 30.0,
+      "zero_windows": 0,
+      "zero_window_pct": 0.0
+     }
+    },
+    "crypto_momentum#05": {
+     "real": {
+      "n_windows": 75,
+      "trades": 2457,
+      "trades_per_window": 32.76,
+      "median_trades_per_window": 31.0,
+      "zero_windows": 1,
+      "zero_window_pct": 1.33
+     },
+     "synthetic": {
+      "n_windows": 120,
+      "trades": 4059,
+      "trades_per_window": 33.825,
+      "median_trades_per_window": 30.0,
+      "zero_windows": 0,
+      "zero_window_pct": 0.0
+     }
+    },
+    "crypto_momentum#06": {
+     "real": {
+      "n_windows": 75,
+      "trades": 190,
+      "trades_per_window": 2.533,
+      "median_trades_per_window": 1.0,
+      "zero_windows": 27,
+      "zero_window_pct": 36.0
+     },
+     "synthetic": {
+      "n_windows": 120,
+      "trades": 220,
+      "trades_per_window": 1.833,
+      "median_trades_per_window": 1.0,
+      "zero_windows": 32,
+      "zero_window_pct": 26.67
+     }
+    },
+    "crypto_momentum#07": {
+     "real": {
+      "n_windows": 75,
+      "trades": 1804,
+      "trades_per_window": 24.053,
+      "median_trades_per_window": 21.0,
+      "zero_windows": 0,
+      "zero_window_pct": 0.0
+     },
+     "synthetic": {
+      "n_windows": 120,
+      "trades": 4036,
+      "trades_per_window": 33.633,
+      "median_trades_per_window": 31.0,
+      "zero_windows": 0,
+      "zero_window_pct": 0.0
+     }
+    },
+    "mean_reversion#00": {
+     "real": {
+      "n_windows": 75,
+      "trades": 58,
+      "trades_per_window": 0.773,
+      "median_trades_per_window": 0.0,
+      "zero_windows": 51,
+      "zero_window_pct": 68.0
+     },
+     "synthetic": {
+      "n_windows": 120,
+      "trades": 235,
+      "trades_per_window": 1.958,
+      "median_trades_per_window": 1.0,
+      "zero_windows": 30,
+      "zero_window_pct": 25.0
+     }
+    },
+    "mean_reversion#01": {
+     "real": {
+      "n_windows": 75,
+      "trades": 205,
+      "trades_per_window": 2.733,
+      "median_trades_per_window": 2.0,
+      "zero_windows": 19,
+      "zero_window_pct": 25.33
+     },
+     "synthetic": {
+      "n_windows": 120,
+      "trades": 536,
+      "trades_per_window": 4.467,
+      "median_trades_per_window": 4.0,
+      "zero_windows": 7,
+      "zero_window_pct": 5.83
+     }
+    },
+    "mean_reversion#02": {
+     "real": {
+      "n_windows": 75,
+      "trades": 55,
+      "trades_per_window": 0.733,
+      "median_trades_per_window": 0.0,
+      "zero_windows": 44,
+      "zero_window_pct": 58.67
+     },
+     "synthetic": {
+      "n_windows": 120,
+      "trades": 140,
+      "trades_per_window": 1.167,
+      "median_trades_per_window": 1.0,
+      "zero_windows": 43,
+      "zero_window_pct": 35.83
+     }
+    },
+    "mean_reversion#03": {
+     "real": {
+      "n_windows": 75,
+      "trades": 700,
+      "trades_per_window": 9.333,
+      "median_trades_per_window": 10.0,
+      "zero_windows": 1,
+      "zero_window_pct": 1.33
+     },
+     "synthetic": {
+      "n_windows": 120,
+      "trades": 1495,
+      "trades_per_window": 12.458,
+      "median_trades_per_window": 12.0,
+      "zero_windows": 0,
+      "zero_window_pct": 0.0
+     }
+    },
+    "mean_reversion#04": {
+     "real": {
+      "n_windows": 75,
+      "trades": 20,
+      "trades_per_window": 0.267,
+      "median_trades_per_window": 0.0,
+      "zero_windows": 56,
+      "zero_window_pct": 74.67
+     },
+     "synthetic": {
+      "n_windows": 120,
+      "trades": 75,
+      "trades_per_window": 0.625,
+      "median_trades_per_window": 1.0,
+      "zero_windows": 59,
+      "zero_window_pct": 49.17
+     }
+    },
+    "mean_reversion#05": {
+     "real": {
+      "n_windows": 75,
+      "trades": 220,
+      "trades_per_window": 2.933,
+      "median_trades_per_window": 2.0,
+      "zero_windows": 28,
+      "zero_window_pct": 37.33
+     },
+     "synthetic": {
+      "n_windows": 120,
+      "trades": 696,
+      "trades_per_window": 5.8,
+      "median_trades_per_window": 4.0,
+      "zero_windows": 3,
+      "zero_window_pct": 2.5
+     }
+    },
+    "mean_reversion#06": {
+     "real": {
+      "n_windows": 75,
+      "trades": 971,
+      "trades_per_window": 12.947,
+      "median_trades_per_window": 12.0,
+      "zero_windows": 0,
+      "zero_window_pct": 0.0
+     },
+     "synthetic": {
+      "n_windows": 120,
+      "trades": 2841,
+      "trades_per_window": 23.675,
+      "median_trades_per_window": 24.0,
+      "zero_windows": 0,
+      "zero_window_pct": 0.0
+     }
+    },
+    "mean_reversion#07": {
+     "real": {
+      "n_windows": 75,
+      "trades": 5,
+      "trades_per_window": 0.067,
+      "median_trades_per_window": 0.0,
+      "zero_windows": 70,
+      "zero_window_pct": 93.33
+     },
+     "synthetic": {
+      "n_windows": 120,
+      "trades": 45,
+      "trades_per_window": 0.375,
+      "median_trades_per_window": 0.0,
+      "zero_windows": 81,
+      "zero_window_pct": 67.5
+     }
+    }
    }
   }
  },
@@ -6070,8 +7518,8 @@
  "caveats": [
   {
    "key": "inactividad_premiada",
-   "title": "El CVaR premia no operar, y eso contamina los dos rankings",
-   "text": "Una configuracion que apenas abre posiciones deja la curva plana: Sharpe 0, rotacion 0, caida 0, headline 0 EXACTO. En un periodo en el que casi todo lo que arriesga pierde, ese cero gana. La correlacion entre recompensa y operaciones por ventana lo mide: -0.8447 en el real y -0.0868 en el sintetico. Por eso el estudio publica ademas el rho restringido a las 9 configuraciones que operan de verdad en los dos mundos (>= 5 operaciones por ventana OOS): -0.6667. Al quitar la inactividad el acuerdo no aparece: se vuelve NEGATIVO. Entre configuraciones que actuan de verdad, el sintetico tiende a invertir el orden del mercado, asi que el veredicto de arriba no es un artefacto de las inactivas —es, si acaso, mas benigno que la realidad. Es un subconjunto POST-HOC y pequeno, y su intervalo por bloques [-0.8833, 0.2333] cruza el cero: senal fuerte, no prueba."
+   "title": "El CVaR premia no operar, y por eso el ranking tiene un suelo",
+   "text": "Una configuracion que apenas abre posiciones deja la curva plana: Sharpe 0, rotacion 0, caida 0, headline 0 EXACTO. En un periodo en el que casi todo lo que arriesga pierde, ese cero gana. La correlacion entre recompensa y operaciones por ventana lo mide: -0.8447 en el real y -0.0868 en el sintetico. La respuesta NO es penalizar la baja rotacion (eso ya lo hace lambda, y el estudio de pesos midio que no estabiliza nada) sino un REQUISITO DE ELEGIBILIDAD: para entrar en el ranking hay que operar al menos 3 veces en la ventana mediana y tener como mucho un 25% de ventanas vacias (ver scoring.activity). En el lado real eso deja 9 de 16 configuraciones, cambia al ganador de mean_reversion#07 a crypto_momentum#00 y reduce los aprobados del gate de 7 a 1. Las que caen conservan su recompensa publicada: no se les resta nada, se les niega competir. El rho restringido a las 9 configuraciones que operan de verdad en los dos mundos es -0.6667. Al quitar la inactividad el acuerdo no aparece: se vuelve NEGATIVO. Entre configuraciones que actuan de verdad, el sintetico tiende a invertir el orden del mercado, asi que el veredicto de arriba no es un artefacto de las inactivas —es, si acaso, mas benigno que la realidad. Es un subconjunto POST-HOC y pequeno, y su intervalo por bloques [-0.8833, 0.2333] cruza el cero: senal fuerte, no prueba."
   },
   {
    "key": "un_solo_camino",

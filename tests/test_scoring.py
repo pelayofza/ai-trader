@@ -255,12 +255,19 @@ class TestBaselines:
 
 
 class TestBaselineGate:
-    """El gate: una estrategia solo aprueba si bate al MEJOR baseline."""
+    """El gate: una estrategia solo aprueba si bate al MEJOR baseline y opera de verdad.
+
+    La segunda condicion (`scoring.activity`) vive con sus propios tests en
+    `test_activity.py`; aqui las estrategias llegan con actividad de sobra para que lo que
+    se este probando sea la comparacion contra los baselines y nada mas."""
+
+    ACTIVE = [9, 9, 9, 9]  # operaciones por ventana, por encima del suelo
 
     def test_approves_a_strategy_that_beats_every_baseline(self):
         verdict = gate(
             [2.0, 2.0, 2.0, 2.0],
             {BASELINE_BTC: [1.0, 1.0, 1.0, 1.0], BASELINE_SPY: [0.5, 0.5, 0.5, 0.5]},
+            trades=self.ACTIVE,
         )
 
         assert verdict.approved

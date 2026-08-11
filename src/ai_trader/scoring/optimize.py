@@ -52,7 +52,10 @@ class OptimizationResult:
     validacion son arquetipos que el CEM nunca vio.
 
     Tres capas de honestidad ademas del hold-out:
-    - `gate`: la estrategia solo APRUEBA si bate al mejor baseline pasivo en validation.
+    - `gate`: la estrategia solo APRUEBA si bate al mejor baseline pasivo en validation Y
+      supera el suelo de actividad (`scoring.activity`): no hacer nada bate a los pasivos
+      en un mercado que cae, y eso no es batirlos. `train.activity` y
+      `validation.activity` publican las operaciones por muestra al lado de la recompensa.
     - `pbo`: probabilidad de que elegir por backtest sea elegir ruido.
     - `dsr`: Sharpe del ganador descontado por el nº de configuraciones probadas.
     """
@@ -85,6 +88,7 @@ class OptimizationResult:
             "strategy_type": self.strategy_type,
             "best_params": self.best_params,
             "approved": self.approved,
+            "rankable": self.gate.eligible,
             "train": self.train.as_dict(),
             "validation": self.validation.as_dict(),
             "overfit_gap": round(self.overfit_gap, 4),
@@ -284,8 +288,17 @@ def run_optimization(
 
     train_evals = evaluator.evaluations(best_spec, split.train)
     validation_evals = evaluator.evaluations(best_spec, split.validation)
-    train_stats = aggregate_reward([e.score for e in train_evals], alpha=cvar_alpha)
-    validation_stats = aggregate_reward([e.score for e in validation_evals], alpha=cvar_alpha)
+    # La actividad acompana a la recompensa desde el primer sitio en el que se calcula: una
+    # muestra sin operaciones puntua 0 EXACTO y ese 0 es indistinguible de "no perdio" si
+    # no se publica al lado cuantas veces se opero. Ver `scoring.activity`.
+    train_stats = aggregate_reward(
+        [e.score for e in train_evals], alpha=cvar_alpha,
+        trades=[e.num_trades for e in train_evals],
+    )
+    validation_stats = aggregate_reward(
+        [e.score for e in validation_evals], alpha=cvar_alpha,
+        trades=[e.num_trades for e in validation_evals],
+    )
 
     # El gate se juega en VALIDATION: batir baselines en los escenarios que el CEM ya vio
     # no probaria nada.
@@ -295,6 +308,7 @@ def run_optimization(
         baseline_scores,
         alpha=cvar_alpha,
         missing=_missing_baselines(baseline_scores),
+        trades=[e.num_trades for e in validation_evals],
     )
 
     # Matriz muestras x configuraciones (train) para el CSCV.
@@ -307,11 +321,16 @@ def run_optimization(
         kurtosis=_mean([e.returns_kurtosis for e in validation_evals], default=3.0),
     )
 
+    activity = validation_stats.activity
     logger.info(
         "Done '%s' | train reward=%.4f | validation reward=%.4f | overfit gap=%.4f "
-        "| gate=%s (mejor baseline: %s %.4f) | PBO=%.3f | DSR=%.3f",
+        "| ops/muestra=%.1f (%.0f%% vacias)%s | gate=%s (mejor baseline: %s %.4f) "
+        "| PBO=%.3f | DSR=%.3f",
         strategy_type, train_stats.reward, validation_stats.reward,
         train_stats.reward - validation_stats.reward,
+        activity.trades_per_window if activity else float("nan"),
+        activity.zero_window_pct if activity else float("nan"),
+        "" if baseline_gate.eligible else " NO RANKEABLE",
         "APROBADO" if baseline_gate.approved else "RECHAZADO",
         baseline_gate.best_name, baseline_gate.best_reward,
         pbo.pbo, dsr.dsr,

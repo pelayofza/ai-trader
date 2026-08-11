@@ -17,8 +17,14 @@ from pathlib import Path
 import numpy as np
 
 from ai_trader.backtest.metrics import DEFAULT_HEADLINE_WEIGHTS
+from ai_trader.backtest.session_study import (
+    SESSIONS_REPORT,
+    US_KEY,
+    load_sessions_report,
+)
 from ai_trader.observation.features import OWN_ASSET_FEATURES
 from ai_trader.observation.regime import REGIME_FEATURES
+from ai_trader.scoring.activity_study import activity_report_path, load_activity_report
 from ai_trader.scoring.search_space import get_space
 from ai_trader.scoring.transfer_study import (
     DEFAULT_LIBRARY_ID as TRANSFER_LIBRARY,
@@ -307,6 +313,37 @@ def _transfer() -> dict | None:
     }
 
 
+def _activity() -> dict | None:
+    """Cifras del suelo de actividad (data/activity): las dos condiciones, la regla que
+    eligio el umbral y su efecto medido sobre el gate. Se lee del informe publicado."""
+    report = load_activity_report(ROOT / activity_report_path(TRANSFER_LIBRARY))
+    if not report:
+        logger.warning("Sin informe de actividad: la seccion 5.6b saldra degradada")
+        return None
+
+    return {
+        "library": report["source"]["library_id"],
+        "floor": report["floor"],
+        "decision": report["decision"],
+        "mechanism": report["mechanism"],
+        "band": report["band"],
+        "sweep": report["sweep"],
+        "reproducibility": report["reproducibility"],
+        "gate": report["gate"],
+        "rows": [
+            {
+                "config_id": c["config_id"],
+                "reward": c["real"]["reward"],
+                "trades_per_window": c["real"]["trades_per_window"],
+                "zero_window_pct": c["real"]["zero_window_pct"],
+                "rankable": c["real"]["rankable"],
+            }
+            for c in sorted(report["configs"], key=lambda c: -c["real"]["reward"])
+        ],
+        "generated_at": report["generated_at"][:10],
+    }
+
+
 def _validation() -> dict | None:
     """Cifras del estudio de validacion multiventana (data/validation).
 
@@ -344,6 +381,41 @@ def _validation() -> dict | None:
     }
 
 
+def _sessions() -> dict | None:
+    """Cifras del estudio de descomposicion por sesion horaria (data/sessions).
+
+    Es lo que convierte la convencion intrabar de la 3.3 —que hasta ahora se justificaba
+    solo por prudencia— en una limitacion MEDIDA con su umbral. Se lee del informe
+    publicado, no se recalcula: son seis anos de barras 1H de 24 pares."""
+    report = load_sessions_report(ROOT / SESSIONS_REPORT)
+    if not report:
+        logger.warning("Sin informe de sesiones: la seccion 3.3 saldra degradada")
+        return None
+
+    plan = report["plan"]
+    latency = {r["hours"]: r for r in report["latency"]["rows"]}
+    overall = report["overall"]["sessions"]
+    return {
+        "window": plan["window"],
+        "exchange": plan["exchange"],
+        "thresholds": plan["thresholds"],
+        "reference_cost_bps": plan["reference_cost_bps"],
+        "n_symbols": report["overall"]["n_symbols"],
+        "n_days": report["overall"]["n_days"],
+        "sessions": report["sessions"],
+        "overall": overall,
+        "gap": report["gap"],
+        "latency_1h": latency.get(1),
+        "latency_rows": report["latency"]["rows"],
+        "trend": report["trend"],
+        "verdicts": report["verdicts"],
+        "us": overall[US_KEY],
+        "us_key": US_KEY,
+        "n_cohort": len(report["cohort"]),
+        "generated_at": report["generated_at"][:10],
+    }
+
+
 def collect() -> dict:
     store = SyntheticStore(ROOT / "data" / "synthetic")
     facts: dict = {}
@@ -377,6 +449,8 @@ def collect() -> dict:
     facts["fidelity"] = _fidelity()
     facts["transfer"] = _transfer()
     facts["validation"] = _validation()
+    facts["sessions"] = _sessions()
+    facts["activity"] = _activity()
 
     facts["mom_params"] = _params(CryptoMomentumStrategy().config)
     facts["mr_params"] = _params(MeanReversionStrategy().config)
