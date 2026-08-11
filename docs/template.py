@@ -551,6 +551,149 @@ reproducible con <span class="mono">python -m ai_trader.synthetic.fidelity_study
 ({f["n_scenarios"]} escenarios × {f["n_paths"]} caminos; {f["generated_at"]}).</p>"""
 
 
+def _transfer_block(t):
+    """Seccion 2.9: ¿ordena el mundo sintetico las estrategias como el real?
+
+    Es la pregunta que §2.8 NO responde. La fidelidad mide parecido estadistico; esto mide
+    si el orden se traslada, que es lo unico que el producto le pide al generador."""
+    if not t:
+        return (
+            "<h3>2.9 · Transferencia de ranking</h3>"
+            "<div class=\"note\"><b>Limitación declarada.</b> El informe de transferencia "
+            "(<span class=\"mono\">data/transfer/</span>) no está disponible en este árbol, así que "
+            "este documento <b>no puede afirmar</b> que el mundo sintético ordene las estrategias "
+            "como el mercado. Mientras no exista, la regla vigente es la conservadora: el sintético "
+            "no se usa como criterio de selección. Genéralo con "
+            "<span class=\"mono\">python -m ai_trader.scoring.transfer_study --offline</span>.</div>"
+        )
+
+    v, b, cb = t["verdict"], t["boot"], t["boot_configs"]
+    k, ds, val, act = t["top_k"], t["discrepancies"], t["validation"], t["activity"]
+    transfers = v["transfers"]
+    inverted = v["key"] == "ordenacion_invertida"
+
+    rows = "".join(
+        f"<tr><td class=mono>{r['config_id']}"
+        f"{'' if r['active'] else ' <span class=tag>(apenas opera)</span>'}</td>"
+        f"<td>{'reversión' if r['family'] == 'mean_reversion' else 'momentum'}</td>"
+        f"<td class='n mono'>{_n(r['reward_real'], 2)}</td>"
+        f"<td class='n mono'>{_n(r['reward_synthetic'], 2)}</td>"
+        f"<td class='n mono'>{_n(r['trades_real'], 1)}</td>"
+        f"<td class='n mono'>{r['rank_real']}</td>"
+        f"<td class='n mono'>{r['rank_synthetic']}</td>"
+        f"<td class='n mono'>{'+' if r['delta'] > 0 else ''}{r['delta']}</td></tr>"
+        for r in t["rows"]
+    )
+
+    ba, pa = act["bootstrap_active"], act["permutation_active"]
+    if act["spearman_active"] is None:
+        activo = ""
+    elif act["spearman_active"] <= -v["threshold"]:
+        activo = f"""<p>Y al quitar la inactividad el resultado <b>empeora</b>, no mejora. Sobre las
+{act["n_active"]} configuraciones que operan de verdad en los dos mundos —el único subconjunto donde la
+pregunta original tiene sentido— el acuerdo no es nulo sino <b>negativo</b>:
+ρ = {_n(act["spearman_active"], 3)}. Entre estrategias que actúan, el mundo sintético tiende a
+<b>invertir</b> el orden del mercado.
+{f'''Con la cautela obligatoria: es un subconjunto <i>post-hoc</i> de {act["n_active"]} puntos y su
+intervalo por bloques [{_n(ba["lo"], 2)}, {_n(ba["hi"], 2)}] cruza el cero
+(p = {_n(pa["p_value"], 3)}), así que es una señal fuerte y no una prueba. Lo que sí queda descartado es
+que el ρ ≈ 0 de la tabla sea un artefacto de la inactividad: al quitarla, el acuerdo no aparece.'''
+if ba and not ba["excludes_zero"] else ""}</p>"""
+    else:
+        activo = f"""<p>Restringido a las {act["n_active"]} configuraciones que operan de verdad en los
+dos mundos, el acuerdo es ρ = {_n(act["spearman_active"], 3)}: el veredicto de la tabla no cambia al
+quitar las que apenas abren posiciones.</p>"""
+    caveats = "".join(
+        f"<li><b>{c['title']}.</b> {c['text']}</li>" for c in t["caveats"]
+    )
+
+    if transfers:
+        veredicto = f"""<div class="note"><b>Veredicto: el orden transfiere.</b> ρ = {_n(t["rho"], 3)}
+≥ {_n(v["threshold"], 2)}, así que el generador es un <b>pre-cribado legítimo</b> y el flujo definitivo
+del sistema queda fijado: <b>{v["flow"]}</b>. Lo que esto autoriza es a <i>filtrar</i> candidatas barato
+en el mundo sintético; lo que no autoriza es a que el ranking que decide salga de ahí.</div>"""
+    elif inverted:
+        veredicto = f"""<div class="note"><b>Veredicto: el orden se invierte.</b> ρ = {_n(t["rho"], 3)}
+≤ −{_n(v["threshold"], 2)}. El mundo sintético no es que no informe: es que ordena <b>al revés</b> que
+el mercado, de modo que seguirlo sería peor que elegir al azar. {v["flow"]}.</div>"""
+    else:
+        veredicto = f"""<div class="note"><b>Veredicto: no hay transferencia medible.</b>
+ρ = {_n(t["rho"], 3)}, por debajo del umbral de {_n(v["threshold"], 2)} declarado antes de mirar el
+resultado. La consecuencia operativa, y este documento la asume: <b>{v["flow"]}</b>. La librería
+sintética sigue siendo válida para lo que sí está medido —fidelidad de los hechos estilizados (§2.8),
+banco de estrés y regresión determinista— pero <b>no</b> como juez que ordena candidatas.</div>"""
+
+    return f"""
+<h3>2.9 · Transferencia de ranking: ¿ordena el sintético como el mercado?</h3>
+<p>§2.8 responde si el mundo sintético <b>se parece</b> al mercado. No responde lo único que el producto
+le pide de verdad: que si una configuración es mejor que otra ahí, <b>tienda a serlo también aquí</b>.
+No son la misma pregunta —un generador puede clavar las colas y ordenar al revés, y ninguna métrica de
+fidelidad lo detectaría—, así que se mide aparte y con su propio umbral.</p>
+<p>El diseño persigue una sola cosa: que entre los dos lados <b>lo único que cambie sea el mundo del que
+salen los precios</b>. Las mismas <b>{t["n_configs"]}</b> configuraciones (la rejilla del estudio de
+pesos de §5.2b: hipercubo latino con semilla {t["study_seed"]} sobre las dos primitivas), el mismo
+config, el mismo universo de <b>{len(t["symbols"])}</b> pares —los que existen a la vez en el mercado y
+en la librería—, el mismo esquema CPCV con {val["n_folds"]} ventanas OOS, la misma purga de
+{val["purge_days"]} días y el mismo embargo de {val["embargo_days"]}. Y la misma <b>longitud de
+ventana</b>: un camino sintético dura {val["window_days"]} días, así que el histórico real
+({t["real_start"]} → {t["real_end"]}) se trocea en {t["n_sub_windows"]} sub-ventanas disjuntas de ese
+tamaño en vez de evaluarse de una sola pieza. Comparar un Sharpe estimado sobre ocho años con otro
+estimado sobre dieciocho meses compararía precisiones, no mundos.</p>
+<p>Cada configuración produce muchos scores —sub-ventana × fold en el real, muestra × fold en el
+sintético— y todos van a <b>una sola distribución</b>, de la que se toma el CVaR al
+{_n(val["cvar_alpha"] * 100, 0)}%. Tomar el CVaR de cada unidad y luego el CVaR de esos CVaR compondría
+dos conservadurismos y dispararía la varianza del estimador.</p>
+{veredicto}
+<table><thead><tr><th>Lectura</th><th class=n>valor</th><th>qué dice</th></tr></thead><tbody>
+<tr><td>Spearman de los dos rankings</td><td class='n mono'>{_n(t["rho"], 3)}</td>
+  <td>acuerdo global del orden sobre {t["n_configs"]} configuraciones</td></tr>
+<tr><td>IC{_n(b["ci_pct"], 0)}% · bootstrap por bloques</td>
+  <td class='n mono'>[{_n(b["lo"], 2)}, {_n(b["hi"], 2)}]</td>
+  <td>{b["n_blocks_real"]} bloques reales, {b["n_blocks_synthetic"]} sintéticos ·
+  {"excluye" if b["excludes_zero"] else "<b>incluye</b>"} el cero</td></tr>
+<tr><td>IC{_n(cb["ci_pct"], 0)}% · remuestreando configuraciones</td>
+  <td class='n mono'>[{_n(cb["lo"], 2)}, {_n(cb["hi"], 2)}]</td>
+  <td>otra pregunta: ¿saldría lo mismo con otras {t["n_configs"]} configuraciones del hipercubo?</td></tr>
+<tr><td>p (permutación)</td><td class='n mono'>{_n(t["permutation"]["p_value"], 4)}</td>
+  <td>probabilidad de un acuerdo así de fuerte por azar</td></tr>
+<tr><td>Top-{k["k"]} del sintético en la mitad buena del real</td>
+  <td class='n mono'>{k["hits"]}/{k["k"]}</td>
+  <td>la lectura operativa del pre-cribado · por azar {_n(k["expected_by_chance"], 1)},
+  p = {_n(k["p_value"], 3)}</td></tr>
+<tr><td>Desacuerdos ≥ {ds["threshold"]} puestos</td><td class='n mono'>{ds["n_large"]}</td>
+  <td>{ds["n_overrated_by_synthetic"]} sobrevaloradas y {ds["n_underrated_by_synthetic"]}
+  infravaloradas por el sintético. Sobrevalorar es el error caro: asciende basura a la fase real</td></tr>
+</tbody></table>
+<p>El <b>bootstrap es por bloques</b>, no iid, y esa elección es la que hace honesto el intervalo: el
+histórico real es un único camino, de modo que sus {b["n_blocks_real"]} sub-ventanas son su única fuente
+de dispersión y los {val["n_folds"]} folds de cada una comparten calendario. Remuestrear scores sueltos
+fingiría una independencia que no existe y devolvería un intervalo demasiado estrecho.</p>
+<h4>El control que hay que hacer antes de creerse un ρ ≈ 0</h4>
+<p>Un ρ nulo admite dos lecturas muy distintas: «el sintético no transfiere» o «ninguno de los dos lados
+estaba rankeando estrategias». Hay una razón concreta para sospechar la segunda: el headline de una
+configuración que <b>no opera</b> es <b>cero exacto</b> —curva plana, Sharpe 0, rotación 0, caída 0— y
+en un periodo donde casi todo lo que arriesga pierde, ese cero gana; el CVaR, que puntúa por la cola
+mala, lo premia doblemente. La correlación entre recompensa y actividad lo mide:
+<b>{_n(act["reward_vs_activity_real"], 3)}</b> en el lado real —cuanto más opera una configuración,
+peor puntúa— frente a {_n(act["reward_vs_activity_synthetic"], 3)} en el sintético, que no castiga
+operar. Esa asimetría es en sí misma un hallazgo sobre el generador: produce oportunidad donde el
+mercado de 2018-2025 no la dio.</p>
+{activo}
+<h4>Configuración a configuración</h4>
+<table><thead><tr><th>Configuración</th><th>familia</th><th class=n>CVaR real</th>
+<th class=n>CVaR sintético</th><th class=n>ops/ventana real</th><th class=n>puesto real</th>
+<th class=n>puesto sintético</th><th class=n>Δ</th></tr></thead><tbody>{rows}</tbody></table>
+<p class="tag">Δ = puesto real − puesto sintético. Positivo = el sintético la coloca mejor de lo que
+merece. {t["leakage"]["folds_audited"]} folds auditados,
+{"sin fuga temporal" if t["leakage"]["clean"] else "<b>CON FUGA</b>"}.</p>
+<div class="note"><b>Lo que esta cifra no es.</b><ul>{caveats}</ul></div>
+<p class="tag">Evidencia completa: <span class="mono">data/transfer/report_{t["library"]}.json</span> ·
+reproducible con <span class="mono">python -m ai_trader.scoring.transfer_study --offline</span>
+({t["n_sub_windows"]} sub-ventanas reales + {t["n_samples"]} muestras de
+<span class="mono">{t["library"]}</span>{" <b>(librería de reserva: la pedida no existía)</b>"
+if t["is_fallback"] else ""}; {t["generated_at"]}).</p>"""
+
+
 def _factor_table(factors):
     body = "".join(f"<tr><td class=mono>{f}</td><td>{d}</td></tr>" for f, d in factors)
     return ("<table><thead><tr><th>Factor</th><th>Interpretación</th></tr></thead>"
@@ -598,6 +741,7 @@ def render_html(f: dict) -> str:
         "SPACE_MR": _rows(f.get("space_mr", []), ["Parámetro", "Rango CEM"]),
         "CALIBRATION": _calibration_block(f.get("calibration")),
         "FIDELITY": _fidelity_block(f.get("fidelity")),
+        "TRANSFER": _transfer_block(f.get("transfer")),
         "VALIDATION": _validation_block(f.get("validation")),
         "LAMBDA": _n((f.get("calibration") or {}).get("lambda", 0.5), 2),
         "KAPPA": _n((f.get("calibration") or {}).get("kappa", 1.0), 1),
@@ -642,8 +786,9 @@ Las cifras marcadas son extraídas del repositorio en el momento de generar este
 <p class="lead">AI-Trader es una herramienta de inversión cuantitativa (criptomonedas, renta variable
 y mercados de predicción tipo Polymarket) que hoy opera en <b>paper trading</b>. Combina un motor
 de riesgo, un motor de ejecución en papel, un backtest de alta fidelidad y un <b>generador de
-mercados sintéticos deterministas</b> sobre el que se desarrollan y evalúan estrategias sin usar
-datos reales.</p>
+mercados sintéticos deterministas</b> sobre el que se desarrollan y estresan estrategias. Ese
+generador reproduce las propiedades estadísticas del mercado (§2.8), pero <b>no</b> su ordenación de
+estrategias (§2.9): el ranking que decide sale del histórico real.</p>
 
 <h3>Qué es y qué no es (todavía)</h3>
 <ul>
@@ -693,6 +838,12 @@ estadística robusta, y podemos reservar <b>arquetipos macro enteros</b> como va
 real en sus propiedades estadísticas (<i>stylized facts</i>). De ahí la validación interna de §2.7 y,
 sobre todo, la validación <b>externa contra el histórico real</b> de §2.8 — que es la que dice en qué
 se parece y en qué no.</div>
+<div class="note"><b>Y una contrapartida que resultó ser mayor de lo previsto.</b> Parecerse no basta:
+lo que el sistema le pide al generador es que <b>ordene</b> las estrategias como el mercado. Eso se
+midió aparte (§2.9) y la respuesta fue que <b>no</b>. Por eso las tres razones de arriba siguen siendo
+válidas para lo que el sintético hace bien —cubrir regímenes que la historia no dio, estresar, dar
+hold-out de arquetipos y regresión determinista— pero <b>ya no</b> para decidir qué configuración es
+mejor. El ranking que decide tiene que salir del histórico real.</div>
 
 <h3>2.2 · El modelo de factores</h3>
 <p>El retorno diario de cada activo se construye con un modelo de factores:</p>
@@ -831,6 +982,8 @@ ser ruido independiente, no que sus colas o su agrupamiento tengan el tamaño de
 otra pregunta, y se responde con datos reales en §2.8.</div>
 
 %%FIDELITY%%
+
+%%TRANSFER%%
 
 <h2 id="s3">3 · Metodología de backtest</h2>
 
@@ -1154,6 +1307,7 @@ de sobreajuste puro da PBO ≈ 1; probar más configuraciones sube el listón de
 <tr><td>Costes que muerden (slippage por símbolo/vol/tamaño; fills parciales)</td><td class="ok">Hecho</td><td>La fricción dejó de ser una constante: el coste distingue BTC de un altcoin ilíquido y el tamaño tiene techo (§3.4-3.6).</td></tr>
 <tr><td>Validación temporal multiventana (walk-forward y CPCV con purga y embargo)</td><td class="ok">Hecho</td><td>Implementada, auditada contra fuga temporal y <b>medida</b>: el corte único no estaba sesgado al alza, pero degradaba el CVaR a un solo número y escondía una dispersión entre ventanas capaz de cambiar qué configuración gana (§3.7).</td></tr>
 <tr><td>Validación sintético-vs-real (correlación de rangos con CCXT)</td><td class="ok">Hecho</td><td>Medida contra ocho años de histórico real: el nivel de riesgo y el orden de las correlaciones cruzadas se sostienen (§2.8).</td></tr>
+<tr><td>Transferencia de ranking real-vs-sintético</td><td class="ok">Hecho</td><td><b>Medida, y con resultado negativo:</b> el mundo sintético pasa todos los umbrales de fidelidad y aun así <b>no ordena</b> las estrategias como el mercado (§2.9). Que esté "hecho" significa que la pregunta está respondida, no que la respuesta fuera la deseada — y esa respuesta es la que reordena el trabajo pendiente.</td></tr>
 <tr><td>Limpieza de consistencia (universo, anualización, reproducibilidad del diseñador)</td><td class="ok">Hecho</td><td>La anualización distingue clase de activo (252 sesiones / 365 días naturales) y se reporta; la no-reproducibilidad del diseñador está documentada y su petición ya no envía parámetros de muestreo retirados; MATIC/USDT queda fuera del universo operado y dentro del sintético, con el motivo escrito.</td></tr>
 </tbody></table>
 
@@ -1163,15 +1317,15 @@ gratis cuando el juez mejore; un juez malo contamina todo lo que puntúe mientra
 sustrato y el juez van delante de la cosecha. El paper trading en vivo se lanza en paralelo porque es lo
 único que compra tiempo de calendario, que no se puede comprimir después.</p>
 <table><thead><tr><th>#</th><th>Trabajo pendiente</th><th>Por qué está donde está</th></tr></thead><tbody>
-<tr><td>1</td><td>Cerrar el hueco de fidelidad: colas, agrupamiento y correlación bajo estrés (<span class="mono">ai_v3</span>)</td><td>Es la raíz. La cobertura del intervalo p10–p90 es del 35%: el mercado real cae fuera de lo que el ensemble considera plausible dos de cada tres veces, y la causa está localizada — las fases de calma no tienen colas en absoluto (§2.8).</td></tr>
-<tr><td>2</td><td>Transferencia de ranking real-vs-sintético</td><td>El único bucle sin cerrar. La fidelidad mide hechos estilizados; no mide si el mundo sintético <i>ordena</i> las estrategias como el real, que es lo único que el producto necesita del generador. Decide la arquitectura: real como sustrato primario y sintético como capa de estrés, o ninguna de las dos.</td></tr>
+<tr><td>1</td><td>Mover el sustrato primario del ranking al histórico <b>real</b> (el sintético, a capa de estrés y veto)</td><td>Es la consecuencia directa de §2.9, y no admite interpretación porque el umbral estaba declarado antes de mirar. El generador pasa todos los umbrales de fidelidad y aun así no ordena; sin embargo el CEM, <span class="mono">sample_eval</span> y todo el <i>scoring</i> siguen puntuando exclusivamente sobre librerías sintéticas. Mientras eso no cambie, el sistema elige con un juez del que ya se sabe que no transfiere.</td></tr>
+<tr><td>2</td><td>Una configuración que no opera no puede ganar el ranking</td><td>Lo destapó el propio estudio de transferencia: en el lado real, Spearman(recompensa, operaciones) = −0,84. Una curva plana puntúa headline <b>cero exacto</b>, y en un periodo donde casi todo lo que arriesga pierde, ese cero gana y hasta aprueba el <i>gate</i>. No es un error de cálculo —no perder es legítimo— pero sí una regla de selección degenerada para un sistema cuyo propósito es operar, y contamina cualquier ranking que se mida encima.</td></tr>
 <tr><td>3</td><td>Cablear el CPCV en el optimizador, en dos etapas</td><td>El CEM sigue puntuando con el corte único que el propio estudio desacredita. No está sesgado, está arbitrario — y arbitrario es letal para un optimizador que escala el relieve del paisaje. Criba barata + finalistas con CPCV completo, agregando por <i>pooling</i> de todos los folds, no CVaR de CVaR.</td></tr>
 <tr><td>4</td><td>Paper trading corriendo en vivo, con diario de ciclos</td><td>Cero desarrollo pendiente y en paralelo a todo lo demás: la divergencia live-vs-backtest necesita meses para ser medible, así que cada semana sin correr es una semana perdida al final.</td></tr>
-<tr><td>5–8</td><td>Rigor del juez: re-correr la validación con el ensemble completo; alinear los bloques del PBO con fronteras de escenario; reportar el recuento de muestras fallidas junto al reward; declarar que el DSR asume intentos independientes</td><td>Cuatro arreglos baratos sobre cifras que se publican como garantía. El estudio de validación corrió con un camino por escenario; los bloques del PBO pueden partir un escenario en dos (la misma fuga de arquetipo que el hold-out evita); la penalización por fallo domina la cola del CVaR; y el CEM no produce los intentos independientes que el DSR supone.</td></tr>
-<tr><td>9</td><td>Optimización CEM completa sobre el sustrato corregido</td><td>Bloqueada a propósito: correrla antes de arreglar sustrato y juez es gastar cómputo caro en un ganador que habría que descartar.</td></tr>
-<tr><td>10</td><td>Nuevas estrategias cripto</td><td><b>No priorizada, deliberadamente.</b> Solo 6 de 32 filas aprueban el gate bajo CPCV, y eso admite dos lecturas — estrategias flojas o juez ruidoso. Hasta saber cuál, cada candidato nuevo multiplica el problema de múltiples pruebas y sube el listón del DSR de todos los demás.</td></tr>
-<tr><td>11–12</td><td>Re-medición de λ y κ con los costes nuevos; modelo de IA anotado en el manifiesto</td><td>Impacto bajo con evidencia detrás: la superficie de pesos ya salió plana sobre 480 backtests y el modelo de costes nuevo solo refuerza la conclusión.</td></tr>
-<tr><td>13–14</td><td>Renta variable y mercados de predicción</td><td><b>Segundo plano explícito.</b> Toda la evidencia empírica del repo es cripto; la pata de renta variable del generador no tiene ni un dato real detrás, no existe estrategia de acciones, y el universo de megacaps arrastra sesgo de supervivencia estructural. Polymarket no tiene histórico que backtestear: el paper trading en vivo es lo que empezará a generarlo.</td></tr>
+<tr><td>5–9</td><td>Rigor del juez: re-correr la validación con el ensemble completo; alinear los bloques del PBO con fronteras de escenario; reportar el recuento de muestras fallidas junto al reward; declarar que el DSR asume intentos independientes; arreglar la <i>ordenación</i> de colas y agrupamiento entre activos</td><td>Cinco arreglos baratos sobre cifras que se publican como garantía. El estudio de validación corrió con un camino por escenario; los bloques del PBO pueden partir un escenario en dos (la misma fuga de arquetipo que el hold-out evita); la penalización por fallo domina la cola del CVaR; el CEM no produce los intentos independientes que el DSR supone; y el generador acierta la magnitud de las colas pero no <i>qué</i> activo las tiene (§2.8), que es un candidato natural a explicar por qué tampoco acierta qué estrategia gana.</td></tr>
+<tr><td>10</td><td>Optimización CEM completa sobre el sustrato corregido</td><td>Bloqueada a propósito, y ahora con más motivo: correrla antes de arreglar el sustrato del ranking es gastar cómputo caro en un ganador elegido por un juez que no transfiere.</td></tr>
+<tr><td>11</td><td>Nuevas estrategias cripto</td><td><b>No priorizada, deliberadamente.</b> Solo 6 de 32 filas aprueban el gate bajo CPCV, y eso admite dos lecturas — estrategias flojas o juez ruidoso. Hasta saber cuál, cada candidato nuevo multiplica el problema de múltiples pruebas y sube el listón del DSR de todos los demás.</td></tr>
+<tr><td>12–13</td><td>Re-medición de λ y κ con los costes nuevos; modelo de IA anotado en el manifiesto</td><td>Impacto bajo con evidencia detrás: la superficie de pesos ya salió plana sobre 480 backtests y el modelo de costes nuevo solo refuerza la conclusión.</td></tr>
+<tr><td>14–15</td><td>Renta variable y mercados de predicción</td><td><b>Segundo plano explícito.</b> Toda la evidencia empírica del repo es cripto; la pata de renta variable del generador no tiene ni un dato real detrás, no existe estrategia de acciones, y el universo de megacaps arrastra sesgo de supervivencia estructural. Polymarket no tiene histórico que backtestear: el paper trading en vivo es lo que empezará a generarlo.</td></tr>
 </tbody></table>
 <div class="note"><b>Foco: cripto.</b> Los <i>stocks</i> no salen del universo <b>sintético</b> — GLD, TLT y UUP
 son lo que hace que los escenarios de tipos y de dólar signifiquen algo para cripto vía los factores

@@ -137,6 +137,11 @@ class MultiWindowValidation:
     leakage_ok: bool
     headline_weights: HeadlineWeights
     baselines: dict[str, RewardStats] = dataclasses.field(default_factory=dict)
+    # Series CRUDAS de los baselines, un valor por fold y en el mismo orden que `folds`.
+    # `baselines` ya trae su agregado, pero agregar dos veces (CVaR de CVaR) compone dos
+    # conservadurismos: quien junte varias validaciones en una sola distribucion necesita
+    # los scores fold a fold, no su cola. Ver `scoring.transfer_study`.
+    baseline_scores: dict[str, tuple[float, ...]] = dataclasses.field(default_factory=dict)
     baseline_gate: BaselineGate | None = None
     single_split_score: float | None = None
 
@@ -287,6 +292,7 @@ def validate_multiwindow(
         leakage_ok=all(f.leakage().ok for f in folds),
         headline_weights=headline_weights,
         baselines=baseline_stats,
+        baseline_scores={n: tuple(v) for n, v in baseline_series.items()},
         baseline_gate=baseline_gate,
         single_split_score=single,
     )

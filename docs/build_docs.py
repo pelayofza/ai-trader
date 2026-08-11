@@ -20,6 +20,11 @@ from ai_trader.backtest.metrics import DEFAULT_HEADLINE_WEIGHTS
 from ai_trader.observation.features import OWN_ASSET_FEATURES
 from ai_trader.observation.regime import REGIME_FEATURES
 from ai_trader.scoring.search_space import get_space
+from ai_trader.scoring.transfer_study import (
+    DEFAULT_LIBRARY_ID as TRANSFER_LIBRARY,
+    load_transfer_report,
+    transfer_report_path,
+)
 from ai_trader.scoring.validation_study import VALIDATION_REPORT, load_validation_report
 from ai_trader.scoring.weight_calibration import (
     CALIBRATION_REPORT,
@@ -248,6 +253,60 @@ def _fidelity() -> dict | None:
     }
 
 
+def _transfer() -> dict | None:
+    """Cifras del estudio de transferencia de ranking real-vs-sintetico (data/transfer).
+
+    Es la pregunta que la fidelidad no responde: si el mundo sintetico ORDENA las
+    estrategias como el mercado. Se lee del informe publicado, no se recalcula: son 208
+    unidades de 15 ventanas de backtest real cada una."""
+    report = load_transfer_report(ROOT / transfer_report_path(TRANSFER_LIBRARY))
+    if not report:
+        logger.warning("Sin informe de transferencia: la seccion 2.9 saldra degradada")
+        return None
+
+    plan = report["plan"]
+    return {
+        "library": plan["library_id"],
+        "is_fallback": plan["library_is_fallback"],
+        "symbols": plan["symbols"],
+        "n_omitted": len(plan["real"]["symbols_omitted"]),
+        "min_history_days": plan["real"]["min_history_days"],
+        "head_discarded": plan["real"]["head_discarded_days"],
+        "n_sub_windows": len(plan["real"]["sub_windows"]),
+        "real_start": plan["real"]["window"]["start"][:10],
+        "real_end": plan["real"]["window"]["end"][:10],
+        "n_samples": plan["synthetic"]["n_samples"],
+        "study_seed": plan["grid"]["study_seed"],
+        "validation": plan["validation"],
+        "n_configs": report["transfer"]["n_configs"],
+        "rho": report["transfer"]["spearman"],
+        "boot": report["transfer"]["bootstrap_blocks"],
+        "boot_configs": report["transfer"]["bootstrap_configs"],
+        "permutation": report["transfer"]["permutation"],
+        "top_k": report["transfer"]["top_k"],
+        "discrepancies": report["transfer"]["discrepancies"],
+        "activity": report["transfer"]["activity"],
+        "verdict": report["verdict"],
+        "caveats": report["caveats"],
+        "rows": [
+            {
+                "config_id": c["config_id"],
+                "family": c["family"],
+                "reward_real": c["reward_real"],
+                "reward_synthetic": c["reward_synthetic"],
+                "rank_real": c["rank_real"],
+                "rank_synthetic": c["rank_synthetic"],
+                "delta": c["rank_delta"],
+                "trades_real": c["trades_per_fold"]["real"],
+                "active": c["active"],
+            }
+            for c in sorted(report["configs"], key=lambda c: c["rank_real"])
+        ],
+        "leakage": report["leakage"],
+        "generated_at": report["generated_at"][:10],
+    }
+
+
 def _validation() -> dict | None:
     """Cifras del estudio de validacion multiventana (data/validation).
 
@@ -316,6 +375,7 @@ def collect() -> dict:
 
     facts["calibration"] = _calibration()
     facts["fidelity"] = _fidelity()
+    facts["transfer"] = _transfer()
     facts["validation"] = _validation()
 
     facts["mom_params"] = _params(CryptoMomentumStrategy().config)

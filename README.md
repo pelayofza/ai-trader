@@ -35,6 +35,7 @@ execution/microstructure.py  Coste de ejecución: spread por símbolo, volatilid
 backtest/engine.py      Conduce el runner real sobre histórico; corre planes de folds.
 backtest/validation.py  Geometría temporal: walk-forward, CPCV, purga, embargo, auditoría.
 scoring/multiwindow.py  Agrega las ventanas de una muestra en una distribución robusta.
+scoring/transfer_study.py  ¿Ordena el mundo sintético las estrategias como el real?
 notifications/          Canal hacia el humano (Telegram) desacoplado del núcleo.
 data/                   Proveedores (Alpaca, CCXT, Polymarket) + caché parquet.
 shared/                 Vocabulario común + `clock.py`, la costura para el backtest.
@@ -193,6 +194,62 @@ de manía (el p90 de la curtosis real va de 30 a 90 en DOGE y XRP, y perseguirlo
 nivel de volatilidad), y la **ordenación** entre activos —qué activo tiene más cola— sigue
 siendo floja o negativa. Documentación completa en §2.8.
 
+### Transferencia de ranking real-vs-sintético
+
+Que el generador se **parezca** al mercado no dice que **ordene** las estrategias como él. Un
+generador puede clavar las colas y ordenar al revés, y ninguna métrica de fidelidad lo
+detectaría. `scoring/transfer_study.py` mide justo eso: las mismas 16 configuraciones (la
+rejilla del estudio de pesos, hipercubo latino con semilla fija) se puntúan **dos veces** y se
+compara el orden de los dos rankings.
+
+Todo el diseño persigue que entre los dos lados **lo único que cambie sea el mundo del que
+salen los precios**: el mismo config, el mismo universo (los 11 pares que existen a la vez en
+Binance y en la librería), el mismo CPCV de 15 ventanas con purga de 10 días y embargo de 5, y
+la misma **longitud de ventana** — un camino sintético dura 544 días, así que el histórico real
+se trocea en 5 sub-ventanas disjuntas de ese tamaño en vez de evaluarse de una pieza. Los
+scores de cada configuración (sub-ventana × fold en el real, muestra × fold en el sintético)
+van a **una sola distribución** y se toma su CVaR@25%: el CVaR de CVaR compondría dos
+conservadurismos y dispararía la varianza del estimador.
+
+La regla de decisión estaba escrita en el código **antes** de mirar el resultado
+(`RHO_ACCEPT = 0.30`). El resultado:
+
+| | valor | |
+|---|---|---|
+| Spearman de los dos rankings | **−0,04** | IC95% por bloques [−0,44, +0,49] |
+| p (permutación, 20 000 barajados) | 0,89 | |
+| Top-4 del sintético en la mitad buena del real | 1/4 | por azar saldrían 2,0 |
+| Desacuerdos ≥ 8 puestos | 4 | 3 de ellos **sobrevalorados** por el sintético |
+| ρ sobre las 9 que operan de verdad en ambos | **−0,67** | IC95% [−0,88, +0,23], p = 0,06 |
+
+**Veredicto: no hay transferencia.** No se diseñan estrategias contra el sintético: el ranking
+lo fija el histórico real y el sintético se queda como banco de estrés y veto, nunca como
+criterio de selección.
+
+Antes de creerse un ρ ≈ 0 hay que descartar que el problema sea que **ninguno** de los dos
+lados estaba rankeando estrategias, y el estudio lo comprueba: el headline de una configuración
+que no opera es **cero exacto** (curva plana → Sharpe 0, rotación 0, caída 0) y en un periodo
+donde casi todo lo que arriesga pierde, ese cero gana. La correlación entre recompensa y
+actividad lo confirma — **−0,84** en el lado real frente a −0,09 en el sintético: el mercado de
+2018-2025 premió no operar y el mundo sintético no. Al quitar las inactivas el acuerdo no
+aparece; se vuelve **negativo**. Es un subconjunto *post-hoc* de 9 puntos y su intervalo cruza
+el cero, así que es señal fuerte y no prueba, pero descarta que el ρ nulo sea un artefacto.
+
+Se reproduce con (usa la caché de barras ya descargada; verifica determinismo re-corriendo
+unidades en procesos nuevos):
+
+```powershell
+.venv\Scripts\python.exe -m ai_trader.scoring.transfer_study --offline --workers 7 --verify-determinism 4
+.venv\Scripts\python.exe -m ai_trader.scoring.transfer_study --analyze-only   # re-analiza sin backtestear
+```
+
+Límites declarados en el propio informe, no en una nota al pie: el histórico real es **un solo
+camino** (5 bloques, sin ensemble — de ahí el bootstrap por bloques y no iid), hay **sesgo de
+supervivencia** en el lado real que juega *en contra* de la hipótesis que se quería validar, 13
+pares del universo operable se omiten por histórico insuficiente (se declaran, no se rellenan),
+y 16 configuraciones de dos familias distinguen "ordena como el mercado" de "no ordena", no
+0,35 de 0,45. Evidencia completa en `data/transfer/` y documentación en §2.9.
+
 ### Costes de ejecución
 
 El deslizamiento no es una constante. Cada fill paga **medio spread del símbolo**
@@ -234,8 +291,9 @@ poetry run ruff check .  # linter
 
 - `data/runtime_state.json` es **estado de ejecución mutable**, no fuente. No se versiona.
 - `.cache/bars/` es caché de barras en parquet; se puede borrar sin consecuencias, se regenera.
-- `data/calibration/` y `data/fidelity/` **sí** se versionan: son la evidencia publicada de los
-  estudios (pesos del headline y fidelidad sintético-vs-real) que consumen dashboard y documentación.
+- `data/calibration/`, `data/fidelity/`, `data/validation/` y `data/transfer/` **sí** se versionan:
+  son la evidencia publicada de los estudios (pesos del headline, fidelidad sintético-vs-real,
+  partición temporal y transferencia de ranking) que consumen dashboard y documentación.
 - **El universo sintético y el operado no son el mismo, a propósito.** `config/default.toml` es lo
   que se opera en vivo y solo lleva símbolos vivos; `config/synthetic.toml` tiene que coincidir
   símbolo a símbolo con `DEFAULT_UNIVERSE` del generador o habría activos sin barras. De ahí que
