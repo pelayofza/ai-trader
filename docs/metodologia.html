@@ -64,8 +64,8 @@ figure{margin:14px 0}
 <h1>AI-Trader — Documentación funcional</h1>
 <div class="sub">Cómo funciona la herramienta, con el detalle necesario para replicarla y auditarla.
 Cada decisión de diseño va justificada.</div>
-<div class="meta">Documento vivo · generado desde el commit <span class="mono">a8ca650</span>
-(75 commits)2026-08-10 · se regenera con <span class="mono">python -m docs.build_docs</span>.
+<div class="meta">Documento vivo · generado desde el commit <span class="mono">be3786d</span>
+(76 commits)2026-08-10 · se regenera con <span class="mono">python -m docs.build_docs</span>.
 Las cifras marcadas son extraídas del repositorio en el momento de generar este documento.</div>
 
 <div class="toc noprint">
@@ -277,11 +277,16 @@ otra pregunta, y se responde con datos reales en §2.8.</div>
 
 
 <h3>2.8 · Fidelidad contra el mercado real (validación externa)</h3>
-<p>Las secciones anteriores comparan el mundo sintético <b>consigo mismo</b>: ai_v2 tiene colas y
-agrupamiento donde ai_v1 no los tenía. Eso no dice que los tenga <b>en la magnitud del mercado</b>.
+<p>Las secciones anteriores comparan el mundo sintético <b>consigo mismo</b>: una librería tiene colas
+y agrupamiento donde otra no los tenía. Eso no dice que los tenga <b>en la magnitud del mercado</b>.
 Esta sección responde esa pregunta contra el histórico diario real de
 <span class="mono">binance</span> (2017-09-01 → 2026-01-01, 12 criptomonedas,
 66 pares), midiendo exactamente las mismas magnitudes sobre los dos mundos.</p>
+<p>Se publican <b>dos</b> librerías medidas con el mismo harness y la misma ventana real:
+<span class="mono">ai_v2</span>, el generador cuyo hueco se midió, y
+<span class="mono">ai_v3</span>, el que lo cierra. El "antes" no es decoración: sin control,
+una corrección medida no se distingue de una afirmación. La cobertura media pasa de
+<b>35%</b> a <b>98%</b>.</p>
 <div class="why"><b>Dos decisiones metodológicas que hacen que la comparación signifique algo.</b>
 <ul>
 <li><b>Misma longitud de muestra.</b> El histórico real se trocea en ventanas de 730
@@ -307,33 +312,84 @@ el nivel absoluto esté mal calibrado.</li>
 ensemble sintético produce para ese mismo activo. Un generador honesto no tiene que acertar el número
 real: tiene que poder <b>producirlo</b> como una realización plausible.</li>
 </ul>
-<table><thead><tr><th>Stylized fact</th><th class=n>real</th><th class=n>sintético</th><th class=n>ratio</th><th class=n>rank corr</th><th class=n>cobertura</th></tr></thead><tbody><tr><td>Autocorrelación de retornos (lag 1)</td><td class='n mono'>-0,047</td><td class='n mono'>0,009</td><td class='n mono'>-0,18×</td><td class='n mono'>0,72</td><td class='n mono'>83%</td></tr><tr><td>Clustering de volatilidad (autocorr. |r|, lag 1)</td><td class='n mono'>0,190</td><td class='n mono'>0,092</td><td class='n mono'>0,49×</td><td class='n mono'>0,32</td><td class='n mono'>33%</td></tr><tr><td>Persistencia del clustering (|r|, lags 1-10)</td><td class='n mono'>0,098</td><td class='n mono'>0,049</td><td class='n mono'>0,50×</td><td class='n mono'>-0,35</td><td class='n mono'>50%</td></tr><tr><td>Exceedances más allá de 3σ (%)</td><td class='n mono'>1,46</td><td class='n mono'>0,55</td><td class='n mono'>0,38×</td><td class='n mono'>0,23</td><td class='n mono'>8%</td></tr><tr><td>Curtosis en exceso</td><td class='n mono'>4,19</td><td class='n mono'>0,37</td><td class='n mono'>0,09×</td><td class='n mono'>-0,03</td><td class='n mono'>0%</td></tr><tr><td>Correlación cruzada entre activos (par a par) <i>(pares)</i></td><td class='n mono'>0,653</td><td class='n mono'>0,489</td><td class='n mono'>0,75×</td><td class='n mono'>0,59</td><td class='n mono'>41%</td></tr><tr><td>Volatilidad anualizada (%) <i>(contexto)</i></td><td class='n mono'>98,7</td><td class='n mono'>97,2</td><td class='n mono'>0,98×</td><td class='n mono'>0,52</td><td class='n mono'>67%</td></tr></tbody></table>
-<h4>Resultado 1 · El nivel de riesgo y la estructura de correlaciones son razonables</h4>
-<p>La volatilidad anualizada sintética es 97% frente a
-99% real (0,98×): los dos mundos tienen el mismo tamaño de riesgo, que
-es la condición mínima para que una comparación de estrategias entre ellos no sea un cambio de unidades.
-Y el modelo de factores <b>ordena los pares como la realidad</b>: correlación de rangos
-0,59 sobre los 66 pares, con nivel 0,489 frente
-a 0,653 real. Que las correlaciones cruzadas <b>emerjan</b> de cargas
-compartidas — y no de una matriz impuesta — produce un acoplamiento con la forma correcta, algo más
-débil que el real.</p>
-<h4>Resultado 2 · Las colas se quedan cortas, y no por poco</h4>
-<div class="why">Éste es el hallazgo incómodo y el motivo de que esta sección exista. La curtosis en
-exceso real es <b>4,2</b> y la sintética <b>0,37</b>;
-las exceedances más allá de 3σ, 1,46% frente a 0,55%
-(recordatorio: bajo una normal serían 0,27%). El agrupamiento de volatilidad va por el mismo camino, a
-0,49× del real.
-<p>Lo que convierte esto en un diagnóstico y no en un matiz es la <b>cobertura</b>:
-0% en curtosis. No significa "el sintético se queda corto de media"; significa
-que <b>ni en su percentil 90</b> el ensemble llega al valor real. La cola gruesa del generador existe
-—se activa en las fases de crisis— pero promediada sobre dos años de camino no alcanza la del mercado.</p>
-<p><b>Consecuencia honesta para todo lo que se mide con este sustrato:</b> un mundo con colas más finas
-que las reales <b>subestima la pérdida de cola</b>. Los drawdowns de crisis, los huecos que se saltan un
-stop y el peor cuartil que puntúa el CVaR (§5) salen mejores de lo que saldrían contra el mercado. Los
-rankings entre estrategias siguen siendo comparaciones honestas —todas compiten en el mismo mundo— pero
-sus <b>cifras absolutas de riesgo son optimistas</b>, y así hay que leerlas.</p></div>
-<h4>Resultado 3 · La autocorrelación se lee al revés que las demás</h4>
-<p>Autocorrelación real -0,047 frente a 0,009 sintética. Aquí
+<table><thead><tr><th>Stylized fact</th><th class=n>real</th><th class=n>ai_v2</th><th class=n>sintético</th><th class=n>ratio</th><th class=n>rank corr</th><th class=n>cobertura</th></tr></thead><tbody><tr><td>Autocorrelación de retornos (lag 1)</td><td class='n mono'>-0,047</td><td class='n mono'>0,009</td><td class='n mono'>0,007</td><td class='n mono'>-0,14×</td><td class='n mono'>0,36</td><td class='n mono'>100% <i>(83%)</i></td></tr><tr><td>Clustering de volatilidad (autocorr. |r|, lag 1)</td><td class='n mono'>0,190</td><td class='n mono'>0,092</td><td class='n mono'>0,196</td><td class='n mono'>1,04×</td><td class='n mono'>-0,74</td><td class='n mono'>100% <i>(33%)</i></td></tr><tr><td>Persistencia del clustering (|r|, lags 1-10)</td><td class='n mono'>0,098</td><td class='n mono'>0,049</td><td class='n mono'>0,105</td><td class='n mono'>1,08×</td><td class='n mono'>-0,50</td><td class='n mono'>100% <i>(50%)</i></td></tr><tr><td>Exceedances más allá de 3σ (%)</td><td class='n mono'>1,46</td><td class='n mono'>0,55</td><td class='n mono'>1,27</td><td class='n mono'>0,87×</td><td class='n mono'>-0,10</td><td class='n mono'>100% <i>(8%)</i></td></tr><tr><td>Curtosis en exceso</td><td class='n mono'>4,19</td><td class='n mono'>0,37</td><td class='n mono'>3,40</td><td class='n mono'>0,81×</td><td class='n mono'>-0,17</td><td class='n mono'>92% <i>(0%)</i></td></tr><tr><td>Correlación cruzada entre activos (par a par) <i>(pares)</i></td><td class='n mono'>0,653</td><td class='n mono'>0,489</td><td class='n mono'>0,542</td><td class='n mono'>0,83×</td><td class='n mono'>0,60</td><td class='n mono'>97% <i>(41%)</i></td></tr><tr><td>Volatilidad anualizada (%) <i>(contexto)</i></td><td class='n mono'>98,7</td><td class='n mono'>97,2</td><td class='n mono'>102,4</td><td class='n mono'>1,04×</td><td class='n mono'>0,51</td><td class='n mono'>92% <i>(67%)</i></td></tr></tbody></table>
+<h4>El test de aceptación: umbrales que el estudio puede fallar</h4>
+<p>Un estudio que no puede salir mal no es evidencia. El harness contrasta cada medición con umbrales
+declarados en el código (<span class="mono">synthetic/fidelity.py</span>) y <b>devuelve error</b> si no
+se cumplen, de modo que una regresión en el generador rompe el comando en vez de pasar desapercibida.
+Son dos familias: <b>cobertura</b> —el valor real de cada activo cae dentro del [p10, p90] del ensemble
+en al menos 60% de los activos— y <b>mediana de mercado</b> —la mediana
+real de la sección cruzada cae dentro de la banda del ensemble entero— en los tres hechos que la
+corrección ataca.</p>
+<table><thead><tr><th>Umbral</th><th>Qué exige</th><th class=n>medido</th><th class=n>veredicto</th></tr></thead><tbody><tr><td>Autocorrelación de retornos (lag 1)</td><td>cobertura ≥ 60%</td><td class='n mono'>100%</td><td class=n>cumple</td></tr><tr><td>Clustering de volatilidad (autocorr. |r|, lag 1)</td><td>cobertura ≥ 60%</td><td class='n mono'>100%</td><td class=n>cumple</td></tr><tr><td>Persistencia del clustering (|r|, lags 1-10)</td><td>cobertura ≥ 60%</td><td class='n mono'>100%</td><td class=n>cumple</td></tr><tr><td>Exceedances más allá de 3σ (%)</td><td>cobertura ≥ 60%</td><td class='n mono'>100%</td><td class=n>cumple</td></tr><tr><td>Curtosis en exceso</td><td>cobertura ≥ 60%</td><td class='n mono'>92%</td><td class=n>cumple</td></tr><tr><td>Correlación cruzada entre activos (par a par)</td><td>cobertura ≥ 60%</td><td class='n mono'>97%</td><td class=n>cumple</td></tr><tr><td>Curtosis en exceso</td><td>mediana real dentro de [1,404, 18,840]</td><td class='n mono'>4,186</td><td class=n>cumple</td></tr><tr><td>Clustering de volatilidad (autocorr. |r|, lag 1)</td><td>mediana real dentro de [0,108, 0,332]</td><td class='n mono'>0,190</td><td class=n>cumple</td></tr><tr><td>Exceedances más allá de 3σ (%)</td><td>mediana real dentro de [0,823, 1,783]</td><td class='n mono'>1,461</td><td class=n>cumple</td></tr></tbody></table>
+<h4>Qué se cambió, y qué movió cada cosa</h4>
+<p>Tres cambios en la física del generador, ninguno en los escenarios: la librería realista se deriva de
+los mismos <span class="mono">spec.json</span> con un retrofit determinista, sin volver a llamar a la IA.
+Las constantes salen de iterar este mismo harness como función objetivo, no de una intuición.</p>
+<ol>
+<li><b>La calma no es gaussiana.</b> La versión anterior daba <span class="mono">tail_dof = 0</span>
+—normal <i>exacta</i>— a toda fase tranquila, que es la mayor parte de un horizonte de
+730 días; las colas gruesas sólo existían en las crisis. Ahora toda fase tiene cola de
+Student (calma 5, elevada 4,5, crisis 4), porque el cripto real tiene curtosis de 4 para arriba también
+en ventanas tranquilas: la cola gruesa no es una propiedad de las crisis, es una propiedad del proceso.
+Curtosis 0,37 → <b>3,40</b>, exceedances
+0,55% → <b>1,27%</b>.</li>
+<li><b>Más reacción a la noticia en el GARCH.</b> El reparto entre noticia de ayer e inercia estaba
+clavado a 0,15 / 0,85 en el motor; ahora es un campo del <i>spec</i>
+(<span class="mono">vol_news</span>) calibrado a 0,25. Los dos pesos siguen sumando la persistencia
+total, así que la varianza incondicional sigue siendo 1: sube el agrupamiento <b>medible</b>, no el
+nivel de riesgo. Clustering 0,092 → <b>0,196</b>
+(real 0,190).</li>
+<li><b>Cargas que suben en el pánico.</b> Con betas congeladas, la correlación entre activos de un
+modelo de factores es una constante del universo: <b>no puede</b> dispararse en las caídas, que es el
+hecho de mercado más caro de ignorar. Cada fase declara ahora un <span class="mono">beta_stress</span>
+y las betas del día se escalan con él — y la volatilidad diaria que calibra mechas y huecos usa la beta
+<b>efectiva</b>, no la congelada, o el rango intradía dejaría de casar con la vol de ese día. La
+covarianza sigue siendo <span class="mono">B_t Σ B_t' + D</span> con D diagonal positiva, así que sigue
+siendo definida positiva por construcción. Correlación cruzada 0,489 →
+<b>0,542</b> (real 0,653).</li>
+</ol>
+<div class="why"><b>Por qué esto no rompe nada de lo ya publicado.</b> Los dos campos nuevos son
+neutros por defecto y las rutas antiguas se conservan bit a bit: la vía gaussiana <i>exacta</i> —con el
+mismo consumo de RNG— sigue siendo la ruta por defecto cuando ninguna fase pide colas, y el reparto del
+GARCH vive en el <i>spec</i>, no en una constante del motor. Las librerías anteriores se regeneran desde
+sus <span class="mono">spec.json</span> byte a byte, y hay tests que lo congelan con un hash.</div>
+<h4>Resultado 1 · Las colas y el agrupamiento ya están en la magnitud del mercado</h4>
+<p>Curtosis en exceso <b>3,40</b> frente a 4,19 real,
+con 92% de cobertura (antes 0%);
+exceedances más allá de 3σ 1,27% frente a 1,46%
+(recordatorio: bajo una normal serían 0,27%); agrupamiento de volatilidad
+0,196 frente a 0,190. Y el <b>nivel de riesgo</b> sigue
+donde estaba: volatilidad anualizada 102% sintética frente a
+99% real (1,04×). Eso último es lo que hace que esto sea una corrección
+y no un cambio de escala: se podían haber engordado las colas subiendo la volatilidad, y no es lo que
+pasó.</p>
+<h4>Resultado 2 · El co-movimiento mejora pero no llega, y es una decisión</h4>
+<p>La correlación cruzada media es 0,542 frente a
+0,653 real, con 97% de cobertura sobre los
+66 pares y una correlación de rangos de 0,60: el modelo de factores
+<b>ordena</b> los pares como la realidad, con un nivel algo más débil. Cerrar el resto exigiría subir
+más las betas de estrés, y la beta entra <b>al cuadrado</b> en la varianza: se compraría acoplamiento
+inflando la volatilidad total, que hoy está en su sitio. Se prefiere el nivel de riesgo correcto con
+algo menos de co-movimiento que lo contrario.</p>
+<h4>Resultado 3 · Límite declarado: la mediana del mercado, no los años de manía</h4>
+<div class="why">El p90 de la curtosis real de cripto va de 30 a 90 (DOGE y XRP en sus años de manía).
+<b>Ni con <span class="mono">dof = 4</span> se reproduce eso</b>, y perseguirlo rompería el nivel de
+volatilidad, que es la propiedad que sostiene todo lo demás. Por eso el umbral de aceptación está sobre
+la <b>mediana</b> de la sección cruzada y no sobre su cola: lo que este generador promete es el cripto de
+un año cualquiera, no la historia de sus outliers.
+<p><b>Consecuencia honesta:</b> lo que se mida sobre este sustrato ya no subestima la pérdida de cola
+del mercado típico —los drawdowns, los huecos que se saltan un stop y el peor cuartil que puntúa el CVaR
+(§5) están ahora en el orden correcto— pero sigue siendo optimista para un escenario de manía. Ésa es la
+frontera del generador, y se declara en vez de disimularse.</p>
+<p>Hay un segundo límite medido, y va en dirección contraria a la mejora: la <b>ordenación</b> de las
+colas y el agrupamiento entre activos (<i>rank corr</i> en la tabla) es floja e incluso negativa. El
+mundo sintético ya produce la magnitud correcta, pero no sabe <i>qué</i> activo tiene más cola: en el
+mercado real son los más ruidosos (DOGE, XRP) y en el generador el ruido idiosincrático —al que se le
+aplica un AR(1) por régimen— <b>blanquea</b> justo esa estructura. Es el siguiente hilo del que tirar, y
+la cobertura y la mediana no lo ocultan: por eso las tres lecturas se publican por separado.</p></div>
+<h4>Resultado 4 · La autocorrelación se lee al revés que las demás</h4>
+<p>Autocorrelación real -0,047 frente a 0,007 sintética. Aquí
 un ratio lejos de 1 <b>no es un defecto: es el diseño</b>. El mercado no regala estructura serial —si la
 regalara sería dinero gratis— mientras que el generador la fija a propósito, con signo según el régimen
 (§2.6), para que la reversión a la media y el momentum tengan algo real que capturar. Lo que sí es una
@@ -347,7 +403,7 @@ el mercado" de "no ordena", pero no permite comparar dos valores parecidos. Las
 ciclos de 2018-2025), mientras que el lado sintético son 150 mundos distintos:
 la comparación es entre "lo que pasó" y "lo que podría pasar", y esa asimetría no se puede eliminar,
 solo declarar.</div>
-<p class="tag">Evidencia completa: <span class="mono">data/fidelity/report_ai_v2.json</span> ·
+<p class="tag">Evidencia completa: <span class="mono">data/fidelity/report_ai_v3.json</span> ·
 reproducible con <span class="mono">python -m ai_trader.synthetic.fidelity_study</span>
 (30 escenarios × 5 caminos; 2026-08-10).</p>
 
@@ -817,7 +873,7 @@ corrigiendo además por asimetría y colas gruesas de los retornos.</p>
 número sino un método.</div>
 
 <h2 id="s6">6 · Tests y garantías</h2>
-<p>La base cuenta con <b>424 tests</b> automatizados y <i>linting</i> (ruff) sobre todo el
+<p>La base cuenta con <b>451 tests</b> automatizados y <i>linting</i> (ruff) sobre todo el
 código. Más allá del número, importa <b>qué</b> se garantiza. Los tests se agrupan por invariante:</p>
 <ul>
 <li><b>Determinismo:</b> la misma semilla produce las mismas velas y las mismas curvas de equity.</li>
@@ -954,5 +1010,5 @@ correlación serial de los retornos no filtre el test en el entrenamiento poster
 <li><b>Stylized facts:</b> propiedades estadísticas robustas de los mercados reales (colas gruesas,
 agrupamiento de volatilidad, autocorrelación) que un buen simulador debe reproducir.</li>
 </ul>
-<p class="meta">Fin del documento · AI-Trader · commit <span class="mono">a8ca650</span>.</p>
+<p class="meta">Fin del documento · AI-Trader · commit <span class="mono">be3786d</span>.</p>
 </div></body></html>

@@ -63,15 +63,24 @@ class PathEngine:
         idio_ar_t = self._phase_scalar_timeline(spec, horizon, "idio_ar")          # B5
         tail_dof_t = self._phase_scalar_timeline(spec, horizon, "tail_dof")        # B2
         persistence_t = self._phase_scalar_timeline(spec, horizon, "vol_persistence")  # B3
+        news_t = self._phase_scalar_timeline(spec, horizon, "vol_news")                # B3
         jump_intensity_t = self._phase_scalar_timeline(spec, horizon, "jump_intensity")  # B4
         jump_scale_t = self._phase_scalar_timeline(spec, horizon, "jump_scale")         # B4
+        beta_stress_t = self._phase_scalar_timeline(spec, horizon, "beta_stress")       # B6
         # Si ninguna fase pide colas, se usa la via gaussiana EXACTA de siempre (mismo
-        # consumo de RNG), de modo que ai_v1 y los tests no cambian byte a byte.
+        # consumo de RNG), de modo que ai_v1 y los tests no cambian byte a byte. La via
+        # gaussiana sigue siendo la RUTA POR DEFECTO cuando la microestructura esta
+        # desactivada; ai_v3 la pide en todas las fases, pero eso es una eleccion del
+        # spec, no del motor.
         dof_t = tail_dof_t if np.any(tail_dof_t > 2.0) else None
+        # Igual con las cargas: si ninguna fase declara estres, ni siquiera se construye
+        # la beta por dia y la suma sobre factores es la misma operacion (mismo BLAS,
+        # mismo redondeo) que antes de que existiera este campo.
+        stress_t = 1.0 + beta_stress_t if np.any(beta_stress_t != 0.0) else None
 
         # Innovaciones de factor: colas (t-Student) + clustering (GARCH), luego escala vol.
         w = _draw_innovations(rng, (horizon, len(factors)), dof_t)
-        w = _apply_garch(w, persistence_t)
+        w = _apply_garch(w, persistence_t, news_t)
         factor_returns = drift + vol * w  # (horizon, n_factors)
 
         index = pd.DatetimeIndex(
@@ -84,18 +93,30 @@ class PathEngine:
             tilt = float(spec.asset_tilts.get(asset.symbol, 0.0))
 
             eps = _draw_innovations(rng, (horizon,), dof_t)
-            eps = _apply_garch(eps, persistence_t)
+            eps = _apply_garch(eps, persistence_t, news_t)
             # Componente idiosincratico con AR(1) por fase: >0 tiende, <0 revierte. Es lo
             # que rompe el mundo iid y da edge real a momentum vs mean-reversion segun el
             # regimen. Variance-matched: con idio_ar=0 se reduce al ruido de siempre.
             idio = _ar1_idio(eps, asset.idio_vol, idio_ar_t)
-            asset_returns = tilt + factor_returns @ beta + idio
+
+            # Cargas EFECTIVAS del dia (B6): en las fases de estres las betas suben, que es
+            # el unico mecanismo por el que la correlacion entre activos puede acercarse a
+            # 1 en las caidas. La covarianza sigue siendo B_t Sigma B_t' + D con D diagonal
+            # positiva, asi que sigue siendo definida positiva por construccion.
+            if stress_t is None:
+                factor_component = factor_returns @ beta
+                beta_t = beta  # (n_factors,) -> broadcast en la vol diaria
+            else:
+                beta_t = beta * stress_t[:, None]  # (horizon, n_factors)
+                factor_component = np.einsum("tk,tk->t", factor_returns, beta_t)
+            asset_returns = tilt + factor_component + idio
 
             # Vol diaria efectiva del activo, POR DIA (no promediada al horizonte): la
-            # varianza de factor usa la vol de la FASE de cada dia, asi los huecos y las
-            # mechas se ensanchan en las fases de panico. Antes se promediaba y el rango
-            # intradia no reaccionaba al regimen, corrompiendo el ATR.
-            daily_vol_t = np.sqrt(np.sum((vol * beta) ** 2, axis=1) + asset.idio_vol**2)
+            # varianza de factor usa la vol de la FASE de cada dia Y la beta efectiva de
+            # ese dia, asi los huecos y las mechas se ensanchan en las fases de panico.
+            # Antes se promediaba y el rango intradia no reaccionaba al regimen,
+            # corrompiendo el ATR.
+            daily_vol_t = np.sqrt(np.sum((vol * beta_t) ** 2, axis=1) + asset.idio_vol**2)
 
             bars[asset.symbol] = self._build_ohlcv(
                 asset_returns, asset.start_price, daily_vol_t,
@@ -240,6 +261,12 @@ _MAX_AR = 0.98
 # dof que aproxima la normal en los dias sin colas de un path que SI usa la via t.
 _GAUSSIAN_DOF = 1e6
 
+# Reparto news/inercia del GARCH cuando la fase no declara `vol_news`. Es el valor con el
+# que se genero ai_v2 y por eso NO se toca: cambiarlo reescribiria una libreria publicada.
+# El valor calibrado contra el informe de fidelidad vive en retrofit.py (es una decision
+# de la fisica de la fase, no del motor).
+DEFAULT_NEWS_SHARE = 0.15
+
 
 def _draw_innovations(
     rng: np.random.Generator, shape: tuple[int, ...], dof_t: np.ndarray | None
@@ -261,16 +288,37 @@ def _draw_innovations(
     return rng.standard_t(dof, size=shape) * scale
 
 
-def _apply_garch(innov: np.ndarray, persistence_t: np.ndarray) -> np.ndarray:
+def _apply_garch(
+    innov: np.ndarray, persistence_t: np.ndarray, news_t: np.ndarray | None = None
+) -> np.ndarray:
     """
     Clustering de volatilidad tipo GARCH(1,1) sobre innovaciones YA dibujadas (B3), sin
-    consumir RNG extra. sigma2_t = (1-p) + 0.15*p*e_{t-1}^2 + 0.85*p*sigma2_{t-1}, con
-    p = vol_persistence de la fase. El reparto 0.15/0.85 (news impact / persistencia) da
-    una autocorrelacion de |retorno| realista. Varianza incondicional 1 (variance-matched).
+    consumir RNG extra:
+
+        sigma2_t = (1-p) + a*p*e_{t-1}^2 + (1-a)*p*sigma2_{t-1}
+
+    con p = `vol_persistence` de la fase (persistencia TOTAL) y a = `vol_news` (que parte
+    de esa persistencia reacciona a la noticia de ayer en vez de arrastrar la inercia).
+    Como los dos pesos suman p, la varianza incondicional es 1 para cualquier a
+    (variance-matched): subir la reaccion a la noticia mueve el CLUSTERING medible, no el
+    nivel de volatilidad.
+
+    `news_t` None -o 0 en un dia- usa DEFAULT_NEWS_SHARE: 0 es "sin override", igual que
+    tail_dof=0 es "gaussiano". Ese default es el reparto con el que se genero ai_v2, asi
+    que esa libreria se sigue regenerando byte a byte; ai_v3 declara su `vol_news` en el
+    propio spec, de modo que las velas las sigue determinando (spec, semilla) y no una
+    constante del codigo.
+
     p=0 => multiplica por 1 (no-op exacto). Actua a lo largo del tiempo (eje 0).
     """
     if not np.any(persistence_t > 0.0):
         return innov
+
+    news = (
+        np.full(len(persistence_t), DEFAULT_NEWS_SHARE)
+        if news_t is None
+        else np.where(news_t > 0.0, news_t, DEFAULT_NEWS_SHARE)
+    )
 
     out = np.empty_like(innov)
     is_2d = innov.ndim == 2
@@ -282,8 +330,9 @@ def _apply_garch(innov: np.ndarray, persistence_t: np.ndarray) -> np.ndarray:
         eps_prev = 0.0
         for t in range(len(col)):
             p = min(0.999, max(0.0, float(persistence_t[t])))
+            a = min(1.0, max(0.0, float(news[t])))
             if t > 0:
-                sigma2 = (1.0 - p) + 0.15 * p * eps_prev * eps_prev + 0.85 * p * sigma2
+                sigma2 = (1.0 - p) + a * p * eps_prev * eps_prev + (1.0 - a) * p * sigma2
             e = col[t] * np.sqrt(sigma2)
             res[t] = e
             eps_prev = e

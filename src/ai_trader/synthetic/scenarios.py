@@ -6,6 +6,19 @@ from dataclasses import dataclass, field
 # motor numerico consume (el "como se ve en velas"). Son la frontera entre las dos
 # piezas: 100% serializables a JSON para poder auditarlos y no re-ejecutar la IA.
 
+# Campos de microestructura de una fase, en un solo sitio: es la lista que decide que se
+# serializa (solo lo NO neutro) y la que el motor expande a timelines por dia. Anadir un
+# campo nuevo aqui y en FactorPhase es todo lo que hace falta.
+MICROSTRUCTURE_FIELDS: tuple[str, ...] = (
+    "idio_ar",
+    "tail_dof",
+    "vol_persistence",
+    "vol_news",
+    "jump_intensity",
+    "jump_scale",
+    "beta_stress",
+)
+
 
 @dataclass(slots=True, frozen=True)
 class FactorPhase:
@@ -26,8 +39,16 @@ class FactorPhase:
     - `tail_dof`: grados de libertad de la t-Student de las innovaciones (0 = gaussiano).
       Bajo (3-6) = colas gruesas, tipico de crisis.
     - `vol_persistence`: persistencia tipo GARCH de la volatilidad (0 = sin clustering).
+    - `vol_news`: fraccion de esa persistencia que reacciona a la NOTICIA del dia anterior
+      (el alpha del GARCH; el resto es inercia). Sube el clustering medible a lag 1 sin
+      tocar la persistencia total. 0 = el reparto por defecto del motor, que es el que
+      genero ai_v2: el campo es un OVERRIDE, igual que `tail_dof`=0 significa "gaussiano".
     - `jump_intensity`: probabilidad diaria de un salto en el hueco de apertura (0 = ninguno).
     - `jump_scale`: tamano del salto en unidades de vol diaria del activo.
+    - `beta_stress`: subida FRACCIONAL de las cargas factoriales durante la fase
+      (0.4 = betas un 40% mayores). Es lo unico que permite que la correlacion entre
+      activos se dispare en las caidas: con betas congeladas la correlacion de un modelo
+      de factores es una constante del universo, no del regimen.
     """
 
     length_days: int
@@ -36,8 +57,10 @@ class FactorPhase:
     idio_ar: float = 0.0
     tail_dof: float = 0.0
     vol_persistence: float = 0.0
+    vol_news: float = 0.0
     jump_intensity: float = 0.0
     jump_scale: float = 0.0
+    beta_stress: float = 0.0
 
     def to_dict(self) -> dict:
         out: dict = {
@@ -47,7 +70,7 @@ class FactorPhase:
         }
         # Solo se serializan los campos de microestructura si son NO neutros, para que
         # los spec.json existentes (ai_v1) no cambien y el diff sea legible.
-        for name in ("idio_ar", "tail_dof", "vol_persistence", "jump_intensity", "jump_scale"):
+        for name in MICROSTRUCTURE_FIELDS:
             value = getattr(self, name)
             if value:
                 out[name] = value
@@ -59,33 +82,23 @@ class FactorPhase:
             length_days=int(data["length_days"]),
             drift={str(k): float(v) for k, v in (data.get("drift") or {}).items()},
             vol={str(k): float(v) for k, v in (data.get("vol") or {}).items()},
-            idio_ar=float(data.get("idio_ar", 0.0)),
-            tail_dof=float(data.get("tail_dof", 0.0)),
-            vol_persistence=float(data.get("vol_persistence", 0.0)),
-            jump_intensity=float(data.get("jump_intensity", 0.0)),
-            jump_scale=float(data.get("jump_scale", 0.0)),
+            **{name: float(data.get(name, 0.0)) for name in MICROSTRUCTURE_FIELDS},
         )
 
-    def with_microstructure(
-        self,
-        *,
-        idio_ar: float | None = None,
-        tail_dof: float | None = None,
-        vol_persistence: float | None = None,
-        jump_intensity: float | None = None,
-        jump_scale: float | None = None,
-    ) -> FactorPhase:
+    def with_microstructure(self, **overrides: float) -> FactorPhase:
         """Copia la fase sustituyendo solo los campos de microestructura indicados.
         Lo usa el retrofit determinista para enriquecer specs de ai_v1 sin tocar drift/vol."""
+        unknown = set(overrides) - set(MICROSTRUCTURE_FIELDS)
+        if unknown:
+            raise TypeError(f"Unknown microstructure field(s): {sorted(unknown)}")
         return FactorPhase(
             length_days=self.length_days,
             drift=dict(self.drift),
             vol=dict(self.vol),
-            idio_ar=self.idio_ar if idio_ar is None else idio_ar,
-            tail_dof=self.tail_dof if tail_dof is None else tail_dof,
-            vol_persistence=self.vol_persistence if vol_persistence is None else vol_persistence,
-            jump_intensity=self.jump_intensity if jump_intensity is None else jump_intensity,
-            jump_scale=self.jump_scale if jump_scale is None else jump_scale,
+            **{
+                name: float(overrides.get(name, getattr(self, name)))
+                for name in MICROSTRUCTURE_FIELDS
+            },
         )
 
 

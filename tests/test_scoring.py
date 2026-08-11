@@ -500,10 +500,16 @@ def _fake_base_config() -> AppConfig:
 
 
 class TestDefaultLibrary:
-    """El sustrato por defecto del scoring debe ser la libreria realista (ai_v2), no el
-    ruido iid de ai_v1: optimizar sobre iid premia sesgos optimistas."""
+    """
+    El sustrato por defecto del scoring nunca puede ser el ruido iid de ai_v1: optimizar
+    sobre iid premia sesgos optimistas.
 
-    def test_constant_points_to_the_realistic_library(self):
+    Sigue siendo ai_v2 y no ai_v3 (la libreria que ya pasa el estudio de fidelidad) a
+    PROPOSITO: la calibracion de pesos y la validacion multiventana se midieron sobre
+    ai_v2, asi que moverlo invalidaria esas cifras hasta re-correrlas. Cambiar de sustrato
+    es un paso con su propio coste, no un efecto lateral de mejorar el generador."""
+
+    def test_constant_points_to_a_library_with_microstructure(self):
         assert DEFAULT_LIBRARY_ID == "ai_v2"
 
     def test_signature_default_is_the_constant(self):

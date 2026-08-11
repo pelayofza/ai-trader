@@ -1,12 +1,14 @@
 """
 ¿Se parece el mundo sintetico al mercado REAL?
 
-El generador de ai_v2 se construyo para tener colas gruesas, clustering de volatilidad y
-estructura serial (ver synthetic/retrofit.py). Que esas propiedades EXISTAN ya esta
-comprobado; lo que faltaba es comprobar que estan en la MAGNITUD del mercado real. Este
-modulo es la parte medible de esa pregunta: dado un conjunto de series de retornos
-sinteticas y otro de series reales, calcula los mismos stylized-facts sobre ambos y los
-compara.
+El generador se construyo para tener colas gruesas, clustering de volatilidad y estructura
+serial (ver synthetic/retrofit.py). Que esas propiedades EXISTAN se comprueba comparando
+una libreria con la anterior; lo que no se puede comprobar asi es que esten en la MAGNITUD
+del mercado real. Este modulo es la parte medible de esa pregunta: dado un conjunto de
+series de retornos sinteticas y otro de series reales, calcula los mismos stylized-facts
+sobre ambos y los compara. Y no solo los compara: los contrasta con umbrales de aceptacion
+declarados (ver mas abajo), de modo que el estudio puede FALLAR. Un estudio que no puede
+salir mal no es evidencia.
 
 Cuatro familias de hechos estilizados, que son las que el generador dice reproducir:
 
@@ -53,7 +55,21 @@ from ai_trader.scoring.weight_calibration import spearman
 # Evidencia publicada del estudio. La genera `fidelity_study` y la consumen los
 # generadores de dashboard y documentacion, igual que el informe de calibracion: medir
 # es caro (descarga + cientos de muestras), leer es gratis.
-FIDELITY_REPORT = Path("data") / "fidelity" / "report_ai_v2.json"
+FIDELITY_DIR = Path("data") / "fidelity"
+
+# Las DOS librerias que se publican juntas, y por que hay dos: ai_v2 es el generador cuyo
+# hueco contra el mercado se midio (curtosis 0,37 contra 4,19) y ai_v3 el que lo cierra.
+# Publicar solo la buena convertiria una correccion medida en una afirmacion sin control;
+# el par es lo que hace auditable que el arreglo funciono y cuanto.
+FIDELITY_LIBRARY = "ai_v3"
+FIDELITY_BASELINE_LIBRARY = "ai_v2"
+
+
+def fidelity_report_path(library_id: str = FIDELITY_LIBRARY) -> Path:
+    return FIDELITY_DIR / f"report_{library_id}.json"
+
+
+FIDELITY_REPORT = fidelity_report_path()
 
 # Lags del clustering. 10 dias de mercado: suficiente para ver la persistencia sin
 # entrar en la zona donde el estimador es puro ruido.
@@ -96,6 +112,33 @@ METRIC_KEYS: tuple[str, ...] = tuple(m.key for m in METRICS)
 TARGET_METRIC_KEYS: tuple[str, ...] = tuple(m.key for m in METRICS if m.is_target)
 CROSS_CORR_KEY = "cross_corr"
 CROSS_CORR_LABEL = "Correlación cruzada entre activos (par a par)"
+
+
+# ------------------------------------------------------------------ aceptacion --------
+#
+# El estudio deja de ser "un vistazo" cuando tiene umbrales que puede FALLAR. Estos son
+# los del generador realista (ai_v3), y son deliberadamente dos cosas distintas:
+#
+# 1. COBERTURA: en al menos `min_coverage_pct` de los activos (o pares), el valor real
+#    cae dentro del [p10, p90] del ensemble sintetico. Es el criterio honesto para un
+#    generador estocastico: no tiene que clavar el numero, tiene que poder producirlo.
+# 2. MEDIANA DE MERCADO: la mediana real de la seccion cruzada cae dentro del [p10, p90]
+#    de TODAS las muestras sinteticas juntas. Es la promesa explicita del generador.
+#
+# LIMITE DECLARADO, y esta escrito aqui a proposito para que no se lea de mas: el p90 de
+# la curtosis real de cripto va de 30 a 90 (DOGE y XRP en los anos de mania). Ni con
+# dof=4 se reproduce eso. El generador cubre la MEDIANA del mercado -el cripto de un ano
+# cualquiera-, no sus anos de mania, y por eso el umbral esta sobre la mediana y no sobre
+# la cola de la seccion cruzada.
+
+# Metricas cuya mediana de mercado tiene que caer dentro de la banda sintetica: son los
+# tres hechos que el retrofit dice arreglar (colas, agrupamiento, exceedances).
+MEDIAN_BAND_KEYS: tuple[str, ...] = ("excess_kurtosis", "ac_abs1", "exceed_3sigma_pct")
+
+# Cobertura minima exigida a cada metrica objetivo. 60% no es "aprobado raspado": con 12
+# activos significa que el mundo sintetico produce el valor real de 8 de ellos como una
+# realizacion plausible. ai_v2 daba 35% de media (0% en curtosis).
+MIN_COVERAGE_PCT = 60.0
 
 
 def metric(key: str) -> Metric:
@@ -446,6 +489,107 @@ def compare_cross_correlations(
 ) -> Comparison:
     """La comparacion de correlaciones cruzadas, con los PARES como seccion cruzada."""
     return compare(real, synth, key=CROSS_CORR_KEY, label=CROSS_CORR_LABEL)
+
+
+# ------------------------------------------------------------------ aceptacion --------
+
+
+@dataclass(frozen=True, slots=True)
+class AcceptanceCheck:
+    """Un umbral concreto, con lo que se midio y si se cumple."""
+
+    kind: str  # "coverage" | "market_median"
+    key: str
+    label: str
+    value: float  # cobertura (%) o mediana real de la seccion cruzada
+    threshold: float | None  # cobertura minima exigida
+    band: tuple[float, float] | None  # [p10, p90] sintetico agregado
+    passed: bool
+
+    def as_dict(self) -> dict:
+        return {
+            "kind": self.kind,
+            "key": self.key,
+            "label": self.label,
+            "value": _round_or_none(self.value, 4),
+            "threshold": self.threshold,
+            "band": None if self.band is None else [round(b, 6) for b in self.band],
+            "passed": self.passed,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class Acceptance:
+    """El veredicto binario del estudio: o el generador cumple los umbrales o no."""
+
+    passed: bool
+    min_coverage_pct: float
+    checks: tuple[AcceptanceCheck, ...]
+
+    @property
+    def failures(self) -> tuple[AcceptanceCheck, ...]:
+        return tuple(c for c in self.checks if not c.passed)
+
+    def as_dict(self) -> dict:
+        return {
+            "passed": self.passed,
+            "min_coverage_pct": self.min_coverage_pct,
+            "median_band_keys": list(MEDIAN_BAND_KEYS),
+            "checks": [c.as_dict() for c in self.checks],
+        }
+
+
+def evaluate_acceptance(
+    comparisons: Sequence[Comparison],
+    pooled_synth: Mapping[str, Estimate],
+    *,
+    min_coverage_pct: float = MIN_COVERAGE_PCT,
+) -> Acceptance:
+    """
+    Aplica los umbrales publicados a un conjunto de comparaciones ya calculadas.
+
+    `pooled_synth` es el [p10, p90] del ensemble sintetico ENTERO por metrica (todas las
+    muestras de todos los activos juntas): es la banda contra la que se contrasta la
+    mediana de mercado. Una comparacion sin elementos (n=0) falla; no medir no es aprobar.
+    """
+    checks: list[AcceptanceCheck] = []
+    for item in comparisons:
+        if item.key not in TARGET_METRIC_KEYS and item.key != CROSS_CORR_KEY:
+            continue
+        checks.append(
+            AcceptanceCheck(
+                kind="coverage",
+                key=item.key,
+                label=item.label,
+                value=item.coverage_pct,
+                threshold=min_coverage_pct,
+                band=None,
+                passed=bool(item.n) and item.coverage_pct >= min_coverage_pct,
+            )
+        )
+
+    by_key = {c.key: c for c in comparisons}
+    for key in MEDIAN_BAND_KEYS:
+        item, band = by_key.get(key), pooled_synth.get(key)
+        real_median = float("nan") if item is None else item.real_median
+        inside = band is not None and band.contains(real_median)
+        checks.append(
+            AcceptanceCheck(
+                kind="market_median",
+                key=key,
+                label=metric(key).label,
+                value=real_median,
+                threshold=None,
+                band=None if band is None else (band.p10, band.p90),
+                passed=bool(inside),
+            )
+        )
+
+    return Acceptance(
+        passed=all(c.passed for c in checks),
+        min_coverage_pct=min_coverage_pct,
+        checks=tuple(checks),
+    )
 
 
 # ------------------------------------------------------------------ informe ----------

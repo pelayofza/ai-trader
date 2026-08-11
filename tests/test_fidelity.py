@@ -11,12 +11,18 @@ from __future__ import annotations
 import argparse
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
 from ai_trader.synthetic.fidelity import (
+    FIDELITY_BASELINE_LIBRARY,
+    FIDELITY_LIBRARY,
+    MEDIAN_BAND_KEYS,
+    MIN_COVERAGE_PCT,
+    Comparison,
     Estimate,
     aggregate_facts,
     aggregate_pairs,
@@ -24,6 +30,7 @@ from ai_trader.synthetic.fidelity import (
     compare,
     compare_cross_correlations,
     compare_metrics,
+    evaluate_acceptance,
     load_fidelity_report,
     log_returns,
     pair_correlations,
@@ -238,6 +245,87 @@ class TestComparison:
         assert payload["real_median"] is None and payload["ratio"] is None
 
 
+class TestAcceptance:
+    """
+    Los umbrales son el unico motivo por el que este estudio es evidencia y no un
+    vistazo: tienen que poder FALLAR, y tienen que fallar por la razon correcta.
+    """
+
+    def _comparison(self, key, coverage, real_median=1.0, n=12):
+        return Comparison(
+            key=key, label=key, n=n, rank_corr=0.5, real_median=real_median,
+            synth_median=real_median, ratio=1.0, coverage_pct=coverage, items=(),
+        )
+
+    def _band(self, low, high):
+        return Estimate(median=(low + high) / 2, p10=low, p90=high, n=100)
+
+    def _all_good(self, coverage=90.0):
+        from ai_trader.synthetic.fidelity import CROSS_CORR_KEY, TARGET_METRIC_KEYS
+
+        comparisons = [
+            self._comparison(key, coverage) for key in (*TARGET_METRIC_KEYS, CROSS_CORR_KEY)
+        ]
+        pooled = {key: self._band(0.0, 2.0) for key in MEDIAN_BAND_KEYS}
+        return comparisons, pooled
+
+    def test_a_library_that_meets_everything_is_accepted(self):
+        comparisons, pooled = self._all_good()
+        assert evaluate_acceptance(comparisons, pooled).passed
+
+    def test_one_metric_below_the_coverage_floor_sinks_the_whole_verdict(self):
+        comparisons, pooled = self._all_good()
+        comparisons[0] = self._comparison(comparisons[0].key, MIN_COVERAGE_PCT - 0.1)
+
+        result = evaluate_acceptance(comparisons, pooled)
+        assert not result.passed
+        assert [c.key for c in result.failures] == [comparisons[0].key]
+
+    def test_a_market_median_outside_the_synthetic_band_fails(self):
+        # El caso de ai_v2: la curtosis real (4.19) queda fuera de la banda sintetica.
+        comparisons, pooled = self._all_good()
+        comparisons = [
+            self._comparison(c.key, c.coverage_pct, real_median=4.19)
+            if c.key == "excess_kurtosis"
+            else c
+            for c in comparisons
+        ]
+        pooled["excess_kurtosis"] = self._band(0.1, 0.6)
+
+        result = evaluate_acceptance(comparisons, pooled)
+        assert not result.passed
+        assert [c.kind for c in result.failures] == ["market_median"]
+
+    def test_not_measuring_is_not_passing(self):
+        """Una comparacion vacia (n=0) tiene cobertura 0 y no hay banda: falla. Si no,
+        un estudio que no encuentra datos se leeria como un aprobado."""
+        comparisons, _ = self._all_good()
+        empty = [self._comparison(c.key, 0.0, n=0) for c in comparisons]
+
+        result = evaluate_acceptance(empty, {})
+        assert not result.passed
+        assert all(not c.passed for c in result.checks)
+
+    def test_only_target_metrics_and_the_cross_section_are_gated(self):
+        """La volatilidad la fija el disenador escenario a escenario: se reporta, pero no
+        puede tumbar el veredicto."""
+        comparisons, pooled = self._all_good()
+        comparisons.append(self._comparison("vol_annual_pct", 0.0))
+
+        result = evaluate_acceptance(comparisons, pooled)
+        assert result.passed
+        assert "vol_annual_pct" not in {c.key for c in result.checks}
+
+    def test_the_threshold_is_configurable_and_serialised_with_the_verdict(self):
+        comparisons, pooled = self._all_good(coverage=55.0)
+
+        assert not evaluate_acceptance(comparisons, pooled).passed
+        relaxed = evaluate_acceptance(comparisons, pooled, min_coverage_pct=50.0)
+        assert relaxed.passed
+        assert relaxed.as_dict()["min_coverage_pct"] == 50.0
+        assert relaxed.as_dict()["median_band_keys"] == list(MEDIAN_BAND_KEYS)
+
+
 # ------------------------------------------------------------------ estudio ----------
 
 
@@ -385,6 +473,7 @@ class TestStudyEndToEnd:
             start="2020-01-01", end="2022-12-31", paths=2, scenarios=0,
             window_days=400, step_days=400, max_lag=5, sigma=3.0,
             min_observations=200, min_pair_overlap=100, offline=False,
+            min_coverage_pct=MIN_COVERAGE_PCT,
             verify_determinism=False, out_dir=str(out_dir),
         )
         base.update(overrides)
@@ -435,23 +524,108 @@ class TestStudyEndToEnd:
         second = run_study(args)
         assert json.dumps(first, sort_keys=True) == json.dumps(second, sort_keys=True)
 
-    def test_the_cli_writes_the_report_to_disk(self, workspace, monkeypatch):
+    def _cli(self, root, out_dir, *extra):
         from ai_trader.synthetic import fidelity_study
 
+        return fidelity_study.main([
+            "--library", self.LIBRARY, "--synthetic-root", str(root),
+            "--start", "2020-01-01", "--end", "2022-12-31", "--paths", "2",
+            "--window-days", "400", "--step-days", "400", "--out-dir", str(out_dir),
+            *extra,
+        ])
+
+    def test_the_cli_writes_the_report_to_disk(self, workspace, monkeypatch):
         root, tmp_path = workspace
         self._patch_service(monkeypatch, ["BTC/USDT", "ETH/USDT"])
         out_dir = tmp_path / "out"
 
-        code = fidelity_study.main([
-            "--library", self.LIBRARY, "--synthetic-root", str(root),
-            "--start", "2020-01-01", "--end", "2022-12-31", "--paths", "2",
-            "--window-days", "400", "--step-days", "400", "--out-dir", str(out_dir),
-        ])
+        self._cli(root, out_dir)
 
-        assert code == 0
         published = load_fidelity_report(out_dir / f"report_{self.LIBRARY}.json")
         assert published["plan"]["library_id"] == self.LIBRARY
         assert "generated_at" in published
+
+    def test_the_cli_fails_when_the_library_does_not_meet_the_thresholds(
+        self, workspace, monkeypatch
+    ):
+        """Es lo que convierte el estudio en un test de aceptacion: contra ruido
+        gaussiano 'real' inventado, la libreria de juguete NO cumple y el comando falla.
+        El informe se publica igual: no cumplir tambien es evidencia."""
+        root, tmp_path = workspace
+        self._patch_service(monkeypatch, ["BTC/USDT", "ETH/USDT"])
+        out_dir = tmp_path / "out"
+
+        code = self._cli(root, out_dir)
+
+        assert code == 1
+        published = load_fidelity_report(out_dir / f"report_{self.LIBRARY}.json")
+        assert published["acceptance"]["passed"] is False
+        assert published["summary"]["accepted"] is False
+
+
+class TestPublishedReports:
+    """
+    El test de aceptacion sobre la EVIDENCIA publicada, no sobre datos de juguete.
+
+    Los dos informes de data/fidelity se generan con el mismo harness y contra la misma
+    ventana real, asi que la comparacion entre ellos significa algo. Si el retrofit se
+    toca y ai_v3 deja de cumplir, esto se pone rojo sin tener que volver a correr el
+    estudio (que exige la libreria de 900 MB y ocho anos de historico cacheados).
+    """
+
+    ROOT = Path(__file__).resolve().parents[1]
+
+    def _report(self, library_id: str) -> dict:
+        from ai_trader.synthetic.fidelity import fidelity_report_path
+
+        report = load_fidelity_report(self.ROOT / fidelity_report_path(library_id))
+        if report is None:
+            pytest.skip(f"informe de {library_id} no publicado en este arbol")
+        return report
+
+    def test_the_realistic_library_meets_every_declared_threshold(self):
+        report = self._report(FIDELITY_LIBRARY)
+
+        assert report["acceptance"]["passed"], [
+            c for c in report["acceptance"]["checks"] if not c["passed"]
+        ]
+        assert report["summary"]["accepted"] is True
+
+    def test_the_previous_library_is_published_failing_the_same_thresholds(self):
+        """El 'antes' se publica a proposito: una correccion sin control no es evidencia.
+        Y no cumplir tambien es un resultado, asi que el informe existe igualmente."""
+        report = self._report(FIDELITY_BASELINE_LIBRARY)
+
+        assert report["acceptance"]["passed"] is False
+        failed = {c["key"] for c in report["acceptance"]["checks"] if not c["passed"]}
+        assert {"excess_kurtosis", "ac_abs1", "exceed_3sigma_pct"} <= failed
+
+    def test_both_reports_measure_the_same_real_world(self):
+        """Comparar dos librerias medidas contra ventanas distintas seria comparar los
+        estudios, no los generadores."""
+        new, old = self._report(FIDELITY_LIBRARY), self._report(FIDELITY_BASELINE_LIBRARY)
+
+        for field in ("real_window", "window_days", "step_days", "symbols", "sigma", "max_lag"):
+            assert new["plan"][field] == old["plan"][field], field
+
+    def test_the_three_stylized_facts_moved_towards_the_market(self):
+        """Lo que el retrofit dice arreglar, medido: colas, agrupamiento y exceedances."""
+        new, old = self._report(FIDELITY_LIBRARY), self._report(FIDELITY_BASELINE_LIBRARY)
+        by_key = lambda r: {m["key"]: m for m in r["metrics"]}  # noqa: E731
+        new_m, old_m = by_key(new), by_key(old)
+
+        for key in MEDIAN_BAND_KEYS:
+            real = new_m[key]["real_median"]
+            assert abs(new_m[key]["synth_median"] - real) < abs(old_m[key]["synth_median"] - real), key
+            assert new_m[key]["coverage_pct"] > old_m[key]["coverage_pct"], key
+
+    def test_the_volatility_level_was_not_traded_away_for_tails(self):
+        """El nivel de riesgo ya estaba bien: un arreglo de colas que lo estropeara seria
+        un cambio de escala disfrazado de correccion."""
+        new = self._report(FIDELITY_LIBRARY)
+        vol = next(m for m in new["metrics"] if m["key"] == "vol_annual_pct")
+
+        assert 0.9 <= vol["ratio"] <= 1.1
 
 
 class TestReportPlumbing:

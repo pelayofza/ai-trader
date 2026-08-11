@@ -350,7 +350,7 @@ function renderOverview(){
   const k=D.kpis, host=$('#overview');
   const tiles=[
     ['Escenarios ai_v2', k.ai_v2?k.ai_v2.scenarios:'-', (k.ai_v2?k.ai_v2.samples:'-')+' muestras'],
-    ['Paths por escenario', k.ai_v2?k.ai_v2.paths:'-','Monte Carlo'],
+    ['Librerías sintéticas', (k.lineage||[]).length||'-', (k.lineage||[]).join(' → ')||'Monte Carlo'],
     ['Estrategias', k.n_strategies,'primitivas paramétricas'],
     ['Features de observación', (k.n_own_features+k.n_regime_features),k.n_own_features+' propio + '+k.n_regime_features+' régimen'],
     ['Commits', k.commit_count||'-', k.commit||''],
@@ -364,7 +364,7 @@ function renderOverview(){
     ['B','Fidelidad sintético-vs-real medida contra CCXT (rank-corr)','hecho'],
     ['D','Validación multiventana (CPCV/walk-forward): construida y medida','hecho'],
     ['E','Limpieza de consistencia (universo, anualización, diseñador)','hecho'],
-    ['B','Cerrar el hueco de fidelidad medido (colas, clustering, correlación) → ai_v3','pendiente'],
+    ['B','Hueco de fidelidad cerrado y aceptado: colas, clustering y correlación → ai_v3','hecho'],
     ['B/D','Transferencia de ranking real-vs-sintético (el bucle que sigue abierto)','pendiente'],
     ['D','Cablear el CPCV en el optimizador (juez en dos etapas)','pendiente'],
     ['Live','Paper trading corriendo en vivo (compra tiempo de calendario)','pendiente'],
@@ -396,6 +396,7 @@ function renderSynthetic(){
     ['Exceedances >3σ (%)','exceed_pct',2,'Colas gruesas'],
   ];
   const colors=[cssv('--s1'),cssv('--s2'),cssv('--s4')];
+  const lineage=((D.kpis&&D.kpis.lineage)||Object.keys(f)).filter(l=>f[l]);
   host.innerHTML=`
     <h1>Datos sintéticos</h1>
     <p class="lead">Librería <b>${esc(D.synthetic.library)}</b>: ${sc.length} escenarios macro × ${D.synthetic.n_paths} paths Monte Carlo,
@@ -409,20 +410,29 @@ function renderSynthetic(){
       vivo, pero se mantiene <i>a propósito</i> en el sintético: aquí el símbolo es la etiqueta de un perfil de cargas
       factoriales, no un par que se pida a un exchange, y retirarlo cambiaría el universo a 34 activos, desincronizando
       la calibración de pesos y el estudio de fidelidad, ambos medidos sobre 35.</div>
-    <h2>El mundo dejó de mentir: ai_v1 (iid) → ai_v2 (retrofit)</h2>
-    <p class="lead">El generador ganó colas gruesas, clustering de volatilidad y estructura serial. Sin esto, la reversión a la media era inganable por construcción.</p>
-    <div class="card"><div class="tblwrap"><table><thead><tr><th>Stylized fact</th><th class="num">ai_v1 (iid)</th><th class="num">ai_v2</th><th>Qué significa</th></tr></thead><tbody>
-    ${factRows.map(r=>{const v1=f.ai_v1?f.ai_v1[r[1]]:null,v2=f.ai_v2?f.ai_v2[r[1]]:null;const mx=Math.max(Math.abs(v1||0),Math.abs(v2||0));
+    <h2>Tres generaciones del mismo mundo</h2>
+    <p class="lead"><b>ai_v1</b> era iid y gaussiano: la reversión a la media era inganable por construcción.
+      <b>ai_v2</b> ganó colas, clustering y estructura serial con un retrofit determinista sobre los mismos
+      <i>spec.json</i>. <b>ai_v3</b> ajusta la magnitud de esas propiedades contra el mercado real —colas
+      también en la calma, más reacción a la noticia en el GARCH y cargas factoriales que suben en el
+      pánico— hasta pasar el test de aceptación de la sección <b>Fidelidad</b>.</p>
+    <div class="card"><div class="tblwrap"><table><thead><tr><th>Stylized fact</th>
+      ${lineage.map(l=>`<th class="num">${esc(l)}${l==='ai_v1'?' (iid)':''}</th>`).join('')}
+      <th>Qué significa</th></tr></thead><tbody>
+    ${factRows.map(r=>{const vs=lineage.map(l=>f[l]?f[l][r[1]]:null);
+      const mx=Math.max(...vs.map(v=>Math.abs(v||0)));
       return `<tr><td>${r[0]}</td>
-      <td class="num">${fmt(v1,r[2])} ${miniBar(v1,mx,'v1')}</td>
-      <td class="num">${fmt(v2,r[2])} ${miniBar(v2,mx)}</td>
+      ${vs.map((v,j)=>`<td class="num">${fmt(v,r[2])} ${miniBar(v,mx,j?'':'v1')}</td>`).join('')}
       <td class="tag">${r[3]}</td></tr>`;}).join('')}
     </tbody></table></div></div>
-    <div class="note"><b>Sustrato por defecto.</b> El harness de scoring optimiza sobre <span class="mono">ai_v2</span>
-      (<span class="mono">DEFAULT_LIBRARY_ID</span> en <span class="mono">src/ai_trader/scoring/optimize.py</span>);
-      <span class="mono">ai_v1</span> se conserva solo como referencia comparativa y hay que pedirla explícitamente.</div>
-    <div class="note"><b>Esta tabla compara el mundo sintético consigo mismo.</b> Que ai_v2 tenga colas y
-      agrupamiento no dice que los tenga <i>en la magnitud del mercado</i>. Esa pregunta se responde
+    <div class="note"><b>Sustrato por defecto.</b> El harness de scoring sigue optimizando sobre
+      <span class="mono">ai_v2</span> (<span class="mono">DEFAULT_LIBRARY_ID</span> en
+      <span class="mono">src/ai_trader/scoring/optimize.py</span>) <b>a propósito</b>: la calibración de
+      pesos y la validación multiventana se midieron sobre esa librería, y moverlo obligaría a recorrerlas
+      antes de que sus cifras volvieran a significar algo. <span class="mono">ai_v3</span> existe y está
+      medido; el cambio de sustrato es un paso separado, con su propio coste.</div>
+    <div class="note"><b>Esta tabla compara el mundo sintético consigo mismo.</b> Que una librería tenga
+      colas y agrupamiento no dice que los tenga <i>en la magnitud del mercado</i>. Esa pregunta se responde
       midiendo contra el histórico real: sección <b>Fidelidad</b>.</div>
     <h2>Explorador de escenarios</h2>
     <div class="split">
@@ -470,10 +480,16 @@ function renderFidelity(){
         vol=M('vol_annual_pct'),ac=M('ac1'),cross=F.cross;
   const pct=v=>(v===null||v===undefined)?'—':fmt(v,0)+'%';
   const ratio=r=>r.ratio===null?'—':fmt(r.ratio,2)+'×';
+  const B=F.before, prev=k=>(B&&B.by_key[k])||null;
+  const A=F.acceptance, ok=A&&A.passed;
+  const was=(k,f)=>{const p=prev(k);return p?f(p):'—';};
   const tiles=[
-    ['Rank corr · pares',fmt(S.rank_corr_cross,2),'ordena los '+S.n_pairs+' pares como el mercado'],
-    ['Cobertura media',pct(S.coverage_mean_pct),'valores reales dentro del rango sintético'],
-    ['Curtosis real / sint.',fmt(kurt.real_median,1)+' / '+fmt(kurt.synth_median,1),'el hueco más grande'],
+    ['Aceptación',ok?'cumple':'no cumple',
+      A?('todos los umbrales declarados · cobertura mínima '+fmt(A.min_coverage_pct,0)+'%'):'sin umbrales'],
+    ['Cobertura media',pct(S.coverage_mean_pct),
+      B?('antes '+pct(B.summary.coverage_mean_pct)+' en '+esc(B.library)):'valores reales dentro del rango sintético'],
+    ['Curtosis real / sint.',fmt(kurt.real_median,1)+' / '+fmt(kurt.synth_median,1),
+      B?('antes '+was('excess_kurtosis',p=>fmt(p.synth_median,2))+' · el hueco que se cerró'):'el hueco más grande'],
     ['Muestras',S.n_real_windows+' / '+S.n_synthetic_samples,'ventanas reales / paths sintéticos'],
   ];
   host.innerHTML=`
@@ -483,9 +499,27 @@ function renderFidelity(){
       diario real de ${esc(F.exchange)} (${esc(F.real_start)} → ${esc(F.real_end)}, ${S.n_symbols} criptos),
       y se comparan en tres ejes distintos: <b>nivel</b> (¿la magnitud es la del mercado?),
       <b>ordenación</b> (¿ordena los activos como el mercado?, correlación de rangos de Spearman) y
-      <b>cobertura</b> (¿produce el ensemble sintético el valor real como una realización plausible?).</p>
+      <b>cobertura</b> (¿produce el ensemble sintético el valor real como una realización plausible?).
+      ${B?`Cada cifra se enseña junto a la de <b>${esc(B.library)}</b>, el generador anterior: sin el antes,
+      una corrección medida no se distingue de una afirmación.`:''}</p>
     <div class="grid tiles">${tiles.map(t=>`<div class="card tile"><div class="k">${t[0]}</div>
       <div class="v">${t[1]}</div><div class="s">${t[2]}</div></div>`).join('')}</div>
+    ${A?`<h2>Test de aceptación</h2>
+    <p class="lead">El estudio no publica cifras y ya: las contrasta con umbrales declarados en el código y
+      <b>devuelve error si no se cumplen</b>. Un estudio que no puede fallar no es evidencia. Dos familias:
+      <b>cobertura</b> (el valor real de cada activo cae dentro del [p10, p90] del ensemble en al menos
+      ${fmt(A.min_coverage_pct,0)}% de los activos) y <b>mediana de mercado</b> (la mediana real de la sección
+      cruzada cae dentro de la banda del ensemble entero) en los tres hechos que la corrección ataca.</p>
+    <div class="card"><div class="tblwrap"><table>
+      <thead><tr><th>Umbral</th><th>Qué exige</th><th class="num">medido</th><th></th></tr></thead>
+      <tbody>${A.checks.map(c=>`<tr>
+        <td>${esc(c.label)}</td>
+        <td class="tag">${c.kind==='coverage'
+          ? 'cobertura ≥ '+fmt(c.threshold,0)+'%'
+          : 'mediana real dentro de '+(c.band?('['+fmt(c.band[0],3)+', '+fmt(c.band[1],3)+']'):'—')}</td>
+        <td class="num">${c.kind==='coverage'?fmt(c.value,0)+'%':fmt(c.value,3)}</td>
+        <td>${c.passed?'<span class="chip hecho">cumple</span>':'<span class="chip pend">falla</span>'}</td>
+      </tr>`).join('')}</tbody></table></div></div>`:''}
     <div class="note"><b>Comparación pareada en tamaño de muestra.</b> El histórico real se trocea en
       ventanas de <b>${F.window_days} días</b> —el mismo horizonte que un camino sintético— porque la
       autocorrelación y sobre todo la curtosis están sesgadas en muestras cortas: medir el real sobre ocho
@@ -493,15 +527,18 @@ function renderFidelity(){
       ${F.step_days} días${F.overlap?' y por tanto <b>solapan</b>: sirven para la tendencia central, no como estimaciones independientes':''}.</div>
     <h2>Métrica a métrica</h2>
     <div class="card"><div class="tblwrap"><table>
-      <thead><tr><th>Stylized fact</th><th class="num">real</th><th class="num">sintético</th>
-        <th class="num">ratio</th><th class="num">rank corr</th><th class="num">cobertura</th></tr></thead>
+      <thead><tr><th>Stylized fact</th><th class="num">real</th>
+        ${B?`<th class="num">${esc(B.library)}</th>`:''}<th class="num">${esc(F.library)}</th>
+        <th class="num">ratio</th><th class="num">rank corr</th>
+        <th class="num">cobertura${B?' (antes)':''}</th></tr></thead>
       <tbody>${rows.map(r=>`<tr>
         <td>${esc(r.label)} ${r.key==='cross_corr'?'<span class="pill">pares</span>':(r.is_target?'':'<span class="pill">contexto</span>')}</td>
         <td class="num">${fmt(r.real_median,r.decimals)}</td>
+        ${B?`<td class="num tag">${was(r.key,p=>fmt(p.synth_median,r.decimals))}</td>`:''}
         <td class="num">${fmt(r.synth_median,r.decimals)}</td>
         <td class="num">${ratio(r)}</td>
         <td class="num">${fmt(r.rank_corr,2)}</td>
-        <td class="num">${fmt(r.coverage_pct,0)}%</td></tr>`).join('')}
+        <td class="num">${fmt(r.coverage_pct,0)}%${B?` <span class="tag">(${was(r.key,p=>fmt(p.coverage_pct,0)+'%')})</span>`:''}</td></tr>`).join('')}
       </tbody></table></div></div>
     <p class="tag"><b>ratio</b> = sintético / real (1,00 sería clavarlo). <b>rank corr</b> = Spearman entre
       la sección cruzada real y la sintética: es invariante a la escala, así que mide la ordenación aunque
@@ -519,26 +556,62 @@ function renderFidelity(){
       <div id="fidchart"></div>
       <div class="tblwrap" id="fidtable" style="margin-top:10px;max-height:360px;overflow:auto"></div>
     </div>
+    <h2>Qué se cambió y qué movió cada cosa</h2>
+    <p class="lead">Tres cambios en la física del generador, ninguno en los escenarios: ${esc(F.library)}
+      se deriva de los mismos <span class="mono">spec.json</span> que ${esc(F.library==='ai_v3'?'ai_v1':'la librería base')}
+      con un retrofit determinista, sin volver a llamar a la IA. Las constantes no son opinión: salen de
+      iterar este mismo harness como función objetivo.</p>
+    <div class="grid cards">
+      <div class="card"><h3>1 · La calma no es gaussiana</h3>
+        <p class="lead" style="margin:6px 0">La versión anterior daba <span class="mono">tail_dof = 0</span>
+          —normal <i>exacta</i>— a toda fase tranquila, que es la mayor parte de un horizonte de 730 días.
+          Ahora toda fase tiene cola de Student (calma 5, elevada 4,5, crisis 4).</p>
+        <p class="tag">Mueve: curtosis ${B?was('excess_kurtosis',p=>fmt(p.synth_median,2))+' → ':''}${fmt(kurt.synth_median,2)}
+          · exceedances ${B?was('exceed_3sigma_pct',p=>fmt(p.synth_median,2))+'% → ':''}${fmt(exc.synth_median,2)}%.</p></div>
+      <div class="card"><h3>2 · Más reacción a la noticia</h3>
+        <p class="lead" style="margin:6px 0">El GARCH repartía la persistencia 0,15 / 0,85 entre noticia de
+          ayer e inercia. Ahora el reparto es un campo del <i>spec</i> (<span class="mono">vol_news</span>),
+          calibrado a 0,25. Los dos pesos siguen sumando <span class="mono">p</span>: sube el agrupamiento
+          medible, no el nivel de riesgo.</p>
+        <p class="tag">Mueve: clustering ${B?was('ac_abs1',p=>fmt(p.synth_median,3))+' → ':''}${fmt(clus.synth_median,3)}
+          (real ${fmt(clus.real_median,3)}).</p></div>
+      <div class="card"><h3>3 · Betas que suben en el pánico</h3>
+        <p class="lead" style="margin:6px 0">Con cargas congeladas, la correlación de un modelo de factores
+          es una constante del universo: <b>no puede</b> dispararse en las caídas. Ahora cada fase declara
+          un <span class="mono">beta_stress</span> y las betas del día se escalan con él (y la volatilidad
+          diaria que calibra mechas y huecos usa la beta efectiva, no la congelada).</p>
+        <p class="tag">Mueve: correlación cruzada ${B?was('cross_corr',p=>fmt(p.synth_median,3))+' → ':''}${fmt(cross.synth_median,3)}
+          (real ${fmt(cross.real_median,3)}).</p></div>
+    </div>
     <h2>Veredicto</h2>
-    <div class="note"><b>1 · Lo que el mundo sintético acierta.</b> El <b>nivel de riesgo</b> es el del
-      mercado (volatilidad anualizada ${fmt(vol.real_median,0)}% real vs ${fmt(vol.synth_median,0)}%
-      sintético, ratio ${ratio(vol)}), y el modelo de factores <b>ordena los pares como la realidad</b>:
-      rank corr ${fmt(cross.rank_corr,2)} sobre ${cross.n} pares. Que las correlaciones cruzadas emerjan de
-      cargas compartidas —y no de una matriz inventada— produce un acoplamiento con la forma correcta.</div>
-    <div class="note"><b>2 · Lo que no acierta: las colas.</b> La curtosis en exceso real es
-      <b>${fmt(kurt.real_median,1)}</b> y la sintética <b>${fmt(kurt.synth_median,1)}</b>
-      (${fmt(kurt.coverage_pct,0)}% de cobertura), y las exceedances más allá de 3σ son
-      ${fmt(exc.real_median,2)}% frente a ${fmt(exc.synth_median,2)}%. Cobertura ${fmt(kurt.coverage_pct,0)}%
-      no significa "el sintético se queda corto de media": significa que <b>ni en su percentil 90</b> el
-      ensemble llega al valor real. El agrupamiento de volatilidad va por el mismo camino, a
-      <b>${ratio(clus)}</b> del real.</div>
-    <div class="note"><b>3 · Qué implica para lo que se mide con este sustrato.</b> Un mundo con colas más
-      finas que las reales <b>subestima la pérdida de cola</b>: los drawdowns de crisis, los huecos que se
-      saltan un stop y el peor cuartil del CVaR salen mejores de lo que saldrían contra el mercado. Los
-      rankings de estrategias siguen siendo comparaciones honestas <i>entre sí</i> (todas compiten en el
-      mismo mundo), pero sus <b>cifras absolutas de riesgo son optimistas</b>. Cerrarlo es la evolución
-      "Subir colas y clustering de ai_v2 al nivel medido" de la sección Evoluciones.</div>
-    <div class="note"><b>4 · La autocorrelación merece leerse aparte.</b> Real ${fmt(ac.real_median,3)},
+    <div class="note"><b>1 · Lo que ahora sí está en la magnitud del mercado.</b> Curtosis en exceso
+      <b>${fmt(kurt.synth_median,2)}</b> frente a ${fmt(kurt.real_median,2)} real
+      (cobertura ${fmt(kurt.coverage_pct,0)}%${B?', antes '+was('excess_kurtosis',p=>fmt(p.coverage_pct,0)+'%'):''}),
+      exceedances más allá de 3σ ${fmt(exc.synth_median,2)}% frente a ${fmt(exc.real_median,2)}%
+      —una gaussiana pura daría 0,27%— y agrupamiento de volatilidad ${fmt(clus.synth_median,3)} frente a
+      ${fmt(clus.real_median,3)}. El <b>nivel de riesgo</b> sigue en su sitio: volatilidad anualizada
+      ${fmt(vol.real_median,0)}% real vs ${fmt(vol.synth_median,0)}% sintético (ratio ${ratio(vol)}), que es
+      lo que hace que el arreglo sea un arreglo y no un cambio de escala.</div>
+    <div class="note"><b>2 · Lo que mejora pero no llega: el co-movimiento.</b> La correlación cruzada media
+      pasa a <b>${fmt(cross.synth_median,3)}</b> frente a ${fmt(cross.real_median,3)} real
+      (rank corr ${fmt(cross.rank_corr,2)} sobre ${cross.n} pares: el modelo de factores <b>ordena</b> los
+      pares como la realidad). Cerrar el resto exigiría subir más las betas de estrés, y la beta entra al
+      cuadrado en la varianza: se compraría correlación inflando la volatilidad total, que hoy está bien.
+      Se prefiere un nivel de riesgo correcto con algo menos de acoplamiento que lo contrario.</div>
+    <div class="note"><b>3 · Límite declarado: la mediana del mercado, no los años de manía.</b> El p90 de
+      la curtosis real va de 30 a 90 (DOGE y XRP en sus años de manía). Ni con
+      <span class="mono">dof = 4</span> se reproduce eso, y perseguirlo rompería el nivel de volatilidad.
+      Por eso el umbral de aceptación está sobre la <b>mediana</b>: el generador produce el cripto de un año
+      cualquiera, no su cola histórica. Lo que se mida sobre este sustrato sigue siendo optimista para los
+      escenarios de manía; ya no lo es para el mercado típico.</div>
+    <div class="note"><b>4 · Lo que sigue sin funcionar, y se publica igual: la ordenación.</b> La columna
+      <b>rank corr</b> de colas y agrupamiento es floja e incluso negativa
+      (${fmt(clus.rank_corr,2)} en clustering, ${fmt(kurt.rank_corr,2)} en curtosis). El mundo sintético ya
+      produce la <i>magnitud</i> correcta pero no sabe <b>qué</b> activo tiene más cola: en el mercado real
+      son los más ruidosos (DOGE, XRP) y aquí el ruido idiosincrático —al que se le aplica un AR(1) por
+      régimen— blanquea justo esa estructura. La cobertura y la mediana no lo tapan porque los tres ejes se
+      publican por separado; es el siguiente hilo del que tirar.</div>
+    <div class="note"><b>5 · La autocorrelación merece leerse aparte.</b> Real ${fmt(ac.real_median,3)},
       sintético ${fmt(ac.synth_median,3)}: el mercado no regala estructura serial —si la regalara, sería
       dinero gratis— mientras que el generador la <b>fija a propósito</b>, con signo según el régimen, para
       que la reversión a la media y el momentum tengan algo que capturar. Aquí un ratio lejos de 1 no es un
@@ -549,8 +622,10 @@ function renderFidelity(){
       Con ${S.n_symbols} puntos, una correlación de rangos tiene un error grande: sirve para distinguir
       "ordena como el mercado" de "no ordena", no para comparar 0,55 con 0,65.
       ${F.missing.length?('Sin contraparte real: <span class="mono">'+F.missing.map(esc).join(', ')+'</span>.'):''}
-      Además, el histórico real es un único camino de la historia: sus siete ventanas comparten los mismos
-      ciclos de 2018-2025, mientras que el sintético son ${S.n_synthetic_samples} mundos distintos.</div>
+      Además, el histórico real es un único camino de la historia: sus ${S.n_real_windows} ventanas comparten
+      los mismos ciclos de 2018-2025, mientras que el sintético son ${S.n_synthetic_samples} mundos distintos.
+      Y las librerías anterior y actual se miden contra <b>la misma</b> ventana real y el mismo harness, que
+      es lo único que hace comparable el antes con el después.</div>
     <p class="tag">Evidencia completa: <span class="mono">data/fidelity/report_${esc(F.library)}.json</span> ·
       reproducible con <span class="mono">python -m ai_trader.synthetic.fidelity_study</span>
       (${F.n_scenarios} escenarios × ${F.n_paths} caminos; ${esc(F.generated_at)}).</p>`;

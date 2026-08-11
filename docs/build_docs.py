@@ -28,8 +28,11 @@ from ai_trader.scoring.weight_calibration import (
 )
 from ai_trader.shared import bars as bar_schema
 from ai_trader.synthetic.fidelity import (
-    FIDELITY_REPORT,
+    CROSS_CORR_KEY,
+    FIDELITY_BASELINE_LIBRARY,
+    FIDELITY_LIBRARY,
     TARGET_METRIC_KEYS,
+    fidelity_report_path,
     load_fidelity_report,
     metric,
 )
@@ -174,7 +177,7 @@ def _fidelity() -> dict | None:
     Igual que la calibracion: se leen del informe publicado, no se recalculan. Medirlo
     exige descargar ocho anos de historico real y recorrer la libreria entera; la
     documentacion tiene que ser barata de regenerar. Sin informe, prosa sin cifras."""
-    report = load_fidelity_report(ROOT / FIDELITY_REPORT)
+    report = load_fidelity_report(ROOT / fidelity_report_path(FIDELITY_LIBRARY))
     if not report:
         logger.warning("Sin informe de fidelidad: la seccion 2.8 saldra degradada")
         return None
@@ -186,7 +189,30 @@ def _fidelity() -> dict | None:
         report["cross_correlation"],
         *(m for m in report["metrics"] if m["key"] not in TARGET_METRIC_KEYS),
     ]
+
+    # La libreria ANTERIOR, medida con el mismo harness y la misma ventana real. Sin el
+    # antes, una correccion medida no se distingue de una afirmacion.
+    baseline = load_fidelity_report(ROOT / fidelity_report_path(FIDELITY_BASELINE_LIBRARY))
+    before = None
+    if baseline:
+        prev = {m["key"]: m for m in baseline["metrics"]}
+        prev[CROSS_CORR_KEY] = baseline["cross_correlation"]
+        before = {
+            "library": baseline["plan"]["library_id"],
+            "by_key": {
+                key: {"synth": row["synth_median"], "coverage": row["coverage_pct"]}
+                for key, row in prev.items()
+            },
+            "coverage_mean_pct": baseline["summary"]["coverage_mean_pct"],
+            "accepted": baseline["summary"].get("accepted"),
+        }
+    else:
+        logger.warning("Sin informe de %s: la seccion 2.8 no podra comparar",
+                       FIDELITY_BASELINE_LIBRARY)
+
     return {
+        "before": before,
+        "acceptance": report["acceptance"],
         "library": plan["library_id"],
         "exchange": plan["exchange"],
         "start": plan["real_window"]["start"],
@@ -205,6 +231,7 @@ def _fidelity() -> dict | None:
                 "ratio": row["ratio"],
                 "rank_corr": row["rank_corr"],
                 "coverage": row["coverage_pct"],
+                "before": (before or {}).get("by_key", {}).get(row["key"]),
                 "is_cross": row["key"] == "cross_corr",
                 "is_target": row["key"] == "cross_corr" or row["key"] in TARGET_METRIC_KEYS,
             }

@@ -26,6 +26,12 @@ Dos decisiones que hacen que la comparacion signifique algo:
    "hasta hoy": si el final se moviera con la fecha de ejecucion, el informe no seria
    reproducible y dos regeneraciones no serian comparables.
 
+3. UMBRALES QUE PUEDEN FALLAR. El estudio no solo publica cifras: las contrasta con los
+   umbrales de aceptacion declarados en `fidelity.py` (cobertura por metrica y mediana de
+   mercado dentro de la banda sintetica) y DEVUELVE 1 si no se cumplen. Un estudio que no
+   puede fallar no es evidencia, es decoracion. El informe se escribe igualmente: una
+   libreria que no cumple tambien es un resultado.
+
 Determinismo: no hay aleatoriedad en ninguna parte (ni muestreo ni semillas); las
 muestras sinteticas son los primeros `--paths` caminos de cada escenario y los datos
 reales, un rango historico cerrado. `--verify-determinism` recalcula todo una segunda
@@ -51,6 +57,10 @@ from ai_trader.shared.instruments import AssetClass
 from ai_trader.synthetic.fidelity import (
     DEFAULT_MAX_LAG,
     DEFAULT_SIGMA,
+    FIDELITY_DIR,
+    FIDELITY_LIBRARY,
+    METRIC_KEYS,
+    MIN_COVERAGE_PCT,
     MIN_OBSERVATIONS,
     MIN_PAIR_OVERLAP,
     TARGET_METRIC_KEYS,
@@ -60,6 +70,8 @@ from ai_trader.synthetic.fidelity import (
     aggregate_pairs,
     compare_cross_correlations,
     compare_metrics,
+    estimate,
+    evaluate_acceptance,
     pair_correlations,
     series_facts,
 )
@@ -67,8 +79,8 @@ from ai_trader.synthetic.store import SyntheticStore
 
 logger = logging.getLogger("fidelity_study")
 
-OUT_DIR = Path("data") / "fidelity"
-DEFAULT_LIBRARY_ID = "ai_v2"
+OUT_DIR = FIDELITY_DIR
+DEFAULT_LIBRARY_ID = FIDELITY_LIBRARY
 DEFAULT_EXCHANGE = "binance"
 # Ventana historica CERRADA (ver docstring): arranca cuando Binance ya tiene profundidad
 # en la mayoria de los pares y termina en un corte fijo, no en "hoy".
@@ -220,6 +232,21 @@ class FactsCollector:
     def pairs(self) -> dict[str, Estimate]:
         return aggregate_pairs(self.pair_snapshots)
 
+    def pooled(self) -> dict[str, Estimate]:
+        """El [p10, p90] de TODAS las muestras juntas, sin separar por activo.
+
+        Es otra pregunta que la agregacion por simbolo: "¿que produce este generador
+        cuando lo miras como un mercado?", que es contra lo que se contrasta la mediana
+        de mercado real en el test de aceptacion."""
+        out: dict[str, Estimate] = {}
+        for key in METRIC_KEYS:
+            agg = estimate(
+                [f.value(key) for facts in self.by_symbol.values() for f in facts]
+            )
+            if agg is not None:
+                out[key] = agg
+        return out
+
     def as_dict(self) -> dict:
         return {
             "n_windows": self.n_windows,
@@ -341,7 +368,13 @@ def crypto_symbols(manifest_universe: Iterable[Mapping]) -> list[str]:
     )
 
 
-def build_report(plan: StudyPlan, real: FactsCollector, synth: FactsCollector) -> dict:
+def build_report(
+    plan: StudyPlan,
+    real: FactsCollector,
+    synth: FactsCollector,
+    *,
+    min_coverage_pct: float = MIN_COVERAGE_PCT,
+) -> dict:
     """Ensambla el informe: plan, mediciones crudas de ambos mundos y comparaciones."""
     comparisons = compare_metrics(real.symbols(), synth.symbols())
     cross = compare_cross_correlations(real.pairs(), synth.pairs())
@@ -350,12 +383,17 @@ def build_report(plan: StudyPlan, real: FactsCollector, synth: FactsCollector) -
     covered = [c.coverage_pct for c in targets if c.n]
     ranks = [c.rank_corr for c in targets if c.n and not np.isnan(c.rank_corr)]
 
+    acceptance = evaluate_acceptance(
+        [*comparisons, cross], synth.pooled(), min_coverage_pct=min_coverage_pct
+    )
+
     return {
         "plan": plan.as_dict(),
         "real": real.as_dict(),
         "synthetic": synth.as_dict(),
         "metrics": [c.as_dict() for c in comparisons],
         "cross_correlation": cross.as_dict(),
+        "acceptance": acceptance.as_dict(),
         "summary": {
             "n_symbols": len(set(real.symbols()) & set(synth.symbols())),
             "n_pairs": cross.n,
@@ -364,6 +402,7 @@ def build_report(plan: StudyPlan, real: FactsCollector, synth: FactsCollector) -
             "coverage_mean_pct": round(float(np.mean(covered)), 1) if covered else None,
             "rank_corr_mean": round(float(np.mean(ranks)), 4) if ranks else None,
             "rank_corr_cross": cross.as_dict()["rank_corr"],
+            "accepted": acceptance.passed,
         },
     }
 
@@ -431,7 +470,7 @@ def run_study(args: argparse.Namespace) -> dict:
         min_pair_overlap=args.min_pair_overlap,
         offline=args.offline,
     )
-    return build_report(plan, real, synth)
+    return build_report(plan, real, synth, min_coverage_pct=args.min_coverage_pct)
 
 
 def _print_report(report: dict) -> None:
@@ -456,6 +495,19 @@ def _print_report(report: dict) -> None:
         f"{s['n_real_windows']} ventanas reales vs {s['n_synthetic_samples']} muestras sinteticas"
     )
 
+    acceptance = report["acceptance"]
+    print(f"\nAceptacion (cobertura minima {acceptance['min_coverage_pct']:.0f}%):")
+    for check in acceptance["checks"]:
+        mark = "OK  " if check["passed"] else "FALLA"
+        if check["kind"] == "coverage":
+            detail = f"cobertura {check['value']:.0f}% >= {check['threshold']:.0f}%"
+        else:
+            band = check["band"]
+            span = "sin banda" if band is None else f"[{band[0]:.3f}, {band[1]:.3f}]"
+            detail = f"mediana de mercado {check['value']:.3f} en {span}"
+        print(f"  {mark:<6}{check['label'][:44]:<46}{detail}")
+    print("VEREDICTO:", "ACEPTADA" if acceptance["passed"] else "NO ACEPTADA")
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -472,6 +524,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--sigma", type=float, default=DEFAULT_SIGMA)
     parser.add_argument("--min-observations", type=int, default=MIN_OBSERVATIONS)
     parser.add_argument("--min-pair-overlap", type=int, default=MIN_PAIR_OVERLAP)
+    parser.add_argument(
+        "--min-coverage-pct", type=float, default=MIN_COVERAGE_PCT,
+        help="Cobertura minima exigida a cada metrica objetivo para aceptar la libreria.",
+    )
     parser.add_argument(
         "--offline", action="store_true", help="No llamar al exchange: usar solo la cache."
     )
@@ -505,6 +561,14 @@ def main(argv: list[str] | None = None) -> int:
     target.write_text(json.dumps(report, indent=1, ensure_ascii=False), encoding="utf-8")
     logger.info("Informe -> %s", target)
     _print_report(report)
+
+    # El informe se publica SIEMPRE (una libreria que no cumple es evidencia, no un
+    # error), pero el codigo de salida es el que convierte el estudio en un test de
+    # aceptacion: si el generador deja de cumplir los umbrales, el comando falla.
+    if not report["acceptance"]["passed"]:
+        failed = [c["key"] for c in report["acceptance"]["checks"] if not c["passed"]]
+        logger.error("Aceptacion NO superada (%s)", ", ".join(failed))
+        return 1
     return 0
 
 

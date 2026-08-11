@@ -23,6 +23,35 @@ _CRISIS_EQUITY_VOL = 0.025
 # Dispersion por defecto del dia de los shocks entre paths (evita crashes alineados).
 DEFAULT_SHOCK_JITTER_DAYS = 15
 
+# --- constantes calibradas contra el informe de fidelidad ---------------------------
+#
+# Los tres numeros de abajo NO son opinion: salen de iterar el propio harness
+# (`ai_trader.synthetic.fidelity_study --library ai_v3`) hasta que la mediana real de
+# cripto cae dentro del [p10, p90] del ensemble sintetico en curtosis, clustering y
+# exceedances. El estudio publica esos umbrales y falla si dejan de cumplirse.
+
+# Grados de libertad de la t-Student por regimen. Menos dof = mas cola. La calma NO es
+# gaussiana: es el cambio que mueve la curtosis de 0,37 a ~4, porque las fases tranquilas
+# ocupan la mayor parte de un horizonte de 730 dias.
+CRISIS_TAIL_DOF = 4.0
+ELEVATED_TAIL_DOF = 4.5
+CALM_TAIL_DOF = 5.0
+
+# Reaccion a la noticia del GARCH (el alpha). Con el 0.15 por defecto del motor el
+# clustering medido se quedaba en ~0,09 contra 0,13-0,31 del mercado real. Sube la
+# autocorrelacion de |r| a lag 1 SIN tocar la persistencia total ni el nivel de
+# volatilidad (los dos pesos siguen sumando p).
+NEWS_SHARE = 0.25
+
+# Subida fraccional de las cargas factoriales por regimen (B6). Con betas congeladas la
+# correlacion entre activos es una constante del universo y NO puede dispararse en las
+# caidas, que es el hecho de mercado mas caro de ignorar: media 0,49 contra 0,65 real.
+# Subir mas las betas seguiria acercando la correlacion a 0,65, pero a costa de inflar la
+# volatilidad total (la beta entra al cuadrado en la varianza), que HOY ya esta en su
+# sitio. Este es el punto donde la correlacion mejora sin estropear el nivel de riesgo.
+CRISIS_BETA_STRESS = 1.00
+ELEVATED_BETA_STRESS = 0.45
+
 
 def _market_vol(phase: FactorPhase) -> float:
     return phase.vol.get(EQUITY, 0.0)
@@ -49,13 +78,30 @@ def _idio_ar_for(phase: FactorPhase) -> float:
 
 def _tail_cluster_jump_for(phase: FactorPhase) -> tuple[float, float, float, float]:
     """(tail_dof, vol_persistence, jump_intensity, jump_scale) segun el estres de la fase.
-    El clustering es ubicuo (base 0.85); las colas y los saltos crecen con la crisis."""
+    El clustering es ubicuo (base 0.85); los saltos crecen con la crisis.
+
+    Las COLAS tambien son ubicuas, y esa es la correccion medida: la version anterior daba
+    tail_dof=0 -gaussiana EXACTA- a toda fase tranquila, que es la mayor parte de un
+    horizonte de 730 dias, y por eso la curtosis sintetica salia ~0,4 contra 3,3-17,8 del
+    cripto real. El cripto real tiene curtosis de 4 para arriba TAMBIEN en ventanas
+    tranquilas: la calma no es gaussiana, solo es menos leptocurtica que el panico."""
     equity_vol = _market_vol(phase)
     if equity_vol >= _CRISIS_EQUITY_VOL:
-        return 5.0, 0.92, 0.04, 5.0
+        return CRISIS_TAIL_DOF, 0.92, 0.04, 5.0
     if equity_vol >= _ELEVATED_EQUITY_VOL:
-        return 8.0, 0.88, 0.015, 4.0
-    return 0.0, 0.85, 0.0, 0.0
+        return ELEVATED_TAIL_DOF, 0.88, 0.015, 4.0
+    return CALM_TAIL_DOF, 0.85, 0.0, 0.0
+
+
+def _beta_stress_for(phase: FactorPhase) -> float:
+    """Cuanto suben las betas en esta fase, con la MISMA semantica de fase que las colas
+    y los saltos: el estres sistemico lo marca la vol de EQUITY."""
+    equity_vol = _market_vol(phase)
+    if equity_vol >= _CRISIS_EQUITY_VOL:
+        return CRISIS_BETA_STRESS
+    if equity_vol >= _ELEVATED_EQUITY_VOL:
+        return ELEVATED_BETA_STRESS
+    return 0.0
 
 
 def enrich_phase(phase: FactorPhase) -> FactorPhase:
@@ -65,8 +111,10 @@ def enrich_phase(phase: FactorPhase) -> FactorPhase:
         idio_ar=idio_ar,
         tail_dof=tail_dof,
         vol_persistence=persistence,
+        vol_news=NEWS_SHARE,
         jump_intensity=jump_intensity,
         jump_scale=jump_scale,
+        beta_stress=_beta_stress_for(phase),
     )
 
 

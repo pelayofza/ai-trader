@@ -152,18 +152,46 @@ están sesgados en muestras cortas y comparar longitudes distintas compararía e
 Se reportan tres ejes por métrica: **nivel** (ratio sintético/real), **ordenación**
 (correlación de rangos de Spearman sobre la sección cruzada de activos, o de pares) y
 **cobertura** (qué fracción de los valores reales cae dentro del [p10, p90] del ensemble).
-La evidencia se publica en `data/fidelity/` y la vista *Fidelidad* del dashboard:
+Además, el estudio es un **test de aceptación**, no un vistazo: contrasta cada medición con
+umbrales declarados en `synthetic/fidelity.py` (cobertura ≥ 60% por métrica y mediana real
+dentro de la banda del ensemble en curtosis, clustering y exceedances) y **devuelve 1** si
+no se cumplen, de modo que una regresión del generador rompe el comando. El informe se
+escribe igualmente: no cumplir también es un resultado. La evidencia se publica en
+`data/fidelity/` y la vista *Fidelidad* del dashboard:
 
 ```powershell
-.venv\Scripts\python.exe -m ai_trader.synthetic.fidelity_study                     # descarga + mide
-.venv\Scripts\python.exe -m ai_trader.synthetic.fidelity_study --offline           # solo caché
-.venv\Scripts\python.exe -m ai_trader.synthetic.fidelity_study --verify-determinism
+.venv\Scripts\python.exe -m ai_trader.synthetic.fidelity_study --library ai_v3            # descarga + mide
+.venv\Scripts\python.exe -m ai_trader.synthetic.fidelity_study --library ai_v3 --offline  # solo caché
+.venv\Scripts\python.exe -m ai_trader.synthetic.fidelity_study --library ai_v3 --verify-determinism
 ```
 
-Resultado actual de `ai_v2`: el nivel de volatilidad y el orden de las correlaciones
-cruzadas se sostienen; **las colas y el agrupamiento se quedan cortos** frente al mercado
-real, así que las cifras absolutas de riesgo medidas sobre este sustrato son optimistas.
-Está declarado en la documentación (§2.8) y es la siguiente evolución del generador.
+Se publican **dos** informes medidos con el mismo harness y la misma ventana real, porque
+sin el "antes" una corrección medida no se distingue de una afirmación:
+
+| | `ai_v2` | `ai_v3` | real |
+|---|---|---|---|
+| Curtosis en exceso | 0,37 | **3,40** | 4,19 |
+| Exceedances > 3σ | 0,55% | **1,27%** | 1,46% |
+| Clustering (autocorr. \|r\|, lag 1) | 0,092 | **0,196** | 0,190 |
+| Correlación cruzada (par a par) | 0,489 | **0,542** | 0,653 |
+| Volatilidad anualizada | 97,2% | 102,4% | 98,7% |
+| Cobertura media p10–p90 | 35% | **98%** | — |
+| Veredicto | no cumple | **acepta** | |
+
+`ai_v3` se deriva de los mismos `spec.json` que `ai_v1` con el retrofit determinista
+(`synthetic/retrofit.py`), sin llamar a la IA. Tres cambios en la física, calibrados
+iterando este mismo harness como función objetivo: colas de Student **también en las fases
+de calma** (antes eran gaussianas exactas, y son la mayor parte del horizonte), reparto
+news/inercia del GARCH movido al *spec* (`vol_news`) y **cargas factoriales que suben en el
+pánico** (`beta_stress`) — sin esto último, la correlación de un modelo de factores es una
+constante del universo y no puede dispararse en las caídas. Los dos campos nuevos son
+neutros por defecto y hay tests que congelan con un hash que `ai_v1` y `ai_v2` se regeneran
+byte a byte desde sus `spec.json`.
+
+Dos límites declarados y medidos: el generador cubre la **mediana** del mercado, no los años
+de manía (el p90 de la curtosis real va de 30 a 90 en DOGE y XRP, y perseguirlo rompería el
+nivel de volatilidad), y la **ordenación** entre activos —qué activo tiene más cola— sigue
+siendo floja o negativa. Documentación completa en §2.8.
 
 ### Costes de ejecución
 

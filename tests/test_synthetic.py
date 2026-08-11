@@ -231,6 +231,176 @@ class TestJumps:
         assert (df[["open", "high", "low", "close"]] > 0).all().all()
 
 
+def _beta_stress_spec(stress, days=600, vol=0.02):
+    """Escenario solo-EQUITY con estres de cargas: aisla el efecto sobre la correlacion."""
+    return _spec([
+        FactorPhase(length_days=days, drift={}, vol={EQUITY: vol}, beta_stress=stress)
+    ])
+
+
+class TestStressDependentLoadings:
+    """
+    B6. Con betas CONGELADAS la correlacion entre dos activos de un modelo de factores es
+    una constante del universo: no puede subir en las caidas por mucha vol que haya. Este
+    es el mecanismo que lo rompe, y es el hecho de mercado mas caro de ignorar.
+    """
+
+    def _corr(self, bars, a, b):
+        return float(np.corrcoef(_log_returns(bars[a]), _log_returns(bars[b]))[0, 1])
+
+    def test_stress_pushes_cross_correlation_up(self):
+        engine = PathEngine(DEFAULT_UNIVERSE)
+        # BTC y DOGE comparten factores pero tienen mucho ruido propio: es donde se ve.
+        calm = self._corr(engine.generate(_beta_stress_spec(0.0), seed=0), "BTC/USDT", "DOGE/USDT")
+        stressed = self._corr(
+            engine.generate(_beta_stress_spec(1.5), seed=0), "BTC/USDT", "DOGE/USDT"
+        )
+
+        assert stressed > calm + 0.10
+
+    def test_a_stressed_phase_correlates_more_than_a_calm_one_in_the_same_path(self):
+        # Dos fases en el MISMO camino: la correlacion se mide por tramo, no entre paths.
+        spec = _spec([
+            FactorPhase(length_days=500, drift={}, vol={EQUITY: 0.02}),
+            FactorPhase(length_days=500, drift={}, vol={EQUITY: 0.02}, beta_stress=1.5),
+        ])
+        bars = PathEngine(DEFAULT_UNIVERSE).generate(spec, seed=3)
+        btc, doge = _log_returns(bars["BTC/USDT"]), _log_returns(bars["DOGE/USDT"])
+
+        calm = float(np.corrcoef(btc[:499], doge[:499])[0, 1])
+        stressed = float(np.corrcoef(btc[500:], doge[500:])[0, 1])
+        assert stressed > calm + 0.10
+
+    def test_zero_stress_is_exactly_neutral(self):
+        # No "casi igual": el mismo camino byte a byte, o ai_v1 se movería.
+        engine = PathEngine(DEFAULT_UNIVERSE)
+        plain = engine.generate(_equity_only(days=300), seed=9)
+        zeroed = engine.generate(_beta_stress_spec(0.0, days=300), seed=9)
+
+        for symbol in plain:
+            assert np.array_equal(plain[symbol].to_numpy(), zeroed[symbol].to_numpy()), symbol
+
+    def test_the_intrabar_range_uses_the_stressed_beta_not_the_frozen_one(self):
+        """La condicion que hace que esto no corrompa el ATR: si `daily_vol_t` siguiera
+        usando la beta congelada, las mechas y los huecos de las fases de estres se
+        quedarian calibrados a una volatilidad que ya no es la del dia."""
+        engine = PathEngine(DEFAULT_UNIVERSE)
+
+        def rel_range(stress):
+            df = engine.generate(_beta_stress_spec(stress, days=400), seed=4)["SPY"]
+            return float(((df["high"] - df["low"]) / df["close"]).mean())
+
+        # SPY carga EQUITY 1.0 y casi no tiene ruido propio: al doblar su beta, su vol
+        # diaria dobla, y el rango intradia tiene que acompanar.
+        assert rel_range(1.0) > 1.6 * rel_range(0.0)
+
+    def test_bars_stay_valid_under_stress(self):
+        df = PathEngine(DEFAULT_UNIVERSE).generate(_beta_stress_spec(2.0, days=300), seed=6)["ETH/USDT"]
+        o, h, low, c = df["open"], df["high"], df["low"], df["close"]
+
+        assert (h >= np.maximum(o, c) - 1e-9).all()
+        assert (low <= np.minimum(o, c) + 1e-9).all()
+        assert (df[["open", "high", "low", "close"]] > 0).all().all()
+        assert (df["volume"] > 0).all()
+
+
+class TestGarchNewsShare:
+    """
+    B3-bis. `vol_news` reparte la persistencia entre reaccion a la noticia de ayer e
+    inercia. Es lo que mueve el clustering MEDIBLE a lag 1 sin tocar el nivel de riesgo.
+    """
+
+    def _spec(self, news, days=3000):
+        return _spec([FactorPhase(
+            length_days=days, drift={}, vol={}, vol_persistence=0.9, vol_news=news
+        )])
+
+    def test_more_news_impact_means_more_measurable_clustering(self):
+        engine = PathEngine(DEFAULT_UNIVERSE)
+        low = _abs_autocorr(_log_returns(engine.generate(self._spec(0.05), seed=0)["BTC/USDT"]))
+        high = _abs_autocorr(_log_returns(engine.generate(self._spec(0.40), seed=0)["BTC/USDT"]))
+
+        assert high > low + 0.05
+
+    def test_the_news_share_is_variance_matched(self):
+        # Los dos pesos suman p, asi que la varianza incondicional es 1 para cualquier
+        # reparto: subir la reaccion a la noticia mueve el clustering, no el riesgo.
+        engine = PathEngine(DEFAULT_UNIVERSE)
+        low = _log_returns(engine.generate(self._spec(0.05), seed=0)["BTC/USDT"]).std()
+        high = _log_returns(engine.generate(self._spec(0.40), seed=0)["BTC/USDT"]).std()
+
+        assert np.isclose(high, low, rtol=0.15)
+
+    def test_zero_news_falls_back_to_the_engine_default_exactly(self):
+        """0 es "sin override", como tail_dof=0 es "gaussiano": tiene que reproducir el
+        reparto con el que se genero ai_v2, byte a byte."""
+        from ai_trader.synthetic.engine import DEFAULT_NEWS_SHARE
+
+        engine = PathEngine(DEFAULT_UNIVERSE)
+        implicit = engine.generate(self._spec(0.0), seed=1)["BTC/USDT"]
+        explicit = engine.generate(self._spec(DEFAULT_NEWS_SHARE), seed=1)["BTC/USDT"]
+
+        assert np.array_equal(implicit.to_numpy(), explicit.to_numpy())
+
+    def test_no_persistence_is_still_an_exact_no_op(self):
+        engine = PathEngine(DEFAULT_UNIVERSE)
+        spec = _spec([FactorPhase(length_days=400, drift={}, vol={EQUITY: 0.02}, vol_news=0.4)])
+        plain = engine.generate(_equity_only(days=400), seed=2)
+        newsy = engine.generate(spec, seed=2)
+
+        for symbol in plain:
+            assert np.array_equal(plain[symbol].to_numpy(), newsy[symbol].to_numpy()), symbol
+
+
+class TestEngineByteIdentity:
+    """
+    Congela la promesa que sostiene toda la evidencia ya publicada: las librerias que
+    existen (ai_v1 sin microestructura, ai_v2 con la suya) se regeneran desde sus
+    spec.json byte a byte, por muchos campos nuevos que gane el motor despues.
+
+    Los hashes se tomaron ANTES de anadir `vol_news` y `beta_stress`. Si uno de estos
+    dos tests se pone rojo, no es el test: es que una libreria publicada ha dejado de
+    ser reproducible y las cifras del dashboard ya no corresponden a sus datos.
+    """
+
+    NEUTRAL_SHA = "65a47b26934c229829a25674fe1db765bdacc35a48620883354e81493b33bf15"
+    MICROSTRUCTURE_SHA = "d2ceb4b73b912ae6a489c5e24450ac15e14e5c425ea5141a6a13e381d9bc472e"
+
+    def _sha(self, bars) -> str:
+        import hashlib
+
+        digest = hashlib.sha256()
+        for symbol in sorted(bars):
+            digest.update(symbol.encode())
+            digest.update(np.ascontiguousarray(bars[symbol].to_numpy()).tobytes())
+        return digest.hexdigest()
+
+    def _phases(self, **micro):
+        from ai_trader.synthetic.universe import CRYPTO
+
+        return [
+            FactorPhase(length_days=120, drift={EQUITY: 0.0005}, vol={EQUITY: 0.008, CRYPTO: 0.02},
+                        **micro.get("calm", {})),
+            FactorPhase(length_days=80, drift={EQUITY: -0.003}, vol={EQUITY: 0.030, CRYPTO: 0.05},
+                        **micro.get("crisis", {})),
+        ]
+
+    def test_a_spec_without_microstructure_is_unchanged(self):
+        """La via gaussiana EXACTA (dof_t None) sigue siendo la ruta por defecto, con el
+        mismo consumo de RNG: es lo que mantiene ai_v1 congelado."""
+        bars = PathEngine(DEFAULT_UNIVERSE).generate(_spec(self._phases()), seed=4242)
+        assert self._sha(bars) == self.NEUTRAL_SHA
+
+    def test_a_spec_with_the_microstructure_of_ai_v2_is_unchanged(self):
+        spec = _spec(self._phases(
+            calm={"idio_ar": -0.30, "vol_persistence": 0.85},
+            crisis={"idio_ar": 0.25, "tail_dof": 5.0, "vol_persistence": 0.92,
+                    "jump_intensity": 0.04, "jump_scale": 5.0},
+        ))
+        assert self._sha(PathEngine(DEFAULT_UNIVERSE).generate(spec, seed=4242)) \
+            == self.MICROSTRUCTURE_SHA
+
+
 class TestShockJitter:
     def _crash_day(self, df):
         # El dia del crash = indice del retorno mas negativo.
@@ -790,6 +960,47 @@ class TestRetrofit:
         assert ep.tail_dof > 0
         assert ep.jump_intensity > 0
         assert ep.vol_persistence > 0
+
+    def test_calm_phases_are_not_gaussian_either(self):
+        """La correccion medida: la version anterior daba tail_dof=0 -gaussiana EXACTA- a
+        toda fase tranquila, que es la mayor parte de un horizonte de 730 dias, y por eso
+        la curtosis sintetica salia ~0,4 contra 4,19 del cripto real. El cripto real tiene
+        curtosis de 4 para arriba TAMBIEN en las ventanas tranquilas."""
+        calm = FactorPhase(length_days=100, drift={}, vol={EQUITY: 0.008})
+        crisis = FactorPhase(length_days=100, drift={EQUITY: -0.004}, vol={EQUITY: 0.03})
+
+        calm_dof = enrich_phase(calm).tail_dof
+        assert 4.0 <= calm_dof <= 8.0
+        # ...pero la calma sigue teniendo MENOS cola que el panico.
+        assert calm_dof > enrich_phase(crisis).tail_dof
+
+    def test_every_phase_declares_the_calibrated_news_share(self):
+        """El reparto news/inercia va en el SPEC, no en una constante del motor: asi las
+        velas las sigue determinando (spec, semilla) y ai_v2 se regenera identica."""
+        from ai_trader.synthetic.engine import DEFAULT_NEWS_SHARE
+        from ai_trader.synthetic.retrofit import NEWS_SHARE
+
+        phase = enrich_phase(FactorPhase(length_days=100, drift={}, vol={EQUITY: 0.008}))
+        assert phase.vol_news == NEWS_SHARE
+        assert NEWS_SHARE > DEFAULT_NEWS_SHARE  # mas reaccion a la noticia que ai_v2
+
+    def test_stress_raises_the_loadings_only_in_stressed_phases(self):
+        calm = FactorPhase(length_days=100, drift={}, vol={EQUITY: 0.008})
+        elevated = FactorPhase(length_days=100, drift={}, vol={EQUITY: 0.018})
+        crisis = FactorPhase(length_days=100, drift={EQUITY: -0.004}, vol={EQUITY: 0.03})
+
+        assert enrich_phase(calm).beta_stress == 0.0
+        assert 0.0 < enrich_phase(elevated).beta_stress < enrich_phase(crisis).beta_stress
+
+    def test_the_enriched_spec_round_trips_through_json(self):
+        """El spec.json es el unico artefacto insustituible de una libreria: si un campo
+        nuevo no sobrevive al round-trip, la libreria no se puede regenerar."""
+        spec = _spec([FactorPhase(length_days=100, drift={EQUITY: -0.004}, vol={EQUITY: 0.03})])
+        enriched = enrich_spec(spec)
+
+        assert ScenarioSpec.from_dict(enriched.to_dict()) == enriched
+        assert enriched.phases[0].beta_stress > 0
+        assert enriched.phases[0].vol_news > 0
 
     def test_enrich_spec_adds_shock_jitter(self):
         spec = _spec(

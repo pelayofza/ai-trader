@@ -50,8 +50,10 @@ from ai_trader.strategies import build_strategy
 from ai_trader.strategies.mean_reversion import MeanReversionStrategy
 from ai_trader.strategies.momentum_crypto import CryptoMomentumStrategy
 from ai_trader.synthetic.fidelity import (
-    FIDELITY_REPORT,
+    FIDELITY_BASELINE_LIBRARY,
+    FIDELITY_LIBRARY,
     TARGET_METRIC_KEYS,
+    fidelity_report_path,
     load_fidelity_report,
     metric,
 )
@@ -65,6 +67,11 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT_HTML = Path(__file__).resolve().parent / "index.html"
 PRIMARY_LIB = "ai_v2"
 COMPARE_LIB = "ai_v1"
+# Las tres generaciones del mundo sintetico, en orden: iid -> microestructura -> calibrado
+# contra el mercado. Se ensenan juntas porque cada una solo significa algo contra la
+# anterior. PRIMARY_LIB sigue siendo ai_v2: es la libreria sobre la que se midieron la
+# calibracion de pesos y la validacion multiventana, y cambiarla obligaria a recorrerlas.
+LIBRARY_LINEAGE = (COMPARE_LIB, PRIMARY_LIB, FIDELITY_LIBRARY)
 
 # --- scope del ranking de muestra (reducido para que el build sea rapido) -----------
 RANK_LIB = "ai_v2"
@@ -246,7 +253,7 @@ def stylized_facts(store: SyntheticStore, n_paths: int = 2, n_scen: int = 12) ->
             "exceed_pct": round(float(np.median(exc)) * 100.0, 2),
         }
 
-    return {"ai_v1": survey(COMPARE_LIB), "ai_v2": survey(PRIMARY_LIB)}
+    return {lib: survey(lib) for lib in LIBRARY_LINEAGE}
 
 
 def collect_strategies() -> dict:
@@ -616,8 +623,8 @@ def collect_kpis(store: SyntheticStore, synthetic: dict) -> dict:
             return None
 
     return {
-        "ai_v1": lib_stats(COMPARE_LIB),
-        "ai_v2": lib_stats(PRIMARY_LIB),
+        **{lib: lib_stats(lib) for lib in LIBRARY_LINEAGE},
+        "lineage": list(LIBRARY_LINEAGE),
         "n_strategies": 2,
         "n_own_features": len(OWN_ASSET_FEATURES),
         "n_regime_features": len(REGIME_FEATURES),
@@ -664,18 +671,8 @@ def collect_calibration() -> dict | None:
     }
 
 
-def collect_fidelity() -> dict | None:
-    """Comparacion de los stylized-facts de ai_v2 contra el historico real (data/fidelity).
-
-    Se LEE del informe publicado; no se recalcula. Medirlo exige descargar ocho anos de
-    historico y recorrer la libreria entera, y el dashboard tiene que seguir siendo
-    regenerable en minutos."""
-    report = load_fidelity_report(ROOT / FIDELITY_REPORT)
-    if not report:
-        logger.warning("Sin informe de fidelidad: el panel sintetico-vs-real saldra vacio")
-        return None
-
-    plan = report["plan"]
+def _fidelity_rows(report: dict) -> tuple[list[dict], dict]:
+    """Metricas y correlacion cruzada de un informe, con lo que necesita la vista."""
     metrics = [
         {
             **m,
@@ -684,6 +681,50 @@ def collect_fidelity() -> dict | None:
         }
         for m in report["metrics"]
     ]
+    return metrics, {**report["cross_correlation"], "is_target": True, "decimals": 3}
+
+
+def collect_fidelity() -> dict | None:
+    """Los stylized-facts de la libreria realista contra el historico real, y contra la
+    libreria ANTERIOR (data/fidelity).
+
+    Se publican los dos informes juntos a proposito: ai_v2 es el generador cuyo hueco se
+    midio y ai_v3 el que lo cierra, asi que la vista no ensena "el sintetico se parece al
+    real" sino "esto es lo que se arreglo y cuanto". Sin el antes, la correccion seria una
+    afirmacion sin control.
+
+    Se LEE de los informes publicados; no se recalcula. Medirlo exige descargar ocho anos
+    de historico y recorrer la libreria entera, y el dashboard tiene que seguir siendo
+    regenerable en minutos."""
+    report = load_fidelity_report(ROOT / fidelity_report_path(FIDELITY_LIBRARY))
+    if not report:
+        logger.warning("Sin informe de fidelidad: el panel sintetico-vs-real saldra vacio")
+        return None
+
+    plan = report["plan"]
+    metrics, cross = _fidelity_rows(report)
+
+    baseline = load_fidelity_report(ROOT / fidelity_report_path(FIDELITY_BASELINE_LIBRARY))
+    before = None
+    if baseline:
+        prev_metrics, prev_cross = _fidelity_rows(baseline)
+        before = {
+            "library": baseline["plan"]["library_id"],
+            "by_key": {
+                row["key"]: {
+                    "synth_median": row["synth_median"],
+                    "coverage_pct": row["coverage_pct"],
+                    "ratio": row["ratio"],
+                    "rank_corr": row["rank_corr"],
+                }
+                for row in (*prev_metrics, prev_cross)
+            },
+            "summary": baseline["summary"],
+            "generated_at": baseline["generated_at"][:10],
+        }
+    else:
+        logger.warning("Sin informe de %s: la vista no podra comparar", FIDELITY_BASELINE_LIBRARY)
+
     return {
         "library": plan["library_id"],
         "exchange": plan["exchange"],
@@ -696,8 +737,10 @@ def collect_fidelity() -> dict | None:
         "n_scenarios": plan["n_scenarios"],
         "missing": plan["missing_symbols"],
         "metrics": metrics,
-        "cross": {**report["cross_correlation"], "is_target": True, "decimals": 3},
+        "cross": cross,
         "summary": report["summary"],
+        "acceptance": report["acceptance"],
+        "before": before,
         "generated_at": report["generated_at"][:10],
     }
 
@@ -902,114 +945,12 @@ ROADMAP_GROUPS = [
 
 ROADMAP = [
     {
-        "id": "line-b-fidelity-gap-ai-v3",
-        "rank": 1,
-        "group": "ahora",
-        "priority": "critica",
-        "title": "Cerrar el hueco de fidelidad: colas, clustering y correlacion bajo estres (ai_v3)",
-        "line": "B", "status": "pendiente", "impact": "alto", "effort": "medio",
-        "evidence": "Curtosis en exceso 0,31-0,46 sintetica frente a 3,3-17,8 real (~10x). "
-                    "Exceedances >3 sigma 0,41-0,55% frente a 1,1-1,8% (~3x; una gaussiana pura "
-                    "daria 0,27%). Clustering 0,08-0,10 frente a 0,13-0,31. Correlacion cruzada "
-                    "0,49 frente a 0,65. Cobertura p10-p90 = 35%, y rank_corr de colas = 0,18.",
-        "why": "El mundo sintetico es demasiado manso por un orden de magnitud, y no lo dice una "
-               "opinion: lo dice el informe que genera el propio repo (data/fidelity). Una "
-               "cobertura del 35% significa que el mercado real cae FUERA del rango que el "
-               "ensemble considera plausible dos de cada tres veces. Todo lo que se puntue sobre "
-               "este sustrato subestima la perdida de cola, asi que las estrategias parecen mas "
-               "seguras de lo que serian. Es la raiz: va primero porque contamina cualquier otra "
-               "medicion que se haga mientras siga abierto. Y la causa esta identificada, no hay "
-               "que buscarla: _tail_cluster_jump_for devuelve tail_dof=0.0 (gaussiana exacta) "
-               "para toda fase con vol de EQUITY < 1,5%, es decir para los dias de calma, que son "
-               "la mayoria del horizonte. Pero el cripto real tiene curtosis 4+ tambien en "
-               "ventanas tranquilas: las colas gruesas no son una propiedad de las crisis, son "
-               "una propiedad del proceso.",
-        "prompt": (
-            "Proyecto ai-trader (Python). El estudio de fidelidad ya midio el hueco entre la "
-            "libreria sintetica ai_v2 y el historico real de cripto de Binance 2017-2026: codigo "
-            "en src/ai_trader/synthetic/fidelity_study.py y src/ai_trader/synthetic/fidelity.py, "
-            "informe publicado en data/fidelity/report_ai_v2.json, vista 'Fidelidad' del "
-            "dashboard. Medianas medidas (real vs sintetico ai_v2):\n"
-            "  - curtosis en exceso: 3,3-17,8 vs 0,31-0,46 (~10x de diferencia)\n"
-            "  - exceedances >3 sigma: 1,1-1,8% vs 0,41-0,55% (~3x; gaussiana pura = 0,27%)\n"
-            "  - clustering (autocorr de |r| en lag 1): 0,13-0,31 vs 0,08-0,10 (~2x)\n"
-            "  - correlacion cruzada media: 0,65 vs 0,49 (ratio 0,75)\n"
-            "  - COBERTURA del intervalo p10-p90 del ensemble sintetico: 35% (deberia rondar 80%)\n"
-            "El NIVEL de volatilidad y la ORDENACION de las correlaciones cruzadas ya son "
-            "razonables; lo que falla son colas, agrupamiento y co-movimiento en estres.\n"
-            "\n"
-            "CAUSA RAIZ IDENTIFICADA (no hace falta buscarla): en "
-            "src/ai_trader/synthetic/retrofit.py, `_tail_cluster_jump_for` devuelve "
-            "tail_dof=0.0 -es decir, gaussiana EXACTA- para toda fase con vol de EQUITY por "
-            "debajo de _ELEVATED_EQUITY_VOL (0.015). Esas son las fases de calma, que ocupan la "
-            "mayor parte del horizonte de 730 dias. El cripto real tiene curtosis 4+ tambien en "
-            "ventanas tranquilas.\n"
-            "\n"
-            "TAREA: tres arreglos concretos, en este orden de impacto.\n"
-            "(1) COLAS EN CALMA. En `_tail_cluster_jump_for`, da tail_dof base ~6-8 tambien a las "
-            "fases tranquilas y baja el de crisis a ~4-5 (hoy: 5.0 en crisis, 8.0 en elevada, 0.0 "
-            "en calma). Son tres lineas. Ojo al efecto lateral: hoy "
-            "synthetic/engine.py usa `dof_t = tail_dof_t if np.any(tail_dof_t > 2.0) else None` "
-            "para conservar la via gaussiana EXACTA (mismo consumo de RNG) cuando ninguna fase "
-            "pide colas; con el cambio esa via dejara de usarse en ai_v3, pero DEBE seguir "
-            "existiendo y siendo la ruta por defecto cuando la microestructura esta desactivada "
-            "(ai_v1 y los tests de neutralidad no pueden moverse ni un byte).\n"
-            "(2) COEFICIENTE DE NEWS DEL GARCH. En synthetic/engine.py, `_apply_garch` reparte "
-            "sigma2_t = (1-p) + 0.15*p*e_{t-1}^2 + 0.85*p*sigma2_{t-1}. Ese 0,15/0,85 fijo es lo "
-            "que produce el clustering ~0,09 que se mide; el real pide mas reaccion a la noticia "
-            "(del orden de 0,20/0,78). Hazlo un parametro con el valor por defecto calibrado "
-            "contra el propio informe, manteniendo varianza incondicional 1 (variance-matched) y "
-            "el no-op exacto con p=0.\n"
-            "(3) CARGAS DEPENDIENTES DEL ESTRES. Hoy los `loadings` de cada activo "
-            "(synthetic/universe.py) estan congelados: en synthetic/engine.py::generate se lee "
-            "`beta = np.array([asset.loading(f) for f in factors])` una sola vez y se aplica igual "
-            "a todos los dias (`asset_returns = tilt + factor_returns @ beta + idio`). Con betas "
-            "constantes es MATEMATICAMENTE IMPOSIBLE que la correlacion se dispare hacia 1 en las "
-            "caidas, que es el hecho de mercado mas caro de ignorar. Anade un escalar de fase "
-            "nuevo (p.ej. `beta_stress`, expandido con `_phase_scalar_timeline` como los demas) y "
-            "aplica beta_eff_t = beta * (1 + s * stress_t) por dia. Dos condiciones: (a) el "
-            "`daily_vol_t` de la linea que calcula sqrt(sum((vol*beta)^2)+idio_vol^2) tiene que "
-            "usar la beta EFECTIVA del dia, o las mechas y los huecos dejarian de casar con la "
-            "vol real de ese dia; (b) neutralidad exacta con s=0. La definida-positividad se "
-            "conserva sola: la covarianza sigue siendo B_t Sigma B_t' + D con D diagonal "
-            "positiva. Asigna el estres desde retrofit.py con la misma semantica de fase que ya "
-            "usa (_CRISIS_EQUITY_VOL / _ELEVATED_EQUITY_VOL).\n"
-            "\n"
-            "BUCLE DE ACEPTACION (esto es lo que convierte el ajuste en evidencia): usa el propio "
-            "harness como funcion objetivo. Itera regenerando y re-midiendo con "
-            "'.venv\\Scripts\\python.exe -m ai_trader.synthetic.fidelity_study --library ai_v3 "
-            "--offline' (los datos reales ya estan cacheados; --offline no toca el exchange). "
-            "Fija UMBRALES EXPLICITOS en el codigo del estudio y hazlos fallar si no se cumplen: "
-            "cobertura p10-p90 >= 60-70% y medianas reales dentro del [p10, p90] sintetico en "
-            "curtosis, clustering y exceedances. Es un test de aceptacion, no un vistazo.\n"
-            "\n"
-            "GENERACION DE ai_v3: no toques ai_v2 ni ai_v1. La libreria realista se deriva de los "
-            "specs de ai_v1 con el retrofit determinista: "
-            "`SyntheticDataService.derive_library('ai_v1', 'ai_v3', enricher=enrich_spec)` (ver "
-            "src/ai_trader/synthetic/service.py y tests/test_synthetic.py). No hay llamada a la "
-            "IA. Publica el informe de fidelidad de ai_v3 junto al de ai_v2 y comparalos en el "
-            "dashboard.\n"
-            "\n"
-            "LIMITE DECLARADO, no perseguir: la curtosis real de cripto tiene p90 de 30-90 (DOGE, "
-            "XRP en anos de mania). Ni con dof=4 se reproduce eso. Documenta explicitamente que "
-            "el generador cubre la MEDIANA del mercado, no los anos de mania, y deja el umbral de "
-            "aceptacion sobre la mediana.\n"
-            "\n"
-            "INVARIANTES que siguen testeados y no pueden romperse: ajuste en varianza (anadir "
-            "cola o AR(1) idiosincratico no cambia la volatilidad total), velas OHLCV validas "
-            "(low <= open/close <= high, volumen > 0), neutralidad exacta de los valores por "
-            "defecto y determinismo dado (spec, semilla). Tests + "
-            ".venv\\Scripts\\python.exe (poetry run esta roto) + ruff. Regenera dashboard y docs."
-        ),
-    },
-    {
         "id": "rank-transfer-real-vs-synthetic",
-        "rank": 2,
+        "rank": 1,
         "group": "ahora",
         "priority": "critica",
         "title": "Estudio de transferencia: ¿ordena el mundo sintetico las estrategias como el real?",
         "line": "B/D", "status": "pendiente", "impact": "alto", "effort": "alto",
-        "depends": 1,
         "evidence": "Sin medir. La fidelidad mide hechos estilizados (curtosis, clustering, "
                     "correlacion); NO mide transferencia de ranking, que es lo unico que el "
                     "producto necesita de verdad del generador.",
@@ -1075,7 +1016,7 @@ ROADMAP = [
     },
     {
         "id": "line-d-cpcv-two-stage-cem",
-        "rank": 3,
+        "rank": 2,
         "group": "ahora",
         "priority": "critica",
         "title": "CPCV en dos etapas dentro del optimizador (que el CEM deje de puntuar con el corte unico)",
@@ -1137,7 +1078,7 @@ ROADMAP = [
     },
     {
         "id": "paper-trading-live",
-        "rank": 4,
+        "rank": 3,
         "group": "ahora",
         "priority": "alta",
         "title": "Poner el paper trading a correr en vivo (y la vista del dashboard que lo lea)",
@@ -1203,7 +1144,7 @@ ROADMAP = [
     },
     {
         "id": "validation-study-full-ensemble",
-        "rank": 5,
+        "rank": 4,
         "group": "despues",
         "priority": "media",
         "title": "Re-correr el estudio de validacion con el ensemble completo",
@@ -1236,7 +1177,7 @@ ROADMAP = [
     },
     {
         "id": "pbo-blocks-scenario-aligned",
-        "rank": 6,
+        "rank": 5,
         "group": "despues",
         "priority": "media",
         "title": "Alinear los bloques del PBO con las fronteras de escenario",
@@ -1275,7 +1216,7 @@ ROADMAP = [
     },
     {
         "id": "report-n-failed-with-reward",
-        "rank": 7,
+        "rank": 6,
         "group": "despues",
         "priority": "media",
         "title": "Reportar n_failed junto al reward (la penalizacion domina la cola)",
@@ -1309,7 +1250,7 @@ ROADMAP = [
     },
     {
         "id": "dsr-independent-trials-caveat",
-        "rank": 8,
+        "rank": 7,
         "group": "despues",
         "priority": "baja",
         "title": "Declarar que el DSR asume intentos independientes y el CEM no los produce",
@@ -1343,13 +1284,78 @@ ROADMAP = [
         ),
     },
     {
+        "id": "fidelity-rank-corr-ordering",
+        "rank": 8,
+        "group": "despues",
+        "priority": "media",
+        "title": "Ordenacion de colas y clustering entre activos: el eje que ai_v3 no arreglo",
+        "line": "B", "status": "pendiente", "impact": "medio", "effort": "medio",
+        "evidence": "ai_v3 cumple los umbrales de NIVEL y COBERTURA (98,3% de cobertura media, "
+                    "curtosis 3,40 vs 4,19 real, clustering 0,196 vs 0,190) pero su rank_corr "
+                    "medio es -0,23: clustering -0,74 y curtosis -0,18. En ai_v2 el clustering "
+                    "ordenaba +0,32. El nivel se arreglo y la ordenacion empeoro.",
+        "why": "El generador ya produce la magnitud correcta de cola y de agrupamiento, pero no "
+               "sabe QUE activo tiene mas: en el mercado real son los mas ruidosos (DOGE 17,8 de "
+               "curtosis y 0,31 de clustering; XRP 13,9) y en el sintetico salen de los que menos "
+               "ruido propio tienen. La causa es identificable en el motor: el componente "
+               "idiosincratico pasa por `_ar1_idio`, un AR(1) con phi negativo en las fases de "
+               "rango, que BLANQUEA la estructura de |r| justo en los activos donde ese "
+               "componente pesa mas (idio_vol alto). Importa para la seleccion cross-sectional: "
+               "una politica que elija activos por su regimen de volatilidad esta aprendiendo un "
+               "ordenamiento invertido respecto al mercado. No es critico -las tres lecturas se "
+               "publican por separado y esta se declara- pero es el ultimo hueco medido del "
+               "sustrato.",
+        "prompt": (
+            "Proyecto ai-trader (Python). El estudio de fidelidad "
+            "(src/ai_trader/synthetic/fidelity_study.py, informes en data/fidelity/) ya acepta la "
+            "libreria ai_v3: cobertura media 98,3% y las medianas reales de curtosis, clustering "
+            "y exceedances dentro de la banda sintetica. Queda UN eje medido y no arreglado: la "
+            "ORDENACION entre activos. rank_corr (Spearman de la seccion cruzada real contra la "
+            "sintetica) sale -0,74 en clustering (ac_abs1) y -0,18 en curtosis; el medio de las "
+            "metricas objetivo es -0,23. Esta INVERTIDO, no solo flojo.\n"
+            "\n"
+            "HIPOTESIS DE CAUSA (verificala antes de tocar nada, no la des por buena): en el "
+            "mercado real los activos con mas ruido propio son los que mas cola y mas "
+            "agrupamiento tienen (DOGE: idio_vol 0,055 en el universo, curtosis real 17,8, "
+            "clustering 0,308; XRP: 13,9 y 0,245; frente a BTC: 3,9 y 0,152). En el motor "
+            "(src/ai_trader/synthetic/engine.py) el componente idiosincratico se dibuja con colas "
+            "y GARCH pero DESPUES pasa por `_ar1_idio`, un AR(1) con phi por fase que en las "
+            "fases de rango es negativo (-0,30, ver `_idio_ar_for` en synthetic/retrofit.py). Un "
+            "AR(1) mezcla dias adyacentes: baja la curtosis y BLANQUEA la autocorrelacion de |r| "
+            "de ese componente, y lo hace MAS en los activos donde el idio pesa mas. Eso "
+            "invertiria la ordenacion. Compruebalo midiendo, con el mismo `series_facts` del "
+            "harness, curtosis y ac_abs1 de un solo activo variando idio_vol con y sin idio_ar.\n"
+            "\n"
+            "TAREA: subir el rank_corr de ac_abs1 y excess_kurtosis a >= +0,3 SIN romper lo que ya "
+            "cumple. Ideas, en orden de preferencia (elige con la medicion, no a priori): (a) que "
+            "el AR(1) idiosincratico actue sobre el SIGNO/direccion pero no destruya el "
+            "agrupamiento -p.ej. aplicando el GARCH DESPUES del AR(1) en vez de antes, que "
+            "reordena las dos operaciones sin cambiar la varianza-; (b) dar al idio su propia "
+            "persistencia/cola por activo en vez de compartir el timeline de fase; (c) escalar "
+            "tail_dof o vol_persistence del idio con el idio_vol del activo. Mide cada una con el "
+            "harness antes de quedarte con ninguna.\n"
+            "\n"
+            "REGLAS DEL SITIO, no negociables: (1) La aceptacion actual NO puede empeorar: "
+            "'.venv\\Scripts\\python.exe -m ai_trader.synthetic.fidelity_study --library ai_v4 "
+            "--offline' tiene que seguir devolviendo 0 y la cobertura media quedarse en >= 95%, "
+            "con el nivel de volatilidad en ratio 0,9-1,1. (2) Neutralidad EXACTA de los defaults: "
+            "tests/test_synthetic.py::TestEngineByteIdentity congela con un hash que ai_v1 y ai_v2 "
+            "se regeneran byte a byte desde sus spec.json; si se pone rojo, el cambio esta mal "
+            "hecho, no el test. (3) Libreria nueva (ai_v4) derivada de ai_v1 con "
+            "`SyntheticDataService.derive_library`, sin tocar las anteriores, y su informe "
+            "publicado junto a los otros dos. (4) Variance-matching: cualquier reordenacion de "
+            "AR(1)/GARCH tiene que dejar la volatilidad total donde estaba. Tests + "
+            ".venv\\Scripts\\python.exe (poetry run esta roto) + ruff. Regenera dashboard y docs."
+        ),
+    },
+    {
         "id": "rl-full-run",
         "rank": 9,
         "group": "despues",
         "priority": "alta",
         "title": "Optimizacion CEM completa, ya con el juez validado",
         "line": "RL", "status": "bloqueada", "impact": "alto", "effort": "medio",
-        "depends": 3,
+        "depends": 2,
         "evidence": "El harness CEM esta listo, pero cada backtest cuesta ~60 s con 35 activos y "
                     "hoy apuntaria al juez del corte unico.",
         "why": "Correr la optimizacion a escala solo tiene sentido cuando el objetivo que escala "
@@ -1385,7 +1391,7 @@ ROADMAP = [
         "priority": "baja",
         "title": "Nuevas estrategias cripto (deliberadamente NO priorizada)",
         "line": "Estrategias", "status": "pendiente", "impact": "medio", "effort": "alto",
-        "depends": 3,
+        "depends": 2,
         "evidence": "Solo 6 de 32 filas aprueban el gate bajo CPCV. Eso admite dos lecturas -las "
                     "estrategias son flojas, o el juez es ruidoso- y hasta saber cual, anadir "
                     "candidatos multiplica el problema de multiples pruebas.",
