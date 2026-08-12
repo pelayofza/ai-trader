@@ -1274,8 +1274,57 @@ def collect_signals() -> dict:
     }
 
 
+# Regla fija que se anade al FINAL de todos los prompts del roadmap. Vive aqui una sola
+# vez y la inyecta `collect_roadmap()`: repetirla en las veinte entradas seria anadir
+# duplicacion para combatir la duplicacion, y ademas garantizaria que veinte copias se
+# desincronicen en cuanto se retoque el texto.
+#
+# Va al final y no al principio porque los prompts ya cierran con los recordatorios
+# operativos ("Tests + ruff. Regenera dashboard y docs"), y esta es del mismo genero: una
+# precondicion del repo, no contexto de la tarea.
+REUSE_RULE = """
+
+--- ANTES DE ESCRIBIR CODIGO NUEVO (regla fija de este repo) ---
+
+Declara estas tres cosas POR ESCRITO, en tu respuesta, antes de tocar el primer fichero:
+
+  1. DONDE VA. Modulo y funcion exactos, y por que ahi y no en otro sitio.
+
+  2. QUE YA EXISTE QUE SE LE PARECE. Busca ANTES de escribir, no despues:
+       grep -rn "<el concepto>" src/          y tambien por los nombres que ibas a usar
+     Mira siempre estos cuatro, que es donde vive lo reutilizable:
+       src/ai_trader/shared/        barras, indicadores, reloj, instrumentos, senales
+       src/ai_trader/backtest/metrics.py     metricas de resultado
+       src/ai_trader/synthetic/fidelity.py   stylized facts, autocorrelacion, colas
+       src/ai_trader/scoring/aggregate.py    la recompensa (CVaR)
+     Di que encontraste, aunque no encaje. "No busque" no es una respuesta valida.
+
+  3. POR QUE NO LO REUTILIZAS. Si no reutilizas lo que encontraste, da el motivo.
+     "Es parecido pero no igual" NO es un motivo: di QUE difiere exactamente y por que
+     parametrizar lo que ya existe seria peor que tener dos copias.
+
+Si acabas con un cuerpo identico a otro que ya existe, la salida por defecto es extraerlo
+a una funcion comun y dejar los nombres antiguos como ALIAS QUE DELEGAN, para no romper
+ninguna llamada. Mueve el cuerpo TAL CUAL, sin reescribirlo: si tocas calculo, el orden de
+las operaciones en coma flotante tiene que ser el mismo, y los golden de tests/golden/ son
+la prueba de que lo fue.
+
+POR QUE ESTA REGLA: la auditoria del 2026-08-12 (ver DEBT_AUDIT.md y DEBT_BACKLOG.md)
+encontro 21 grupos de funciones con el cuerpo IDENTICO, ~135 lineas. Los peores no eran
+utilidades sino calculo publicado: el CVaR que DEFINE LA RECOMPENSA esta escrito tres
+veces (scoring/aggregate.py:103, scoring/activity_study.py:104,
+scoring/transfer_study.py:654) y el cargador de informes, seis. Ninguna de esas copias la
+detecta un test, porque cada una tiene los suyos: corregir una y no las otras deja al
+sistema puntuando con dos definiciones distintas de la misma metrica."""
+
+
 def collect_roadmap() -> list[dict]:
-    """Evoluciones pendientes, ordenadas por criticidad, con prompt para Claude Code."""
+    """Evoluciones pendientes, ordenadas por criticidad, con prompt para Claude Code.
+
+    A cada prompt se le pega `REUSE_RULE` al vuelo. Se hace aqui y no en el texto de cada
+    entrada para que la regla exista UNA sola vez en el repo; y sobre copias
+    (`{**r, ...}`) para no mutar `ROADMAP`, que si no acumularia la regla en cada llamada.
+    """
     from ai_trader.synthetic import retrofit  # noqa: F401  (asegura que el modulo existe)
     ranks = [r["rank"] for r in ROADMAP]
     if sorted(ranks) != list(range(1, len(ROADMAP) + 1)):
@@ -1284,7 +1333,10 @@ def collect_roadmap() -> list[dict]:
     unknown = groups - {g["key"] for g in ROADMAP_GROUPS}
     if unknown:
         raise ValueError(f"Grupos de roadmap desconocidos: {sorted(unknown)}")
-    return sorted(ROADMAP, key=lambda r: r["rank"])
+    return [
+        {**row, "prompt": row["prompt"] + REUSE_RULE}
+        for row in sorted(ROADMAP, key=lambda r: r["rank"])
+    ]
 
 
 def build() -> None:
