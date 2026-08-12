@@ -442,15 +442,17 @@ class FakeAdapter(BaseJsonAdapter):
 
 
 class TestPort:
-    def test_the_registry_holds_exactly_the_connected_batch(self):
-        """El dia cero esto decia "vacio". Hoy dice cuales estan conectadas, y sigue siendo
-        la misma pregunta: el registro es la unica respuesta a "que fuentes existen de
-        verdad", y las mecanicas (Tier A) siguen sin adaptador a proposito."""
+    def test_the_registry_holds_the_whole_catalog(self):
+        """El dia cero esto decia "vacio"; despues, "solo las continuas"; hoy, "todas". Es
+        la misma pregunta cada vez —que fuentes existen de verdad— y la respuesta ya no
+        depende del tier: las de evento tambien tienen adaptador, porque sin adaptador no
+        hay medicion y sin medicion no hay tamano de muestra que discutir."""
         from ai_trader.signals.capture import connect_adapters
 
         connected = set(connect_adapters())
-        assert connected == {s.key for s in CATALOG if s.tier == TIER_STATISTICAL}
-        assert all(build_adapter(s) is None for s in CATALOG if s.tier == TIER_MECHANICAL)
+        assert connected == {s.key for s in CATALOG}
+        assert all(build_adapter(s) is not None for s in CATALOG if s.tier == TIER_MECHANICAL)
+        assert all(build_adapter(s) is not None for s in CATALOG if s.tier == TIER_STATISTICAL)
 
     def test_raw_record_stamps_fetched_at(self):
         record = raw_record(source="s", entity="BTC", payload={"a": 1})

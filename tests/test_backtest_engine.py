@@ -15,8 +15,10 @@ from ai_trader.backtest.metrics import (
     HeadlineWeights,
 )
 from ai_trader.config import AppConfig, StrategySpec
+from ai_trader.data.backtest_source import HistoricalDataSource
 from ai_trader.execution.paper import PaperExecutionConfig
 from ai_trader.risk.engine import RiskLimits
+from ai_trader.shared.clock import HistoricalClock
 from ai_trader.app.runner import RunnerConfig
 
 
@@ -321,6 +323,69 @@ class TestLiquidityIsWired:
 
         assert biggest_thin < biggest_deep
         assert biggest_thin <= 10.0 * 0.10 + 1e-9  # max_participation del config
+
+
+class TestSignalsAreWired:
+    """
+    Las senales llegan a la decision por el MISMO bucle duck-typed que el regimen.
+
+    Es la mitad de backtest del cableado; la de vivo esta en `tests/test_live_wiring.py`.
+    Lo que se comprueba aqui no es que el radar acierte, sino que EXISTE dentro del motor y
+    que un backtest sin senales sigue construyendolo (vacio) en vez de dejar el
+    colaborador a None y comportarse distinto segun de donde vengan los datos.
+    """
+
+    def _strategies_of(self, engine, bars):
+        clock = HistoricalClock(datetime(2024, 6, 1, tzinfo=timezone.utc))
+        source = HistoricalDataSource(bars, clock)
+        return engine._build_runner(source, clock).strategies
+
+    def test_el_motor_adjunta_el_radar_aunque_no_haya_senales(self):
+        bars = {"BTC/USDT": trending_df(400)}
+        engine = BacktestEngine.from_bars(make_config(), bars, 10_000.0)
+        strategy = self._strategies_of(engine, bars)[0]
+
+        assert strategy._signals is not None
+        assert strategy._signals.is_empty  # vacio, no ausente
+        assert strategy._regime is not None
+
+    def test_las_senales_entran_por_from_bars_y_llegan_a_la_estrategia(self):
+        bars = {"BTC/USDT": trending_df(400)}
+        events = pd.DataFrame(
+            {"unlock_pct_float": [3.0], "unlock_pct_adv": [12.0], "observed": [1]},
+            index=pd.MultiIndex.from_arrays(
+                [["BTC"], pd.DatetimeIndex(["2024-07-01"], tz="UTC")], names=["entity", "day"]
+            ),
+        )
+        engine = BacktestEngine.from_bars(
+            make_config(), bars, 10_000.0, signals={"token_unlocks": events}
+        )
+        strategy = self._strategies_of(engine, bars)[0]
+
+        assert not strategy._signals.is_empty
+        assert strategy._signals.coverage_report()["event_sources"] == ["token_unlocks"]
+
+    def test_con_las_puertas_neutras_las_senales_no_cambian_ni_un_trade(self):
+        """La compuerta de esta evolucion, en pequeno: adjuntar el radar no puede mover
+        un backtest mientras los umbrales esten en su valor inerte."""
+        bars = {"BTC/USDT": trending_df(400)}
+        events = pd.DataFrame(
+            {"hack_amount_usd": [5e8], "hack_count": [1.0], "observed": [1]},
+            index=pd.MultiIndex.from_arrays(
+                [["*"], pd.DatetimeIndex(["2024-08-01"], tz="UTC")], names=["entity", "day"]
+            ),
+        )
+        window = dict(
+            start=datetime(2024, 6, 1, tzinfo=timezone.utc),
+            end=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        )
+        sin = BacktestEngine.from_bars(make_config(), bars, 10_000.0).run(**window)
+        con = BacktestEngine.from_bars(
+            make_config(), bars, 10_000.0, signals={"defillama_hacks": events}
+        ).run(**window)
+
+        assert con.headline_score == sin.headline_score
+        assert con.test.metrics.num_trades == sin.test.metrics.num_trades
 
 
 class TestCompounding:

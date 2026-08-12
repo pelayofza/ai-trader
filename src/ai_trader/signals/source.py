@@ -23,14 +23,13 @@ Es la misma logica que ya sostiene el resto del repo: el `spec.json` de un escen
 sintetico se GUARDA porque no se puede re-derivar, y todo lo determinista que va detras se
 puede borrar y rehacer (`synthetic/designer.py`). Aqui el crudo es el spec.
 
-EL REGISTRO ARRANCA VACIO
--------------------------
-`REGISTRY` mapea clave de catalogo -> constructor de adaptador, y hoy no tiene ninguna
-entrada. No es un olvido: esta tarea construye el esqueleto y NO conecta fuentes.
-`signals/capture.py` recorre el catalogo entero, encuentra 0 adaptadores y lo dice con
-todas sus letras en el informe. Esa cifra —N declaradas, 0 conectadas— es el estado real
-del sistema, y es la que baja a 1, 2, 10 segun se vayan escribiendo adaptadores sin tocar
-ni una linea de este modulo.
+EL REGISTRO, QUE ES LA UNICA RESPUESTA HONESTA A "QUE FUENTES EXISTEN"
+---------------------------------------------------------------------
+`REGISTRY` mapea clave de catalogo -> constructor de adaptador. Arranco VACIO a proposito
+—el esqueleto se construyo antes que las fuentes— y la cifra que publicaba entonces la
+captura, "17 declaradas, 0 conectadas", era el estado real del sistema y no un defecto del
+informe. Hoy son 17 de 17, y llegar ahi no ha exigido tocar ni una linea de este modulo:
+cada adaptador se escribe, se registra y ya.
 """
 from __future__ import annotations
 
@@ -228,7 +227,7 @@ def build_adapter(source: SignalSource) -> SignalAdapter | None:
 
 
 def connected_keys() -> tuple[str, ...]:
-    """Fuentes del catalogo que YA tienen adaptador. Hoy, ninguna."""
+    """Fuentes del catalogo que YA tienen adaptador. Hoy, las diecisiete."""
     return tuple(sorted(REGISTRY))
 
 

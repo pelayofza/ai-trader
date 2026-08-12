@@ -20,11 +20,36 @@ class StrategySpec:
 
 
 @dataclass(slots=True)
+class SignalsConfig:
+    """
+    El radar de senales externas. APAGADO por defecto, y eso es una decision.
+
+    Encenderlo lee el archivo crudo de `data/signals_raw/`, deriva las diecisiete fuentes
+    y construye el bloque de observacion (`observation/signal_radar.py`). Con `enabled =
+    false` no se lee nada, el radar sale vacio, la cobertura es 0 y todas las puertas de
+    senales se saltan: el sistema opera EXACTAMENTE igual que antes de que existieran.
+
+    LO QUE NO HAY AQUI, Y ES EL PUNTO: ningun umbral. Ni el minimo de cobertura, ni los
+    pisos de tono, ni las escalas de las magnitudes de evento. Todo eso son constantes
+    razonadas en codigo, y estan ahi justamente para que no se puedan ajustar —ni desde un
+    fichero de configuracion ni desde un sorteo del optimizador— contra el resultado. Lo
+    unico configurable de las senales es si se encienden y de donde se leen.
+    """
+
+    enabled: bool = False
+    # Raiz del archivo crudo. Vacio = la de `signals/store.py`. Es una RUTA, no un umbral.
+    raw_root: str = ""
+
+
+@dataclass(slots=True)
 class AppConfig:
     runner: RunnerConfig
     risk: RiskLimits
     execution: PaperExecutionConfig
     strategies: list[StrategySpec]
+    # Con default: todo lo que ya construia un AppConfig (estudios, tests, el generador
+    # sintetico) sigue construyendolo sin tocar una linea, y con el radar apagado.
+    signals: SignalsConfig = field(default_factory=SignalsConfig)
 
 
 def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AppConfig:
@@ -55,4 +80,8 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         risk=RiskLimits(**raw.get("risk", {})),
         execution=PaperExecutionConfig(**raw.get("execution", {})),
         strategies=strategies,
+        # El splat es ESTRICTO a proposito (una clave de mas revienta al cargar, en vez de
+        # ignorarse en silencio), asi que una seccion nueva exige dataclass + campo + esta
+        # linea. Sin `[signals]` en el fichero, el radar queda apagado.
+        signals=SignalsConfig(**raw.get("signals", {})),
     )

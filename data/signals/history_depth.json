@@ -1,67 +1,37 @@
 {
-  "generated_at": "2026-08-11T21:18:04.404545+00:00",
+  "generated_at": "2026-08-12T09:06:32.682453+00:00",
   "n_sources": 17,
-  "n_measured": 9,
+  "n_measured": 13,
   "probe_years": 12,
   "sources": [
     {
-      "source_key": "guavy_sentiment",
-      "measured_at": "2026-08-11T21:18:04.404545+00:00",
-      "method": "archive",
+      "source_key": "btc_difficulty",
+      "measured_at": "2026-08-12T09:06:04.315668+00:00",
+      "method": "provider",
       "connected": true,
-      "first_day": null,
-      "last_day": null,
-      "days": 0,
-      "observations": 0,
-      "n_entities": 0,
-      "entities": {},
-      "error": null
-    },
-    {
-      "source_key": "etf_flows",
-      "measured_at": "2026-08-11T21:18:04.404545+00:00",
-      "method": "archive",
-      "connected": true,
-      "first_day": "2024-01-11",
-      "last_day": "2026-08-10",
-      "days": 662,
-      "observations": 662,
+      "first_day": "2014-08-19",
+      "last_day": "2026-08-08",
+      "days": 321,
+      "observations": 321,
       "n_entities": 1,
       "entities": {
-        "BTC": "2024-01-11"
+        "bitcoin": "2014-08-19"
       },
       "error": null
     },
     {
-      "source_key": "fred_macro",
+      "source_key": "cftc_cot",
       "measured_at": "2026-08-11T21:18:04.404545+00:00",
       "method": "archive",
       "connected": true,
-      "first_day": null,
-      "last_day": null,
-      "days": 0,
-      "observations": 0,
-      "n_entities": 0,
-      "entities": {},
-      "error": null
-    },
-    {
-      "source_key": "defillama_stablecoins",
-      "measured_at": "2026-08-11T21:18:04.404545+00:00",
-      "method": "archive",
-      "connected": true,
-      "first_day": "2017-11-29",
-      "last_day": "2026-08-11",
-      "days": 12497,
-      "observations": 12497,
-      "n_entities": 6,
+      "first_day": "2018-04-13",
+      "last_day": "2026-08-07",
+      "days": 714,
+      "observations": 714,
+      "n_entities": 2,
       "entities": {
-        "arbitrum": "2021-06-25",
-        "base": "2023-08-15",
-        "bsc": "2020-08-29",
-        "ethereum": "2017-11-29",
-        "solana": "2021-09-10",
-        "tron": "2019-04-16"
+        "BTC": "2018-04-13",
+        "ETH": "2021-04-09"
       },
       "error": null
     },
@@ -104,6 +74,41 @@
       "error": null
     },
     {
+      "source_key": "defillama_hacks",
+      "measured_at": "2026-08-12T09:06:04.315668+00:00",
+      "method": "provider",
+      "connected": true,
+      "first_day": "2016-06-17",
+      "last_day": "2026-08-09",
+      "days": 519,
+      "observations": 621,
+      "n_entities": 1,
+      "entities": {
+        "*": "2016-06-17"
+      },
+      "error": null
+    },
+    {
+      "source_key": "defillama_stablecoins",
+      "measured_at": "2026-08-11T21:18:04.404545+00:00",
+      "method": "archive",
+      "connected": true,
+      "first_day": "2017-11-29",
+      "last_day": "2026-08-11",
+      "days": 12497,
+      "observations": 12497,
+      "n_entities": 6,
+      "entities": {
+        "arbitrum": "2021-06-25",
+        "base": "2023-08-15",
+        "bsc": "2020-08-29",
+        "ethereum": "2017-11-29",
+        "solana": "2021-09-10",
+        "tron": "2019-04-16"
+      },
+      "error": null
+    },
+    {
       "source_key": "defillama_volumes",
       "measured_at": "2026-08-11T21:18:04.404545+00:00",
       "method": "archive",
@@ -132,47 +137,31 @@
       "error": null
     },
     {
-      "source_key": "wikipedia_pageviews",
+      "source_key": "etf_flows",
       "measured_at": "2026-08-11T21:18:04.404545+00:00",
       "method": "archive",
       "connected": true,
-      "first_day": "2015-07-01",
+      "first_day": "2024-01-11",
       "last_day": "2026-08-10",
-      "days": 36024,
-      "observations": 126958,
-      "n_entities": 15,
+      "days": 662,
+      "observations": 662,
+      "n_entities": 1,
       "entities": {
-        "ADA": "2021-04-28",
-        "AVAX": "2021-12-19",
-        "BTC": "2015-07-01",
-        "DOGE": "2015-07-01",
-        "DOT": "2021-01-04",
-        "ETC": "2016-07-25",
-        "ETH": "2015-07-01",
-        "FIL": "2017-08-11",
-        "LINK": "2024-12-11",
-        "LTC": "2015-07-01",
-        "NEAR": "2024-04-09",
-        "OP": "2024-02-28",
-        "SOL": "2021-09-10",
-        "UNI": "2020-11-28",
-        "XRP": "2018-08-24"
+        "BTC": "2024-01-11"
       },
       "error": null
     },
     {
-      "source_key": "p2p_premium",
+      "source_key": "fred_macro",
       "measured_at": "2026-08-11T21:18:04.404545+00:00",
       "method": "archive",
       "connected": true,
-      "first_day": "2026-08-11",
-      "last_day": "2026-08-11",
-      "days": 1,
-      "observations": 4,
-      "n_entities": 1,
-      "entities": {
-        "USDT": "2026-08-11"
-      },
+      "first_day": null,
+      "last_day": null,
+      "days": 0,
+      "observations": 0,
+      "n_entities": 0,
+      "entities": {},
       "error": null
     },
     {
@@ -252,78 +241,10 @@
       "error": null
     },
     {
-      "source_key": "cftc_cot",
+      "source_key": "guavy_sentiment",
       "measured_at": "2026-08-11T21:18:04.404545+00:00",
       "method": "archive",
       "connected": true,
-      "first_day": "2018-04-13",
-      "last_day": "2026-08-07",
-      "days": 714,
-      "observations": 714,
-      "n_entities": 2,
-      "entities": {
-        "BTC": "2018-04-13",
-        "ETH": "2021-04-09"
-      },
-      "error": null
-    },
-    {
-      "source_key": "token_unlocks",
-      "measured_at": "2026-08-11T21:18:04.404545+00:00",
-      "method": "archive",
-      "connected": false,
-      "first_day": null,
-      "last_day": null,
-      "days": 0,
-      "observations": 0,
-      "n_entities": 0,
-      "entities": {},
-      "error": null
-    },
-    {
-      "source_key": "staking_queue",
-      "measured_at": "2026-08-11T21:18:04.404545+00:00",
-      "method": "archive",
-      "connected": false,
-      "first_day": null,
-      "last_day": null,
-      "days": 0,
-      "observations": 0,
-      "n_entities": 0,
-      "entities": {},
-      "error": null
-    },
-    {
-      "source_key": "btc_difficulty",
-      "measured_at": "2026-08-11T21:18:04.404545+00:00",
-      "method": "archive",
-      "connected": false,
-      "first_day": null,
-      "last_day": null,
-      "days": 0,
-      "observations": 0,
-      "n_entities": 0,
-      "entities": {},
-      "error": null
-    },
-    {
-      "source_key": "defillama_hacks",
-      "measured_at": "2026-08-11T21:18:04.404545+00:00",
-      "method": "archive",
-      "connected": false,
-      "first_day": null,
-      "last_day": null,
-      "days": 0,
-      "observations": 0,
-      "n_entities": 0,
-      "entities": {},
-      "error": null
-    },
-    {
-      "source_key": "ofac_sdn",
-      "measured_at": "2026-08-11T21:18:04.404545+00:00",
-      "method": "archive",
-      "connected": false,
       "first_day": null,
       "last_day": null,
       "days": 0,
@@ -334,16 +255,106 @@
     },
     {
       "source_key": "macro_calendar",
+      "measured_at": "2026-08-12T09:06:04.315668+00:00",
+      "method": "provider",
+      "connected": true,
+      "first_day": "2017-02-01",
+      "last_day": "2026-12-10",
+      "days": 76,
+      "observations": 76,
+      "n_entities": 1,
+      "entities": {
+        "*": "2017-02-01"
+      },
+      "error": null
+    },
+    {
+      "source_key": "ofac_sdn",
+      "measured_at": "2026-08-12T09:06:32.682453+00:00",
+      "method": "provider",
+      "connected": true,
+      "first_day": "2026-08-07",
+      "last_day": "2026-08-07",
+      "days": 1,
+      "observations": 1,
+      "n_entities": 1,
+      "entities": {
+        "*": "2026-08-07"
+      },
+      "error": null
+    },
+    {
+      "source_key": "p2p_premium",
       "measured_at": "2026-08-11T21:18:04.404545+00:00",
       "method": "archive",
-      "connected": false,
+      "connected": true,
+      "first_day": "2026-08-11",
+      "last_day": "2026-08-11",
+      "days": 1,
+      "observations": 4,
+      "n_entities": 1,
+      "entities": {
+        "USDT": "2026-08-11"
+      },
+      "error": null
+    },
+    {
+      "source_key": "staking_queue",
+      "measured_at": "2026-08-12T09:06:04.315668+00:00",
+      "method": "archive",
+      "connected": true,
       "first_day": null,
       "last_day": null,
       "days": 0,
       "observations": 0,
       "n_entities": 0,
       "entities": {},
+      "error": "HTTP Error 401: Unauthorized"
+    },
+    {
+      "source_key": "token_unlocks",
+      "measured_at": "2026-08-12T09:06:04.315668+00:00",
+      "method": "archive",
+      "connected": true,
+      "first_day": null,
+      "last_day": null,
+      "days": 0,
+      "observations": 0,
+      "n_entities": 0,
+      "entities": {},
+      "error": "HTTP Error 402: Payment Required"
+    },
+    {
+      "source_key": "wikipedia_pageviews",
+      "measured_at": "2026-08-11T21:18:04.404545+00:00",
+      "method": "archive",
+      "connected": true,
+      "first_day": "2015-07-01",
+      "last_day": "2026-08-10",
+      "days": 36024,
+      "observations": 126958,
+      "n_entities": 15,
+      "entities": {
+        "ADA": "2021-04-28",
+        "AVAX": "2021-12-19",
+        "BTC": "2015-07-01",
+        "DOGE": "2015-07-01",
+        "DOT": "2021-01-04",
+        "ETC": "2016-07-25",
+        "ETH": "2015-07-01",
+        "FIL": "2017-08-11",
+        "LINK": "2024-12-11",
+        "LTC": "2015-07-01",
+        "NEAR": "2024-04-09",
+        "OP": "2024-02-28",
+        "SOL": "2021-09-10",
+        "UNI": "2020-11-28",
+        "XRP": "2018-08-24"
+      },
       "error": null
     }
+  ],
+  "measured_in_this_pass": [
+    "ofac_sdn"
   ]
 }

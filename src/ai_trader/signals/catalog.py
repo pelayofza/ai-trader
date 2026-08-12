@@ -40,29 +40,54 @@ util— y el catalogo espera a que la ventana exista.
 
 Juntos responden la unica pregunta que importa antes de puntuar nada: **que fuentes pueden
 entrar en un backtest y cuales solo en vivo**. El dia que se construyo el esqueleto la
-respuesta era "ninguna", con el catalogo entero en `None`. Hoy, con el primer lote continuo
-conectado y sondeado, son seis, y las demas siguen a `None` por tres motivos distintos que
-conviene no confundir: la credencial no esta en el entorno (Guavy, FRED), la cuota del
-proveedor se agoto antes de terminar (GitHub), o la fuente no tiene pasado que descargar y
-su profundidad la compra el calendario (P2P, funding). Las seis mecanicas (Tier A) ni
-siquiera tienen adaptador todavia.
+respuesta era "ninguna", con el catalogo entero en `None`. Hoy, con las diecisiete
+conectadas y sondeadas, son diez, y las demas siguen a `None` por motivos distintos que
+conviene no confundir: la credencial no esta en el entorno (Guavy, FRED, beaconcha.in), el
+proveedor cerro el endpoint detras de un muro de pago (unlocks de DefiLlama: 402 medido), o
+la fuente no tiene pasado que descargar y su profundidad la compra el calendario (P2P,
+funding, OFAC).
 
-LAS DOS PUERTAS (`tier`)
-------------------------
-`A` = MECANICA. Oferta calendarizada y determinista: unlocks, colas de staking, ajustes de
-dificultad, hacks, sanciones. Muestras de DECENAS. Entran como ELEGIBILIDAD (una guarda
-que veta operar) y NUNCA como feature de un optimizador: un CEM suelto sobre catorce
-observaciones construye una estrategia preciosa y falsa.
+EL `tier` DESCRIBE; YA NO ENRUTA (2026-08-11)
+---------------------------------------------
+Durante una fase este campo fue una BIFURCACION: el tier `A` (mecanico) iba a entrar como
+ELEGIBILIDAD —una guarda que veta operar— y solo el `B` como features. La bifurcacion se
+retira, y no por comodidad: la defensa que la justificaba —"muestras de DECENAS, un CEM
+suelto sobre catorce observaciones construye una estrategia preciosa y falsa"— se apoyaba en
+un numero que NADIE HABIA MEDIDO. Al medirlo (2026-08-12) resulto falso por un factor de
+diez: 463 ajustes de dificultad desde 2009 —321 dentro de la ventana de doce anos que pide
+la sonda—, 621 hacks fechados desde 2016 y el calendario del FOMC desde 2017. Y donde la
+muestra SI es corta, la razon medida es otra: el endpoint de unlocks pasa a ser de pago
+(402) y el de colas de staking pide credencial (401). Ademas, contando el EVENTO NORMALIZADO
+(% del float, % del ADV) y no el token, la unidad de observacion se multiplica por el numero
+de activos: el recuento pooled se publica en `data/signals/event_pool.json`.
 
-`B` = ESTADISTICA. Series continuas con efectos pequenos y decadentes: sentimiento, flujos
-de ETF, macro, actividad de desarrollo, dispersion de funding. Entran como features.
+Hoy TODAS las fuentes van por la misma via: features al espacio de observacion, en backtest
+y en vivo (`observation/signal_radar.py`). El tier ya no separa el destino sino que DESCRIBE
+la naturaleza economica de la fuente:
 
-La separacion vive en el catalogo —no en un comentario— para que el dia que se cablee sea
-un filtro y no un acto de disciplina.
+`A` = OFERTA MECANICA, calendarizada y determinista: unlocks, colas de staking, ajustes de
+dificultad, hacks, sanciones, calendario macro.
+
+`B` = EFECTO ESTADISTICO, pequeno y decadente: sentimiento, flujos de ETF, macro, actividad
+de desarrollo, dispersion de funding.
+
+Y LA CODIFICACION LA DECIDE LA CADENCIA, NO EL TIER. `cadence == 'event'` -> `events.py`
+(dias-al-evento acotado, magnitud sobre su escala declarada, ventana activa), porque una z
+contra una serie que es 99% ceros no significa nada. Cualquier otra cadencia -> las dos
+varas de `normalize.py`. Coinciden en cinco de las seis mecanicas; la sexta,
+`staking_queue`, es mecanica y publica un NIVEL diario, y enrutar por el tier le habria
+puesto un dias-al-evento a una cola de validadores.
+
+QUE SUSTITUYE A LA PUERTA, sin fingir que es equivalente: NINGUNA feature —de ningun tier—
+entra en `scoring/search_space.py`, y los umbrales de las puertas son constantes declaradas
+y razonadas en codigo, no parametros sorteables. Eso limita los grados de libertad, pero no
+es un test: mientras no exista el break-even de rho (barrido de capacidad predictiva sobre
+el generador, con rho=0 como grupo de control), el sistema NO tiene forma de falsar que una
+feature de muestra corta este siendo sobreajustada. Es un hueco declarado, no cerrado.
 
 ESTE MODULO NO CONECTA NADA. No importa `requests` ni ningun cliente: es una lista de
-declaraciones. Los adaptadores viven en `signals/source.py` y hoy no hay ninguno
-registrado; el catalogo es lo que permite medir cuantos faltan.
+declaraciones. Los adaptadores viven en `signals/adapters/` y se registran en
+`signals/source.py`; el catalogo es lo que permite medir cuantos faltan (hoy, ninguno).
 """
 from __future__ import annotations
 
@@ -94,7 +119,17 @@ SCOPES: tuple[str, ...] = (SCOPE_ASSET, SCOPE_MARKET, SCOPE_CHAIN, SCOPE_MACRO, 
 PIT_FORWARD_CAPTURE = "forward_capture"
 PIT_ARCHIVE_REVISABLE = "archive_revisable"
 PIT_DERIVED_FROM_PRICE = "derived_from_price"
-PIT_KINDS: tuple[str, ...] = (PIT_FORWARD_CAPTURE, PIT_ARCHIVE_REVISABLE, PIT_DERIVED_FROM_PRICE)
+# Reconstruible desde un registro INMUTABLE que no es nuestro (las cabeceras de bloque de
+# una cadena). Comparte con `derived_from_price` lo que importa —point-in-time por
+# construccion, nadie puede reescribir el pasado— y se distingue de el en que su
+# profundidad no la limita nuestro historico de precios sino la del propio registro.
+PIT_CHAIN_IMMUTABLE = "chain_immutable"
+PIT_KINDS: tuple[str, ...] = (
+    PIT_FORWARD_CAPTURE,
+    PIT_ARCHIVE_REVISABLE,
+    PIT_DERIVED_FROM_PRICE,
+    PIT_CHAIN_IMMUTABLE,
+)
 
 # Cadencia -> cada cuantos DIAS NATURALES se espera una observacion nueva. Es lo que
 # convierte "hay 40 dias con dato" en un porcentaje de cobertura (`signals/audit.py`).
@@ -257,11 +292,12 @@ def _is_slug(value: str) -> bool:
 
 # --- el catalogo --------------------------------------------------------------------
 #
-# TODAS las fuentes arrancan con `history_from=None`. No es un hueco pendiente de
-# rellenar por comodidad: es el estado medido. Lo que el proveedor promete va en `notes`.
+# Ninguna fecha de aqui se escribe a mano sin respaldo: `history_from` se copia del
+# registro de mediciones y un test falla si no coincide. Lo que el proveedor PROMETE va en
+# `notes`, en prosa y como lo que es, para que ningun codigo lo confunda con una medicion.
 
 CATALOG: tuple[SignalSource, ...] = (
-    # ---------------- Tier B: continuas, entran como features -----------------------
+    # -------- Tier B: efecto estadistico; cadencia diaria/semanal -> las dos z --------
     SignalSource(
         key="guavy_sentiment",
         title="Sentimiento social por token (Guavy)",
@@ -536,7 +572,13 @@ CATALOG: tuple[SignalSource, ...] = (
               "los micro y los de otros exchanges quedan fuera para no sumar contratos de "
               "tamano distinto.",
     ),
-    # ---------------- Tier A: mecanicas, entran como ELEGIBILIDAD --------------------
+    # ------ Tier A: eventos discretos; features como todas, con otra codificacion -----
+    #
+    # NINGUNA declara ya un `days_to_*`. No es una perdida: los dias-al-evento son
+    # EXACTAMENTE lo que publica `signals/events.py` para las seis a la vez. Declararlos
+    # aqui decia que los producia el proveedor, y lo que el proveedor produce es el
+    # CALENDARIO; los dias que faltan son una cuenta nuestra contra el 'ahora', y hacerla
+    # una vez en un sitio es lo que la hace testeable.
     SignalSource(
         key="token_unlocks",
         title="Desbloqueos y vesting (DefiLlama emissions)",
@@ -547,54 +589,74 @@ CATALOG: tuple[SignalSource, ...] = (
         features=(
             SignalFeature("unlock_pct_float", AGG_SUM, "%", "Desbloqueo como % del float."),
             SignalFeature("unlock_pct_adv", AGG_SUM, "%", "Desbloqueo como % del volumen diario."),
-            SignalFeature("days_to_unlock", AGG_LAST, "dias", "Dias hasta el proximo desbloqueo."),
         ),
         pit=PIT_ARCHIVE_REVISABLE,
-        license="DefiLlama: abierta, sin auth.",
+        license="DefiLlama: el endpoint de emisiones dejo de ser abierto (402 medido).",
         endpoint="https://api.llama.fi/emissions",
         notes="Lo valioso NO es 'hay unlock' (explotado) sino el desbloqueo NORMALIZADO: "
               "un 3% sobre un token con 40 dias de volumen en circulacion es un evento; el "
-              "mismo 3% sobre uno liquido no lo es. El calendario futuro se reescribe "
-              "cuando el equipo cambia el vesting: revisable por naturaleza.",
+              "mismo 3% sobre uno liquido no lo es. Esa normalizacion es ademas lo que "
+              "permite agrupar: la unidad de observacion es el evento comparable entre "
+              "activos, no el token. MEDIDO 2026-08-12: la API responde 402 Payment "
+              "Required, asi que hoy no hay muestra que contar y history_from sigue a None. "
+              "El adaptador existe para que eso sea una MEDICION y no un hueco. El "
+              "calendario futuro se reescribe cuando el equipo cambia el vesting: revisable "
+              "por naturaleza.",
     ),
     SignalSource(
         key="staking_queue",
-        title="Cola de entrada/salida del staking (Ethereum y equivalentes)",
+        title="Cola de entrada/salida del staking (Ethereum)",
         tier=TIER_MECHANICAL,
         scope=SCOPE_CHAIN,
         cadence="daily",
         entity_kind=EntityKind.CHAIN,
         features=(
-            SignalFeature("staking_exit_queue", AGG_LAST, "unidades", "Oferta futura en cola."),
-            SignalFeature("staking_entry_queue", AGG_LAST, "unidades", "Demanda futura en cola."),
-            SignalFeature("staking_queue_days", AGG_LAST, "dias", "Espera estimada."),
+            SignalFeature("staking_exit_queue", AGG_LAST, "validadores",
+                          "Oferta futura en cola."),
+            SignalFeature("staking_entry_queue", AGG_LAST, "validadores",
+                          "Demanda futura en cola."),
         ),
         pit=PIT_FORWARD_CAPTURE,
-        license="beaconcha.in: gratis con limite de peticiones.",
+        license="beaconcha.in: ahora exige credencial (401 medido).",
         endpoint="https://beaconcha.in/api/v1/validators/queue",
-        fixed_entities=("ethereum", "solana", "cosmos"),
-        notes="Oferta futura con FECHA CONOCIDA dias antes. El endpoint devuelve la foto de "
-              "AHORA y no guarda la de ayer: es forward_capture puro, el caso que mas "
-              "penaliza retrasar la captura.",
+        auth_env="BEACONCHAIN_API_KEY",
+        fixed_entities=("ethereum",),
+        notes="Oferta futura con FECHA CONOCIDA dias antes. Tres correcciones MEDIDAS el "
+              "2026-08-12: (1) el endpoint devuelve 401 sin credencial, asi que la fuente "
+              "declara auth_env y sin la variable en el entorno no hay medicion; (2) solo "
+              "cubre Ethereum —Solana y Cosmos no tienen este endpoint— y por eso "
+              "fixed_entities baja a una; (3) la espera en DIAS no se publica y no se "
+              "estima: convertir la cola en dias exige el limite de churn vigente, que "
+              "cambia con cada fork. Forward_capture puro: devuelve la foto de AHORA y no "
+              "guarda la de ayer, el caso que mas penaliza retrasar la captura.",
     ),
     SignalSource(
         key="btc_difficulty",
-        title="Ajuste de dificultad y hashprice (mempool.space)",
+        title="Ajuste de dificultad de Bitcoin (mempool.space)",
         tier=TIER_MECHANICAL,
         scope=SCOPE_CHAIN,
         cadence="event",
         entity_kind=EntityKind.CHAIN,
         features=(
-            SignalFeature("difficulty_change_pct", AGG_LAST, "%", "Ajuste estimado/aplicado."),
-            SignalFeature("hashprice_usd", AGG_LAST, "USD/TH/dia", "Ingreso por unidad de hash."),
-            SignalFeature("days_to_adjustment", AGG_LAST, "dias", "Dias al proximo ajuste."),
+            SignalFeature("difficulty_change_pct", AGG_LAST, "%", "Ajuste aplicado."),
         ),
-        pit=PIT_FORWARD_CAPTURE,
+        pit=PIT_CHAIN_IMMUTABLE,
+        history_from=date(2014, 8, 19),  # MEDIDO: 321 retargets en la ventana de la sonda
         license="mempool.space: abierta, sin auth.",
-        endpoint="https://mempool.space/api/v1/difficulty-adjustment",
+        endpoint="https://mempool.space/api/v1/mining/difficulty-adjustments/all",
         fixed_entities=("bitcoin",),
-        notes="Cada 2016 bloques, con fecha estimable de antemano. Hashprice comprimido "
-              "implica venta forzada de mineros: oferta con calendario.",
+        notes="LA HIPOTESIS DE 'DECENAS' ERA FALSA AQUI POR UN FACTOR DE DIEZ: 321 ajustes "
+              "MEDIDOS en la ventana de la sonda (doce anos, 2014-08-19 en adelante), uno "
+              "cada 2016 bloques. El limite lo pone PROBE_YEARS y no el proveedor: el "
+              "endpoint devuelve los 463 retargets desde el bloque 0 (2009-01-03, "
+              "COMPROBADO), y el catalogo declara lo medido, no lo disponible. Las "
+              "cabeceras de bloque no se reescriben, de ahi el pit. El endpoint que se "
+              "sondea no es el que estaba declarado: /difficulty-adjustment da la foto de "
+              "AHORA y /mining/difficulty-adjustments/all da la serie entera en 21 KB. LIMITE "
+              "DECLARADO: los dias-al-evento del pasado se cuentan contra la fecha en que "
+              "el retarget OCURRIO, que aquel dia era una estimacion (bloques restantes x "
+              "10 min) con error de horas. El HASHPRICE queda fuera: exige una pata en USD "
+              "que esta capa no tiene, y publicarlo a medias seria peor que no publicarlo.",
     ),
     SignalSource(
         key="defillama_hacks",
@@ -608,10 +670,16 @@ CATALOG: tuple[SignalSource, ...] = (
             SignalFeature("hack_count", AGG_SUM, "n", "Numero de incidentes."),
         ),
         pit=PIT_ARCHIVE_REVISABLE,
+        history_from=date(2016, 6, 17),  # MEDIDO: 621 incidentes fechados
         license="DefiLlama: abierta, sin auth.",
         endpoint="https://api.llama.fi/hacks",
-        notes="Muestra de decenas en anos. Es el ejemplo canonico de Tier A: como feature "
-              "de un optimizador seria un ajuste perfecto a catorce dias del historico.",
+        notes="Era 'el caso mas duro del catalogo' y la sonda dice otra cosa: 621 "
+              "incidentes MEDIDOS desde 2016-06-17, la segunda muestra mas grande de las "
+              "seis de evento. El importe llega en MILLONES de dolares y el adaptador lo "
+              "pasa a dolares, para que no se compare un 1,5 de aqui con un 1,5 de otra "
+              "serie. El evento no se anuncia, asi que aqui los dias-al-evento no miran "
+              "adelante: lo que codifica es la ventana POSTERIOR. Revisable: DefiLlama "
+              "corrige importes y clasificaciones despues del incidente.",
     ),
     SignalSource(
         key="ofac_sdn",
@@ -622,31 +690,42 @@ CATALOG: tuple[SignalSource, ...] = (
         entity_kind=EntityKind.MARKET,
         features=(
             SignalFeature("sdn_crypto_addresses", AGG_LAST, "n", "Direcciones en la lista."),
-            SignalFeature("sdn_new_entries", AGG_SUM, "n", "Altas del dia."),
+            SignalFeature("sdn_new_entries", AGG_SUM, "n", "Altas desde la captura anterior."),
         ),
         pit=PIT_FORWARD_CAPTURE,
         license="US Treasury: dominio publico.",
         endpoint="https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN.XML",
         notes="Se publica la lista de HOY, no la de una fecha pasada. Reconstruir el pasado "
               "exige haber guardado cada version: forward_capture, y por eso el archivo es "
-              "append-only con fetched_at.",
+              "append-only con fetched_at. MEDIDO: 28 MB de XML, 19.199 registros y 977 "
+              "direcciones de cripto (529 XBT, 198 TRX, 100 ETH...). Se archiva SOLO el "
+              "subconjunto cripto —la unica excepcion del catalogo a 'el payload intacto', "
+              "razonada en adapters/events.py— y el certificado del host no lo valida el "
+              "almacen de Windows, asi que esta fuente usa el bundle de certifi.",
     ),
     SignalSource(
         key="macro_calendar",
-        title="Calendario macro (FOMC, CPI, vencimientos)",
+        title="Calendario macro (FOMC y publicaciones del IPC)",
         tier=TIER_MECHANICAL,
         scope=SCOPE_MACRO,
         cadence="event",
         entity_kind=EntityKind.MARKET,
         features=(
-            SignalFeature("days_to_fomc", AGG_LAST, "dias", "Dias a la proxima reunion."),
-            SignalFeature("days_to_cpi", AGG_LAST, "dias", "Dias al proximo dato de IPC."),
-            SignalFeature("event_today", AGG_LAST, "0/1", "Hay evento programado hoy."),
+            SignalFeature("fomc_meeting", AGG_LAST, "0/1", "Dia de reunion del FOMC."),
+            SignalFeature("cpi_release", AGG_LAST, "0/1", "Dia de publicacion del IPC."),
         ),
         pit=PIT_FORWARD_CAPTURE,
+        history_from=date(2017, 2, 1),  # MEDIDO: la primera reunion del calendario de la Fed
         license="Fuentes oficiales (Fed, BLS): dominio publico.",
-        notes="Determinista y conocido con meses de antelacion, que es lo que lo hace apto "
-              "como guarda de elegibilidad y no como alfa.",
+        endpoint="https://www.federalreserve.gov/json/calendar.json",
+        notes="Determinista y conocido con meses de antelacion: las fechas son exactas y no "
+              "revisables, que es la mejor propiedad que puede tener una feature de evento. "
+              "De una reunion de dos dias se toma el SEGUNDO, que es cuando sale el "
+              "comunicado. DOS PROFUNDIDADES DISTINTAS, como en GitHub: el calendario de la "
+              "Fed llega a 2017 (MEDIDO), pero el del BLS es una ventana RODANTE de ~13 "
+              "meses, asi que la historia larga del IPC solo se acumula captura a captura y "
+              "un cpi_release vacio en 2019 no significa que no hubiera IPC. El BLS no "
+              "publica esto en JSON: se archiva el HTML crudo para poder re-derivar.",
     ),
 )
 

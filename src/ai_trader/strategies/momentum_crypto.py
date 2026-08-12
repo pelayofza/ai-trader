@@ -6,6 +6,12 @@ from uuid import uuid4
 
 import pandas as pd
 
+from ai_trader.observation.signal_radar import (
+    INERT_MAX_INTENSITY,
+    INERT_MIN_INTENSITY,
+    INERT_MIN_TONE,
+    signal_gate_reason,
+)
 from ai_trader.shared import bars as bar_schema
 from ai_trader.shared.clock import utc_now
 from ai_trader.shared.schemas import Side, Signal
@@ -51,6 +57,22 @@ class CryptoMomentumConfig:
     # que el comportamiento en vivo es identico. El CEM los optimiza como params.
     min_breadth: float = 0.0  # 0 = sin filtro; exige fraccion minima del universo > SMA
     min_relative_strength: float = -1.0  # -1 = sin filtro; exige fuerza vs mercado
+    # Filtros de SENALES EXTERNAS (opcionales, solo con SignalRadarProvider inyectado).
+    #
+    # Los defaults son los valores INERTES por construccion: el tono esta acotado a
+    # [-Z_CLIP, +Z_CLIP] y la intensidad a [0, Z_CLIP], asi que un piso en el borde exacto
+    # no puede bloquear ninguna lectura posible. No es "permisivo": es imposible que filtre.
+    #
+    # POLARIDAD. Momentum quiere las dos cosas ALTAS y por motivos distintos: el tono como
+    # CONFIRMACION —comprar fuerza mientras el flujo, la actividad y la atencion acompanan—
+    # y la intensidad porque una ruptura sin nada detras es ruido. La intensidad es el
+    # unico eje en el que esta primitiva y la reversion a la media quieren cosas opuestas;
+    # en el tono las dos ponen un PISO (ver mean_reversion.py).
+    #
+    # NINGUNO ENTRA EN `scoring/search_space.py`: son constantes de configuracion, no
+    # dimensiones sorteables. Ver el test que lo congela en tests/test_transfer.py.
+    min_signal_tone: float = INERT_MIN_TONE
+    min_signal_intensity: float = INERT_MIN_INTENSITY
 
     def __post_init__(self) -> None:
         if self.fast_sma_window <= 0:
@@ -71,6 +93,17 @@ class CryptoMomentumConfig:
             raise ValueError("min_bars must be >= slow_sma_window")
         if not 0.0 <= self.min_breadth <= 1.0:
             raise ValueError("min_breadth must be between 0 and 1")
+        # Un umbral fuera del rango alcanzable no es "muy exigente": es una puerta cerrada
+        # a cal y canto que nadie escribio queriendo. Se rechaza al construir.
+        if not INERT_MIN_TONE <= self.min_signal_tone <= -INERT_MIN_TONE:
+            raise ValueError(
+                f"min_signal_tone must be between {INERT_MIN_TONE} and {-INERT_MIN_TONE}"
+            )
+        if not INERT_MIN_INTENSITY <= self.min_signal_intensity <= INERT_MAX_INTENSITY:
+            raise ValueError(
+                f"min_signal_intensity must be between {INERT_MIN_INTENSITY} "
+                f"and {INERT_MAX_INTENSITY}"
+            )
 
 
 class CryptoMomentumStrategy:
@@ -78,14 +111,25 @@ class CryptoMomentumStrategy:
 
     def __init__(self, config: CryptoMomentumConfig | None = None) -> None:
         self.config = config or CryptoMomentumConfig()
-        # Colaborador cross-sectional opcional; lo inyecta el backtest. None en vivo.
+        # Colaboradores opcionales; los inyecta quien construye (backtest o proceso vivo).
         self._regime = None
+        self._signals = None
 
     def attach_regime_provider(self, provider) -> None:
         self._regime = provider
 
+    def attach_signal_provider(self, provider) -> None:
+        """Mismo patron duck-typed que el regimen: quien no lo llame se queda sin puerta."""
+        self._signals = provider
+
     def _regime_active(self) -> bool:
         return self.config.min_breadth > 0.0 or self.config.min_relative_strength > -1.0
+
+    def _signals_active(self) -> bool:
+        return (
+            self.config.min_signal_tone > INERT_MIN_TONE
+            or self.config.min_signal_intensity > INERT_MIN_INTENSITY
+        )
 
     def supports_symbol(self, symbol: str) -> bool:
         # Opera cualquier simbolo con barras OHLCV; los de prediccion no las tienen.
@@ -162,6 +206,21 @@ class CryptoMomentumStrategy:
                 return None
             if regime["relative_strength"] < self.config.min_relative_strength:
                 logger.info("Regime relative-strength gate blocked symbol=%s", symbol)
+                return None
+
+        # Puerta de senales externas, DESPUES de la de regimen: es la mas cara de las dos
+        # (toca diecisiete fuentes) y la que menos veces esta activa, asi que preguntarla
+        # la ultima es lo mismo que preguntarla nunca en la configuracion por defecto.
+        # Nunca bloquea por falta de datos: `signal_gate_reason` se salta el bloque cuya
+        # cobertura no llega al minimo declarado.
+        if self._signals is not None and self._signals_active():
+            reason = signal_gate_reason(
+                self._signals.features(symbol),
+                min_tone=self.config.min_signal_tone,
+                min_intensity=self.config.min_signal_intensity,
+            )
+            if reason is not None:
+                logger.info("Signal gate blocked symbol=%s (%s)", symbol, reason)
                 return None
 
         stop_loss = float(latest_close - (latest_atr * self.config.risk_atr_multiple))

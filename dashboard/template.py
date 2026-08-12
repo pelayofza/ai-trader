@@ -35,12 +35,20 @@ a{color:var(--s1)}
 .side{background:var(--surface);border-right:1px solid var(--border);padding:20px 14px;position:sticky;top:0;height:100vh;overflow:auto}
 .brand{font-weight:700;font-size:16px;margin:0 0 2px}
 .brand small{display:block;color:var(--muted);font-weight:400;font-size:12px}
-.nav{list-style:none;padding:0;margin:18px 0 0}
+.nav{list-style:none;padding:0;margin:14px 0 0}
 .nav li{margin:2px 0}
 .nav button{width:100%;text-align:left;background:none;border:0;color:var(--ink2);
-  padding:9px 12px;border-radius:8px;cursor:pointer;font-size:14px}
+  padding:8px 12px 8px 22px;border-radius:8px;cursor:pointer;font-size:13.5px}
 .nav button:hover{background:var(--plane)}
 .nav button.active{background:var(--s1);color:#fff;font-weight:600}
+/* Capitulos: la nav es de dos niveles porque la documentacion tambien lo es, y las dos
+   tienen que poder leerse en el mismo orden. */
+.nav li.chap{margin:16px 0 3px;padding:0 12px;color:var(--muted);font-size:11px;
+  font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+.nav li.chap:first-child{margin-top:2px}
+.nav li.chap b{color:var(--ink2)}
+.crumb{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.05em;
+  font-weight:600;margin:0 0 4px}
 .main{padding:26px 32px;max-width:1180px;overflow-x:hidden}
 h1{font-size:22px;margin:0 0 4px}
 h2{font-size:17px;margin:30px 0 12px}
@@ -463,44 +471,310 @@ function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replac
 
 // ---------------- sections ----------------
 function renderOverview(){
-  const k=D.kpis, host=$('#overview');
+  const k=D.kpis, host=$('#overview'), M=D.market||{}, F=D.fidelity, T=D.transfer, A=D.activity, V=D.validation;
+  const rho=T?T.transfer.spearman:null;
   const tiles=[
-    ['Escenarios ai_v2', k.ai_v2?k.ai_v2.scenarios:'-', (k.ai_v2?k.ai_v2.samples:'-')+' muestras'],
-    ['Librerías sintéticas', (k.lineage||[]).length||'-', (k.lineage||[]).join(' → ')||'Monte Carlo'],
+    ['Pares operados', M.n_symbols||'-', 'cripto en '+esc(M.exchange||'-')+' · velas diarias'],
+    ['Fuentes de señal', (D.signals_platform?D.signals_platform.summary.n_sources:'-'),
+      (D.signals_platform?D.signals_platform.sources.filter(s=>s.connected).length:'-')+' con adaptador'],
+    ['Mundos sintéticos', k.ai_v2?k.ai_v2.samples:'-', (k.lineage||[]).join(' → ')],
     ['Estrategias', k.n_strategies,'primitivas paramétricas'],
-    ['Features de observación', (k.n_own_features+k.n_regime_features),k.n_own_features+' propio + '+k.n_regime_features+' régimen'],
-    ['Commits', k.commit_count||'-', k.commit||''],
+    ['Features de observación', (k.n_own_features+k.n_regime_features),
+      k.n_own_features+' propio + '+k.n_regime_features+' régimen + radar'],
   ];
-  const roadmapStatus=[
-    ['B','Generador (colas, clustering, serial)','hecho'],
-    ['Wiring','ai_v2 como sustrato por defecto del scoring','hecho'],
-    ['A','Métrica y ranking honestos (headline, CVaR, baselines, DSR/PBO)','hecho'],
-    ['A','Calibración medida de λ y κ (rejilla + auditoría de costes)','hecho'],
-    ['C','Costes que muerden (spread por símbolo, impacto, capacidad)','hecho'],
-    ['B','Fidelidad sintético-vs-real medida contra CCXT (rank-corr)','hecho'],
-    ['D','Validación multiventana (CPCV/walk-forward): construida y medida','hecho'],
-    ['E','Limpieza de consistencia (universo, anualización, diseñador)','hecho'],
-    ['B','Hueco de fidelidad cerrado y aceptado: colas, clustering y correlación → ai_v3','hecho'],
-    ['B/D','Transferencia de ranking real-vs-sintético: medida, y el sintético NO ordena','hecho'],
-    ['Medición','La ventana ciega del backtest diario, medida por sesión horaria','hecho'],
-    ['A','Suelo de actividad: el ranking ya no lo gana quien no opera','hecho'],
-    ['D','Cablear el CPCV en el optimizador (juez en dos etapas)','pendiente'],
-    ['Live','Paper trading corriendo en vivo (compra tiempo de calendario)','pendiente'],
+  // El end-to-end: una operacion atraviesa estas etapas, y cada una es una vista del menu.
+  // Es lo que sustituye a la antigua tabla de "evoluciones completadas", que decia en que
+  // fase esta el proyecto pero no que HACE la herramienta.
+  const chain=[
+    ['1','Captura de precio',(M.n_symbols||'-')+' pares cripto, velas diarias cacheadas en disco: cualquier estudio se repite sin red.','market','Datos'],
+    ['2','Señales externas','Diecisiete fuentes fuera del precio, normalizadas y con su profundidad histórica medida, no declarada.','signals','Datos'],
+    ['3','Mundos sintéticos','Una IA diseña la física de cada escenario macro; un motor determinista la convierte en velas con colas, clustering y estructura serial.','synthetic','Datos'],
+    ['4','Observación','Lo que la política ve al decidir: mercado propio, contexto cross-sectional y radar de señales. Solo datos hasta el cierre de ayer.','strategies','Estrategias'],
+    ['5','Señal','Dos primitivas de regímenes opuestos proponen entrada, confianza y salidas.','strategies','Estrategias'],
+    ['6','Riesgo','Puerta única: tamaño, exposición, confianza mínima, pérdida diaria y propiedad del stop.','trade','Trade'],
+    ['7','Ejecución','Se llena al open del día siguiente pagando spread, volatilidad e impacto, con techo de capacidad.','trade','Trade'],
+    ['8','Contabilidad','PnL neto de comisiones en las dos patas, equity marcado a diario y rotación medida.','trade','Trade'],
+    ['9','Puntuación','Headline out-of-sample por muestra y CVaR@25% de la distribución: se compite por la cola mala.','ranking','Estrategias'],
+    ['10','Validación','Arquetipos macro enteros como hold-out y varias ventanas temporales con purga y embargo.','validation','Estrategias'],
+    ['11','Veredicto','Aprueba quien bate al mejor pasivo y además opera de verdad.','activity','Estrategias'],
+    ['12','Búsqueda','CEM sobre los parámetros, con el resultado descontado por el número de intentos.','ranking','Estrategias'],
+    ['13','En vivo','El mismo camino, con reloj real y dinero de papel. La etapa que aún no ha producido resultados.','paper','Resultados'],
+  ];
+  const findings=[
+    ['¿Se parece el mundo sintético al mercado?',
+      F?('Sí: cobertura '+fmt(F.summary.coverage_mean_pct,0)+'% y nueve umbrales que el estudio puede fallar.'):'Sin informe.',
+      'hecho','El generador vale como banco de estrés y de regresión.','fidelity'],
+    ['¿<b>Ordena</b> las estrategias como el mercado?',
+      T?('<b>No.</b> ρ = '+fmt(rho,2)+' sobre '+T.n_configs+' configuraciones, y '+fmt(T.transfer.activity.spearman_active,2)+' entre las que operan de verdad.'):'Sin informe.',
+      'pend','El sintético deja de ser criterio de selección: el ranking que decide sale del histórico real.','transfer'],
+    ['¿Sobre-estimaba el corte único 70/30?',
+      V?('No sobre-estima ('+fmt(V.optimism.walk_forward.median,2)+'): es <b>arbitrario</b>. Mover la ventana pesa ×'+fmt(V.svn.ratio,1)+' más que cambiar de estrategia.'):'Sin informe.',
+      'pend','Elegir con una sola ventana es elegir por el tramo de historia que tocó.','validation'],
+    ['¿Qué estaba ganando el ranking real?',
+      A?('La <b>inactividad</b>: ρ(recompensa, operaciones) = '+fmt(A.mechanism.sides.real.spearman_reward_activity,2)+'. Una curva plana puntúa cero exacto y ese cero gana.'):'Sin informe.',
+      'pend','Rankear exige operar: hay un suelo de actividad medido.','activity'],
   ];
   host.innerHTML=`
-    <h1>AI-Trader · Dashboard</h1>
-    <p class="lead">Herramienta de inversión sobre datos sintéticos deterministas (paper trading).
-      Esta v1 reúne los datos sintéticos, las estrategias, el ranking y las evoluciones pendientes.
+    <p class="crumb">Capítulo 1</p>
+    <h1>Resumen ejecutivo</h1>
+    <p class="lead">AI-Trader es una herramienta de inversión cuantitativa que hoy opera en <b>paper
+      trading</b> sobre criptomonedas. Junta cinco piezas que normalmente viven separadas: la captura de
+      datos de mercado, una plataforma de señales externas, un generador de mercados sintéticos
+      deterministas, un motor de ejecución con costes y capacidad realistas, y un aparato de evaluación que
+      decide qué estrategia merece operar. Este dashboard está organizado como el recorrido de una
+      operación: <b>datos → trade → estrategias → resultados</b>.
       Generado desde el commit <span class="mono">${esc(k.commit)}</span>${k.generated_at?(' · '+k.generated_at):''}.</p>
     <div class="grid tiles">${tiles.map(t=>`<div class="card tile"><div class="k">${t[0]}</div><div class="v">${t[1]}</div><div class="s">${t[2]}</div></div>`).join('')}</div>
-    <h2>Estado del roadmap</h2>
-    <div class="tblwrap"><table><thead><tr><th>Línea</th><th>Trabajo</th><th>Estado</th></tr></thead><tbody>
-    ${roadmapStatus.map(r=>`<tr><td><span class="pill">${r[0]}</span></td><td>${r[1]}</td>
-      <td>${r[2]==='hecho'?'<span class="chip" style="background:color-mix(in srgb,var(--good) 20%,transparent);color:var(--good)">✓ hecho</span>':'<span class="chip pendiente">pendiente</span>'}</td></tr>`).join('')}
-    </tbody></table></div>
-    <p class="tag" style="margin-top:14px">Ve a <b>Evoluciones</b>: las pendientes están ordenadas de mayor a menor
-      criticidad, con su evidencia medida y su prompt copiable. Foco en cripto; renta variable y mercados de
-      predicción están aparcados a propósito.</p>`;
+
+    <h2>El recorrido, de punta a punta</h2>
+    <p class="lead">Una sola operación atraviesa trece etapas. El orden importa: nada de lo que viene
+      después puede arreglar un error cometido antes. Cada fila enlaza con la vista que la detalla.</p>
+    <div class="card"><div class="tblwrap"><table>
+      <thead><tr><th class="num">#</th><th>Etapa</th><th>Qué ocurre</th><th>Capítulo</th></tr></thead>
+      <tbody>${chain.map(r=>`<tr>
+        <td class="num tag">${r[0]}</td>
+        <td><button class="btn ghost" data-goto="${r[3]}" style="padding:4px 9px">${esc(r[1])}</button></td>
+        <td class="tag">${esc(r[2])}</td>
+        <td class="tag">${esc(r[4])}</td></tr>`).join('')}
+      </tbody></table></div></div>
+    <div class="note"><b>La propiedad que sostiene todo lo anterior:</b> las etapas 4 a 8 son <b>el mismo
+      código</b> en backtest y en vivo. El motor de backtest no reimplementa la lógica de trading: inyecta
+      un reloj simulado y una fuente de datos con anti-look-ahead, y hace avanzar el mismo orquestador que
+      operaría con dinero. Lo que se optimiza es, literalmente, lo que se ejecutaría.</div>
+
+    <h2>Los cuatro resultados que condicionan lo demás</h2>
+    <p class="lead">El proyecto publica mediciones, no impresiones. Dos de éstas salieron como se esperaba
+      y dos no; las cuatro se reportan igual, porque una pregunta respondida en contra sigue siendo una
+      pregunta respondida.</p>
+    <div class="card"><div class="tblwrap"><table>
+      <thead><tr><th>Pregunta</th><th>Respuesta medida</th><th>Consecuencia</th><th></th></tr></thead>
+      <tbody>${findings.map(f=>`<tr>
+        <td><b>${f[0]}</b></td>
+        <td>${f[1]}</td>
+        <td class="tag">${esc(f[3])}</td>
+        <td><button class="btn ghost" data-goto="${f[4]}" style="padding:4px 9px">ver</button></td></tr>`).join('')}
+      </tbody></table></div></div>
+    <p class="tag" style="margin-top:14px">El capítulo <b>5 · Resultados</b> está vacío a propósito: un
+      backtest es una medición sobre historia, no un resultado. Se llenará cuando el paper trading acumule
+      calendario. Las <b>evoluciones</b> pendientes están ordenadas por criticidad, con su evidencia medida
+      y su prompt copiable.</p>`;
+  $$('#overview [data-goto]').forEach(b=>b.onclick=()=>goTo(b.dataset.goto));
+}
+
+// Navegacion cruzada: el resumen enlaza etapas y hallazgos con la vista que los detalla.
+function goTo(sec){
+  const btn=$$('.nav button').find(b=>b.dataset.sec===sec);
+  if(btn) btn.click();
+}
+
+function renderMarket(){
+  const host=$('#market'), M=D.market;
+  if(!M){host.innerHTML='<h1>Captura de datos reales</h1><div class="card"><p class="tag">Sin datos.</p></div>';return;}
+  const F=D.fidelity, S=D.sessions, T=D.transfer;
+  // Las ventanas reales sobre las que se ha medido algo. Se publican juntas porque son el
+  // sustrato de TODA la evidencia externa del proyecto, y hasta ahora estaban repartidas
+  // por tres vistas distintas sin que en ningun sitio se dijera cuanto dato real hay.
+  const windows=[];
+  if(F)windows.push(['Fidelidad del sintético',esc(F.exchange)+' · velas 1D',F.real_start+' → '+F.real_end,
+    F.summary.n_symbols+' pares',`ventanas de ${F.window_days} días, paso ${F.step_days}`,'fidelity']);
+  if(S)windows.push(['Sesiones intradía',esc(S.exchange)+' · velas 1H',S.window.start+' → '+S.window.end,
+    S.overall.n_symbols+' pares',S.overall.n_days.toLocaleString('es')+' días-símbolo','sessions']);
+  if(T)windows.push(['Ordenación real vs sintético',esc(F?F.exchange:'binance')+' · velas 1D',
+    T.real_window.start.slice(0,10)+' → '+T.real_window.end.slice(0,10),T.symbols.length+' pares',
+    T.sub_windows.length+' sub-ventanas disjuntas','transfer']);
+  const tiles=[
+    ['Pares operados',M.n_symbols,'todos cripto contra stablecoin'],
+    ['Proveedor',esc(M.exchange),'vía ccxt · lotes de '+M.batch+' barras'],
+    ['Lookback por ciclo',M.lookback_days+' d','lo justo para que las ventanas largas estén calientes'],
+    ['Caché en disco','parquet',esc(M.cache_dir)+'/'],
+  ];
+  host.innerHTML=`
+    <p class="crumb">Capítulo 2 · Datos</p>
+    <h1>Captura de datos reales</h1>
+    <p class="lead">El sistema opera sobre <b>velas diarias</b> (OHLCV) de ${M.n_symbols} pares de
+      criptomoneda, leídas de <span class="mono">${esc(M.exchange)}</span> a través de un adaptador CCXT
+      que pagina en lotes de ${M.batch} barras hasta cubrir el rango pedido. Cada ciclo de decisión pide
+      ${M.lookback_days} días de historia por símbolo. Es el sustrato del que sale <b>toda</b> la evidencia
+      externa del proyecto —fidelidad, ordenación y sesiones— y el único que se usa en vivo.</p>
+    <div class="grid tiles">${tiles.map(t=>`<div class="card tile"><div class="k">${t[0]}</div>
+      <div class="v">${t[1]}</div><div class="s">${t[2]}</div></div>`).join('')}</div>
+
+    <h2>Proveedores, y qué se usa de cada uno</h2>
+    <div class="card"><div class="tblwrap"><table>
+      <thead><tr><th>Clase de activo</th><th>Proveedor</th><th>Estado</th><th>Qué se usa hoy</th></tr></thead>
+      <tbody>${M.providers.map(p=>`<tr>
+        <td><b>${esc(p.asset_class)}</b></td>
+        <td class="mono">${esc(p.provider)}</td>
+        <td><span class="chip ${p.state==='operado'?'hecho':'placeholder'}">${esc(p.state)}</span></td>
+        <td class="tag">${esc(p.note)}</td></tr>`).join('')}
+      </tbody></table></div></div>
+
+    <h2>Las tres decisiones que hacen auditable el dato real</h2>
+    <div class="grid cards">
+      <div class="card"><h3>Caché en disco, no en memoria</h3>
+        <p class="lead" style="margin:6px 0">Las barras se guardan en
+          <span class="mono">${esc(M.cache_dir)}/&lt;símbolo&gt;_&lt;timeframe&gt;.parquet</span> y se
+          reutilizan. Los estudios se repiten <b>sin red</b>, que es lo que hace que dos regeneraciones
+          den lo mismo aunque el exchange esté caído o haya reescrito el pasado.</p></div>
+      <div class="card"><h3>Ventanas cerradas, no «hasta hoy»</h3>
+        <p class="lead" style="margin:6px 0">Cada estudio declara su rango como constante. Si el final se
+          moviera con la fecha de ejecución, dos ejecuciones del mismo estudio no serían comparables y la
+          palabra «reproducible» no significaría nada.</p></div>
+      <div class="card"><h3>El corte anti-look-ahead vive en la fuente</h3>
+        <p class="lead" style="margin:6px 0">Da igual quién pida las barras —una estrategia, el bloque de
+          régimen, el radar de señales—: nadie puede ver la barra de hoy, porque la capa que las sirve no
+          la devuelve. No depende de que nadie se despiste.</p></div>
+    </div>
+
+    ${windows.length?`<h2>Cuánto dato real hay detrás de cada medición</h2>
+    <p class="lead">Todo lo que este dashboard publica como evidencia externa sale de estas tres ventanas.
+      Se enseñan juntas porque su tamaño es el límite de lo que cualquiera de esas cifras puede afirmar.</p>
+    <div class="card"><div class="tblwrap"><table>
+      <thead><tr><th>Estudio</th><th>Fuente</th><th>Ventana</th><th class="num">universo</th><th>troceado</th><th></th></tr></thead>
+      <tbody>${windows.map(w=>`<tr>
+        <td><b>${w[0]}</b></td><td class="tag">${w[1]}</td><td class="mono">${w[2]}</td>
+        <td class="num">${w[3]}</td><td class="tag">${w[4]}</td>
+        <td><button class="btn ghost" data-goto="${w[5]}" style="padding:4px 9px">ver</button></td></tr>`).join('')}
+      </tbody></table></div>
+      <p class="tag">El histórico real es <b>un único camino de la historia</b>: estas ventanas comparten
+        los mismos ciclos de mercado. Ésa es exactamente la razón de que exista el generador sintético
+        —muchos mundos frente a uno— y también el motivo de que su ordenación haya que comprobarla
+        aparte.</p></div>`:''}
+
+    <div class="note"><b>El universo operado y el sintético no son el mismo, y la asimetría es
+      deliberada.</b> Aquí solo hay cripto: es donde está toda la evidencia empírica del repositorio. El
+      universo del generador tiene ${M.n_synthetic_assets} activos, con renta variable y refugios, porque
+      los factores compartidos son lo que hace que un escenario de tipos signifique algo para cripto. La
+      regla que mantiene consistentes los dos ficheros: <b>éste tiene que ser operable hoy</b> —un símbolo
+      deslistado falla en silencio en cada ciclo, que fue el caso de MATIC/USDT— y el sintético tiene que
+      coincidir con el universo declarado en código.</div>
+    <div class="card"><h3>Universo operado (${M.n_symbols})</h3>
+      <p class="lead" style="margin:8px 0"><span class="mono">${M.symbols.map(esc).join(' · ')}</span></p>
+      <p class="tag">Se configura en <span class="mono">config/default.toml</span>. Cambiarlo cambia lo
+        que se opera en vivo, no lo que se ha medido: los estudios publicados declaran su propio
+        universo.</p></div>`;
+  $$('#market [data-goto]').forEach(b=>b.onclick=()=>goTo(b.dataset.goto));
+}
+
+function renderTrade(){
+  const host=$('#trade'), t=D.trade;
+  if(!t){host.innerHTML='<h1>Cómo se ejecuta un trade</h1><div class="card"><p class="tag">Sin datos.</p></div>';return;}
+  const S=D.sessions, G=S?S.gap:null, L=S?(S.latency.rows.find(r=>r.hours===1)||{}):{};
+  const pct=(v,d=2)=>v===null||v===undefined?'-':fmt(100*v,d)+'%';
+  const tiles=[
+    ['Comisión por pata',fmt(100*t.fee_rate,2)+'%','sobre el notional realmente llenado'],
+    ['Techo de capacidad',fmt(100*t.max_participation,0)+'%','del volumen de la barra · lo que excede no se llena'],
+    ['Tope de deslizamiento',fmt(t.max_slippage_bps,0)+' pb','más allá, extrapolar el modelo no significa nada'],
+    ['Capital de referencia',t.starting_equity.toLocaleString('es')+' $','el equity inicial de cada backtest'],
+  ];
+  host.innerHTML=`
+    <p class="crumb">Capítulo 3 · Trade</p>
+    <h1>Cómo se ejecuta un trade, y qué cuesta</h1>
+    <p class="lead">Esta vista sigue <b>una sola operación</b> desde que existe una barra cerrada hasta que
+      su resultado entra en la curva de equity: quién decide, quién autoriza, a qué precio se llena, qué
+      paga y cómo se apunta. Todo lo que el capítulo de <b>Estrategias</b> puntúa sale de aquí, así que
+      cualquier optimismo escondido en estos cinco pasos contamina todas las cifras del dashboard.</p>
+    <div class="grid tiles">${tiles.map(x=>`<div class="card tile"><div class="k">${x[0]}</div>
+      <div class="v">${x[1]}</div><div class="s">${x[2]}</div></div>`).join('')}</div>
+
+    <h2>Los cinco pasos de una operación</h2>
+    <div class="grid cards">
+      <div class="card"><h3>1 · Decisión</h3>
+        <p class="lead" style="margin:6px 0">La estrategia solo ve barras <b>estrictamente anteriores</b>
+          al día del reloj: decide con el cierre de ayer. El corte vive en la capa que sirve los datos, no
+          en cada consumidor.</p></div>
+      <div class="card"><h3>2 · Riesgo</h3>
+        <p class="lead" style="margin:6px 0">La señal pasa por la puerta única: tamaño, exposición,
+          confianza mínima y pérdida diaria. El riesgo es <b>dueño</b> del stop y del objetivo, y puede
+          recortar lo que propone la estrategia.</p></div>
+      <div class="card"><h3>3 · Llenado</h3>
+        <p class="lead" style="margin:6px 0">La entrada se ejecuta al <b>open del día siguiente</b>, no al
+          cierre con el que se decidió. Stop y objetivo se comprueban contra el máximo y el mínimo de la
+          barra.</p></div>
+      <div class="card"><h3>4 · Coste</h3>
+        <p class="lead" style="margin:6px 0">Cada fill paga <b>medio spread del símbolo + volatilidad
+          reciente + impacto</b>, y el impacto sigue la ley de raíz cuadrada sobre la fracción del volumen
+          que consume la orden.</p></div>
+      <div class="card"><h3>5 · Cierre y apunte</h3>
+        <p class="lead" style="margin:6px 0">Se cierra por stop, objetivo o vejez
+          (${t.risk.find(r=>r[0].startsWith('Vida'))?esc(t.risk.find(r=>r[0].startsWith('Vida'))[1]):'—'}),
+          y el cierre <b>pasa por el motor de ejecución</b>: paga su deslizamiento y su comisión igual que
+          la entrada.</p></div>
+    </div>
+    <div class="note"><b>La convención es pesimista a propósito.</b> Si en la misma barra se tocan stop y
+      objetivo, gana el <b>stop</b>; si la apertura abre pasado el nivel del stop, se llena al open, peor.
+      Ante la ambigüedad intrabar se prefiere <b>subestimar</b> el resultado: si una estrategia parece
+      buena aquí, tiene margen.</div>
+
+    <h2>El motor de riesgo: la puerta única, con sus números</h2>
+    <p class="lead">Una señal no es una orden. Publicar los límites y no solo el mecanismo es lo que
+      convierte «hay control de riesgo» en algo que se puede auditar.</p>
+    <div class="card"><div class="tblwrap"><table>
+      <thead><tr><th>Límite</th><th class="num">valor</th><th>qué impide</th></tr></thead>
+      <tbody>${t.risk.map(r=>`<tr><td>${esc(r[0])}</td><td class="num mono">${esc(r[1])}</td>
+        <td class="tag">${esc(r[2])}</td></tr>`).join('')}
+      </tbody></table></div>
+      <p class="tag"><b>Por qué el riesgo es dueño del stop y no la estrategia.</b> Una estrategia optimiza
+        su propia señal; el stop es una decisión de <b>cartera</b>. Si cada estrategia fijara el suyo, el
+        optimizador aprendería a ensancharlo hasta que dejara de doler — que es exactamente cómo se fabrica
+        una curva de equity bonita con una cola desastrosa.</p></div>
+
+    ${costPanel(D.costs)}
+
+    <h2>Techo de capacidad y fills parciales</h2>
+    <div class="grid cards">
+      <div class="card"><h3>Entrar es opcional</h3>
+        <p class="lead" style="margin:6px 0">Ninguna orden puede consumir más del
+          <b>${fmt(100*t.max_participation,0)}%</b> del volumen de la barra. Lo que exceda ese techo
+          <b>no se llena</b>: la posición se abre por el tamaño realmente ejecutado, y si la barra no da ni
+          para eso, la orden se rechaza.</p></div>
+      <div class="card"><h3>Salir no lo es</h3>
+        <p class="lead" style="margin:6px 0">Las salidas están <b>exentas</b> del techo, por asimetría
+          deliberada: un cierre se llena entero y paga el impacto de todo el tamaño. Si un cierre se
+          llenara a medias, la posición quedaría cerrada en el estado y pagada a medias — contabilidad
+          optimista escondida en un detalle de ejecución.</p></div>
+    </div>
+
+    <h2>Cómo se registra el resultado: PnL, equity y rotación</h2>
+    <div class="card">
+      <p class="mono" style="font-size:13px;margin:2px 0 10px">PnL_neto = (precio_salida − precio_entrada)
+        × tamaño × dirección − comisiones(entrada + salida)</p>
+      <p class="lead" style="margin:0 0 10px">La comisión es <b>${fmt(100*t.fee_rate,2)}%</b> del notional
+        llenado en <b>cada</b> pata, y sigue al tamaño <b>realmente ejecutado</b>, no al pedido: si la
+        orden se llenó a medias por el techo de capacidad, se cobra la mitad. El PnL registrado en cada
+        posición cerrada es siempre el neto.</p>
+      <div class="tblwrap"><table>
+        <thead><tr><th>Magnitud</th><th>Cómo se calcula</th><th>Dónde se usa</th></tr></thead><tbody>
+        <tr><td><b>Equity</b></td>
+          <td class="tag">Capital inicial (${t.starting_equity.toLocaleString('es')} $ en backtest) + PnL neto realizado
+            acumulado + PnL no realizado de lo abierto, valorado al cierre del día.</td>
+          <td class="tag">Es la serie de la que salen Sharpe, drawdown y CAGR.</td></tr>
+        <tr><td><b>PnL diario realizado</b></td>
+          <td class="tag">Suma de los cierres del día; se reinicia cada día.</td>
+          <td class="tag">Alimenta el límite de pérdida diaria del motor de riesgo.</td></tr>
+        <tr><td><b>Rotación (turnover)</b></td>
+          <td class="tag">Notional movido por día en unidades del capital inicial, contando las dos patas
+            de cada operación.</td>
+          <td class="tag">Es el término que penaliza la métrica de cabecera, y lo que permite comprobar que
+            las comisiones cobradas cuadran con el <span class="mono">fee_rate</span> configurado.</td></tr>
+        </tbody></table></div>
+      <p class="tag"><b>Por qué el equity se marca a mercado todos los días.</b> Si solo contara el PnL
+        realizado, la curva sería una escalera plana entre cierres y el drawdown mediría cuándo se decidió
+        cerrar, no cuánto se sufrió.</p></div>
+    <div class="note"><b>Lo que la contabilidad guarda hoy, y lo que no.</b> El estado persistido tiene la
+      <i>foto</i> —posiciones abiertas y cerradas, PnL realizado, equity— pero no la <i>película</i>: qué
+      se decidió cada ciclo, con qué precio de referencia y cuánto deslizamiento se cobró. Ese diario de
+      ciclos es el material con el que se medirá la divergencia entre lo ejecutado y lo simulado, y por eso
+      es parte de la evolución de paper trading.</div>
+
+    ${G?`<h2>Lo que este modelo NO cubre, medido</h2>
+    <div class="note"><b>El hueco cierre → open vale
+      ${pct(G.share_of_range.median,2)}</b> del rango del día (${fmt(G.bps.median,1)} pb): llenar «al open»
+      no introduce sesgo. Lo que sí queda sin modelar es la <b>latencia</b> — con una hora de retraso el
+      precio de llenado ya se ha desplazado ${fmt(L.slip_bps_median,0)} pb, varias veces el coste de
+      referencia que el motor sí cobra. El detalle está en <b>Sesiones intradía</b>.
+      <button class="btn ghost" data-goto="sessions" style="padding:4px 9px;margin-left:6px">ver</button></div>`:''}`;
+  $$('#trade [data-goto]').forEach(b=>b.onclick=()=>goTo(b.dataset.goto));
 }
 
 function renderSynthetic(){
@@ -516,7 +790,8 @@ function renderSynthetic(){
   const colors=[cssv('--s1'),cssv('--s2'),cssv('--s4')];
   const lineage=((D.kpis&&D.kpis.lineage)||Object.keys(f)).filter(l=>f[l]);
   host.innerHTML=`
-    <h1>Datos sintéticos</h1>
+    <p class="crumb">Capítulo 2 · Datos</p>
+    <h1>Generación de datos sintéticos</h1>
     <p class="lead">Librería <b>${esc(D.synthetic.library)}</b>: ${sc.length} escenarios macro × ${D.synthetic.n_paths} paths Monte Carlo,
       horizonte ${D.synthetic.horizon_days} días, 35 activos. Deterministas y reproducibles. Diseñador: <span class="mono">${esc(D.synthetic.designer||'')}</span>.</p>
     <div class="note"><b>Qué es reproducible aquí, y qué no.</b> Todo lo que va del <i>spec.json</i> hacia abajo
@@ -611,7 +886,8 @@ function renderFidelity(){
     ['Muestras',S.n_real_windows+' / '+S.n_synthetic_samples,'ventanas reales / paths sintéticos'],
   ];
   host.innerHTML=`
-    <h1>Fidelidad contra el mercado real</h1>
+    <p class="crumb">Capítulo 2 · Datos</p>
+    <h1>Fidelidad: el test que el generador puede fallar</h1>
     <p class="lead">Un mercado sintético solo vale si se parece al real en sus propiedades estadísticas.
       Aquí se miden los mismos <i>stylized facts</i> sobre <b>${esc(F.library)}</b> y sobre el histórico
       diario real de ${esc(F.exchange)} (${esc(F.real_start)} → ${esc(F.real_end)}, ${S.n_symbols} criptos),
@@ -803,7 +1079,8 @@ function renderTransfer(){
       `sobre las ${ACT.n_active}/${n} que operan de verdad en los dos mundos`],
   ];
   host.innerHTML=`
-    <h1>Transferencia de ranking: ¿ordena el sintético como el mercado?</h1>
+    <p class="crumb">Capítulo 4 · Estrategias</p>
+    <h1>Ordenación en datos reales y sintéticos: ¿ordena el sintético como el mercado?</h1>
     <p class="lead">La vista <b>Fidelidad</b> mide si el generador <i>se parece</i> al mercado en sus
       propiedades estadísticas. Esta vista mide lo único
       que el producto le pide de verdad: que si una configuración es mejor que otra en el mundo
@@ -1003,8 +1280,11 @@ function renderStrategies(){
   const host=$('#strategies'),S=D.strategies;
   const demo=D.signals||{};
   host.innerHTML=`
-    <h1>Estrategias</h1>
-    <p class="lead">Dos primitivas paramétricas de regímenes opuestos. El motor de scoring/RL las optimiza sobre los backtests sintéticos.</p>
+    <p class="crumb">Capítulo 4 · Estrategias</p>
+    <h1>Estrategias y espacio de observación</h1>
+    <p class="lead">Dos primitivas paramétricas de regímenes opuestos, y el vector de features con el que
+      deciden. Lo que ven es tan importante como la regla: la ordenación que mide la vista
+      <b>Ordenación real vs sintético</b> se midió con estrategias que solo veían precio y volumen.</p>
     <div class="grid cards">
     ${S.strategies.map(st=>`<div class="card">
       <h3>${esc(st.name)} <span class="chip ${st.regime}">${st.regime}</span></h3>
@@ -1098,7 +1378,8 @@ function renderRanking(){
       <td class="num">${fmt(r.std)}</td><td class="num">${fmt(r.worst)}</td><td class="num">${fmt(r.best)}</td><td class="num">${r.n}</td>`;
   const pbo=OV.pbo||{},dsr=OV.dsr||{};
   host.innerHTML=`
-    <h1>Ranking de estrategias</h1>
+    <p class="crumb">Capítulo 4 · Estrategias</p>
+    <h1>Recompensa y ranking de estrategias</h1>
     <p class="lead">La unidad de evaluación es la DISTRIBUCIÓN sobre muestras (no un path). La puntuación por muestra es el
       <b>headline out-of-sample</b> = <span class="mono">Sharpe − ${W.lambda_turnover ?? 'λ'}·turnover${W.kappa_maxdd?' − '+W.kappa_maxdd+'·maxDD':''}</span>${W.kappa_maxdd===0?' (el término de maxDD queda en 0 por la calibración medida, más abajo)':''},
       y el ranking es el <b>CVaR@25%</b> de esa distribución (media del peor cuartil: se compite por la cola mala, no por el centro).</p>
@@ -1133,8 +1414,11 @@ function renderRanking(){
       <td class="num">${b.symbols}</td>${statCells(b)}</tr>`).join('')}
     </tbody></table></div></div>
     ${(G.missing&&G.missing.length)?`<div class="note"><b>Baselines no disponibles en este scope:</b>
-      <span class="mono">${G.missing.map(esc).join(', ')}</span>. No se sustituyen por nada: si un rival no se puede construir, se dice.</div>`:''}`:''}
-    ${costPanel(D.costs)}
+      <span class="mono">${G.missing.map(esc).join(', ')}</span>. No se sustituyen por nada: si un rival no se puede construir, se dice.</div>`:''}
+    <div class="note"><b>Y una segunda condición.</b> Aprobar exige además que la estrategia sea
+      <b>rankeable</b>: una curva plana puntúa 0 exacto y bate a los pasivos en cualquier periodo bajista
+      sin haber abierto una posición. El umbral medido está en la vista <b>Suelo de actividad</b>.
+      <button class="btn ghost" data-goto="activity" style="padding:4px 9px;margin-left:6px">ver</button></div>`:''}
     ${pbo.computable||dsr.computable?`
     <h2>Descuento por múltiples pruebas</h2>
     <p class="lead">Probar muchas configuraciones garantiza encontrar una que brilla aunque no haya nada que encontrar.
@@ -1154,6 +1438,7 @@ function renderRanking(){
       mide el CVaR — y los baselines aparecen en la misma escala para que la comparación se vea, no se afirme.</p>
     <div class="card"><div id="distchart"></div></div>`
     :`<div class="card"><p class="tag">Ranking no disponible (¿falta ai_v2 en disco? corre <span class="mono">build_dashboard.py</span>).</p></div>`}`;
+  $$('#ranking [data-goto]').forEach(b=>b.onclick=()=>goTo(b.dataset.goto));
   if(R.rows&&R.rows.length){
     const pal=[cssv('--s1'),cssv('--s2'),cssv('--s4'),cssv('--s7'),cssv('--s6'),cssv('--s5')];
     const groups=R.rows.map((r,i)=>({label:r.label,values:(R.distributions[r.label]||[]),color:pal[i%pal.length]}));
@@ -1207,7 +1492,8 @@ function renderValidation(){
   const ex=V.example;
 
   host.innerHTML=`
-    <h1>Validación temporal</h1>
+    <p class="crumb">Capítulo 4 · Estrategias</p>
+    <h1>Validación temporal: cómo se parte el tiempo</h1>
     <p class="lead">Un backtest se puede partir en train y test de muchas formas, y la forma elegida
       <b>cambia la respuesta</b>. Hasta ahora cada muestra se partía con un único corte 70/30: un solo
       número out-of-sample, sin cola, sin dispersión y con el día del corte cayendo en las dos ventanas.
@@ -1357,7 +1643,8 @@ function renderActivity(){
       `${G.n_lost} dejan de aprobar al exigir actividad`],
   ];
   host.innerHTML=`
-    <h1>Actividad: quién puede ganar el ranking</h1>
+    <p class="crumb">Capítulo 4 · Estrategias</p>
+    <h1>Suelo de actividad: quién puede ganar el ranking</h1>
     <p class="lead">El headline de una ventana es <span class="mono">Sharpe − λ·rotación − κ·maxDD</span>.
       Si una configuración <b>no abre ninguna posición</b>, la curva es una recta: Sharpe 0, rotación 0,
       caída 0 → headline <b>0 exacto</b>. Y como la recompensa es el <b>CVaR@25%</b> (la media del peor
@@ -1521,6 +1808,7 @@ function renderSessions(){
   ];
 
   host.innerHTML=`
+    <p class="crumb">Capítulo 3 · Trade</p>
     <h1>Sesiones: dónde se forma el precio dentro de la barra diaria</h1>
     <p class="lead">Todo el sistema es <b>diario</b>: decide con velas 1D ya cerradas, llena al
       <b>open</b> del día siguiente y comprueba los stops contra el <b>máximo/mínimo</b> de la barra
@@ -1728,17 +2016,30 @@ function _sessionRationale(sessions){
 
 function renderPaper(){
   $('#paper').innerHTML=`
-    <h1>Paper trading</h1>
-    <p class="lead">El runner ya opera en paper con estado persistido, pero esta vista aún no está conectada. Se poblará más adelante.</p>
+    <p class="crumb">Capítulo 5 · Resultados</p>
+    <h1>Resultados del paper trading</h1>
+    <p class="lead">Este capítulo está <b>vacío a propósito</b>, y decirlo es más honesto que llenarlo con
+      cifras de backtest presentadas como resultados. Un backtest es una medición sobre historia; un
+      resultado es lo que hace el sistema cuando corre. El runner ya opera en paper con estado persistido,
+      pero hasta que acumule meses de calendario no hay nada que publicar aquí.</p>
     <div class="grid cards">
-      <div class="card"><h3>Curva de equity <span class="chip placeholder">próximamente</span></h3><p class="tag">Line chart de equity marcado a mercado a lo largo del tiempo.</p></div>
-      <div class="card"><h3>Posiciones <span class="chip placeholder">próximamente</span></h3><p class="tag">Tabla de posiciones abiertas y cerradas con PnL neto de comisiones.</p></div>
-      <div class="card"><h3>Riesgo <span class="chip placeholder">próximamente</span></h3><p class="tag">Exposición desplegada, nº de posiciones vs máximo, drawdown de cuenta.</p></div>
+      <div class="card"><h3>Diario de ciclos <span class="chip placeholder">pendiente</span></h3>
+        <p class="tag">Qué se decidió cada ciclo, con qué precio de referencia, qué aprobó el riesgo y
+          cuánto deslizamiento se cobró. Hoy el estado guarda la foto, no la película.</p></div>
+      <div class="card"><h3>Curva de equity <span class="chip placeholder">pendiente</span></h3>
+        <p class="tag">Equity marcado a mercado y posiciones abiertas y cerradas con PnL neto de
+          comisiones, con la misma contabilidad que describe el capítulo del trade.</p></div>
+      <div class="card"><h3>Riesgo desplegado <span class="chip placeholder">pendiente</span></h3>
+        <p class="tag">Exposición real frente a los límites configurados, número de posiciones y drawdown
+          de cuenta.</p></div>
+      <div class="card"><h3>Divergencia live-vs-backtest <span class="chip placeholder">pendiente</span></h3>
+        <p class="tag">La cifra que justifica el capítulo 3 entero: cuánto se aparta lo ejecutado de lo que
+          el motor predecía, separando precio de llenado, coste y latencia.</p></div>
     </div>
-    <div class="note">Conectarla es parte de la evolución <b>#4 · "Poner el paper trading a correr en vivo"</b>
-      (sección <b>Evoluciones</b>), que incluye además el diario de ciclos en JSONL del que esta vista se alimentará:
-      hoy el estado guarda la foto —posiciones y PnL— pero no la película, y la película es el material con el que
-      dentro de unos meses se medirá la divergencia live-vs-backtest.</div>`;
+    <div class="note"><b>Por qué esto no se puede acelerar.</b> Es la única parte del proyecto que consume
+      <b>tiempo de calendario</b> y no cómputo: la divergencia entre lo ejecutado y lo simulado necesita
+      meses de operaciones para ser medible. Por eso arrancar el paper trading es la evolución número 1
+      aunque no requiera desarrollo nuevo — cada semana sin correr es una semana perdida al final.</div>`;
 }
 
 const PRIORITY_LABEL={critica:'crítica',alta:'alta',media:'media',baja:'baja',aparcada:'aparcada'};
@@ -1764,6 +2065,28 @@ function roadmapItem(r,i){
   </div>`;
 }
 
+// Los limites ESTRUCTURALES: no son trabajo pendiente y por eso no viven en la lista de
+// evoluciones. Antes estaban repetidos como notas sueltas en media docena de vistas.
+function limitsPanel(){
+  const F=D.fidelity, M=D.market;
+  const limits=[
+    ['El diseño con IA no es reproducible',
+      'Los modelos actuales retiraron los parámetros de muestreo: enviar <span class="mono">temperature</span> devuelve error. Lo que se guarda es el artefacto —el <span class="mono">spec.json</span>— no la llamada.'],
+    ['El histórico real es un único camino',
+      'Todas las ventanas reales comparten los mismos ciclos de mercado'+(F?' ('+F.real_start+' → '+F.real_end+')':'')+'. Comparar «lo que pasó» con «lo que podría pasar» es una asimetría que solo se puede declarar, no eliminar.'],
+    ['El generador produce el cripto de un año cualquiera, no sus años de manía',
+      'El umbral de aceptación está sobre la <b>mediana</b> de la sección cruzada: perseguir el p90 de curtosis rompería el nivel de volatilidad, que es la propiedad que sostiene todo lo demás.'],
+    ['Foco cripto',
+      'Toda la evidencia empírica es cripto'+(M?' ('+M.n_symbols+' pares operados)':'')+'. Los stocks <i>sí</i> siguen en el universo sintético —GLD, TLT y UUP son lo que hace que los escenarios de tipos signifiquen algo para cripto vía factores compartidos—, pero se puntúa y se opera solo cripto.'],
+  ];
+  return `<h2>Los límites que no se van a cerrar</h2>
+    <p class="lead">No todo hueco es trabajo pendiente. Estos cuatro son propiedades del enfoque, y se
+      declaran aquí —una vez— para que nadie los lea como promesas.</p>
+    <div class="grid cards">${limits.map(l=>`<div class="card">
+      <h3>${esc(l[0])}</h3><p class="lead" style="margin:6px 0">${l[1]}</p></div>`).join('')}</div>
+    <h2>Lo que queda por hacer</h2>`;
+}
+
 function renderRoadmap(){
   const host=$('#roadmap');
   const items=[...D.roadmap].sort((a,b)=>a.rank-b.rank);
@@ -1777,54 +2100,55 @@ function renderRoadmap(){
     </div>`;
   }).join('');
   host.innerHTML=`
+    <p class="crumb">Capítulo 6 · Limitaciones y evoluciones</p>
     <h1>Evoluciones pendientes</h1>
-    <p class="lead">Ordenadas <b>de mayor a menor criticidad</b>, no por gusto. El criterio es una asimetría de coste:
-      una estrategia añadida hoy se re-evalúa gratis cuando el juez mejore, pero un juez malo contamina todo lo que
-      puntúe mientras siga malo. Por eso el sustrato (fidelidad) y el juez (validación multiventana) van delante de la
-      cosecha (estrategias), y el paper trading en vivo se lanza en paralelo: es lo único que compra tiempo de
-      calendario. Cada ficha lleva su prompt detallado para Claude Code.</p>
-    <div class="note"><b>Foco: cripto.</b> Toda la evidencia empírica del repo —fidelidad contra Binance, calibración
-      de pesos, estudio de validación— es cripto, y la pata de renta variable del generador no tiene ni un solo dato
-      real detrás. Renta variable y mercados de predicción quedan en <b>segundo plano de forma explícita</b>, no por
-      olvido. Los stocks <i>sí</i> siguen en el universo sintético: GLD, TLT y UUP son lo que hace que los escenarios
-      de tipos y de dólar signifiquen algo para cripto vía los factores compartidos. Se genera con los 35, se puntúa y
-      se opera solo cripto.</div>
+    <p class="lead">Ordenadas <b>de mayor a menor criticidad</b>. El criterio es una asimetría de coste: una
+      estrategia añadida hoy se re-evalúa gratis cuando el juez mejore, pero un juez malo contamina todo lo
+      que puntúe mientras siga malo. Por eso el sustrato y el juez van delante de la cosecha, y el paper
+      trading se lanza en paralelo: es lo único que compra tiempo de calendario. Cada ficha lleva su
+      evidencia medida y un prompt reproducible.</p>
+    ${limitsPanel()}
     ${groups}`;
 }
 function copyPrompt(i,btn){const t=D.roadmap[i].prompt;navigator.clipboard.writeText(t).then(()=>{const o=btn.textContent;btn.textContent='✓ Copiado';setTimeout(()=>btn.textContent=o,1500);});}
 window.copyPrompt=copyPrompt;
 
 const PIT_LABEL={forward_capture:'solo hacia adelante',archive_revisable:'backfill revisable',
-  derived_from_price:'derivada del precio'};
+  derived_from_price:'derivada del precio',chain_immutable:'registro inmutable'};
 const PIT_NOTE={forward_capture:'nadie publica su pasado: lo que no se capture hoy no existirá',
   archive_revisable:'hay histórico, pero el proveedor puede reescribirlo',
-  derived_from_price:'point-in-time por construcción'};
+  derived_from_price:'point-in-time por construcción',
+  chain_immutable:'cabeceras de bloque: nadie puede reescribir el pasado'};
 
 function renderSignals(){
   const host=$('#signals'),S=D.signals_platform;
   if(!S){host.innerHTML='<h1>Señales externas</h1><div class="card"><p class="tag">Sin datos.</p></div>';return;}
   const M=S.summary,E=S.entities,A=S.archive,C=S.capture,N=S.normalization;
+  const R=S.radar||{},POOL=S.event_pool||{};
   const nConn=S.sources.filter(s=>s.connected).length;
   const measured=S.sources.filter(s=>s.measured_from);
   const fwd=M.by_pit.forward_capture;
   const deepest=measured.slice().sort((a,b)=>(a.measured_from<b.measured_from?-1:1))[0];
+  const eventRows=Object.entries(POOL);
   const tiles=[
-    ['Fuentes declaradas',M.n_sources,`${M.by_tier.A} mecánicas (A) · ${M.by_tier.B} estadísticas (B)`],
-    ['Con adaptador',nConn+'/'+M.n_sources,'las '+M.by_tier.B+' continuas (Tier B); las mecánicas van por otra puerta'],
+    ['Fuentes declaradas',M.n_sources,`${M.by_tier.A} de evento (A) · ${M.by_tier.B} continuas (B)`],
+    ['Con adaptador',nConn+'/'+M.n_sources,nConn===M.n_sources?'el catálogo entero, evento incluido':'faltan adaptadores'],
     ['Con profundidad MEDIDA',measured.length+'/'+M.n_sources,
       deepest?`la más honda arranca en ${deepest.measured_from} (${esc(deepest.key)})`:'sin medición todavía'],
     ['Backtesteables hoy',M.n_backtestable+'/'+M.n_sources,'solo las que la sonda pudo medir'],
-    ['Cobertura de entidades',fmt(E.coverage_pct,0)+'%',
-      `${E.by_source.rule} por regla · ${E.by_source.override} overrides · ${E.by_source.unmapped} sin resolver`],
-    ['Registros archivados',A.records.toLocaleString('es'),'crudo, append-only, con su fetched_at'],
+    ['Eventos <i>pooled</i>',(M.pooled_events||0).toLocaleString('es'),
+      'la cifra que sustituyó a «muestras de decenas»'],
+    ['Al espacio de observación','6 features',
+      `${R.n_asset_sources||0} fuentes de activo · ${R.n_market_sources||0} de mercado`],
   ];
   host.innerHTML=`
-    <h1>Señales externas: once fuentes conectadas y su profundidad medida</h1>
-    <p class="lead">Hoy las estrategias solo ven <b>precio y volumen</b>. Sobre el esqueleto ya construido
-      —catálogo, puerto de dos capas, archivo crudo, captura, auditoría— este paso conecta el primer lote
-      de fuentes <b>continuas</b> (Tier B: entran como features, nunca como vetos) y mide lo único que
-      decide si sirven para algo: <b>desde cuándo hay dato de verdad</b>. Sigue sin cablearse nada a
-      ninguna estrategia.</p>
+    <p class="crumb">Capítulo 2 · Datos</p>
+    <h1>Señales externas: diecisiete fuentes, una sola vía hasta la decisión</h1>
+    <p class="lead">Hasta hoy las estrategias solo veían <b>precio y volumen</b>. Sobre el esqueleto
+      —catálogo, puerto de dos capas, archivo crudo, captura, auditoría— están conectadas <b>las
+      diecisiete</b> fuentes, medida su profundidad una a una, y cableadas al espacio de observación
+      <b>en backtest y en vivo</b>. Sin segunda puerta y sin veto: todo entra como <i>feature</i>, y lo
+      único que cambia entre una fuente y otra es la <b>codificación</b>.</p>
     <div class="grid tiles">${tiles.map(t=>`<div class="card tile"><div class="k">${t[0]}</div>
       <div class="v">${t[1]}</div><div class="s">${t[2]}</div></div>`).join('')}</div>
 
@@ -1851,18 +2175,47 @@ function renderSignals(){
       ${C?`${C.n_pending} fuentes pendientes y ${C.records} registros`:'el estado real'} en vez de fallar.</p>
 
     <h2>Las ${M.n_sources} fuentes declaradas</h2>
-    <p class="lead"><b>Dos puertas, y la separación vive en el catálogo, no en un comentario.</b> El tier
-      <b>A</b> es oferta calendarizada y determinista —unlocks, colas de staking, dificultad, hacks,
-      sanciones— con muestras de <i>decenas</i>: entra como <b>elegibilidad</b> y nunca como feature de un
-      optimizador, porque un CEM suelto sobre catorce observaciones construye una estrategia preciosa y
-      falsa. El tier <b>B</b> son series continuas con efectos pequeños y decadentes: entra como features.</p>
+    <p class="lead"><b>El <span class="mono">tier</span> describe; ya no enruta.</b> Durante una fase fue
+      una bifurcación: el tier <b>A</b> —oferta calendarizada y determinista: unlocks, colas de staking,
+      dificultad, hacks, sanciones— iba a entrar como <b>elegibilidad</b>, una guarda que veta operar, y
+      solo el <b>B</b> como features. Se retiró el 12 de agosto de 2026, y el motivo es que la defensa que
+      la sostenía —«muestras de <i>decenas</i>»— descansaba en un número que <b>nadie había medido</b>.
+      Al medirlo resultó falso por un factor de diez: <b>${(POOL.btc_difficulty||{}).pooled_events||0}
+      ajustes</b> de dificultad y <b>${(POOL.defillama_hacks||{}).pooled_events||0} hacks</b> fechados,
+      que era «el caso duro». Ahora <b>todas las fuentes van al motor por la misma vía</b>, y lo que
+      decide la codificación no es el tier sino la <b>cadencia</b>: ${R.n_event_sources||0} fuentes de
+      evento —serie casi toda a ceros, donde una z contra su propia historia no significa nada— y
+      ${R.n_continuous_sources||0} continuas, con las dos varas de
+      <span class="mono">normalize.py</span>. La distinción no es cosmética: <span class="mono">staking_queue</span>
+      es mecánica y publica un <b>nivel</b> diario, así que enrutar por el tier le habría puesto un
+      días-al-evento a una cola de validadores.</p>
+    <div class="note"><b>Y entonces qué impide sobreajustar una muestra corta.</b> Dos cosas medibles y una
+      que falta, y la que falta se declara aquí en vez de esconderse. <b>Una</b>: ninguna feature —de
+      ningún tier— entra en <span class="mono">search_space.py</span>; los umbrales son constantes
+      declaradas, así que la huella de las 16 configuraciones publicadas no se mueve, y hay un test que
+      lo demuestra añadiendo una dimensión y comprobando que <b>sustituye</b> las 16 en vez de ampliarlas.
+      <b>Dos</b>: subir N por <i>pooling</i> del evento normalizado —${(M.pooled_events||0).toLocaleString('es')}
+      eventos publicados en <span class="mono">data/signals/event_pool.json</span>— y medir la profundidad
+      con la sonda en vez de declararla. <b>La que falta</b>: el test de falsación. Limitar los grados de
+      libertad <i>reduce</i> el riesgo; no lo <i>mide</i>. Hasta que exista el <b>break-even de ρ</b>
+      —barrido de capacidad predictiva sobre el generador, con ρ=0 como grupo de control, evolución
+      «Canal de observación sintético», hoy en el puesto 2 del roadmap— una feature de muestra corta
+      puede estar sobreajustada y el sistema no tiene forma de saberlo.</div>
+    <div class="note"><b>No hay veto, y eso deja algo abierto.</b> Al unificar se decidió que ninguna señal
+      bloquee: no hay <span class="mono">TradabilityProvider</span> ni lista negra. La consecuencia se
+      escribe en vez de silenciarse —nada impide abrir posición en un activo <b>sancionado, deslistado o
+      con el mercado detenido</b>—, y esa guarda, que es <i>operativa</i> y no de alfa, vive como entrada
+      propia del roadmap: hoy el riesgo es teórico porque el dinero es de papel y el universo se configura
+      a mano.</div>
     <div class="card"><div class="tblwrap"><table>
-      <thead><tr><th>fuente</th><th>tier</th><th>point-in-time</th>
+      <thead><tr><th>fuente</th><th>codificación</th><th>point-in-time</th>
         <th class="num">features</th><th class="num">ent.</th><th>declarada</th><th>MEDIDA</th>
         <th class="num">días</th><th class="num">registros</th><th>acceso</th></tr></thead>
       <tbody>${S.sources.map(s=>`<tr>
         <td><b>${esc(s.title)}</b><div class="tag mono">${esc(s.key)} · ${esc(s.scope)} · ${esc(s.cadence)}</div></td>
-        <td><span class="chip ${s.tier==='A'?'critica':'bajo'}">${s.tier}</span>
+        <td><span class="chip ${s.encoding==='evento'?'mixto':'bajo'}">${esc(s.encoding||'')}</span>
+          <div class="tag">bloque ${esc(s.block||'')} · tier ${s.tier}</div>
+          ${s.pooled_events?`<div class="tag">${s.pooled_events.toLocaleString('es')} eventos</div>`:''}
           ${s.connected?'<div class="tag">conectada</div>':'<div class="tag">sin adaptador</div>'}</td>
         <td>${esc(PIT_LABEL[s.pit]||s.pit)}<div class="tag">${esc(PIT_NOTE[s.pit]||'')}</div></td>
         <td class="num">${s.features.length}</td>
@@ -1880,6 +2233,87 @@ function renderSignals(){
         —una credencial que falta, una cuota agotada—. Las fuentes
         <span class="mono">forward_capture</span> miden lo que llevan capturado, que arranca en cero por
         definición y crece un día por día real.</p></div>
+
+    <h2>El radar: de diecisiete fuentes a seis números</h2>
+    <p class="lead">Cuarenta y cinco columnas crudas no son un espacio de observación: son cuarenta y
+      cinco grados de libertad esperando a que alguien los pondere. El radar
+      (<span class="mono">observation/signal_radar.py</span>) las reduce a <b>tres ejes</b> y los publica
+      por <b>dos bloques</b> que se mantienen separados <i>en el código</i>, porque un factor común y un
+      componente idiosincrático no se simulan igual —y el generador sintético va a necesitar esa
+      distinción—.</p>
+    <div class="grid cards">
+      <div class="card"><h3>Tono</h3>
+        <p class="lead" style="margin:8px 0">Hacia dónde apunta lo que se sabe. Suman solo las
+          <b>${R.n_with_polarity||0} features con polaridad declarada</b>, una a una y razonada: entradas
+          de ETF a favor, oferta desbloqueada en contra. Lo que no está en la tabla no es un olvido: es
+          una feature cuya dirección exigiría una hipótesis que nadie ha medido, y meterla con signo
+          sería colarla dentro de un número.</p></div>
+      <div class="card"><h3>Intensidad</h3>
+        <p class="lead" style="margin:8px 0">Cuánto está pasando, <b>sin signo</b>. Es el único eje en el
+          que momentum y reversión a la media quieren cosas opuestas: la primera la usa como
+          <b>confirmación</b> (piso) y la segunda como <b>filtro de catástrofe</b> (techo).</p></div>
+      <div class="card"><h3>Cobertura</h3>
+        <p class="lead" style="margin:8px 0">Qué fracción de las fuentes del bloque tiene dato hoy. Es la
+          feature que distingue <i>no hay evento</i> de <i>no sé de eventos</i>, y con ella el invariante
+          central: por debajo de <b>${fmt((R.min_coverage||0)*100,0)}%</b> la puerta <b>no se evalúa</b>.</p></div>
+      <div class="card"><h3>Mercado y activo, separados</h3>
+        <p class="lead" style="margin:8px 0"><span class="mono">${(R.market_features||[]).join(' · ')}</span>
+          son iguales para todos los símbolos ese día; <span class="mono">${(R.asset_features||[]).join(' · ')}</span>
+          no. La regla que reparte es la misma que decide a qué entidades se pide el dato, no una lista
+          paralela que se pueda desincronizar.</p></div>
+    </div>
+    <div class="note"><b>Una puerta de señales nunca bloquea por falta de datos.</b> La convención del
+      espacio de observación es «feature no disponible = 0.0 neutro», y con eventos es peor que peligrosa:
+      <i>no hay unlock</i> y <i>no sé de unlocks</i> se escriben con el mismo cero. Sin cobertura
+      suficiente la puerta <b>falla abierta</b> —no se evalúa— y el umbral que lo decide es una
+      <b>constante, no un parámetro</b>: si fuera sorteable, un sorteo del optimizador podría subirlo
+      hasta convertir el radar en un filtro de <i>disponibilidad de datos</i>, que rankearía por qué
+      fuentes tenían cobertura en cada tramo de historia en vez de por lo que dicen.</div>
+
+    <h2>Por qué los eventos no pasan por la misma normalización</h2>
+    <p class="lead">Una z contra una serie que es <b>99% ceros</b> no significa nada: su mediana es 0, su
+      IQR es 0, y el resultado es o NaN o un número enorme. Peor todavía, rellenar los huecos con ceros y
+      normalizar produce una feature que parece razonable, no falla ningún test de forma y <b>no significa
+      nada</b>. Por eso las de evento se codifican aparte, y la diferencia vive en el código.</p>
+    <div class="grid cards">
+      <div class="card"><h3>Días-al-evento, <b>acotado</b></h3>
+        <p class="lead" style="margin:8px 0">«Días hasta el próximo desbloqueo» es infinito cuando no hay
+          ninguno, y el infinito no entra en un vector. Escribir 0 diría «es hoy» y escribir 9999
+          aplastaría la escala de todo lo demás. Con un tope declarado de
+          <b>${fmt(((R.event_spec||{}).days_ahead_cap)||0,0)} días</b> y la cuenta invertida, «no hay nada
+          a la vista» es un 0 que significa exactamente eso.</p></div>
+      <div class="card"><h3>Y el tope hace un segundo trabajo</h3>
+        <p class="lead" style="margin:8px 0">Es lo que mantiene honesto usar el calendario de <i>hoy</i>
+          para fechar el pasado: las reuniones del FOMC de 2019 también estaban publicadas en 2019, así
+          que a treinta días vista la respuesta es la misma que se habría tenido entonces. A dos años
+          vista no lo sería.</p></div>
+      <div class="card"><h3>Lo que se anuncia y lo que no</h3>
+        <p class="lead" style="margin:8px 0">Un desbloqueo, un ajuste de dificultad y un FOMC tienen fecha
+          conocida <b>antes</b>. Un hack y una sanción, no. Mirar hacia adelante en esas dos sería futuro
+          puro, así que <span class="mono">announced=False</span> apaga la mirada por <b>código</b>: de un
+          evento no anunciado solo queda su estela.</p></div>
+      <div class="card"><h3>Magnitud sobre su escala declarada</h3>
+        <p class="lead" style="margin:8px 0">Un 3% del float sobre un token con cuarenta días de volumen
+          en circulación es un evento; el mismo 3% sobre uno líquido no lo es. La magnitud se divide por
+          una escala razonada por fuente y se recorta a <b>±${fmt(((R.event_spec||{}).magnitude_clip)||0,0)}</b>,
+          el mismo tope que las z, para que ninguna domine a la otra por construcción.</p></div>
+    </div>
+    ${eventRows.length?`<div class="card"><div class="tblwrap"><table>
+      <thead><tr><th>fuente de evento</th><th class="num">eventos <i>pooled</i></th>
+        <th class="num">entidades</th><th>ventana medida</th><th>magnitud</th><th>anticipación</th></tr></thead>
+      <tbody>${eventRows.map(([k,r])=>`<tr>
+        <td class="mono">${esc(k)}</td>
+        <td class="num"><b>${(r.pooled_events||0).toLocaleString('es')}</b></td>
+        <td class="num">${r.entities||0}</td>
+        <td>${r.first_day?`${esc(r.first_day)} → ${esc(r.last_day)}`:'<span class="chip pend">sin dato</span>'}</td>
+        <td class="tag">${r.magnitude?esc(r.magnitude):'—'}</td>
+        <td>${r.announced?'<span class="chip bajo">anunciado</span>':'<span class="chip mixto">sin aviso</span>'}</td>
+      </tr>`).join('')}</tbody></table></div>
+      <p class="tag">La unidad es el <b>evento normalizado</b>, no el token: los eventos de todas las
+        entidades de una fuente van a la misma distribución, que es lo que hace que catorce desbloqueos por
+        token sean cientos de observaciones comparables. Las dos fuentes con muestra corta lo son por un
+        motivo <b>medido</b> y no por naturaleza: el endpoint de <i>unlocks</i> de DefiLlama pasó a ser de
+        pago (402) y beaconcha.in ahora pide credencial (401).</p></div>`:''}
 
     <h2>Símbolo → entidad: una regla, y una tabla que arranca vacía</h2>
     <p class="lead">Las fuentes externas no hablan en símbolos de mercado. La clave común se deriva con una
@@ -1990,18 +2424,45 @@ function renderSignals(){
           dejado una serie que falla en silencio en cada captura.</td></tr>
       </tbody></table></div></div>
 
-    <div class="note"><b>Nada de esto está cableado todavía.</b> Ni a las estrategias, ni al runner, ni al
-      espacio de búsqueda del optimizador. El catálogo declara, la captura archiva, la sonda mide y la
-      normalización publica; cablearlo es el paso siguiente y tiene su propia compuerta: con las puertas
-      neutras, la validación multiventana tiene que devolver <b>exactamente</b> los scores ya
-      publicados.</div>`;
+    <h2>Cableado en los dos sitios, y con la compuerta cumplida</h2>
+    <div class="grid cards">
+      <div class="card"><h3>En backtest</h3>
+        <p class="lead" style="margin:8px 0">El motor acepta las señales ya derivadas y las adjunta con el
+          <b>mismo bucle duck-typed</b> que el régimen. Un backtest sin señales construye el radar
+          <b>vacío</b> en vez de dejar el colaborador a <span class="mono">None</span>: así el sistema no
+          se comporta distinto según de dónde vengan los datos.</p></div>
+      <div class="card"><h3>En vivo, y de paso un hueco viejo</h3>
+        <p class="lead" style="margin:8px 0"><span class="mono">main.py</span> no adjuntaba <b>nada</b>, así
+          que las puertas de régimen solo existían en backtest y cualquier configuración elegida con esos
+          filtros se comportaba distinto en paper. Un <span class="mono">Mapping</span> perezoso sobre
+          <span class="mono">MarketDataService</span> lo cierra <b>sin tocar una línea</b> de
+          <span class="mono">regime.py</span> —y que no haga falta tocarlo es la comprobación de que el
+          adaptador es correcto—.</p></div>
+      <div class="card"><h3>Apagado por defecto</h3>
+        <p class="lead" style="margin:8px 0">La sección <span class="mono">[signals]</span> arranca con
+          <span class="mono">enabled = false</span>. Sin credenciales, sin archivo o con medio catálogo
+          caído, el sistema <b>arranca igual</b>: radar vacío, cobertura 0, puertas saltadas y un aviso
+          explícito. Y ahí no hay ningún umbral configurable, a propósito.</p></div>
+      <div class="card"><h3>La compuerta</h3>
+        <p class="lead" style="margin:8px 0">Con las puertas neutras,
+          <span class="mono">validate_multiwindow</span> devuelve los scores <b>idénticos</b> a los
+          publicados en <span class="mono">units_ai_v3.json</span> —cinco unidades reproducidas, quince
+          ventanas OOS cada una, hasta el último decimal—. Adjuntar el radar no movió un solo número, que
+          es la única forma de que la evidencia ya publicada siga hablando del sistema que corre.</p></div>
+    </div>
+    <div class="note"><b>Los defaults no son permisivos: son imposibles de activar.</b> El tono vive en
+      <b>±${N.clip}</b> y la intensidad en <b>[0, ${N.clip}]</b> porque las z están recortadas y las
+      magnitudes de evento también, así que un umbral puesto en el <b>borde exacto</b> no puede bloquear
+      ninguna lectura <i>posible</i> —no solo ninguna probable—. Es la mejora concreta sobre
+      <span class="mono">min_relative_strength = -1.0</span>, que se documentó como «sin filtro» y no lo
+      era: la fuerza relativa no está acotada y un −1.0 es alcanzable.</div>`;
 }
 
 function main(){
   initTheme();initNav();
-  renderOverview();renderSynthetic();renderFidelity();renderTransfer();renderStrategies();
-  renderRanking();renderActivity();renderValidation();renderSessions();renderSignals();
-  renderPaper();renderRoadmap();
+  renderOverview();renderMarket();renderSignals();renderSynthetic();renderFidelity();
+  renderTrade();renderSessions();renderStrategies();renderRanking();renderActivity();
+  renderValidation();renderTransfer();renderPaper();renderRoadmap();
   addEventListener('resize',()=>{clearTimeout(window._rt);window._rt=setTimeout(rerenderCharts,150);});
 }
 main();
@@ -2012,32 +2473,42 @@ SHELL = """
   <aside class="side">
     <div class="brand">AI-Trader <small>dashboard v1</small></div>
     <ul class="nav">
-      <li><button class="active" data-sec="overview">Resumen</button></li>
-      <li><button data-sec="synthetic">Datos sintéticos</button></li>
-      <li><button data-sec="fidelity">Fidelidad</button></li>
-      <li><button data-sec="transfer">Transferencia</button></li>
-      <li><button data-sec="strategies">Estrategias</button></li>
-      <li><button data-sec="ranking">Ranking</button></li>
-      <li><button data-sec="activity">Actividad</button></li>
-      <li><button data-sec="validation">Validación</button></li>
-      <li><button data-sec="sessions">Sesiones</button></li>
-      <li><button data-sec="signals">Señales</button></li>
+      <li class="chap"><b>1 · Resumen</b></li>
+      <li><button class="active" data-sec="overview">Resumen ejecutivo</button></li>
+      <li class="chap"><b>2 · Datos</b></li>
+      <li><button data-sec="market">Captura de datos reales</button></li>
+      <li><button data-sec="signals">Señales externas</button></li>
+      <li><button data-sec="synthetic">Generación sintética</button></li>
+      <li><button data-sec="fidelity">Fidelidad del sintético</button></li>
+      <li class="chap"><b>3 · Trade</b></li>
+      <li><button data-sec="trade">Cómo se ejecuta un trade</button></li>
+      <li><button data-sec="sessions">Sesiones intradía</button></li>
+      <li class="chap"><b>4 · Estrategias</b></li>
+      <li><button data-sec="strategies">Estrategias y observación</button></li>
+      <li><button data-sec="ranking">Recompensa y ranking</button></li>
+      <li><button data-sec="activity">Suelo de actividad</button></li>
+      <li><button data-sec="validation">Validación temporal</button></li>
+      <li><button data-sec="transfer">Ordenación real vs sintético</button></li>
+      <li class="chap"><b>5 · Resultados</b></li>
       <li><button data-sec="paper">Paper trading</button></li>
+      <li class="chap"><b>6 · Limitaciones</b></li>
       <li><button data-sec="roadmap">Evoluciones</button></li>
     </ul>
   </aside>
   <main class="main">
     <button id="themeBtn" class="btn ghost toggle">☾ Oscuro</button>
     <section id="overview" class="section active"></section>
+    <section id="market" class="section"></section>
+    <section id="signals" class="section"></section>
     <section id="synthetic" class="section"></section>
     <section id="fidelity" class="section"></section>
-    <section id="transfer" class="section"></section>
+    <section id="trade" class="section"></section>
+    <section id="sessions" class="section"></section>
     <section id="strategies" class="section"></section>
     <section id="ranking" class="section"></section>
     <section id="activity" class="section"></section>
     <section id="validation" class="section"></section>
-    <section id="sessions" class="section"></section>
-    <section id="signals" class="section"></section>
+    <section id="transfer" class="section"></section>
     <section id="paper" class="section"></section>
     <section id="roadmap" class="section"></section>
   </main>

@@ -36,8 +36,11 @@ backtest/engine.py      Conduce el runner real sobre histórico; corre planes de
 backtest/validation.py  Geometría temporal: walk-forward, CPCV, purga, embargo, auditoría.
 scoring/multiwindow.py  Agrega las ventanas de una muestra en una distribución robusta.
 scoring/transfer_study.py  ¿Ordena el mundo sintético las estrategias como el real?
-signals/                Ingesta de señales externas: catálogo, puerto, adaptadores,
-                        archivo, captura, sonda de profundidad y normalización.
+signals/                Ingesta de señales externas: catálogo, puerto, 17 adaptadores,
+                        archivo, captura, sonda de profundidad, normalización y
+                        codificación de eventos.
+observation/signal_radar.py  Las 17 fuentes -> seis features: tono, intensidad y
+                        cobertura, por activo y de mercado. Nunca bloquea sin datos.
 notifications/          Canal hacia el humano (Telegram) desacoplado del núcleo.
 data/                   Proveedores (Alpaca, CCXT, Polymarket) + caché parquet.
 shared/                 Vocabulario común + `clock.py`, la costura para el backtest.
@@ -364,24 +367,32 @@ en §3.3 de la documentación; se reproduce con:
 .venv\Scripts\python.exe -m ai_trader.backtest.session_study --offline  # solo caché
 ```
 
-### Señales externas: 17 declaradas, 11 conectadas, 7 backtesteables
+### Señales externas: 17 declaradas, 17 conectadas, 10 backtesteables, y ya en la decisión
 
-Las estrategias solo ven **precio y volumen**. El único canal de contexto es el bloque de régimen,
-construido sobre las propias barras. `signals/` es el sitio donde enchufar fuentes externas, y el
-primer lote **continuo** (Tier B: entran como features, nunca como vetos) ya está conectado: 17
-fuentes declaradas que producen 45 features, **11 con adaptador**, **9 con profundidad medida** y
-**7 backtesteables**.
+Hasta hoy las estrategias solo veían **precio y volumen**. `signals/` es el sitio donde se enchufan
+las fuentes externas y está **entero conectado**: 17 fuentes que producen 40 features, **17 con
+adaptador**, **13 con profundidad medida** y **10 backtesteables**. Y desde el 12/08/2026 llegan al
+espacio de observación y a la decisión, **en backtest y en vivo**.
+
+**Todas por la misma vía**, y **ninguna** al espacio de búsqueda del optimizador. El campo `tier`
+describe la naturaleza de la fuente (`A` oferta mecánica, `B` efecto estadístico) y **ya no enruta**:
+lo que decide la codificación es la **cadencia**. La bifurcación anterior —lo mecánico como *veto*,
+lo continuo como feature— se retiró porque su defensa, «muestras de decenas», era un número que
+nadie había medido; al medirlo resultó falso por un factor de diez (**321 ajustes** de dificultad en
+la ventana de la sonda —463 desde 2009—, **621 hacks** fechados desde 2016, el calendario del FOMC
+desde 2017: **917 eventos** *pooled* en `data/signals/event_pool.json`). Donde la muestra sí es
+corta, la razón también está medida: el endpoint de *unlocks* de DefiLlama responde **402 Payment
+Required** y beaconcha.in **401 Unauthorized**. Tampoco hay veto: ninguna señal bloquea, y la guarda
+operativa que eso deja abierta —sancionado, deslistado, mercado detenido— está declarada aparte en
+el roadmap.
 
 Que las tres cifras no coincidan es el contenido, no un hueco. Cada fuente declara `history_from`
 —la primera fecha con dato **comprobado por nosotros**— y `pit` (*forward_capture* /
-*archive_revisable* / *derived_from_price*). Esa comprobación es una operación explícita: la sonda
-descarga la serie, la deriva con el adaptador real y escribe lo que encuentra en
-`data/signals/history_depth.json`; el catálogo solo puede declarar lo que ese registro respalda **y con al
-menos un año medido** (por eso 9 medidas y 7 declarables: la prima P2P y la dispersión de funding
-tienen medición de un día, que es el día que arrancó la captura) — y un test lo verifica. Las que siguen sin fecha lo están por tres motivos
-distintos que conviene no confundir: falta la credencial (Guavy, FRED), la cuota del proveedor se
-agotó (GitHub) o la fuente **no tiene pasado que descargar** y su profundidad la compra el
-calendario (P2P, dispersión de funding).
+*archive_revisable* / *derived_from_price* / *chain_immutable*). Esa comprobación es una operación
+explícita: la sonda descarga la serie, la deriva con el adaptador real y escribe lo que encuentra en
+`data/signals/history_depth.json`; el catálogo solo puede declarar lo que ese registro respalda **y
+con al menos un año de ventana medida** (la prima P2P, la dispersión de *funding* y la lista OFAC
+tienen medición de un día, que es el día que arrancó la captura) — y un test lo verifica.
 
 | fuente | desde (medido) | qué aporta |
 |---|---|---|
@@ -393,6 +404,44 @@ calendario (P2P, dispersión de funding).
 | `etf_flows` | 2024-01-11 | flujos de ETF spot **por emisor** (TFTC, CC BY 4.0) |
 | `github_activity` | 2009-08-23 | commits diarios y contribuidores únicos (asimétrica: la fecha
 la alcanza *contributors*; *commits* solo trae 52 semanas por captura) |
+| `btc_difficulty` | 2014-08-19 | 321 ajustes en la ventana de la sonda; cabeceras de bloque, no revisables |
+| `defillama_hacks` | 2016-06-17 | 621 incidentes fechados: la segunda muestra más grande de las de evento |
+| `macro_calendar` | 2017-02-01 | FOMC e IPC: fechas exactas, publicadas con meses de antelación |
+
+**El radar convierte esas 40 columnas en seis números** (`observation/signal_radar.py`, con la forma
+exacta del proveedor de régimen): **tono**, **intensidad** y **cobertura**, por activo y de mercado.
+El tono suma solo las features con polaridad declarada y razonada una a una; la intensidad no tiene
+signo y es el único eje en el que *momentum* y reversión a la media quieren cosas opuestas —piso en
+la primera como confirmación, techo en la segunda como filtro de catástrofe—; en el tono las dos
+ponen un piso, porque el modo de fallo característico de la reversión es comprar una caída de −3σ
+que es el primer día de un reprecio permanente.
+
+**Una puerta de señales nunca bloquea por falta de datos.** «No hay *unlock*» y «no sé de *unlocks*»
+se escriben con el mismo cero: la **cobertura** es la feature que los distingue, y por debajo del
+25 % de las fuentes del bloque la puerta **no se evalúa** (falla abierta). Ese umbral es una
+constante, no un parámetro: si fuera sorteable, el optimizador podría subirlo hasta convertir el
+radar en un filtro de *disponibilidad de datos*. Los umbrales por defecto están en el **borde exacto**
+del recorte de las z, así que no existe lectura posible que los active — la inercia está demostrada
+por el rango, no confiada.
+
+**Los eventos no pasan por la misma normalización** (`signals/events.py`): una z contra una serie
+que es 99 % ceros no significa nada. Se codifican como proximidad al próximo evento **acotada a 30
+días** (así «no hay nada a la vista» es un 0 finito y no un infinito disfrazado), estela del último
+acotada a 10, magnitud sobre una escala declarada por fuente y recortada a ±4 —el mismo tope que las
+z—, y una marca de si esa entidad *tiene* calendario. Lo que no se anuncia (un *hack*, una sanción)
+tiene la mirada hacia adelante apagada **por código**.
+
+**La compuerta del cableado:** con las puertas en su valor neutro, `validate_multiwindow` devuelve
+los scores **idénticos** a los publicados en `data/transfer/units_ai_v3.json` (cinco unidades
+reproducidas, quince ventanas OOS cada una), y hay un test que lo comprueba. En el mismo movimiento
+se cerró un hueco anterior: `main.py` **no adjuntaba** el proveedor de régimen en producción, así
+que cualquier configuración elegida con filtros de régimen activos se comportaba distinto en paper
+que en el backtest que la seleccionó; un `Mapping` perezoso sobre `MarketDataService` lo arregla sin
+tocar una línea de `observation/regime.py`.
+
+Lo que **no** cierra, y se escribe en vez de callarse: sin el *break-even* de ρ (evolución «canal de
+observación sintético») no hay test de falsación. Limitar los grados de libertad reduce el riesgo de
+sobreajuste; no lo mide.
 
 **Toda feature se publica normalizada, con dos varas** (`signals/normalize.py`): `<feature>_z` es la
 z contra la propia historia de la entidad (expansiva y **causal**, mínimo 20 observaciones) y
@@ -402,7 +451,7 @@ recorte declarado a **±4** y huecos a **NaN**, nunca a 0: un 0 diría «normal,
 una afirmación que no se ha observado. La primera no existe para un listado nuevo; la segunda sí,
 desde el primer día, y por eso hacen falta las dos.
 
-**La captura arranca antes que los adaptadores.** 6 de las 17 fuentes son *forward capture*: nadie
+**La captura arranca antes que los adaptadores.** 5 de las 17 fuentes son *forward capture*: nadie
 publica el pasado de una cola de staking, de un libro P2P ni de la lista SDN de hace tres meses.
 Para ésas la profundidad histórica no depende de escribir mejor código después, sino del calendario.
 Cada día sin capturar es profundidad que no se recupera.
@@ -434,13 +483,16 @@ fuente, Wikimedia contesta 403 al User-Agent genérico y 429 en cuanto hay prisa
 ETF de BTC pero no los de ETH, y FRED ya no sirve oro. Ninguno de esos huecos se rellena con un
 sustituto que significaría otra cosa: se declara y aparece como cobertura cero.
 
-Nada está cableado a las estrategias ni al runner.
+El radar está **apagado por defecto** (`[signals] enabled = false` en `config/default.toml`). Sin
+credenciales, sin archivo o con medio catálogo caído el sistema arranca igual: radar vacío, cobertura
+0, puertas saltadas y un aviso explícito. En esa sección no hay ningún umbral, a propósito.
 
 ```powershell
 .venv\Scripts\python.exe -m ai_trader.cli signals catalog   # las 17 fuentes declaradas
 .venv\Scripts\python.exe -m ai_trader.cli signals capture   # archiva lo que devuelvan hoy
 .venv\Scripts\python.exe -m ai_trader.cli signals depth     # MIDE la profundidad y compara con lo declarado
 .venv\Scripts\python.exe -m ai_trader.cli signals features  # panel normalizado desde el archivo (sin red)
+.venv\Scripts\python.exe -m ai_trader.cli signals events    # eventos pooled por fuente + radar de un símbolo
 .venv\Scripts\python.exe -m ai_trader.cli signals audit     # cobertura de entidades y archivo
 ```
 

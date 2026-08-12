@@ -3,7 +3,7 @@ PUBLICACION NORMALIZADA: la unica forma en que una senal sale de aqui.
 
 EL PROBLEMA, QUE NO ES ESTETICO
 -------------------------------
-Las once fuentes conectadas producen numeros que no se pueden ni sumar ni comparar: 90.000
+Las fuentes continuas producen numeros que no se pueden ni sumar ni comparar: 90.000
 millones de dolares de oferta de stablecoins, 3,4 puntos basicos de dispersion de funding,
 23.000 visitas, una prima del 12%, 47 commits. Un consumidor que reciba eso crudo tiene dos
 salidas y las dos son malas: inventarse un factor de escala por columna, o dejar que la

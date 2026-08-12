@@ -532,6 +532,98 @@ def run_ranking(store: SyntheticStore) -> dict:
     return result
 
 
+def collect_market() -> dict:
+    """Capitulo 2.1: la captura de datos REALES.
+
+    No corre nada: son constantes del sistema que opera (universo, proveedor, cache y
+    lookback). Es la vista que faltaba -- el dashboard empezaba por el mundo sintetico,
+    como si el dato real no existiera, cuando toda la evidencia externa sale de el."""
+    from ai_trader.data.cache import CACHE_DIR
+    from ai_trader.data.providers.ccxt_crypto import CCXTCryptoConfig
+    from ai_trader.synthetic.universe import DEFAULT_UNIVERSE
+
+    config = load_config(ROOT / "config" / "default.toml")
+    ccxt_config = CCXTCryptoConfig()
+    symbols = list(config.runner.symbols)
+    return {
+        "symbols": symbols,
+        "n_symbols": len(symbols),
+        "exchange": ccxt_config.exchange_id,
+        "batch": ccxt_config.max_batch_size,
+        "timeout_ms": ccxt_config.timeout_ms,
+        "lookback_days": config.runner.lookback_days,
+        "cache_dir": str(CACHE_DIR).replace("\\", "/"),
+        "n_synthetic_assets": len(DEFAULT_UNIVERSE.assets),
+        "providers": [
+            {"asset_class": "Criptomonedas", "provider": f"ccxt · {ccxt_config.exchange_id}",
+             "state": "operado",
+             "note": "El universo que se opera. Cotiza 24/7: una barra por día natural."},
+            {"asset_class": "Renta variable", "provider": "alpaca", "state": "aparcado",
+             "note": "Proveedor implementado y sin estrategia detrás. La clase de activo está "
+                     "aparcada a propósito."},
+            {"asset_class": "Mercados de predicción", "provider": "polymarket · gamma + CLOB",
+             "state": "sin histórico",
+             "note": "Precio vivo y libro, pero no hay OHLCV histórico: no se puede backtestear, "
+                     "solo capturar hacia adelante."},
+        ],
+    }
+
+
+def _usd_es(value: float) -> str:
+    """Importe con separador de miles espanol: 1.000 $ y no 1,000 $."""
+    return "{:,.0f} $".format(value).replace(",", ".")
+
+
+def collect_trade() -> dict:
+    """Capitulo 3: las constantes que gobiernan UN trade, leidas del config operado.
+
+    Riesgo, coste y capacidad van juntos porque son la misma decision vista en tres
+    sitios; separarlos es lo que permitia describir un trade que el sistema no ejecuta."""
+    from ai_trader.backtest.engine import DEFAULT_STARTING_EQUITY
+
+    config = load_config(ROOT / "config" / "default.toml")
+    slippage = config.execution.slippage
+    return {
+        "starting_equity": DEFAULT_STARTING_EQUITY,
+        "fee_rate": config.execution.fee_rate,
+        "slippage_bps": config.execution.slippage_bps,
+        "max_participation": config.execution.max_participation,
+        "vol_coef": slippage.vol_coef,
+        "impact_coef": slippage.impact_coef,
+        "max_slippage_bps": slippage.max_slippage_bps,
+        # Formato espanol para las cifras que se publican tal cual (el JS no puede
+        # reformatear un string ya montado).
+        "risk": [
+            ["Confianza mínima por operación", f"{config.risk.min_confidence_per_trade:.2f}",
+             "Que una señal débil abra posición solo porque no había nada mejor."],
+            ["Tamaño máximo por posición", _usd_es(config.risk.max_position_size_usd),
+             f"Que un trade concentre la cuenta. Con equity conocido manda además la fracción "
+             f"de riesgo ({config.risk.risk_fraction_per_trade:.0%} del capital), y el tamaño "
+             f"compone."],
+            ["Exposición máxima por símbolo",
+             _usd_es(config.risk.max_symbol_exposure_usd),
+             "Que varias señales del mismo activo se acumulen en una apuesta única."],
+            ["Exposición máxima total", _usd_es(config.risk.max_total_exposure_usd),
+             "Que el sistema despliegue más de lo que la cuenta soporta."],
+            ["Posiciones abiertas simultáneas", str(config.risk.max_open_positions),
+             "Que la cartera se convierta en un índice por goteo."],
+            ["Pérdida diaria máxima", _usd_es(config.risk.max_daily_loss_usd),
+             "Que un mal día siga abriendo posiciones nuevas."],
+            ["Stop / objetivo por defecto",
+             f"−{config.risk.default_stop_loss_pct:.0f}% / +{config.risk.default_take_profit_pct:.0f}%",
+             f"Que una posición quede sin salida definida. La estrategia puede proponer los "
+             f"suyos, nunca más lejos de {config.risk.max_stop_distance_pct:.0f}%."],
+            ["Vida máxima de una posición", f"{config.runner.max_holding_days} días",
+             "Que una posición sin desenlace ocupe exposición indefinidamente. Es el mismo "
+             "número que fija la purga de la validación temporal."],
+            ["Enfriamiento por símbolo", f"{config.runner.symbol_cooldown_hours} h",
+             "Que el sistema reabra lo que acaba de cerrar."],
+            ["Operaciones por ciclo", str(config.runner.max_trades_per_cycle),
+             "Que un ciclo raro dispare una ráfaga."],
+        ],
+    }
+
+
 def collect_costs(store: SyntheticStore) -> dict:
     """Lo que cuesta EJECUTAR en cada mercado del universo.
 
@@ -1049,14 +1141,24 @@ def _etf_dispersion(store) -> dict:
 
 def collect_signals() -> dict:
     """
-    La plataforma de ingesta de senales: catalogo, mapeo de entidades, archivo crudo y
-    —lo que cambia la lectura de todo lo demas— la PROFUNDIDAD MEDIDA de cada fuente.
+    La plataforma de ingesta de senales: catalogo, mapeo de entidades, archivo crudo,
+    la PROFUNDIDAD MEDIDA de cada fuente y —desde el 2026-08-12— el RADAR que las lleva a
+    la decision.
 
-    Todo se lee de disco y del registro de mediciones (`data/signals/history_depth.json`);
-    nada de esto toca red al generar el dashboard. La cifra que hay que mirar no es cuantas
-    fuentes hay declaradas, sino cuantas tienen `history_from` MEDIDO: esas son las unicas
-    que pueden entrar en un backtest, y el resto solo existen hacia adelante.
+    Todo se lee de disco y del registro de mediciones (`data/signals/history_depth.json`,
+    `data/signals/event_pool.json`); nada de esto toca red al generar el dashboard. Las
+    cifras que hay que mirar no son cuantas fuentes hay declaradas, sino cuantas tienen
+    `history_from` MEDIDO —esas son las unicas que pueden entrar en un backtest— y cuantos
+    EVENTOS POOLED hay detras de las de evento, que es lo que sustituyo a la creencia de que
+    eran "muestras de decenas".
     """
+    from ai_trader.observation.signal_radar import (
+        ASSET_SIGNAL_FEATURES,
+        MARKET_SIGNAL_FEATURES,
+        MIN_SIGNAL_COVERAGE,
+        POLARITY,
+        is_market_scoped,
+    )
     from ai_trader.signals.audit import audit_archive, audit_entities
     from ai_trader.signals.capture import (
         CAPTURE_REPORT,
@@ -1066,6 +1168,7 @@ def collect_signals() -> dict:
     )
     from ai_trader.signals.catalog import CATALOG, catalog_summary
     from ai_trader.signals.depth import DEPTH_LEDGER, load_ledger
+    from ai_trader.signals.events import EVENT_POOL_REPORT, is_event_source, load_pool_report
     from ai_trader.signals.normalize import normalization_spec
     from ai_trader.signals.source import connected_keys
     from ai_trader.signals.store import SignalStore
@@ -1084,14 +1187,31 @@ def collect_signals() -> dict:
     archive_by_key = {row.source_key: row for row in archive.sources}
     etf = _etf_dispersion(SignalStore(ROOT / "data" / "signals_raw"))
 
+    pool = load_pool_report(ROOT / EVENT_POOL_REPORT) or {}
+    pool_by_key = pool.get("sources") or {}
+
     return {
         "summary": {
             **catalog_summary(),
             "n_connected": len(connected),
             "n_measured": sum(1 for r in depth_by_key.values() if r.get("first_day")),
+            "pooled_events": pool.get("pooled_events_total"),
         },
         "universe": universe,
         "normalization": normalization_spec(),
+        # El radar: como llegan las diecisiete fuentes a una decision, y con que reglas.
+        "radar": {
+            "asset_features": list(ASSET_SIGNAL_FEATURES),
+            "market_features": list(MARKET_SIGNAL_FEATURES),
+            "min_coverage": MIN_SIGNAL_COVERAGE,
+            "n_market_sources": sum(1 for s in CATALOG if is_market_scoped(s)),
+            "n_asset_sources": sum(1 for s in CATALOG if not is_market_scoped(s)),
+            "n_event_sources": sum(1 for s in CATALOG if is_event_source(s)),
+            "n_continuous_sources": sum(1 for s in CATALOG if not is_event_source(s)),
+            "n_with_polarity": len(POLARITY),
+            "event_spec": pool.get("spec"),
+        },
+        "event_pool": pool_by_key,
         "etf_dispersion": etf,
         "depth_measured_at": (ledger.get("generated_at") or "")[:10] or None,
         "sources": [
@@ -1111,6 +1231,12 @@ def collect_signals() -> dict:
                 "n_entities": len(entities_for(s, universe)),
                 "connected": s.key in connected,
                 "notes": s.notes,
+                # Como entra al espacio de observacion: la codificacion la decide la
+                # CADENCIA, y el bloque (mercado o activo) sale del alcance del catalogo.
+                "encoding": "evento" if is_event_source(s) else "continua",
+                "block": "mercado" if is_market_scoped(s) else "activo",
+                "pooled_events": (pool_by_key.get(s.key) or {}).get("pooled_events"),
+                "announced": (pool_by_key.get(s.key) or {}).get("announced"),
                 # Lo MEDIDO, al lado de lo declarado: sin las dos cosas juntas no se ve la
                 # diferencia entre "no hay historia" y "nadie la ha comprobado".
                 "measured_from": (depth_by_key.get(s.key) or {}).get("first_day"),
@@ -1163,6 +1289,8 @@ def collect_roadmap() -> list[dict]:
 
 def build() -> None:
     store = SyntheticStore(ROOT / "data" / "synthetic")
+    logger.info("Captura de datos reales y constantes del trade...")
+    market, trade = collect_market(), collect_trade()
     logger.info("Recolectando datos sinteticos...")
     synthetic = collect_synthetic(store)
     logger.info("Stylized facts ai_v1 vs ai_v2...")
@@ -1187,6 +1315,8 @@ def build() -> None:
 
     data = {
         "kpis": kpis,
+        "market": market,
+        "trade": trade,
         "synthetic": synthetic,
         "facts": facts,
         "fidelity": fidelity,
@@ -1240,6 +1370,42 @@ def build() -> None:
 # pareada. Sacar el sintetico del criterio de seleccion pasa a ser la CONTINGENCIA, no la
 # conclusion automatica.
 #
+# ACTUALIZACION 2026-08-12 (2): EL RADAR UNIFICADO ESTA HECHO, y lo primero que hizo fue
+# tumbar la creencia que sostenia el diseno anterior. Las seis fuentes de evento tienen
+# adaptador y la sonda las midio: 463 ajustes de dificultad desde 2009 (321 dentro de la
+# ventana de doce anos que pide la sonda), 621 hacks fechados desde 2016, el calendario del
+# FOMC desde 2017. "Muestras de decenas" era falso por un factor de diez, y donde SI es
+# corta la muestra la razon medida es otra: el endpoint de unlocks de DefiLlama pasa a ser
+# de pago (402) y beaconcha.in pide credencial (401). 917 eventos pooled publicados en
+# data/signals/event_pool.json.
+#
+# Las diecisiete fuentes llegan hoy a la decision por UNA sola via
+# (observation/signal_radar.py): seis numeros —tono, intensidad y cobertura, por activo y de
+# mercado— con las continuas normalizadas por las dos z y las de evento codificadas aparte
+# (dias-al-evento ACOTADO, magnitud sobre su escala declarada, ventana activa), porque una z
+# contra una serie que es 99% ceros no significa nada. La cobertura es la feature que
+# distingue "no hay evento" de "no se de eventos", y con ella el invariante: ninguna puerta
+# bloquea por falta de datos. Nada entro en search_space y la COMPUERTA se cumplio:
+# validate_multiwindow devuelve los scores publicados en units_ai_v3.json, identicos hasta el
+# ultimo decimal, en las cinco unidades reproducidas.
+#
+# De paso se cerro el hueco del regimen en vivo (main.py adjunta los dos ensambladores con un
+# Mapping perezoso sobre MarketDataService, sin tocar una linea de regime.py) y NO se
+# construyo ningun veto: nada impide operar un activo sancionado o deslistado, y esa guarda
+# sigue como entrada propia del roadmap. Lo que esta evolucion NO cierra sube al puesto 2: sin
+# el break-even de rho no hay test de falsacion, asi que una feature de muestra corta puede
+# estar sobreajustada y el sistema no tiene forma de saberlo.
+#
+# ACTUALIZACION 2026-08-12: las dos evoluciones que ocupaban los puestos 1 y 2 -las senales
+# mecanicas como elegibilidad, y el radar de features con su cableado- se FUSIONAN en una
+# sola, y de paso cambian de contenido. El motivo no es de agenda sino de diseno: la
+# separacion en dos puertas se apoyaba en un tamano de muestra declarado y nunca medido (ver
+# "UNA SOLA VIA" mas abajo), y mantener dos caminos distintos hacia la decision obligaba a
+# elegir el camino de cada fuente ANTES de saber cuanta historia tiene. Ahora el orden es el
+# contrario: se mide la profundidad, y todas las features fluyen igual al motor. En el mismo
+# movimiento entra una evolucion NUEVA -el canal de observacion sintetico con barrido de rho-
+# que es la que traera el test de falsacion que esta fusion deja pendiente.
+#
 # ACTUALIZACION 2026-08-11 (4): el primer lote CONTINUO (Tier B) esta conectado: 11 de las
 # 17 fuentes tienen adaptador (`src/ai_trader/signals/adapters/`), 9 tienen profundidad MEDIDA
 # y 7 son backtesteables. Las tres cifras se separan a proposito: la profundidad se mide en
@@ -1270,13 +1436,31 @@ def build() -> None:
 # data/activity/), el gate exige las dos cosas y el ranking se publica con y sin suelo.
 # Ninguna de las dos toca el generador, que sigue siendo el problema de fondo.
 #
-# DOS PUERTAS, y esta separacion es la que impide sobreajustar: las senales MECANICAS
-# (unlocks, colas de staking, mNAV<1, mapas de liquidacion) tienen muestras de decenas, asi
-# que entran como ELEGIBILIDAD en el runner y NUNCA en search_space -- el CEM no puede
-# alcanzar ni [risk] ni las guardas del runner, luego la imposibilidad de construir una
-# estrategia sobre catorce observaciones es una propiedad estructural, no una convencion.
-# Las senales ESTADISTICAS (dispersion de funding, atencion geografica, ratios de fees,
-# flujos de ETF) si entran como features continuas, esperando efectos pequenos y decadentes.
+# UNA SOLA VIA (decision del 2026-08-12, sustituye a las "dos puertas"). Durante una fase el
+# plan fue bifurcar: las senales MECANICAS (unlocks, colas de staking, mNAV<1, mapas de
+# liquidacion) entrarian como ELEGIBILIDAD en el runner -una guarda que veta operar- y solo
+# las ESTADISTICAS como features. Se retira, y el motivo es que la defensa que la sostenia
+# -"muestras de decenas, un CEM suelto sobre catorce observaciones construye una estrategia
+# preciosa y falsa"- descansaba en un numero QUE NADIE HA MEDIDO. Es una afirmacion de
+# folleto, de la misma clase que los history_from que la sonda tuvo que corregir uno por uno,
+# y donde se puede comprobar a mano no se sostiene: el ajuste de dificultad de Bitcoin son
+# ~900 epocas reconstruibles desde las cabeceras de bloque.
+#
+# Asi que TODAS las senales fluyen al mismo sitio: features normalizadas al espacio de
+# observacion, en backtest Y en vivo, con la codificacion como unica diferencia (evento
+# discreto -> dias-al-evento acotado y magnitud sobre float/ADV; serie continua -> las dos
+# varas de normalize.py). Lo que reemplaza a la puerta son dos cosas medibles y una que
+# falta, y la que falta se declara: (i) NINGUNA feature entra en search_space -- los umbrales
+# son constantes declaradas, asi que la huella de las 16 configuraciones publicadas no se
+# mueve; (ii) subir N por POOLING del evento normalizado, y medir la profundidad del Tier A
+# con la sonda en vez de declararla; (iii) lo que falta es el test de falsacion -- el
+# break-even de rho, con rho=0 como control, que es la evolucion 'Canal de observacion
+# sintetico'. Hasta que exista, el sistema puede sobreajustar una feature de muestra corta y
+# no tiene forma de saberlo.
+#
+# Y NO HAY VETO: se elimina el concepto de puerta de elegibilidad por senales. Consecuencia
+# asumida y escrita, no silenciada: nada impide hoy abrir posicion en un activo sancionado o
+# deslistado, y esa guarda -operativa, no de alfa- queda como entrada propia del roadmap.
 #
 # FOCO: cripto. Renta variable y mercados de prediccion quedan en segundo plano de forma
 # EXPLICITA (grupo 'segundo-plano'), no por olvido: toda la evidencia empirica del repo
@@ -1287,188 +1471,50 @@ ROADMAP_GROUPS = [
     {
         "key": "ahora",
         "title": "Ahora",
-        "subtitle": "El sustrato es fiel pero NO ordena (medido el 2026-08-11). La hipotesis "
-                    "que se persigue antes de dar el generador por perdido es que el cuello de "
-                    "botella no es el generador sino el ESPACIO DE INPUTS: hoy las estrategias "
-                    "solo ven precio y volumen. Las dos mediciones baratas que condicionaban la "
-                    "lectura ya estan hechas -la ventana ciega (vista Sesiones) y el suelo de "
-                    "actividad del ranking (vista Actividad)-, y la plataforma de ingesta tambien "
-                    "(vista Senales): esqueleto, ONCE fuentes continuas conectadas y su "
-                    "profundidad MEDIDA fuente a fuente. Lo que queda aqui es la puerta de "
-                    "ELEGIBILIDAD para las mecanicas y el cableado al espacio de observacion, con "
-                    "el reloj de la captura corriendo en paralelo. Nada de lo que se puntue "
-                    "mientras tanto vale mas que el juez que lo puntua.",
+        "subtitle": "Dos frentes que no compiten entre si. Arrancar el PAPER TRADING, porque compra "
+                    "lo único que no se puede comprimir después: tiempo de calendario. Y el barrido "
+                    "de rho, que es el TEST DE FALSACIÓN que dejó abierto el radar de señales -hoy "
+                    "limitar los grados de libertad reduce el riesgo de sobreajuste, pero no lo "
+                    "mide.",
     },
     {
         "key": "despues",
         "title": "Despues",
-        "subtitle": "Rigor del juez: potencia estadistica, fugas menores y transparencia de los "
-                    "descuentos. Barato, y necesario antes de creerse un ranking.",
+        "subtitle": "Ampliar el espacio de inputs en los dos mundos y afinar el rigor del juez. Es "
+                    "lo que convierte el 'no transfiere' de la vista Ordenación en una conclusión "
+                    "en vez de un artefacto del instrumento con el que se midió.",
     },
     {
         "key": "no-prioritario",
         "title": "No prioritario",
-        "subtitle": "Trabajo legitimo que NO se aborda todavia. Anadir candidatos a un juez en el "
-                    "que aun no se confia solo multiplica el problema de multiples pruebas.",
+        "subtitle": "Trabajo legítimo que no se aborda todavía: añadir candidatos a un juez en el "
+                    "que aún no se confía solo multiplica el problema de múltiples pruebas.",
     },
     {
         "key": "segundo-plano",
         "title": "Segundo plano (no cripto)",
-        "subtitle": "Renta variable y mercados de prediccion. Aparcados a proposito hasta que el "
-                    "bucle cripto -sintetico, real, paper- este cerrado y medido.",
+        "subtitle": "Renta variable y mercados de predicción, aparcados a propósito hasta que el "
+                    "bucle cripto -sintético, real, paper- esté cerrado y medido.",
     },
 ]
 
 ROADMAP = [
     {
-        "id": "signals-tier-a-eligibility",
-        "rank": 1,
-        "group": "ahora",
-        "priority": "critica",
-        "title": "Senales mecanicas (Tier A) como ELEGIBILIDAD, nunca como alfa",
-        "line": "Inputs/Riesgo", "status": "pendiente", "impact": "alto", "effort": "medio",
-        "evidence": "Los eventos mas informativos (unlocks, colas de staking, deslistados) tienen "
-                    "muestras de DECENAS. Y el sistema no tiene hoy ningun concepto de "
-                    "elegibilidad: grep de eligib|veto|blacklist|blackout|halt en src/ no "
-                    "devuelve nada. Las unicas guardas por simbolo son la posicion abierta y el "
-                    "cooldown (app/runner.py:229-235).",
-        "why": "Un motor RL sobre features de N pequeno sobreajusta de forma espectacular: si el "
-               "optimizador las descubre libre, construye una estrategia preciosa sobre catorce "
-               "observaciones. La defensa no es una advertencia en un docstring, es "
-               "ARQUITECTONICA -- estas senales entran como guarda de elegibilidad en el runner y "
-               "no como features. Y la garantia se hereda gratis: el CEM no puede alcanzar ni "
-               "[risk] ni las guardas del runner (scoring/optimize.py solo reconstruye "
-               "`strategies`, y search_space.SPACES contiene exclusivamente parametros de "
-               "estrategia), asi que la imposibilidad de sobreajustarlas es una propiedad del "
-               "sistema, no una convencion que haya que defender.",
-        "prompt": (
-            "Proyecto ai-trader (Python). Con el esqueleto de src/ai_trader/signals/ construido, "
-            "conecta el lote de senales MECANICAS y creales una puerta propia.\n"
-            "\n"
-            "FUENTES (oferta calendarizada y determinista, todas gratis):\n"
-            "1. Unlocks/vesting via la API de emisiones de DefiLlama. Lo valioso NO es 'hay "
-            "unlock' (algo explotado) sino el desbloqueo como PORCENTAJE DEL FLOAT CIRCULANTE Y "
-            "DEL ADV: un 3% sobre un token con 40 dias de volumen en circulacion es un evento; el "
-            "mismo 3% sobre uno liquido no lo es. Casi nadie lo normaliza asi.\n"
-            "2. Cola de salida del staking de Ethereum (beaconcha.in, gratis): oferta futura con "
-            "FECHA CONOCIDA dias antes. Equivalentes en Solana (activacion/desactivacion por "
-            "epoca) y Cosmos (unbonding 21 dias).\n"
-            "3. Ajuste de dificultad y hashprice de Bitcoin (mempool.space, gratis sin auth): "
-            "cada 2016 bloques con fecha estimable. Hashprice comprimido implica venta forzada de "
-            "mineros.\n"
-            "4. Hacks y exploits fechados (DefiLlama), lista OFAC SDN legible por maquina, y un "
-            "calendario macro (FOMC, CPI, vencimientos).\n"
-            "\n"
-            "LA PUERTA (signals/eligibility.py): un TradabilityProvider consultado como UNA GUARDA "
-            "MAS en TradingRunner._process_symbol, junto al cooldown por simbolo, ANTES de pedir "
-            "senal. NO dentro de RiskEngine, y las tres razones importan: (i) RiskEngine no tiene "
-            "reloj ni colaboradores -- es una funcion pura de (limites, senal, cartera) y esa "
-            "pureza vale; (ii) en modo equity-aware, que es SIEMPRE el del backtest, tres de sus "
-            "guardas no se ejecutan (risk/engine.py:108-119), asi que un veto ahi correria el "
-            "riesgo de estar silenciosamente inactivo en toda la evidencia; (iii) "
-            "_symbol_in_cooldown (app/runner.py:489-502) es el precedente estructural exacto: la "
-            "unica guarda que consulta reloj e historial por simbolo y descarta antes de pedir "
-            "senal, y ademas es mas barato porque evita cargar barras y correr estrategias.\n"
-            "\n"
-            "CUATRO PROPIEDADES NO NEGOCIABLES:\n"
-            "1. NUNCA en search_space.py. Anadir una dimension al hipercubo latino no anade un "
-            "campo a las 16 configuraciones publicadas: candidate_specs hace "
-            "rng.random((n, space.dim)), asi que las SUSTITUYE por 16 objetos distintos. Congela "
-            "la huella con un test contra data/transfer/report_ai_v3.json ANTES de tocar nada.\n"
-            "2. Umbrales DECLARADOS y razonados en codigo (p.ej. desbloqueo > X% del ADV en los "
-            "proximos N dias), nunca optimizados.\n"
-            "3. Falla abierta: sin datos no hay veto. Un fallo del proveedor no puede parar el "
-            "trading.\n"
-            "4. EL VETO SE MIDE. Hoy un rechazo es una cadena de texto libre en "
-            "RiskDecision.reason (risk/engine.py:239-241): no hay taxonomia ni recuento, asi que "
-            "un veto que nunca dispara y uno que dispara siempre son indistinguibles. Cada veto "
-            "lleva source_key estructurado y se acumula en SymbolCycleDiagnostics (que ya existe) "
-            "para reportar cuantas veces veto cada fuente y sobre que simbolos. Sin esa cifra, "
-            "una regla mecanica es una creencia.\n"
-            "\n"
-            "El orden de las guardas de _process_symbol no esta testeado hoy: congelalo con un "
-            "test ANTES de insertar la nueva. Tests + .venv\\Scripts\\python.exe (poetry run esta "
-            "roto) + ruff. Regenera dashboard y docs."
-        ),
-    },
-    {
-        "id": "signal-radar-wiring",
-        "rank": 2,
-        "group": "ahora",
-        "priority": "alta",
-        "title": "Radar de features y cableado en backtest Y en vivo (cierra el hueco del regimen)",
-        "line": "Inputs", "status": "pendiente", "impact": "alto", "effort": "medio",
-        "evidence": "attach_regime_provider NO se llama en produccion: main.py::build_runner "
-                    "construye las estrategias y no adjunta nada, asi que las puertas "
-                    "cross-sectional (min_breadth, min/max_relative_strength) solo existen en "
-                    "backtest. Cualquier configuracion que el CEM elija con esos filtros activos "
-                    "se comporta distinto en paper que en backtest.",
-        "why": "Es donde las senales llegan de verdad a la decision. Y hay un regalo: "
-               "MarketRegimeProvider solo usa .get(symbol) e iteracion sobre el dict de barras, "
-               "asi que un Mapping perezoso sobre MarketDataService lo hace funcionar en vivo SIN "
-               "TOCAR observation/regime.py ni una linea -- el mismo adaptador cierra el hueco "
-               "que ya arrastra el regimen y sirve al radar nuevo. Cerrar los dos a la vez sale "
-               "casi gratis y evita que el sistema tenga dos comportamientos segun donde corra.",
-        "prompt": (
-            "Proyecto ai-trader (Python). Con las fuentes Tier B ya ingiriendo, cablea el radar a "
-            "las estrategias, en backtest y en vivo.\n"
-            "\n"
-            "(a) PROVIDER (observation/signal_radar.py) con la forma EXACTA de "
-            "observation/regime.py::MarketRegimeProvider: features(symbol) -> dict[str, float], "
-            "memo por el 'ahora' del reloj, y anti-look-ahead propio importando visible_cutoff de "
-            "shared/clock.py. Separa en codigo, no en un comentario, las features de MERCADO "
-            "(iguales para todos los simbolos ese dia) de las de ACTIVO: es un invariante "
-            "testeable y el generador sintetico lo necesitara.\n"
-            "(b) LA TRAMPA DE LOS TRES ESTADOS. La convencion del repo es 'feature no disponible "
-            "= 0.0 neutro' (observation/features.py:58-63), y aqui es PELIGROSA: tono 0 es "
-            "neutral, pero 'no tengo datos' NO es 'no hay senal'. Anade una feature de COBERTURA "
-            "en [0,1] que los distinga, y con ella el invariante central: una puerta de senales "
-            "NUNCA bloquea por falta de datos -- sin cobertura suficiente no se evalua (falla "
-            "abierta). Implementa el umbral como constante NO configurable, para que ningun "
-            "sorteo del CEM convierta el radar en un filtro de disponibilidad de datos.\n"
-            "(c) PUERTAS en crypto_momentum y mean_reversion siguiendo el patron de cinco piezas "
-            "del regimen: attach_*_provider duck-typed, params con DEFAULT INERTE validados en "
-            "__post_init__, puerta _X_active() consultada DESPUES de la de regimen. Fija los "
-            "neutros en el borde exacto del recorte de las z, de modo que la inercia del default "
-            "quede DEMOSTRADA y no confiada (mejora sobre min_relative_strength=-1.0, que no esta "
-            "fuera del rango alcanzable). Ojo con la polaridad: momentum y mean-reversion no "
-            "quieren lo opuesto de TODAS las features -- el tono es un piso en ambas (en momentum "
-            "como confirmacion, en mean-reversion como filtro de catastrofe: su modo de fallo "
-            "caracteristico es comprar una caida de -3 sigma que es el primer dia de un reprecio "
-            "permanente), y solo la intensidad es el eje genuinamente opuesto.\n"
-            "(d) CABLEADO EN LOS DOS SITIOS. En backtest, backtest/engine.py: __init__ y "
-            "from_bars aceptan las senales, y se adjuntan en _build_runner:411-425 con el mismo "
-            "bucle duck-typed. En vivo, main.py:58-89: crea un LiveUniverseBars(Mapping) sobre "
-            "MarketDataService y adjunta el proveedor de REGIMEN (que hoy no se adjunta, es un "
-            "hueco conocido) y el de senales. regime.py no deberia necesitar ni una linea de "
-            "cambio.\n"
-            "(e) CONFIG: seccion [signals] nueva con enabled=false por defecto. El splat de "
-            "config.py es estricto, asi que hace falta dataclass + campo en AppConfig + linea en "
-            "load_config. Sin credenciales el sistema tiene que ARRANCAR IGUAL: radar vacio, "
-            "cobertura 0, todas las puertas se saltan, warning explicito.\n"
-            "\n"
-            "COMPUERTA: con las puertas neutras, validate_multiwindow tiene que devolver scores "
-            "IDENTICOS a los publicados en data/transfer/units_ai_v3.json. Si no coinciden, para: "
-            "algo no es lo que creemos. Tests + .venv\\Scripts\\python.exe (poetry run esta roto) "
-            "+ ruff. Regenera dashboard y docs."
-        ),
-    },
-    {
         "id": "paper-trading-live",
-        "rank": 3,
+        "rank": 1,
         "group": "ahora",
         "priority": "alta",
         "title": "Poner el paper trading a correr en vivo (y la vista del dashboard que lo lea)",
         "line": "Live", "status": "pendiente", "impact": "alto", "effort": "bajo",
-        "evidence": "Cero desarrollo pendiente para arrancar: runner, motor de riesgo, ejecucion "
+        "evidence": "Cero desarrollo pendiente para arrancar: runner, motor de riesgo, ejecución "
                     "en papel con microestructura y bot de Telegram existen y funcionan (ciclo "
-                    "automatico cada 900 s, estado persistido en data/runtime_state.json).",
-        "why": "No compite con lo demas: se lanza YA, en paralelo, porque compra la unica cosa "
-               "que no se puede comprimir despues -tiempo de calendario. La divergencia "
-               "live-vs-backtest necesita meses para ser medible, asi que cada semana que el bot "
-               "no corre es una semana perdida al final del proyecto. Ademas, corriendo en vivo "
-               "es cuando Polymarket empieza a generar el historico de midpoints que hoy no "
-               "existe, que es la unica via barata hacia un backtest de mercados de prediccion. "
+                    "automático cada 900 s, estado persistido en data/runtime_state.json).",
+        "why": "No compite con lo demás: se lanza YA, en paralelo, porque compra la única cosa "
+               "que no se puede comprimir después -tiempo de calendario. La divergencia "
+               "live-vs-backtest necesita meses para ser medible, así que cada semana que el bot "
+               "no corre es una semana perdida al final del proyecto. Además, corriendo en vivo "
+               "es cuando Polymarket empieza a generar el histórico de midpoints que hoy no "
+               "existe, que es la única vía barata hacia un backtest de mercados de predicción. "
                "Con el universo actual y sin tocar tickers.",
         "prompt": (
             "Proyecto ai-trader (Python). El sistema ya opera en paper y no le falta desarrollo "
@@ -1521,19 +1567,19 @@ ROADMAP = [
     },
     {
         "id": "signals-expensive-batch",
-        "rank": 5,
+        "rank": 4,
         "group": "despues",
         "priority": "media",
-        "title": "Lote caro de senales: apalancamiento observable, opciones, atencion geografica y legal",
+        "title": "Lote caro de señales: apalancamiento observable, opciones, atención geográfica y legal",
         "line": "Inputs", "status": "pendiente", "impact": "alto", "effort": "alto",
         "evidence": "Hyperliquid publica ON-CHAIN el libro completo y las posiciones de todos los "
                     "traders, con API gratuita y sin KYC (POST api.hyperliquid.xyz/info). Ningun "
-                    "CEX da eso: en Binance ves funding y OI agregado, aqui ves la DISTRIBUCION.",
-        "why": "Son fuentes con senal genuina cuya barrera no es el precio sino la friccion de "
-               "ingenieria: parsear filings, reconstruir estado on-chain, normalizar APIs mal "
+                    "CEX da eso: en Binance ves funding y OI agregado, aquí ves la DISTRIBUCIÓN.",
+        "why": "Son fuentes con señal genuina cuya barrera no es el precio sino la fricción de "
+               "ingeniería: parsear filings, reconstruir estado on-chain, normalizar APIs mal "
                "documentadas. Nadie lo hace porque es trabajo sucio, no porque sea secreto -- que "
-               "es exactamente lo que las mantiene sin arbitrar. Hyperliquid es la mas valiosa: "
-               "convierte las cascadas de liquidacion de fenomeno impredecible en algo con "
+               "es exactamente lo que las mantiene sin arbitrar. Hyperliquid es la más valiosa: "
+               "convierte las cascadas de liquidación de fenómeno impredecible en algo con "
                "estructura conocida por adelantado.",
         "prompt": (
             "Proyecto ai-trader (Python). Sobre el puerto de src/ai_trader/signals/ ya "
@@ -1544,10 +1590,11 @@ ROADMAP = [
             "la media), MAPA DE PRECIOS DE LIQUIDACION (donde estan los clusters y cuanto "
             "notional hay en cada nivel), y concentracion (que fraccion del OI esta en 5 "
             "cuentas: un perp con OI concentrado es un perp con riesgo de gap). El mapa de "
-            "liquidacion es Tier A (elegibilidad); la distribucion y la concentracion son Tier B.\n"
+            "liquidacion se codifica como EVENTO (distancia al cluster mas cercano, notional "
+            "acumulado hasta el); la distribucion y la concentracion, como series continuas.\n"
             "2. DERIBIT: skew de 25 delta, DVOL y term structure -- de lo mas informativo y "
             "gratuito que existe. Y el calendario de vencimientos mensuales/trimestrales con OI "
-            "por strike, que es Tier A por ser fechas fijas.\n"
+            "por strike, que son fechas fijas: dias-al-evento exactos y no revisables.\n"
             "3. LIQUIDACIONES ON-CHAIN de prestamos (Aave/Compound via subgraphs): distribucion "
             "de health factors -> mapa de liquidacion del colateral spot. Es el OTRO LADO del "
             "apalancamiento y complementa a Hyperliquid.\n"
@@ -1558,13 +1605,17 @@ ROADMAP = [
             "fuera de esos paises -- y Corea es desproporcionadamente importante para altcoins.\n"
             "5. LEGAL E INSTITUCIONAL, todo gratis y llega ANTES que la noticia: SEC EDGAR "
             "full-text search (API EFTS) para 13F/13G/S-1/8-K, Federal Register API, "
-            "CourtListener/RECAP para dockets. Tier A.\n"
+            "CourtListener/RECAP para dockets. Eventos fechados.\n"
             "6. LISTADOS Y DESLISTADOS DE CEX: el 'efecto Upbit' es de los eventos mas limpios "
             "que existen en cripto, y un deslistado es oferta forzada mas riesgo de liquidez. "
-            "Tier A.\n"
+            "Evento fechado, y el unico de esta lista que ademas pide la guarda OPERATIVA (ver la "
+            "evolucion 'Guarda operativa por simbolo').\n"
             "\n"
-            "Respeta la separacion de las dos puertas: lo mecanico y de N pequeno va a "
-            "elegibilidad con umbral declarado; lo continuo va a features normalizadas. Registra "
+            "TODO ENTRA COMO FEATURE, por la via unica de la evolucion 'TODAS las senales al "
+            "motor': lo de evento con dias-al-evento acotado y magnitud normalizada, lo continuo "
+            "con las dos varas de normalize.py, y nada en search_space. Mide la profundidad con la "
+            "sonda antes de declarar cualquier history_from -- varias de estas fuentes prometen mas "
+            "pasado del que entregan. Registra "
             "en el catalogo el ADV tipico de las entidades donde cada senal existe: varias son "
             "genuinas pero viven en activos donde no cabe tamano, y eso hay que saberlo antes de "
             "escalar. Tests + .venv\\Scripts\\python.exe (poetry run esta roto) + ruff. Regenera "
@@ -1572,21 +1623,141 @@ ROADMAP = [
         ),
     },
     {
+        "id": "signal-channel-rho-sweep",
+        "rank": 2,
+        "group": "ahora",
+        "priority": "alta",
+        "title": "Canal de observación sintético: barrido de rho y break-even del IC",
+        "line": "B/D", "status": "pendiente", "impact": "alto", "effort": "medio",
+        "evidence": "El radar unificado YA ESTÁ CONSTRUIDO (2026-08-12) y mete features al motor "
+                    "sin ningún test de falsación: su única defensa es que nada entra en "
+                    "search_space, que limita los grados de libertad pero NO mide si una feature de "
+                    "muestra corta está sobreajustada. Esa es literalmente la frase que la evolución "
+                    "del radar dejó escrita como hueco declarado. Y el generador ya produce el "
+                    "estado latente completo -factores, retornos, régimen-, así que una señal "
+                    "exógena no es una serie más que haya que inventar: es una observación ruidosa y "
+                    "ADELANTADA de algo que ya se está generando.",
+        "why": "Cambia la pregunta, y por eso rompe la circularidad que este roadmap teme desde el "
+               "principio. No se simula la señal -su nivel, su estacionalidad, su distribución-, se "
+               "simula el CANAL DE OBSERVACIÓN, y el canal cuesta cuatro números por familia de "
+               "señal en vez de los millones de parámetros de un generador aprendido. Ese es el "
+               "argumento cuantitativo: la circularidad es un problema de PRESUPUESTO DE GRADOS DE "
+               "LIBERTAD, no una propiedad binaria. Un rho estimado del histórico real con un error "
+               "del +-50% no produce una estrategia sobreajustada: produce un orden de magnitud. Y "
+               "el producto del barrido no son 'los mejores parámetros' sino el IC DE BREAK-EVEN "
+               "-a partir de qué capacidad predictiva esta estrategia bate al baseline después de "
+               "costes-, que es una propiedad del DISENO y no de los datos: no se puede sobreajustar "
+               "a un histórico porque el histórico nunca entró. Al real le queda una sola pregunta, "
+               "binaria: el rho que mide mi señal está por encima del break-even, con margen?",
+        "prompt": (
+            "Proyecto ai-trader (Python). El radar unificado ya esta construido y cableado en los "
+            "dos sitios (observation/signal_radar.py, signals/events.py, [signals] en el config), "
+            "asi que ya hay features que barrer y esta evolucion queda desbloqueada. Construye el "
+            "canal de observacion sintetico y el barrido que produce el IC de break-even. Las "
+            "estrategias reciben las senales por `attach_signal_provider` y consultan la puerta con "
+            "`signal_gate_reason`: el canal sintetico tiene que entrar por ESE contrato, no por uno "
+            "paralelo, o el barrido mediria otra cosa que la que corre.\n"
+            "\n"
+            "RELACION CON 'Que el generador emita las senales' (la evolucion siguiente), para que "
+            "no se solapen: esta es la BARATA y va primero. Aqui la senal se deriva del retorno "
+            "futuro YA GENERADO, sin acoplarse a los FactorShock, sin effective_shocks y sin los "
+            "cerrojos de anticircularidad; su producto es el break-even. La otra es la CARA: senal "
+            "acoplada al estado latente, banda de aceptacion de dos colas, experimento pareado de "
+            "cuatro brazos; su producto es la medida de transferencia del ranking. Y hay un motivo "
+            "de orden ademas del coste: si el break-even sale absurdamente alto, la pregunta de la "
+            "otra queda contestada antes de construirla.\n"
+            "\n"
+            "(a) EL MODELO, cuatro parametros interpretables y uno mas para la breadth:\n"
+            "    senal_t = rho * z(retorno_futuro_t->t+h) + sqrt(1-rho^2) * ruido_t\n"
+            "  rho = capacidad predictiva real (el IC de la senal); h = dias de adelanto; phi = "
+            "autocorrelacion del componente de ruido (AR(1), para que parezca una serie y no "
+            "confeti); lambda = tasa de falsos positivos, picos que no anticipan nada; y un GRUPO DE "
+            "CORRELACION explicito entre senales. Ese ultimo no es decorativo: por la ley "
+            "fundamental, cinco senales con rho=0,03 poco correlacionadas valen mas que una con "
+            "rho=0,08, y sin el parametro no se distingue multiplicar apuestas de repetir la misma.\n"
+            "\n"
+            "(b) PARAMETRIZA EN POSITIVO. Regla dura: 0 = MENOS edge, nunca mas. informative_share y "
+            "coverage antes que false_positive_rate, para que un default olvidado degrade a 'sin "
+            "senal' y no a 'senal perfecta'.\n"
+            "\n"
+            "(c) CAUSALIDAD Y ORDEN DE GENERACION. La senal se genera DESPUES de los retornos, con "
+            "shift(-h) sobre el futuro ya calculado: la causalidad va del mundo a la senal, y solo "
+            "la estrategia sufre el adelanto. Y en un PASE APARTE, no dentro de PathEngine.generate: "
+            "asi la no interferencia con la secuencia RNG no es una promesa que haya que auditar "
+            "leyendo el codigo, es una imposibilidad estructural. "
+            "tests/test_synthetic.py::TestEngineByteIdentity congela dos SHA de librerias "
+            "publicadas.\n"
+            "\n"
+            "(d) EN EL CODIGO: ScenarioSpec gana una lista de SignalChannel(name, rho, lead_days, "
+            "noise_ar, false_positive_rate, corr_group), serializable a JSON como el resto y via "
+            "MICROSTRUCTURE_FIELDS (solo se serializa lo NO neutro, asi que los spec.json "
+            "existentes no cambian ni un byte). El pase de emision devuelve, junto a las barras, un "
+            "DataFrame de senales por simbolo. Las estrategias las reciben por el MISMO contrato que "
+            "en vivo -el radar de rank 1- con el mismo recorte anti-look-ahead que aplica "
+            "HistoricalDataSource. El barrido es una dimension mas del plan de estudio, hermana de "
+            "la de escenarios.\n"
+            "\n"
+            "(e) BARRER, NO CALIBRAR -- y esto es el metodo, no un detalle. NO fijes rho. Genera "
+            "librerias con rho en {0; 0,02; 0,05; 0,10; 0,20} y h en {1; 3; 10}, optimiza en cada "
+            "regimen, y publica la respuesta a UNA pregunta: cual es el rho minimo a partir del cual "
+            "la estrategia bate al baseline DESPUES DE COSTES. Inyecta los params de puerta con "
+            "dataclasses.replace sobre las 16 configuraciones publicadas, sin tocar search_space, "
+            "para que los config_id sean literalmente los publicados.\n"
+            "\n"
+            "(f) rho = 0 ES EL GRUPO DE CONTROL, y es el test de falsacion que hoy no existe en "
+            "ninguna parte del repo: si una estrategia que consume la senal puntua bien con rho=0, "
+            "ha aprendido a explotar el ruido persistente o a hacer market timing con el AR(1) del "
+            "canal. Declara el criterio de lectura ANTES de correr.\n"
+            "\n"
+            "(g) SEPARACION POR FUNCION, NO POR VENTANA. No mezcles sintetico y real dentro del "
+            "mismo backtest: rompe la coherencia temporal y el anti-look-ahead. Sintetico = sustrato "
+            "de SELECCION (barrido de rho, ranking, gate); real = sustrato de VERIFICACION (medir "
+            "rho, y el estudio de transferencia). Nunca el mismo dato haciendo las dos cosas.\n"
+            "\n"
+            "(h) EL LOOP DE CALIBRACION, version legitima. Toxica: cerrar el loop sobre el "
+            "RENDIMIENTO de la estrategia ('ajusto el generador hasta que mis estrategias funcionen "
+            "mejor') -- eso es sobreajuste con pasos extra. Legitima: cerrarlo sobre PROPIEDADES DEL "
+            "MUNDO medidas con estadisticos que ninguna estrategia optimiza. Esa ya esta construida: "
+            "es synthetic/fidelity_study.py, con sus umbrales y su cobertura. Extiendelo con las "
+            "metricas de senal -IC empirico, autocorrelacion, lead-lag- y el loop sigue midiendo "
+            "hechos y no resultados.\n"
+            "\n"
+            "(i) TRES TRAMPAS, y la primera es probablemente el mayor riesgo de toda esta linea:\n"
+            "  1. VINTAGE. Google Trends se renormaliza al descargarlo, los scores de sentimiento se "
+            "recalculan con modelos nuevos, las noticias se reescriben. Descargar hoy la serie de "
+            "2023 devuelve una serie que NO EXISTIA en 2023: look-ahead invisible. La mitigacion es "
+            "grabar nosotros con timestamp de captura, que es exactamente lo que ya hace "
+            "signals/capture.py y una razon mas para que el paper trading corra ya.\n"
+            "  2. CONTAMINACION DEL LLM. Un modelo que puntua sentimiento sobre noticias de 2022 "
+            "sabe como termino 2022. Cualquier scoring retroactivo con un LLM esta envenenado por "
+            "construccion: solo vale en tiempo real, hacia delante.\n"
+            "  3. BREADTH, NO POTENCIA. Ver el grupo de correlacion de (a).\n"
+            "\n"
+            "COSTE: cada valor de rho es una libreria nueva. Cinco rho x tres h son quince "
+            "librerias. Empieza con UNA senal y TRES valores de rho, y comprueba que el break-even "
+            "sale un numero creible antes de industrializarlo.\n"
+            "\n"
+            "Tests + determinismo + .venv\\Scripts\\python.exe (poetry run esta roto) + ruff. "
+            "Regenera dashboard y docs."
+        ),
+    },
+    {
         "id": "synthetic-signal-emission",
-        "rank": 4,
+        "rank": 3,
         "group": "despues",
         "priority": "critica",
-        "title": "Que el generador emita las senales, y re-medir la transferencia de forma pareada",
+        "title": "Que el generador emita las señales, y re-medir la transferencia de forma pareada",
         "line": "B/D", "status": "pendiente", "impact": "alto", "effort": "alto",
-        "evidence": "Los FactorShock del generador YA son eventos con dia, factor y magnitud "
+        "evidence": "Los FactorShock del generador YA son eventos con día, factor y magnitud "
                     "(synthetic/scenarios.py:105-134), descritos como 'un anuncio de la Fed, un "
-                    "default, un ataque'. El generador ya sabe QUE pasa y CUANDO: las senales "
-                    "sinteticas serian la emision observable de un estado latente que ya existe.",
+                    "default, un ataque'. El generador ya sabe QUE pasa y CUANDO: las señales "
+                    "sintéticas serían la emisión observable de un estado latente que ya existe.",
         "why": "Es la ficha que VALIDA O REFUTA la tesis entera: si ampliar el espacio de inputs "
-               "hace que el ranking transfiera, el sintetico se queda en el nucleo; si no, la "
-               "contingencia (rank 17) se activa. Y es la mas delicada del roadmap por un riesgo "
-               "concreto: si las senales sinteticas se emiten del mismo estado latente que los "
-               "precios con un acoplamiento limpio, funcionaran demasiado bien en el sintetico; y "
+               "hace que el ranking transfiera, el sintético se queda en el núcleo; si no, la "
+               "contingencia ('mover el sustrato primario del ranking al histórico REAL') se "
+               "activa. Y es la más delicada del roadmap por un riesgo "
+               "concreto: si las señales sintéticas se emiten del mismo estado latente que los "
+               "precios con un acoplamiento limpio, funcionaran demasiado bien en el sintético; y "
                "si ajustamos ese acoplamiento hasta que rho suba, habremos calibrado el generador "
                "contra nuestro propio instrumento de medida.",
         "prompt": (
@@ -1642,24 +1813,24 @@ ROADMAP = [
     },
     {
         "id": "dat-mnav-index",
-        "rank": 6,
+        "rank": 5,
         "group": "despues",
         "priority": "media",
-        "title": "Indice de estres de vendedores forzados (mNAV de tesorerias cotizadas)",
+        "title": "Índice de estrés de vendedores forzados (mNAV de tesorerías cotizadas)",
         "line": "Inputs", "status": "pendiente", "impact": "medio", "effort": "alto",
-        "evidence": "El canal se ha extendido a mas de 200 companias con mas de 100.000 millones "
-                    "en cripto en 2026, y la maquina funciona en reversa de forma observable: "
-                    "Strategy vendio 3.588 BTC por unos 216 millones entre el 29 de junio y el 5 "
-                    "de julio de 2026, por debajo de su coste medio y sin ventas de equity via "
-                    "ATM -- la prima se habia comprimido lo bastante como para que vender saliera "
-                    "mas barato que emitir acciones.",
-        "why": "Es la novedad estructural del ciclo y la construccion que casi nadie hace: no el "
-               "mNAV de una compania, sino la DISTRIBUCION de mNAV a traves de los 200+ DATs, "
+        "evidence": "El canal se ha extendido a más de 200 compañías con más de 100.000 millones "
+                    "en cripto en 2026, y la máquina funciona en reversa de forma observable: "
+                    "Strategy vendió 3.588 BTC por unos 216 millones entre el 29 de junio y el 5 "
+                    "de julio de 2026, por debajo de su coste medio y sin ventas de equity vía "
+                    "ATM -- la prima se había comprimido lo bastante como para que vender saliera "
+                    "más barato que emitir acciones.",
+        "why": "Es la novedad estructural del ciclo y la construcción que casi nadie hace: no el "
+               "mNAV de una compañía, sino la DISTRIBUCIÓN de mNAV a través de los 200+ DATs, "
                "desagregada por activo subyacente. Cuando la cola inferior engorda hay oferta "
-               "futura estructural sobre ese activo. Y como las tesorerias de SOL o ETH pueden "
-               "crecer organicamente via staking, sus mNAV corren mas altos que los puros de BTC: "
-               "la compresion RELATIVA entre ellos dice donde se cierra el grifo primero. Va al "
-               "final por coste de ingenieria, no por falta de valor -- y ese coste es "
+               "futura estructural sobre ese activo. Y como las tesorerías de SOL o ETH pueden "
+               "crecer orgánicamente vía staking, sus mNAV corren más altos que los puros de BTC: "
+               "la compresión RELATIVA entre ellos dice donde se cierra el grifo primero. Va al "
+               "final por coste de ingeniería, no por falta de valor -- y ese coste es "
                "precisamente lo que lo deja sin arbitrar.",
         "prompt": (
             "Proyecto ai-trader (Python). Sobre el puerto de src/ai_trader/signals/, construye un "
@@ -1680,9 +1851,11 @@ ROADMAP = [
             "cotizaba a finales de julio de 2026 con un mNAV entre 0,24x y 0,31x, con un tesoro "
             "de 120,6 millones contra una capitalizacion de unos 37.\n"
             "\n"
-            "ENTRA COMO TIER A (elegibilidad), no como feature: es un evento estructural de N "
-            "pequeno. Umbral declarado y razonado, falla abierta, y veto contado por fuente y "
-            "simbolo. Cuidado con la latencia: los holdings se publican con retraso y de forma "
+            "ENTRA COMO FEATURE con codificacion de EVENTO -no como veto, que ya no existe-: "
+            "fraccion de la distribucion por debajo de 1, y distancia del activo a esa frontera. "
+            "Umbral declarado y razonado, cobertura explicita y falla abierta. Ojo con la muestra: "
+            "el N no lo dan los eventos de una compania sino el POOLING sobre las 200+, y esa cifra "
+            "hay que publicarla. Cuidado con la latencia: los holdings se publican con retraso y de forma "
             "irregular, asi que el descriptor tiene que declarar el lag real y el archivo guardar "
             "fetched_at -- sin eso, el backtest usaria informacion que no existia ese dia.\n"
             "\n"
@@ -1692,20 +1865,20 @@ ROADMAP = [
     },
     {
         "id": "line-d-cpcv-two-stage-cem",
-        "rank": 7,
+        "rank": 6,
         "group": "despues",
         "priority": "alta",
-        "title": "CPCV en dos etapas dentro del optimizador (que el CEM deje de puntuar con el corte unico)",
+        "title": "CPCV en dos etapas dentro del optimizador (que el CEM deje de puntuar con el corte único)",
         "line": "D", "status": "pendiente", "impact": "alto", "effort": "medio",
-        "evidence": "mom_default en crypto_winter: +2,63 con el corte unico y -2,20 con CPCV. En "
-                    "crypto_bull_supercycle: -0,18 vs -0,60, con dispersion entre folds de "
+        "evidence": "mom_default en crypto_winter: +2,63 con el corte único y -2,20 con CPCV. En "
+                    "crypto_bull_supercycle: -0,18 vs -0,60, con dispersión entre folds de "
                     "sigma ~ 2-3 unidades de Sharpe.",
         "why": "El optimizador sigue puntuando con el corte que su propio estudio desacredita: "
                "run_optimization -> evaluate_sample_detailed -> BacktestEngine.run(split_ratio=0.7). "
-               "El corte unico no esta SESGADO, esta ARBITRARIO -y arbitrario es letal para un "
+               "El corte único no está SESGADO, está ARBITRARIO -y arbitrario es letal para un "
                "optimizador: el CEM escala un paisaje cuyo relieve depende de que tramo de "
-               "historia cayo en el 30% de test. La objecion obvia es el coste (CPCV multiplica "
-               "x15), y la solucion no es elegir sino separar cribado de decision: dos etapas.",
+               "historia cayó en el 30% de test. La objeción obvia es el coste (CPCV multiplica "
+               "x15), y la solución no es elegir sino separar cribado de decisión: dos etapas.",
         "prompt": (
             "Proyecto ai-trader (Python). La validacion multiventana esta implementada, testeada "
             "y MEDIDA: src/ai_trader/backtest/validation.py (geometria de folds con purga y "
@@ -1754,17 +1927,18 @@ ROADMAP = [
     },
     {
         "id": "validation-study-full-ensemble",
-        "rank": 8,
+        "rank": 7,
         "group": "despues",
         "priority": "media",
-        "title": "Re-correr el estudio de validacion con el ensemble completo",
+        "title": "Re-correr el estudio de validación con el ensemble completo",
         "line": "D", "status": "pendiente", "impact": "medio", "effort": "bajo",
-        "evidence": "El informe publicado corrio con n_paths=1: 8 escenarios x 4 configuraciones "
+        "evidence": "El informe publicado corrió con n_paths=1: 8 escenarios x 4 configuraciones "
                     "= 32 muestras.",
-        "why": "Las conclusiones sobre el corte unico -que es arbitrario y no optimista, y que la "
-               "brecha real esta contra la cola- son direccionales pero descansan en poca "
-               "muestra. Al integrar CPCV en el pipeline (evolucion #3) conviene re-correrlo con "
-               "varios caminos por escenario para que la dispersion medida tenga detras "
+        "why": "Las conclusiones sobre el corte único -que es arbitrario y no optimista, y que la "
+               "brecha real está contra la cola- son direccionales pero descansan en poca "
+               "muestra. Al integrar CPCV en el pipeline (evolución 'CPCV en dos etapas dentro del "
+               "optimizador') conviene re-correrlo con "
+               "varios caminos por escenario para que la dispersión medida tenga detrás "
                "observaciones suficientes.",
         "prompt": (
             "Proyecto ai-trader (Python). El estudio de validacion "
@@ -1787,7 +1961,7 @@ ROADMAP = [
     },
     {
         "id": "pbo-blocks-scenario-aligned",
-        "rank": 9,
+        "rank": 8,
         "group": "despues",
         "priority": "media",
         "title": "Alinear los bloques del PBO con las fronteras de escenario",
@@ -1796,9 +1970,9 @@ ROADMAP = [
                     "muestras van en orden escenario-mayor: los 30 caminos de un escenario pueden "
                     "quedar mitad en train y mitad en test de la CSCV.",
         "why": "Es la misma fuga de arquetipo que `scenario_split` evita cuidadosamente en el "
-               "hold-out, colandose dentro del PBO: si el mismo escenario esta a los dos lados, "
-               "el PBO sale mas benigno de lo que deberia, porque elegir por train ya sabe algo "
-               "del test. Arreglo pequeno, y afecta a una cifra que se publica como garantia.",
+               "hold-out, colándose dentro del PBO: si el mismo escenario está a los dos lados, "
+               "el PBO sale más benigno de lo que debería, porque elegir por train ya sabe algo "
+               "del test. Arreglo pequeño, y afecta a una cifra que se publica como garantía.",
         "prompt": (
             "Proyecto ai-trader (Python). `probability_of_backtest_overfitting` "
             "(src/ai_trader/scoring/overfit.py) implementa PBO por CSCV: recibe una matriz "
@@ -1826,18 +2000,18 @@ ROADMAP = [
     },
     {
         "id": "report-n-failed-with-reward",
-        "rank": 10,
+        "rank": 9,
         "group": "despues",
         "priority": "media",
-        "title": "Reportar n_failed junto al reward (la penalizacion domina la cola)",
+        "title": "Reportar n_failed junto al reward (la penalización domina la cola)",
         "line": "A", "status": "pendiente", "impact": "medio", "effort": "bajo",
         "evidence": "FAILURE_PENALTY = -5 frente a un headline que vive en el rango -2..2: una "
-                    "configuracion que falla en 2-3 muestras de 100 tiene el CVaR@25% "
-                    "practicamente capturado por los -5.",
+                    "configuración que falla en 2-3 muestras de 100 tiene el CVaR@25% "
+                    "prácticamente capturado por los -5.",
         "why": "Que fallar duela es correcto y no se discute; lo que no puede ser es que el "
-               "numero final no distinga 'esta config tiene mala cola' de 'esta config es "
-               "fragil'. Son dos diagnosticos distintos con dos acciones distintas, y hoy "
-               "colapsan en el mismo -5. No hay que cambiar la penalizacion, hay que publicar el "
+               "número final no distinga 'esta config tiene mala cola' de 'esta config es "
+               "frágil'. Son dos diagnósticos distintos con dos acciones distintas, y hoy "
+               "colapsan en el mismo -5. No hay que cambiar la penalización, hay que publicar el "
                "recuento al lado.",
         "prompt": (
             "Proyecto ai-trader (Python). `FAILURE_PENALTY = -5.0` "
@@ -1860,18 +2034,18 @@ ROADMAP = [
     },
     {
         "id": "dsr-independent-trials-caveat",
-        "rank": 11,
+        "rank": 10,
         "group": "despues",
         "priority": "baja",
         "title": "Declarar que el DSR asume intentos independientes y el CEM no los produce",
         "line": "A", "status": "pendiente", "impact": "bajo", "effort": "bajo",
         "evidence": "n_trials = 192 configuraciones evaluadas por el CEM, tratadas como intentos "
-                    "independientes en el maximo esperado bajo la nula.",
-        "why": "Las generaciones tardias del CEM se concentran alrededor de la elite, asi que los "
+                    "independientes en el máximo esperado bajo la nula.",
+        "why": "Las generaciones tardías del CEM se concentran alrededor de la élite, así que los "
                "intentos efectivos son menos que los contados y el DSR SOBRE-deflacta. El sentido "
-               "del error es el prudente, pero mientras no este escrito alguien puede leer el DSR "
-               "como una probabilidad calibrada, que no lo es. Una linea de docstring y una nota "
-               "en la metodologia.",
+               "del error es el prudente, pero mientras no esté escrito alguien puede leer el DSR "
+               "como una probabilidad calibrada, que no lo es. Una línea de docstring y una nota "
+               "en la metodología.",
         "prompt": (
             "Proyecto ai-trader (Python). `deflated_sharpe_ratio` "
             "(src/ai_trader/scoring/overfit.py) deflacta el Sharpe del ganador usando "
@@ -1895,25 +2069,25 @@ ROADMAP = [
     },
     {
         "id": "fidelity-rank-corr-ordering",
-        "rank": 12,
+        "rank": 11,
         "group": "despues",
         "priority": "media",
-        "title": "Ordenacion de colas y clustering entre activos: el eje que ai_v3 no arreglo",
+        "title": "Ordenación de colas y clustering entre activos: el eje que ai_v3 no arregló",
         "line": "B", "status": "pendiente", "impact": "medio", "effort": "medio",
         "evidence": "ai_v3 cumple los umbrales de NIVEL y COBERTURA (98,3% de cobertura media, "
                     "curtosis 3,40 vs 4,19 real, clustering 0,196 vs 0,190) pero su rank_corr "
                     "medio es -0,23: clustering -0,74 y curtosis -0,18. En ai_v2 el clustering "
-                    "ordenaba +0,32. El nivel se arreglo y la ordenacion empeoro.",
+                    "ordenaba +0,32. El nivel se arregló y la ordenación empeoró.",
         "why": "El generador ya produce la magnitud correcta de cola y de agrupamiento, pero no "
-               "sabe QUE activo tiene mas: en el mercado real son los mas ruidosos (DOGE 17,8 de "
-               "curtosis y 0,31 de clustering; XRP 13,9) y en el sintetico salen de los que menos "
+               "sabe QUÉ activo tiene más: en el mercado real son los más ruidosos (DOGE 17,8 de "
+               "curtosis y 0,31 de clustering; XRP 13,9) y en el sintético salen de los que menos "
                "ruido propio tienen. La causa es identificable en el motor: el componente "
-               "idiosincratico pasa por `_ar1_idio`, un AR(1) con phi negativo en las fases de "
+               "idiosincrático pasa por `_ar1_idio`, un AR(1) con phi negativo en las fases de "
                "rango, que BLANQUEA la estructura de |r| justo en los activos donde ese "
-               "componente pesa mas (idio_vol alto). Importa para la seleccion cross-sectional: "
-               "una politica que elija activos por su regimen de volatilidad esta aprendiendo un "
-               "ordenamiento invertido respecto al mercado. No es critico -las tres lecturas se "
-               "publican por separado y esta se declara- pero es el ultimo hueco medido del "
+               "componente pesa más (idio_vol alto). Importa para la selección cross-sectional: "
+               "una política que elija activos por su régimen de volatilidad está aprendiendo un "
+               "ordenamiento invertido respecto al mercado. No es crítico -las tres lecturas se "
+               "publican por separado y esta se declara- pero es el último hueco medido del "
                "sustrato.",
         "prompt": (
             "Proyecto ai-trader (Python). El estudio de fidelidad "
@@ -1960,29 +2134,29 @@ ROADMAP = [
     },
     {
         "id": "real-substrate-primary-ranking",
-        "rank": 13,
+        "rank": 12,
         "group": "despues",
         "priority": "critica",
-        "title": "CONTINGENCIA: mover el sustrato primario del ranking al historico REAL",
+        "title": "CONTINGENCIA: mover el sustrato primario del ranking al histórico REAL",
         "line": "B/D", "status": "bloqueada", "impact": "alto", "effort": "alto",
-        "evidence": "MEDIDO: Spearman entre el ranking real y el sintetico = -0,04 sobre 16 "
+        "evidence": "MEDIDO: Spearman entre el ranking real y el sintético = -0,04 sobre 16 "
                     "configuraciones (IC95% por bloques [-0,44, +0,49], p = 0,89). El top-4 del "
-                    "sintetico acierta 1 de 4 en la mitad buena del real, peor que el azar (2,0). "
+                    "sintético acierta 1 de 4 en la mitad buena del real, peor que el azar (2,0). "
                     "Y sobre las 9 que operan de verdad en los dos mundos el acuerdo es NEGATIVO "
                     "(-0,67). Informe: data/transfer/report_ai_v3.json.",
         "why": "La evidencia de arriba sigue en pie y no se toca. Lo que cambia es la LECTURA: se "
-               "midio con estrategias que solo ven precio y volumen, y el unico edge del mundo "
-               "sintetico es un AR(1) colocado a mano por regimen -- rankear momentum sobre eso "
-               "mide que configuracion ajusta mejor ese AR(1), y no hay motivo para que "
-               "transfiera. La hipotesis alternativa (el cuello de botella es el ESPACIO DE "
+               "midió con estrategias que solo ven precio y volumen, y el único edge del mundo "
+               "sintético es un AR(1) colocado a mano por régimen -- rankear momentum sobre eso "
+               "mide que configuración ajusta mejor ese AR(1), y no hay motivo para que "
+               "transfiera. La hipótesis alternativa (el cuello de botella es el ESPACIO DE "
                "INPUTS, no el generador) es testeable con el mismo instrumento, y es lo que "
-               "persiguen los ranks 1-9. Por eso esta ficha pasa de conclusion automatica a "
-               "CONTINGENCIA: se ejecuta si `synthetic-signal-emission` (rank 9) refuta esa "
-               "hipotesis -- es decir, si con el espacio de inputs ampliado el ranking sigue sin "
-               "transferir, y en particular si tampoco transfiere en el brazo ORACULO, que hace "
-               "trampa a proposito. Si ni haciendo trampa transfiere, el problema no son los "
-               "inputs y hay que sacar el sintetico del criterio de seleccion. Bloqueada, no "
-               "descartada: el codigo sigue eligiendo hoy con un juez del que se sabe que no "
+               "persiguen los ranks 1-9. Por eso esta ficha pasa de conclusión automática a "
+               "CONTINGENCIA: se ejecuta si `synthetic-signal-emission` refuta esa "
+               "hipótesis -- es decir, si con el espacio de inputs ampliado el ranking sigue sin "
+               "transferir, y en particular si tampoco transfiere en el brazo ORÁCULO, que hace "
+               "trampa a propósito. Si ni haciendo trampa transfiere, el problema no son los "
+               "inputs y hay que sacar el sintético del criterio de selección. Bloqueada, no "
+               "descartada: el código sigue eligiendo hoy con un juez del que se sabe que no "
                "transfiere, y eso no deja de ser cierto mientras se prueba la alternativa.",
         "prompt": (
             "Proyecto ai-trader (Python). El estudio de transferencia "
@@ -2025,18 +2199,18 @@ ROADMAP = [
     },
     {
         "id": "rl-full-run",
-        "rank": 14,
+        "rank": 13,
         "group": "despues",
         "priority": "alta",
-        "title": "Optimizacion CEM completa, ya con el juez validado",
+        "title": "Optimización CEM completa, ya con el juez validado",
         "line": "RL", "status": "bloqueada", "impact": "alto", "effort": "medio",
         "depends": 1,
-        "evidence": "El harness CEM esta listo, pero cada backtest cuesta ~60 s con 35 activos y "
-                    "hoy apuntaria al juez del corte unico.",
-        "why": "Correr la optimizacion a escala solo tiene sentido cuando el objetivo que escala "
+        "evidence": "El harness CEM está listo, pero cada backtest cuesta ~60 s con 35 activos y "
+                    "hoy apuntaría al juez del corte único.",
+        "why": "Correr la optimización a escala solo tiene sentido cuando el objetivo que escala "
                "el CEM es el bueno: primero el sustrato (#1) y el juez en dos etapas (#3), "
-               "despues esto. Hacerlo antes es gastar computo caro produciendo un ganador que "
-               "habria que tirar.",
+               "después esto. Hacerlo antes es gastar cómputo caro produciendo un ganador que "
+               "habría que tirar.",
         "prompt": (
             "Proyecto ai-trader (Python). El harness de optimizacion por Cross-Entropy Method "
             "(src/ai_trader/scoring/optimize.py, run_optimization) esta listo, pero cada backtest "
@@ -2061,25 +2235,25 @@ ROADMAP = [
     },
     {
         "id": "execution-latency-budget",
-        "rank": 15,
+        "rank": 14,
         "group": "despues",
         "priority": "media",
         "title": "Presupuesto de latencia: el backtest supone que se llena a las 00:00 UTC en punto",
         "line": "Medicion", "status": "pendiente", "impact": "medio", "effort": "bajo",
         "evidence": "MEDIDO (data/sessions/report.json): el hueco entre el cierre que la estrategia "
-                    "ve y el open al que se llena es CERO a efectos practicos -0,07% del rango "
-                    "diario, 0,55 pb-, asi que la convencion de llenado no sesga nada. Pero eso "
+                    "ve y el open al que se llena es CERO a efectos prácticos -0,07% del rango "
+                    "diario, 0,55 pb-, así que la convención de llenado no sesga nada. Pero eso "
                     "solo vale si la orden sale en el instante del open: con UNA hora de retraso el "
-                    "precio de llenado ya se ha desplazado 57,9 pb (9,2% del rango del dia), que "
+                    "precio de llenado ya se ha desplazado 57,9 pb (9,2% del rango del día), que "
                     "son 3,9x el coste de entrada de referencia que el motor si cobra (15 pb).",
-        "why": "El estudio de sesiones cerro la pregunta que tenia abierta el backtest (la ventana "
-               "ciega no tiene ancho) y abrio otra que hoy no esta ni medida ni presupuestada: el "
+        "why": "El estudio de sesiones cerró la pregunta que tenía abierta el backtest (la ventana "
+               "ciega no tiene ancho) y abrió otra que hoy no está ni medida ni presupuestada: el "
                "backtest describe un sistema PUNTUAL, y nada en el repo obliga al ciclo real a "
-               "serlo. No es un bug del motor -por eso no se toco- sino un requisito no escrito "
-               "que hay que convertir en presupuesto explicito: cuanto puede tardar el ciclo en "
-               "ejecutar antes de que el backtest deje de describirlo. Va en 'despues' y no en "
+               "serlo. No es un bug del motor -por eso no se tocó- sino un requisito no escrito "
+               "que hay que convertir en presupuesto explícito: cuanto puede tardar el ciclo en "
+               "ejecutar antes de que el backtest deje de describirlo. Va en 'después' y no en "
                "'ahora' porque solo muerde cuando el paper trading corra en vivo (#6), que es "
-               "donde la latencia deja de ser hipotetica.",
+               "donde la latencia deja de ser hipotética.",
         "depends": 6,
         "prompt": (
             "Proyecto ai-trader (Python). El estudio de sesiones (data/sessions/report.json, "
@@ -2106,21 +2280,21 @@ ROADMAP = [
     },
     {
         "id": "new-crypto-strategies",
-        "rank": 16,
+        "rank": 15,
         "group": "no-prioritario",
         "priority": "baja",
         "title": "Nuevas estrategias cripto (deliberadamente NO priorizada)",
         "line": "Estrategias", "status": "pendiente", "impact": "medio", "effort": "alto",
         "depends": 1,
         "evidence": "Solo 6 de 32 filas aprueban el gate bajo CPCV. Eso admite dos lecturas -las "
-                    "estrategias son flojas, o el juez es ruidoso- y hasta saber cual, anadir "
-                    "candidatos multiplica el problema de multiples pruebas.",
-        "why": "Aparece en la lista porque es trabajo real y acordado, pero NO se aborda todavia, "
-               "y la razon es una asimetria de coste, no una preferencia: una estrategia anadida "
-               "hoy se re-evalua GRATIS cuando el juez mejore; un juez malo contamina todo lo que "
-               "puntue hoy. Las estrategias son la cosecha; el juez es el suelo. Ademas cada "
-               "candidato nuevo sube el n_trials del DSR, o sea que anadir sin ganar edge "
-               "empeora activamente el veredicto de todo lo demas.",
+                    "estrategias son flojas, o el juez es ruidoso- y hasta saber cual, añadir "
+                    "candidatos multiplica el problema de múltiples pruebas.",
+        "why": "Aparece en la lista porque es trabajo real y acordado, pero NO se aborda todavía, "
+               "y la razón es una asimetría de coste, no una preferencia: una estrategia añadida "
+               "hoy se re-evalúa GRATIS cuando el juez mejore; un juez malo contamina todo lo que "
+               "puntúe hoy. Las estrategias son la cosecha; el juez es el suelo. Además cada "
+               "candidato nuevo sube el n_trials del DSR, o sea que añadir sin ganar edge "
+               "empeora activamente el veredicto de todo lo demás.",
         "prompt": (
             "Proyecto ai-trader (Python). ANTES DE EMPEZAR: comprueba que el juez esta arreglado "
             "-CPCV en dos etapas dentro de run_optimization y libreria ai_v3 con la fidelidad "
@@ -2154,18 +2328,18 @@ ROADMAP = [
     },
     {
         "id": "weights-recalibrate-power",
-        "rank": 17,
+        "rank": 16,
         "group": "no-prioritario",
         "priority": "baja",
-        "title": "Re-medir lambda y kappa con los costes nuevos y mas potencia estadistica",
+        "title": "Re-medir lambda y kappa con los costes nuevos y más potencia estadística",
         "line": "A/C", "status": "pendiente", "impact": "bajo", "effort": "medio",
         "evidence": "480 backtests ya medidos: la superficie (lambda, kappa) sale PLANA y la "
-                    "eleccion de configuracion no cambia. Pero se midio con un unico corte 70/30, "
+                    "elección de configuración no cambia. Pero se midió con un único corte 70/30, "
                     "un camino por escenario y el slippage PLANO de 5 bps que ya no existe.",
-        "why": "La conclusion publicada -penalizar no estabiliza, y los costes ya dentro del "
+        "why": "La conclusión publicada -penalizar no estabiliza, y los costes ya dentro del "
                "Sharpe equivalen a un lambda ~ 6,3, muy por encima del 0,25 elegido- se refuerza "
-               "con el modelo de costes nuevo, que cobra mas friccion. Es decir: re-medirlo casi "
-               "seguro no mueve nada. Por eso es de impacto bajo y va aqui, no arriba.",
+               "con el modelo de costes nuevo, que cobra más fricción. Es decir: re-medirlo casi "
+               "seguro no mueve nada. Por eso es de impacto bajo y va aquí, no arriba.",
         "prompt": (
             "Proyecto ai-trader (Python). Los pesos del headline score "
             "(src/ai_trader/backtest/metrics.py::DEFAULT_HEADLINE_WEIGHTS, hoy lambda=0.25, "
@@ -2199,16 +2373,16 @@ ROADMAP = [
     },
     {
         "id": "designer-model-in-manifest",
-        "rank": 18,
+        "rank": 17,
         "group": "no-prioritario",
         "priority": "baja",
-        "title": "Anotar el modelo de IA en el manifiesto de cada libreria",
+        "title": "Anotar el modelo de IA en el manifiesto de cada librería",
         "line": "E", "status": "pendiente", "impact": "bajo", "effort": "bajo",
-        "evidence": "El manifiesto guarda la CLASE del disenador ('ClaudeScenarioDesigner'), no "
-                    "el identificador del modelo ni la fecha del diseno.",
-        "why": "El diseno con IA no es reproducible y ya no puede serlo (los modelos actuales "
-               "retiraron los parametros de muestreo), asi que la unica trazabilidad posible es "
-               "registrar CON QUE se genero. Hoy dos librerias disenadas con modelos distintos "
+        "evidence": "El manifiesto guarda la CLASE del diseñador ('ClaudeScenarioDesigner'), no "
+                    "el identificador del modelo ni la fecha del diseño.",
+        "why": "El diseño con IA no es reproducible y ya no puede serlo (los modelos actuales "
+               "retiraron los parámetros de muestreo), así que la única trazabilidad posible es "
+               "registrar CON QUE se generó. Hoy dos librerías diseñadas con modelos distintos "
                "son indistinguibles en disco.",
         "prompt": (
             "Proyecto ai-trader (Python). El disenador con IA "
@@ -2230,26 +2404,85 @@ ROADMAP = [
         ),
     },
     {
+        "id": "operational-symbol-guard",
+        "rank": 18,
+        "group": "no-prioritario",
+        "priority": "baja",
+        "title": "Guarda operativa por símbolo (sanciones, deslistado, halt): lo que deja abierto no tener veto",
+        "line": "Riesgo", "status": "pendiente", "impact": "bajo", "effort": "bajo",
+        "evidence": "El sistema no tiene ningún concepto de símbolo no operable: grep de "
+                    "eligib|veto|blacklist|blackout|halt en src/ no devuelve nada, y las únicas "
+                    "guardas por símbolo son la posición abierta y el cooldown "
+                    "(app/runner.py:229-235). El radar de señales ya está construido y cableado "
+                    "(2026-08-12) y sigue sin vetar nada A PROPÓSITO: toda señal actúa como feature "
+                    "y la única puerta que existe falla ABIERTA por diseño, así que este hueco "
+                    "queda abierto y escrito en vez de resuelto de tapadillo.",
+        "why": "No es alfa y por eso se separa: vetar un activo sancionado, deslistado o con el "
+               "mercado detenido no es una estrategia, es una restricción operativa, y meterla en "
+               "la misma caja que las features fue justamente el error de diseño que la "
+               "unificación corrige. Va en 'no prioritario' porque hoy el riesgo es teórico -paper "
+               "trading, universo de majors configurado a mano- y se vuelve real el día que haya "
+               "dinero de verdad o un universo ancho y rotatorio. Ese día esto sube de rango solo.",
+        "prompt": (
+            "Proyecto ai-trader (Python). NO EJECUTAR ANTES de que haya dinero real o un universo "
+            "que rote sin supervision: hoy el riesgo es teorico y esta declarado. Se deja escrita "
+            "para no perder el alcance.\n"
+            "\n"
+            "ALCANCE, y es deliberadamente estrecho: una guarda por simbolo que impide operar por "
+            "razones NO PREDICTIVAS -direccion o token sancionado (OFAC SDN), par deslistado del "
+            "venue, mercado detenido o en mantenimiento-. Nada que huela a alfa entra aqui: si una "
+            "senal predice retornos, su sitio es el radar de features y no esta puerta. La "
+            "distincion no es estetica -- una puerta que veta por motivos predictivos es una "
+            "estrategia sin backtest.\n"
+            "\n"
+            "DONDE: consultada como UNA GUARDA MAS en TradingRunner._process_symbol, junto al "
+            "cooldown por simbolo, ANTES de pedir senal. NO dentro de RiskEngine, y las tres "
+            "razones importan: (i) RiskEngine no tiene reloj ni colaboradores -- es una funcion "
+            "pura de (limites, senal, cartera) y esa pureza vale; (ii) en modo equity-aware, que es "
+            "SIEMPRE el del backtest, tres de sus guardas no se ejecutan "
+            "(risk/engine.py:108-119), asi que una guarda ahi correria el riesgo de estar "
+            "silenciosamente inactiva en toda la evidencia; (iii) _symbol_in_cooldown "
+            "(app/runner.py:489-502) es el precedente estructural exacto: la unica guarda que "
+            "consulta reloj e historial por simbolo y descarta antes de pedir senal, y ademas es "
+            "mas barata porque evita cargar barras y correr estrategias.\n"
+            "\n"
+            "TRES PROPIEDADES NO NEGOCIABLES:\n"
+            "1. Falla ABIERTA: sin datos no hay bloqueo. Un fallo del proveedor no puede parar el "
+            "trading, y menos uno cuya unica funcion es una comprobacion administrativa.\n"
+            "2. NUNCA en search_space.py, igual que las features: nada de esto es sorteable.\n"
+            "3. SE MIDE. Hoy un rechazo es una cadena de texto libre en RiskDecision.reason "
+            "(risk/engine.py:239-241): no hay taxonomia ni recuento, asi que una guarda que nunca "
+            "dispara y una que dispara siempre son indistinguibles. Cada bloqueo lleva source_key "
+            "estructurado y se acumula en SymbolCycleDiagnostics (que ya existe) para reportar "
+            "cuantas veces bloqueo cada motivo y sobre que simbolos. Sin esa cifra, una guarda es "
+            "una creencia.\n"
+            "\n"
+            "El orden de las guardas de _process_symbol no esta testeado: congelalo con un test "
+            "ANTES de insertar la nueva. Tests + .venv\\Scripts\\python.exe (poetry run esta roto) "
+            "+ ruff. Regenera dashboard y docs."
+        ),
+    },
+    {
         "id": "equities-parked",
         "rank": 19,
         "group": "segundo-plano",
         "priority": "aparcada",
-        "title": "Renta variable: aparcada a proposito (no se activa la clase de activo)",
+        "title": "Renta variable: aparcada a propósito (no se activa la clase de activo)",
         "line": "Universo", "status": "aparcada", "impact": "bajo", "effort": "alto",
         "evidence": "Cero estrategias de renta variable en el repo (hay proveedor, no estrategia). "
-                    "Cero datos reales detras de la pata de equity del generador. Y el universo "
-                    "de 20 megacaps esta elegido en 2024-26 entre las que sobrevivieron.",
-        "why": "La decision es SOLO CRIPTO, y no por poco. Toda la evidencia empirica del repo es "
-               "cripto: la fidelidad se midio contra Binance y la calibracion y la validacion "
-               "corrieron sobre universos con calendario 365. Activar renta variable seria "
+                    "Cero datos reales detrás de la pata de equity del generador. Y el universo "
+                    "de 20 megacaps está elegido en 2024-26 entre las que sobrevivieron.",
+        "why": "La decisión es SOLO CRIPTO, y no por poco. Toda la evidencia empírica del repo es "
+               "cripto: la fidelidad se midió contra Binance y la calibración y la validación "
+               "corrieron sobre universos con calendario 365. Activar renta variable sería "
                "construir estrategia + validar el proveedor Alpaca (¿ajusta splits y "
                "dividendos?) + verificar el calendario 252 de punta a punta + resolver un sesgo "
                "de supervivencia estructural (constituyentes point-in-time), todo antes de la "
-               "primera senal. Y el edge plausible no esta ahi: momentum diario sobre AAPL o SPY "
-               "compite contra el segmento mas eficiente del planeta. Lo que NO se hace es quitar "
-               "los stocks del universo SINTETICO: alli GLD, TLT y UUP son lo que hace que los "
-               "escenarios de tipos y de dolar signifiquen algo para cripto via los factores "
-               "compartidos. Se genera con los 35, se puntua y se opera solo cripto.",
+               "primera señal. Y el edge plausible no está ahí: momentum diario sobre AAPL o SPY "
+               "compite contra el segmento más eficiente del planeta. Lo que NO se hace es quitar "
+               "los stocks del universo SINTÉTICO: allí GLD, TLT y UUP son lo que hace que los "
+               "escenarios de tipos y de dólar signifiquen algo para cripto vía los factores "
+               "compartidos. Se genera con los 35, se puntúa y se opera solo cripto.",
         "prompt": (
             "Proyecto ai-trader (Python). NO EJECUTAR TODAVIA: esta tarea esta aparcada a "
             "proposito hasta que el bucle cripto (sintetico fiel -> transferencia contra el real "
@@ -2281,15 +2514,16 @@ ROADMAP = [
         "rank": 20,
         "group": "segundo-plano",
         "priority": "aparcada",
-        "title": "Polymarket en el backtest: aparcado hasta tener historico propio",
+        "title": "Polymarket en el backtest: aparcado hasta tener histórico propio",
         "line": "Universo", "status": "aparcada", "impact": "bajo", "effort": "alto",
-        "evidence": "Sin OHLCV historico de mercados de prediccion. La estrategia "
-                    "polymarket_threshold existe y opera en papel, pero no entra en ningun "
+        "evidence": "Sin OHLCV histórico de mercados de predicción. La estrategia "
+                    "polymarket_threshold existe y opera en papel, pero no entra en ningún "
                     "backtest.",
-        "why": "No es un olvido ni una limitacion del codigo: no hay historico que backtestear, y "
-               "comprarlo no es barato. La via realista es la que abre la evolucion #4: con el "
+        "why": "No es un olvido ni una limitación del código: no hay histórico que backtestear, y "
+               "comprarlo no es barato. La vía realista es la que abre la evolución 'Poner el "
+               "paper trading a correr en vivo': con el "
                "paper trading corriendo, el sistema empieza a guardar midpoints por ciclo, y en "
-               "unos meses habra una serie propia. Retomar esto antes de tener esa serie es "
+               "unos meses habrá una serie propia. Retomar esto antes de tener esa serie es "
                "construir sobre nada.",
         "prompt": (
             "Proyecto ai-trader (Python). NO EJECUTAR TODAVIA: depende de tener meses de "

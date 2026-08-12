@@ -16,6 +16,7 @@ from pathlib import Path
 
 import numpy as np
 
+from ai_trader.backtest.engine import DEFAULT_STARTING_EQUITY
 from ai_trader.backtest.metrics import DEFAULT_HEADLINE_WEIGHTS
 from ai_trader.backtest.session_study import (
     SESSIONS_REPORT,
@@ -61,6 +62,7 @@ logger = logging.getLogger("docs")
 ROOT = Path(__file__).resolve().parent.parent
 OUT = Path(__file__).resolve().parent / "metodologia.html"
 MACRO = {"GLD", "TLT", "UUP"}
+_CONFIG_CACHE = None
 
 
 def _git(*a: str) -> str:
@@ -192,7 +194,7 @@ def _fidelity() -> dict | None:
     documentacion tiene que ser barata de regenerar. Sin informe, prosa sin cifras."""
     report = load_fidelity_report(ROOT / fidelity_report_path(FIDELITY_LIBRARY))
     if not report:
-        logger.warning("Sin informe de fidelidad: la seccion 2.8 saldra degradada")
+        logger.warning("Sin informe de fidelidad: la seccion 2.10 saldra degradada")
         return None
 
     plan = report["plan"]
@@ -220,7 +222,7 @@ def _fidelity() -> dict | None:
             "accepted": baseline["summary"].get("accepted"),
         }
     else:
-        logger.warning("Sin informe de %s: la seccion 2.8 no podra comparar",
+        logger.warning("Sin informe de %s: la seccion 2.10 no podra comparar",
                        FIDELITY_BASELINE_LIBRARY)
 
     return {
@@ -269,7 +271,7 @@ def _transfer() -> dict | None:
     unidades de 15 ventanas de backtest real cada una."""
     report = load_transfer_report(ROOT / transfer_report_path(TRANSFER_LIBRARY))
     if not report:
-        logger.warning("Sin informe de transferencia: la seccion 2.9 saldra degradada")
+        logger.warning("Sin informe de transferencia: la seccion 4.11 saldra degradada")
         return None
 
     plan = report["plan"]
@@ -320,7 +322,7 @@ def _activity() -> dict | None:
     eligio el umbral y su efecto medido sobre el gate. Se lee del informe publicado."""
     report = load_activity_report(ROOT / activity_report_path(TRANSFER_LIBRARY))
     if not report:
-        logger.warning("Sin informe de actividad: la seccion 5.6b saldra degradada")
+        logger.warning("Sin informe de actividad: la seccion 4.10 saldra degradada")
         return None
 
     return {
@@ -353,7 +355,7 @@ def _validation() -> dict | None:
     recalculan. Cada unidad del estudio son ~20 ventanas de backtest real."""
     report = load_validation_report(ROOT / VALIDATION_REPORT)
     if not report:
-        logger.warning("Sin informe de validacion: la seccion 3.7 saldra degradada")
+        logger.warning("Sin informe de validacion: la seccion 4.8 saldra degradada")
         return None
 
     plan = report["plan"]
@@ -386,12 +388,12 @@ def _validation() -> dict | None:
 def _sessions() -> dict | None:
     """Cifras del estudio de descomposicion por sesion horaria (data/sessions).
 
-    Es lo que convierte la convencion intrabar de la 3.3 —que hasta ahora se justificaba
+    Es lo que convierte la convencion intrabar de la 3.4 —que hasta ahora se justificaba
     solo por prudencia— en una limitacion MEDIDA con su umbral. Se lee del informe
     publicado, no se recalcula: son seis anos de barras 1H de 24 pares."""
     report = load_sessions_report(ROOT / SESSIONS_REPORT)
     if not report:
-        logger.warning("Sin informe de sesiones: la seccion 3.3 saldra degradada")
+        logger.warning("Sin informe de sesiones: la seccion 3.5 saldra degradada")
         return None
 
     plan = report["plan"]
@@ -418,9 +420,75 @@ def _sessions() -> dict | None:
     }
 
 
+def _app_config():
+    """El config operado, cargado una sola vez: lo consumen la 2.1 y el capitulo 3."""
+    global _CONFIG_CACHE
+    if _CONFIG_CACHE is None:
+        _CONFIG_CACHE = load_config(ROOT / "config" / "default.toml")
+    return _CONFIG_CACHE
+
+
+def _market() -> dict:
+    """Seccion 2.1: la captura de datos REALES (proveedores, universo, cache).
+
+    No lee ningun informe: son constantes del sistema que corre. Es la mitad del
+    capitulo de datos que hasta ahora no estaba escrita en ningun sitio -- la
+    documentacion empezaba por el generador sintetico, como si los datos reales no
+    existieran, cuando toda la evidencia publicada (fidelidad, transferencia,
+    sesiones) sale de ellos."""
+    from ai_trader.data.cache import CACHE_DIR
+    from ai_trader.data.providers.ccxt_crypto import CCXTCryptoConfig
+
+    cfg = _app_config()
+    ccxt_cfg = CCXTCryptoConfig()
+    symbols = list(cfg.runner.symbols)
+    return {
+        "n_synthetic_assets": len(DEFAULT_UNIVERSE.assets),
+        "n_symbols": len(symbols),
+        "symbols": symbols,
+        "n_crypto": sum(1 for s in symbols if "/" in s),
+        "lookback_days": cfg.runner.lookback_days,
+        "exchange": ccxt_cfg.exchange_id,
+        "batch": ccxt_cfg.max_batch_size,
+        "cache_dir": str(CACHE_DIR).replace("\\", "/"),
+    }
+
+
+def _trade() -> dict:
+    """Capitulo 3: las constantes que gobiernan UN trade, leidas del config operado.
+
+    Van juntas a proposito: el limite de riesgo, el coste de ejecucion y el techo de
+    capacidad son la misma decision vista en tres sitios, y separarlas es lo que
+    permitia que la documentacion describiera un trade que el sistema no ejecuta."""
+    cfg = _app_config()
+    slip = cfg.execution.slippage
+    return {
+        "fee_rate": cfg.execution.fee_rate,
+        "slippage_bps": cfg.execution.slippage_bps,
+        "max_participation": cfg.execution.max_participation,
+        "vol_coef": slip.vol_coef,
+        "impact_coef": slip.impact_coef,
+        "max_slippage_bps": slip.max_slippage_bps,
+        "starting_equity": DEFAULT_STARTING_EQUITY,
+        "max_position_size_usd": cfg.risk.max_position_size_usd,
+        "max_open_positions": cfg.risk.max_open_positions,
+        "max_symbol_exposure_usd": cfg.risk.max_symbol_exposure_usd,
+        "max_total_exposure_usd": cfg.risk.max_total_exposure_usd,
+        "max_daily_loss_usd": cfg.risk.max_daily_loss_usd,
+        "min_confidence": cfg.risk.min_confidence_per_trade,
+        "default_stop_loss_pct": cfg.risk.default_stop_loss_pct,
+        "default_take_profit_pct": cfg.risk.default_take_profit_pct,
+        "max_stop_distance_pct": cfg.risk.max_stop_distance_pct,
+        "risk_fraction_per_trade": cfg.risk.risk_fraction_per_trade,
+        "max_holding_days": cfg.runner.max_holding_days,
+        "cooldown_hours": cfg.runner.symbol_cooldown_hours,
+        "max_trades_per_cycle": cfg.runner.max_trades_per_cycle,
+    }
+
+
 def _signals() -> dict:
     """
-    La plataforma de ingesta de senales (seccion 4.3): catalogo, conexion y PROFUNDIDAD.
+    La plataforma de ingesta de senales (seccion 2.2): catalogo, conexion y PROFUNDIDAD.
 
     A diferencia de los demas bloques, este NO lee un informe de estudio: el catalogo es
     codigo, la auditoria de entidades y de archivo es local, y la profundidad sale del
@@ -428,10 +496,22 @@ def _signals() -> dict:
     cifras que importan —cuantas fuentes tienen adaptador y cuantas tienen historia
     MEDIDA— cambian escribiendo codigo y corriendo la sonda, no re-corriendo un estudio.
     """
+    from ai_trader.observation.signal_radar import (
+        MIN_SIGNAL_COVERAGE,
+        POLARITY,
+        SIGNAL_FEATURES,
+        is_market_scoped,
+    )
     from ai_trader.signals.audit import audit_archive, audit_entities
     from ai_trader.signals.capture import connect_adapters
     from ai_trader.signals.catalog import CATALOG, catalog_summary
     from ai_trader.signals.depth import DEPTH_LEDGER, load_ledger
+    from ai_trader.signals.events import (
+        EVENT_POOL_REPORT,
+        event_encoding_spec,
+        is_event_source,
+        load_pool_report,
+    )
     from ai_trader.signals.normalize import normalization_spec
     from ai_trader.signals.source import connected_keys
     from ai_trader.signals.store import SignalStore
@@ -443,6 +523,8 @@ def _signals() -> dict:
 
     ledger = load_ledger(ROOT / DEPTH_LEDGER) or {}
     depth = {row["source_key"]: row for row in ledger.get("sources") or []}
+    pool = load_pool_report(ROOT / EVENT_POOL_REPORT) or {}
+    pool_rows = pool.get("sources") or {}
 
     return {
         "summary": catalog_summary(),
@@ -451,6 +533,31 @@ def _signals() -> dict:
         "records": archive.records,
         "normalization": normalization_spec(),
         "depth_measured_at": (ledger.get("generated_at") or "")[:10] or "—",
+        # El radar: como llegan las diecisiete fuentes a una decision.
+        "radar": {
+            "features": list(SIGNAL_FEATURES),
+            "min_coverage_pct": round(MIN_SIGNAL_COVERAGE * 100),
+            "n_polarity": len(POLARITY),
+            "n_market": sum(1 for s in CATALOG if is_market_scoped(s)),
+            "n_asset": sum(1 for s in CATALOG if not is_market_scoped(s)),
+            "n_event": sum(1 for s in CATALOG if is_event_source(s)),
+            "n_continuous": sum(1 for s in CATALOG if not is_event_source(s)),
+        },
+        "events": {
+            "spec": event_encoding_spec(),
+            "pooled_total": pool.get("pooled_events_total", 0),
+            "rows": [
+                (
+                    key,
+                    f"{row.get('pooled_events', 0):,}".replace(",", " "),
+                    str(row.get("entities", 0)),
+                    "si" if row.get("announced") else "no",
+                    row.get("first_day") or "—",
+                    row.get("last_day") or "—",
+                )
+                for key, row in sorted(pool_rows.items())
+            ],
+        },
         "entities": {
             "n_symbols": entities.n_symbols,
             "coverage_pct": round(entities.coverage_pct, 2),
@@ -461,7 +568,7 @@ def _signals() -> dict:
         "rows": [
             (
                 s.key,
-                s.tier,
+                "evento" if is_event_source(s) else "continua",
                 s.pit,
                 str(len(s.features)),
                 "si" if s.key in set(connected_keys()) else "no",
@@ -503,6 +610,8 @@ def collect() -> dict:
     facts["n_own"] = len(OWN_ASSET_FEATURES)
     facts["n_regime"] = len(REGIME_FEATURES)
 
+    facts["market"] = _market()
+    facts["trade"] = _trade()
     facts["calibration"] = _calibration()
     facts["fidelity"] = _fidelity()
     facts["transfer"] = _transfer()

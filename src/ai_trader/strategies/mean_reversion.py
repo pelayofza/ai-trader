@@ -6,6 +6,12 @@ from uuid import uuid4
 
 import pandas as pd
 
+from ai_trader.observation.signal_radar import (
+    INERT_MAX_INTENSITY,
+    INERT_MIN_INTENSITY,
+    INERT_MIN_TONE,
+    signal_gate_reason,
+)
 from ai_trader.shared import bars as bar_schema
 from ai_trader.shared.clock import utc_now
 from ai_trader.shared.schemas import Side, Signal
@@ -68,6 +74,20 @@ class MeanReversionConfig:
     # inyectado). Defaults permisivos = comportamiento identico. El CEM los optimiza.
     min_breadth: float = 0.0  # 0 = sin filtro; evita comprar en selloff amplio (cuchillos)
     max_relative_strength: float = 1.0  # 1 = sin filtro; solo compra rezagados del mercado
+    # Filtros de SENALES EXTERNAS (opcionales, solo con SignalRadarProvider inyectado).
+    # Defaults en el borde exacto del recorte de las z: inertes por construccion, no por
+    # convenio (ver observation/signal_radar.py::INERT_MIN_TONE).
+    #
+    # POLARIDAD, Y AQUI ESTA EL MATIZ QUE PARECE UN ERROR Y NO LO ES. La intensidad si es
+    # el eje opuesto al de momentum: esta primitiva compra caidas y lo que la mata es
+    # comprarlas mientras algo grande esta ocurriendo, asi que su umbral es un TECHO.
+    # El tono, en cambio, es un PISO en las dos, igual que en momentum. No por simetria:
+    # el modo de fallo caracteristico de la reversion a la media es comprar una caida de
+    # -3 sigma que resulta ser el primer dia de un reprecio permanente —el hack, el
+    # desbloqueo, la sancion—, y en esa situacion el tono esta muy negativo. Un techo de
+    # tono compraria exactamente esas.
+    min_signal_tone: float = INERT_MIN_TONE
+    max_signal_intensity: float = INERT_MAX_INTENSITY
 
     def __post_init__(self) -> None:
         if self.lookback <= 1:
@@ -88,6 +108,15 @@ class MeanReversionConfig:
             raise ValueError("min_bars must be >= lookback")
         if not 0.0 <= self.min_breadth <= 1.0:
             raise ValueError("min_breadth must be between 0 and 1")
+        if not INERT_MIN_TONE <= self.min_signal_tone <= -INERT_MIN_TONE:
+            raise ValueError(
+                f"min_signal_tone must be between {INERT_MIN_TONE} and {-INERT_MIN_TONE}"
+            )
+        if not INERT_MIN_INTENSITY <= self.max_signal_intensity <= INERT_MAX_INTENSITY:
+            raise ValueError(
+                f"max_signal_intensity must be between {INERT_MIN_INTENSITY} "
+                f"and {INERT_MAX_INTENSITY}"
+            )
 
 
 class MeanReversionStrategy:
@@ -95,14 +124,24 @@ class MeanReversionStrategy:
 
     def __init__(self, config: MeanReversionConfig | None = None) -> None:
         self.config = config or MeanReversionConfig()
-        # Colaborador cross-sectional opcional; lo inyecta el backtest. None en vivo.
+        # Colaboradores opcionales; los inyecta quien construye (backtest o proceso vivo).
         self._regime = None
+        self._signals = None
 
     def attach_regime_provider(self, provider) -> None:
         self._regime = provider
 
+    def attach_signal_provider(self, provider) -> None:
+        self._signals = provider
+
     def _regime_active(self) -> bool:
         return self.config.min_breadth > 0.0 or self.config.max_relative_strength < 1.0
+
+    def _signals_active(self) -> bool:
+        return (
+            self.config.min_signal_tone > INERT_MIN_TONE
+            or self.config.max_signal_intensity < INERT_MAX_INTENSITY
+        )
 
     def supports_symbol(self, symbol: str) -> bool:
         # Opera cualquier simbolo con barras OHLCV; los de prediccion no las tienen.
@@ -171,6 +210,18 @@ class MeanReversionStrategy:
                 return None
             if regime["relative_strength"] > self.config.max_relative_strength:
                 logger.info("Regime relative-strength gate blocked symbol=%s", symbol)
+                return None
+
+        # Puerta de senales, DESPUES de la de regimen y con la misma regla de fallo
+        # abierto: sin cobertura suficiente no se evalua nada.
+        if self._signals is not None and self._signals_active():
+            reason = signal_gate_reason(
+                self._signals.features(symbol),
+                min_tone=self.config.min_signal_tone,
+                max_intensity=self.config.max_signal_intensity,
+            )
+            if reason is not None:
+                logger.info("Signal gate blocked symbol=%s (%s)", symbol, reason)
                 return None
 
         stop_loss = latest_close - (latest_atr * self.config.stop_atr_mult)

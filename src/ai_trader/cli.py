@@ -412,6 +412,57 @@ def cmd_signals_features(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_signals_events(args: argparse.Namespace) -> int:
+    """
+    Cuenta los EVENTOS POOLED por fuente y publica el recuento. No toca red.
+
+    Es la cifra que sustituye a la creencia: "muestras de decenas" era una afirmacion que
+    nadie habia medido, y esta orden es la que la mide. La unidad es el evento NORMALIZADO
+    —% del float, % del ADV— y no el token, que es lo que permite ponerlos todos en la
+    misma distribucion.
+    """
+    import json
+
+    from ai_trader.observation.signal_radar import SignalRadarProvider
+    from ai_trader.shared.clock import LiveClock
+    from ai_trader.signals.events import pool_report, write_pool_report
+    from ai_trader.signals.feed import load_frames
+
+    config = load_config(args.config)
+    frames = load_frames(raw_root=config.signals.raw_root or None)
+    report = pool_report(frames)
+    path = write_pool_report(report)
+
+    if args.json:
+        print(json.dumps(report, indent=2))
+        return 0
+
+    print(f"=== EVENTOS POOLED | {report['n_event_sources']} fuentes de evento | "
+          f"{report['pooled_events_total']} eventos ===")
+    for key, row in report["sources"].items():
+        window = (
+            f"{row['first_day']} -> {row['last_day']}" if row["first_day"] else "sin dato"
+        )
+        print(f"  {key:<24} {row['pooled_events']:>6} eventos  {row['entities']:>3} ent.  "
+              f"{'anunciado' if row['announced'] else 'sin aviso':<10} {window}")
+    print()
+    print(f"  Tope dias-al-evento: {report['spec']['days_ahead_cap']:.0f} | "
+          f"ventana posterior: {report['spec']['days_active_cap']:.0f} | "
+          f"recorte de magnitud: +-{report['spec']['magnitude_clip']:.0f}")
+    print(f"  Recuento publicado en {path}")
+
+    if args.symbol:
+        radar = SignalRadarProvider(frames, LiveClock())
+        features = radar.features(args.symbol)
+        print()
+        print(f"=== RADAR | {args.symbol} ===")
+        for name, value in features.items():
+            print(f"  {name:<26} {value:+.3f}")
+        print(f"  Fuentes: {len(radar.coverage_report()['asset_sources'])} por activo, "
+              f"{len(radar.coverage_report()['market_sources'])} de mercado")
+    return 0
+
+
 def _print_window(title, window) -> None:
     m = window.metrics
     print(f"=== {title} | {window.start.date()} -> {window.end.date()} ===")
@@ -593,6 +644,13 @@ def main(argv: list[str] | None = None) -> int:
     feat.add_argument("--json", action="store_true", help="Emit the coverage summary as JSON.")
     feat.add_argument("--source", default=None, help="Publicar solo esta fuente del catalogo.")
 
+    ev = signals_sub.add_parser(
+        "events",
+        help="CUENTA los eventos pooled por fuente y publica el radar que ven las puertas.",
+    )
+    ev.add_argument("--json", action="store_true", help="Emit the pool report as JSON.")
+    ev.add_argument("--symbol", default=None, help="Ademas, imprime el radar de este simbolo.")
+
     report_parser = sub.add_parser("report", help="Print reports without running a cycle.")
     report_parser.add_argument(
         "which",
@@ -618,6 +676,7 @@ def main(argv: list[str] | None = None) -> int:
             "audit": cmd_signals_audit,
             "depth": cmd_signals_depth,
             "features": cmd_signals_features,
+            "events": cmd_signals_events,
         }
         return signal_handlers[args.signals_command](args)
 

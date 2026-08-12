@@ -1,0 +1,115 @@
+{
+  "spec": {
+    "cadence": "event",
+    "days_ahead_cap": 30.0,
+    "days_active_cap": 10.0,
+    "magnitude_clip": 4.0,
+    "suffixes": {
+      "ahead": "_ahead",
+      "active": "_active",
+      "magnitude": "_mag",
+      "seen": "_seen"
+    },
+    "missing": "0.0 con `_seen` = 0 (la ausencia de dato se declara aparte)",
+    "sources": {
+      "btc_difficulty": {
+        "magnitude": "difficulty_change_pct",
+        "scale": 5.0,
+        "announced": true,
+        "reason": "Un ajuste del 5% es grande: la mediana historica esta en torno al 1-2%. La fecha se estima con los bloques que faltan, no la anuncia nadie."
+      },
+      "defillama_hacks": {
+        "magnitude": "hack_amount_usd",
+        "scale": 100000000.0,
+        "announced": false,
+        "reason": "100 M$ comprometidos es una unidad. Un hack NO se anuncia: mirar hacia adelante aqui seria futuro puro, asi que solo queda la estela."
+      },
+      "macro_calendar": {
+        "magnitude": null,
+        "scale": 1.0,
+        "announced": true,
+        "reason": "No tiene magnitud: lo que aporta es CUANDO, y el cuando se sabe con meses de antelacion. La magnitud queda en 0 y solo cuenta la proximidad."
+      },
+      "ofac_sdn": {
+        "magnitude": "sdn_new_entries",
+        "scale": 10.0,
+        "announced": false,
+        "reason": "Diez direcciones nuevas en una publicacion es un dia grande. La lista sale sin preaviso."
+      },
+      "token_unlocks": {
+        "magnitude": "unlock_pct_float",
+        "scale": 1.0,
+        "announced": true,
+        "reason": "Un 1% del float en un dia es una unidad. El calendario de vesting se publica con meses de antelacion (y se reescribe: por eso es revisable)."
+      }
+    }
+  },
+  "n_event_sources": 5,
+  "pooled_events_total": 917,
+  "sources": {
+    "btc_difficulty": {
+      "tier": "A",
+      "cadence": "event",
+      "announced": true,
+      "magnitude": "difficulty_change_pct",
+      "pooled_events": 321,
+      "entities": 1,
+      "events_per_entity": 321.0,
+      "with_magnitude": 321,
+      "first_day": "2014-08-19",
+      "last_day": "2026-08-08",
+      "observations": 321
+    },
+    "defillama_hacks": {
+      "tier": "A",
+      "cadence": "event",
+      "announced": false,
+      "magnitude": "hack_amount_usd",
+      "pooled_events": 519,
+      "entities": 1,
+      "events_per_entity": 519.0,
+      "with_magnitude": 519,
+      "first_day": "2016-06-17",
+      "last_day": "2026-08-09",
+      "observations": 621
+    },
+    "macro_calendar": {
+      "tier": "A",
+      "cadence": "event",
+      "announced": true,
+      "magnitude": null,
+      "pooled_events": 76,
+      "entities": 1,
+      "events_per_entity": 76.0,
+      "with_magnitude": 0,
+      "first_day": "2017-02-01",
+      "last_day": "2026-12-10",
+      "observations": 76
+    },
+    "ofac_sdn": {
+      "tier": "A",
+      "cadence": "event",
+      "announced": false,
+      "magnitude": "sdn_new_entries",
+      "pooled_events": 1,
+      "entities": 1,
+      "events_per_entity": 1.0,
+      "with_magnitude": 1,
+      "first_day": "2026-08-07",
+      "last_day": "2026-08-07",
+      "observations": 1
+    },
+    "token_unlocks": {
+      "tier": "A",
+      "cadence": "event",
+      "announced": true,
+      "magnitude": "unlock_pct_float",
+      "pooled_events": 0,
+      "entities": 0,
+      "events_per_entity": 0.0,
+      "with_magnitude": 0,
+      "first_day": null,
+      "last_day": null
+    }
+  }
+}

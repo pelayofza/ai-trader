@@ -37,6 +37,7 @@ from ai_trader.execution.polymarket_paper import PolymarketPaperExecutionEngine
 from ai_trader.execution.router import ExecutionRouter
 from ai_trader.notifications.base import NullNotifier
 from ai_trader.observation.regime import MarketRegimeProvider
+from ai_trader.observation.signal_radar import SignalRadarProvider
 from ai_trader.risk.engine import RiskEngine
 from ai_trader.shared.clock import HistoricalClock
 from ai_trader.shared.schemas import Position
@@ -159,6 +160,7 @@ class BacktestEngine:
         *,
         bars: dict | None = None,
         headline_weights: HeadlineWeights = DEFAULT_HEADLINE_WEIGHTS,
+        signals: dict | None = None,
     ) -> None:
         if data_provider is None and bars is None:
             raise ValueError("BacktestEngine requires either a data_provider or preloaded bars")
@@ -168,6 +170,11 @@ class BacktestEngine:
         self.starting_equity = starting_equity
         self.headline_weights = headline_weights
         self._preloaded_bars = bars
+        # Senales externas ya derivadas (clave de fuente -> frame diario canonico), tal y
+        # como las devuelve `signals/feed.py::load_frames`. None es el caso normal: un
+        # backtest sin senales construye el radar vacio y las puertas se saltan solas, de
+        # modo que las cifras publicadas siguen siendo reproducibles sin tener el archivo.
+        self._signal_frames = signals
         # 365 si el universo incluye algun activo 24/7 (cripto o prediccion), 252 si es
         # solo renta variable. Ver metrics.periods_per_year_for.
         self.periods_per_year = periods_per_year_for_symbols(config.runner.symbols)
@@ -180,6 +187,7 @@ class BacktestEngine:
         starting_equity: float = DEFAULT_STARTING_EQUITY,
         *,
         headline_weights: HeadlineWeights = DEFAULT_HEADLINE_WEIGHTS,
+        signals: dict | None = None,
     ) -> BacktestEngine:
         """Construye un motor sobre series ya generadas (datos simulados o cualquier
         OHLCV en memoria), sin pasar por un proveedor."""
@@ -188,6 +196,7 @@ class BacktestEngine:
             bars=bars,
             starting_equity=starting_equity,
             headline_weights=headline_weights,
+            signals=signals,
         )
 
     def run(
@@ -414,15 +423,23 @@ class BacktestEngine:
             for spec in self.config.strategies
         ]
 
-        # Ensamblador cross-sectional: mira el universo entero (con su propio anti
-        # look-ahead por reloj) y se inyecta en las estrategias que lo aceptan. Es la
+        # Ensambladores de observacion: miran mas alla del simbolo que se esta decidiendo
+        # (el universo entero, las senales externas), cada uno con su propio anti
+        # look-ahead por reloj, y se inyectan en las estrategias que los aceptan. Es la
         # costura que el contrato de un-solo-simbolo no provee; las estrategias sin
-        # soporte (o con filtros de regimen desactivados) lo ignoran.
-        regime_provider = MarketRegimeProvider(source.raw_bars, clock)
+        # soporte (o con sus filtros desactivados) los ignoran.
+        #
+        # El bucle es UNO para los dos, duck-typed por el nombre del metodo. Anadir un
+        # tercer ensamblador es anadir una linea a este diccionario, no un caso especial.
+        providers = {
+            "attach_regime_provider": MarketRegimeProvider(source.raw_bars, clock),
+            "attach_signal_provider": SignalRadarProvider(self._signal_frames, clock),
+        }
         for strategy in strategies:
-            attach = getattr(strategy, "attach_regime_provider", None)
-            if callable(attach):
-                attach(regime_provider)
+            for method, provider in providers.items():
+                attach = getattr(strategy, method, None)
+                if callable(attach):
+                    attach(provider)
         # Costura de liquidez: el motor de ejecucion cobra spread, volatilidad e impacto
         # leyendo las barras YA CERRADAS del simbolo (mismo corte anti look-ahead que la
         # estrategia). Sin ella el fill no sabria distinguir BTC de un altcoin iliquido.

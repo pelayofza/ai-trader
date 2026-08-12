@@ -40,7 +40,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -66,13 +66,20 @@ METHOD_ARCHIVE = "archive"  # se midio sobre lo ya archivado (unica opcion en fo
 # igualmente.
 PROBE_YEARS = 12
 
-# Dias medidos que se exigen para que el catalogo pueda DECLARAR `history_from`. Un ano.
+# Ventana medida que se exige para que el catalogo pueda DECLARAR `history_from`. Un ano.
 #
 # El motivo no es estetico. En una fuente `forward_capture` el primer dia con dato es el dia
 # que arranco la captura, asi que declararlo seria literalmente cierto y practicamente
 # enganoso: `backtestable` pasaria a True en una serie de un dia. Con el umbral, el registro
 # de mediciones guarda desde cuando se captura —que es el dato util— y el catalogo espera a
 # que exista una ventana con la que se pueda backtestear algo.
+#
+# SE MIDE EN DIAS DE CALENDARIO (last_day - first_day), NO EN FILAS. Empezo contando filas,
+# que para una serie diaria es lo mismo, y dejo de serlo el dia que entraron las fuentes de
+# EVENTO: el calendario del FOMC son ~60 fechas exactas repartidas en una decada, y contar
+# filas lo habria dejado fuera del backtest por "no llegar a un ano" teniendo nueve. Lo que
+# la regla quiere es una VENTANA sobre la que se pueda backtestear; cuantas observaciones
+# hay dentro es otra pregunta, y la responde `observations` en el mismo registro.
 MIN_MEASURED_DAYS = 365
 
 
@@ -136,7 +143,7 @@ class DepthReport:
 
 
 def _connect() -> None:
-    """Registra los adaptadores del lote Tier B. Importar aqui y no arriba mantiene el
+    """Registra los diecisiete adaptadores. Importar aqui y no arriba mantiene el
     modulo importable sin `ccxt` ni ningun cliente detras."""
     from ai_trader.signals.adapters import register_all
 
@@ -246,10 +253,36 @@ def _measure(
     )
 
 
-def write_ledger(report: DepthReport, path: Path | str = DEPTH_LEDGER) -> Path:
+def write_ledger(
+    report: DepthReport, path: Path | str = DEPTH_LEDGER, *, merge: bool = True
+) -> Path:
+    """
+    Escribe el registro de mediciones. Por defecto FUSIONA con lo que ya hubiera.
+
+    Sondear una sola fuente es la operacion normal —las demas cuestan cuota, minutos y, en
+    las revisables, un re-archivado entero— y sin fusion esa pasada borraria del registro
+    todo lo medido antes. Con ella, cada fila conserva SU `measured_at`: el fichero es un
+    registro de mediciones fechadas una a una, no una foto simultanea, y leerlo como si lo
+    fuera seria el unico modo de equivocarse aqui.
+
+    `merge=False` para una pasada que quiera dejar el registro con EXACTAMENTE lo que acaba
+    de medir (es lo que hacen los tests con su propio fichero temporal).
+    """
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(report.as_dict(), indent=2), encoding="utf-8")
+
+    payload = report.as_dict()
+    if merge:
+        previous = load_ledger(target) or {}
+        rows = {str(r.get("source_key")): r for r in previous.get("sources") or []}
+        rows.update({r["source_key"]: r for r in payload["sources"]})
+        merged = [rows[key] for key in sorted(rows)]
+        payload["sources"] = merged
+        payload["n_sources"] = len(merged)
+        payload["n_measured"] = sum(1 for r in merged if r.get("first_day"))
+        payload["measured_in_this_pass"] = [s.source_key for s in report.sources]
+
+    target.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return target
 
 
@@ -264,20 +297,30 @@ def load_ledger(path: Path | str = DEPTH_LEDGER) -> dict | None:
         return None
 
 
+def measured_span_days(row: Mapping) -> int:
+    """Dias de CALENDARIO cubiertos por una fila del registro. 0 si no hay medicion."""
+    first, last = row.get("first_day"), row.get("last_day")
+    if not first:
+        return 0
+    if not last:
+        return 1
+    return (date.fromisoformat(str(last)) - date.fromisoformat(str(first))).days + 1
+
+
 def measured_history(
     path: Path | str = DEPTH_LEDGER, *, min_days: int = MIN_MEASURED_DAYS
 ) -> dict[str, date]:
-    """clave de fuente -> primer dia MEDIDO, si hay ventana suficiente.
+    """clave de fuente -> primer dia MEDIDO, si la VENTANA medida es suficiente.
 
-    Es literalmente lo que el catalogo tiene derecho a declarar: una fuente con menos de
-    `min_days` medidos no aparece, por mucho que la sonda le haya visto un primer dia (ver
-    `MIN_MEASURED_DAYS`). Con `min_days=0` se obtiene la medicion cruda, que es lo que hace
-    falta para AUDITAR el registro, no para declarar."""
+    Es literalmente lo que el catalogo tiene derecho a declarar: una fuente cuya ventana
+    medida no llega a `min_days` dias de calendario no aparece, por mucho que la sonda le
+    haya visto un primer dia (ver `MIN_MEASURED_DAYS`). Con `min_days=0` se obtiene la
+    medicion cruda, que es lo que hace falta para AUDITAR el registro, no para declarar."""
     ledger = load_ledger(path) or {}
     out: dict[str, date] = {}
     for row in ledger.get("sources") or []:
         first = row.get("first_day")
-        if first and int(row.get("days") or 0) >= min_days:
+        if first and measured_span_days(row) >= min_days:
             out[str(row.get("source_key"))] = date.fromisoformat(first)
     return out
 
@@ -324,5 +367,6 @@ __all__ = [
     "load_ledger",
     "measure_depth",
     "measured_history",
+    "measured_span_days",
     "write_ledger",
 ]

@@ -1,10 +1,10 @@
 {
-  "started_at": "2026-08-11T19:38:28.509678+00:00",
-  "finished_at": "2026-08-11T19:38:28.511974+00:00",
+  "started_at": "2026-08-12T10:05:09.071652+00:00",
+  "finished_at": "2026-08-12T10:17:33.602272+00:00",
   "root": "data\\signals_raw",
   "catalog": {
     "n_sources": 17,
-    "n_features": 44,
+    "n_features": 40,
     "by_tier": {
       "A": 6,
       "B": 11
@@ -17,25 +17,26 @@
       "venue": 2
     },
     "by_pit": {
-      "forward_capture": 6,
+      "forward_capture": 5,
       "archive_revisable": 11,
-      "derived_from_price": 0
+      "derived_from_price": 0,
+      "chain_immutable": 1
     },
-    "n_backtestable": 0,
-    "n_forward_only": 17,
-    "n_open": 14
+    "n_backtestable": 10,
+    "n_forward_only": 7,
+    "n_open": 13
   },
   "n_sources": 17,
-  "n_connected": 0,
-  "n_pending": 17,
-  "n_failed": 0,
-  "records": 0,
+  "n_connected": 17,
+  "n_pending": 0,
+  "n_failed": 4,
+  "records": 14025,
   "sources": [
     {
       "source_key": "guavy_sentiment",
       "tier": "B",
       "pit": "archive_revisable",
-      "connected": false,
+      "connected": true,
       "entities": [
         "BTC",
         "ETH",
@@ -64,13 +65,13 @@
       ],
       "n_entities": 24,
       "records": 0,
-      "error": null
+      "error": "Guavy necesita la variable de entorno GUAVY_API_KEY (Bearer token)."
     },
     {
       "source_key": "etf_flows",
       "tier": "B",
       "pit": "archive_revisable",
-      "connected": false,
+      "connected": true,
       "entities": [
         "BTC",
         "ETH",
@@ -98,30 +99,34 @@
         "TIA"
       ],
       "n_entities": 24,
-      "records": 0,
+      "records": 22,
       "error": null
     },
     {
       "source_key": "fred_macro",
       "tier": "B",
       "pit": "archive_revisable",
-      "connected": false,
+      "connected": true,
       "entities": [
         "DTWEXBGS",
         "DFII10",
+        "DGS2",
+        "DGS10",
         "T10Y2Y",
         "SP500",
-        "VIXCLS"
+        "NASDAQ100",
+        "VIXCLS",
+        "DCOILWTICO"
       ],
-      "n_entities": 5,
+      "n_entities": 9,
       "records": 0,
-      "error": null
+      "error": "FRED necesita la variable de entorno FRED_API_KEY (key gratuita). Sin ella la fuente no se captura; el resto del catalogo sigue su curso."
     },
     {
       "source_key": "defillama_stablecoins",
       "tier": "B",
       "pit": "archive_revisable",
-      "connected": false,
+      "connected": true,
       "entities": [
         "ethereum",
         "solana",
@@ -131,14 +136,14 @@
         "bsc"
       ],
       "n_entities": 6,
-      "records": 0,
+      "records": 186,
       "error": null
     },
     {
       "source_key": "defillama_fees",
       "tier": "B",
       "pit": "archive_revisable",
-      "connected": false,
+      "connected": true,
       "entities": [
         "BTC",
         "ETH",
@@ -166,14 +171,14 @@
         "TIA"
       ],
       "n_entities": 24,
-      "records": 0,
+      "records": 2140,
       "error": null
     },
     {
       "source_key": "defillama_volumes",
       "tier": "B",
       "pit": "archive_revisable",
-      "connected": false,
+      "connected": true,
       "entities": [
         "BTC",
         "ETH",
@@ -201,14 +206,14 @@
         "TIA"
       ],
       "n_entities": 24,
-      "records": 0,
+      "records": 854,
       "error": null
     },
     {
       "source_key": "wikipedia_pageviews",
       "tier": "B",
       "pit": "archive_revisable",
-      "connected": false,
+      "connected": true,
       "entities": [
         "BTC",
         "ETH",
@@ -236,49 +241,26 @@
         "TIA"
       ],
       "n_entities": 24,
-      "records": 0,
+      "records": 1283,
       "error": null
     },
     {
       "source_key": "p2p_premium",
       "tier": "B",
       "pit": "forward_capture",
-      "connected": false,
+      "connected": true,
       "entities": [
-        "BTC",
-        "ETH",
-        "SOL",
-        "BNB",
-        "XRP",
-        "ADA",
-        "DOGE",
-        "AVAX",
-        "DOT",
-        "LINK",
-        "LTC",
-        "UNI",
-        "ATOM",
-        "NEAR",
-        "APT",
-        "ARB",
-        "OP",
-        "INJ",
-        "FIL",
-        "ETC",
-        "AAVE",
-        "SUI",
-        "SEI",
-        "TIA"
+        "USDT"
       ],
-      "n_entities": 24,
-      "records": 0,
+      "n_entities": 1,
+      "records": 6,
       "error": null
     },
     {
       "source_key": "funding_dispersion",
       "tier": "B",
       "pit": "forward_capture",
-      "connected": false,
+      "connected": true,
       "entities": [
         "BTC",
         "ETH",
@@ -306,14 +288,14 @@
         "TIA"
       ],
       "n_entities": 24,
-      "records": 0,
+      "records": 72,
       "error": null
     },
     {
       "source_key": "github_activity",
       "tier": "B",
       "pit": "archive_revisable",
-      "connected": false,
+      "connected": true,
       "entities": [
         "BTC",
         "ETH",
@@ -341,14 +323,14 @@
         "TIA"
       ],
       "n_entities": 24,
-      "records": 0,
+      "records": 9402,
       "error": null
     },
     {
       "source_key": "cftc_cot",
       "tier": "B",
       "pit": "archive_revisable",
-      "connected": false,
+      "connected": true,
       "entities": [
         "BTC",
         "ETH",
@@ -376,14 +358,14 @@
         "TIA"
       ],
       "n_entities": 24,
-      "records": 0,
+      "records": 8,
       "error": null
     },
     {
       "source_key": "token_unlocks",
       "tier": "A",
       "pit": "archive_revisable",
-      "connected": false,
+      "connected": true,
       "entities": [
         "BTC",
         "ETH",
@@ -412,68 +394,66 @@
       ],
       "n_entities": 24,
       "records": 0,
-      "error": null
+      "error": "HTTP Error 402: Payment Required"
     },
     {
       "source_key": "staking_queue",
       "tier": "A",
       "pit": "forward_capture",
-      "connected": false,
+      "connected": true,
       "entities": [
-        "ethereum",
-        "solana",
-        "cosmos"
+        "ethereum"
       ],
-      "n_entities": 3,
+      "n_entities": 1,
       "records": 0,
-      "error": null
+      "error": "HTTP Error 401: Unauthorized"
     },
     {
       "source_key": "btc_difficulty",
       "tier": "A",
-      "pit": "forward_capture",
-      "connected": false,
+      "pit": "chain_immutable",
+      "connected": true,
       "entities": [
         "bitcoin"
       ],
       "n_entities": 1,
-      "records": 0,
+      "records": 2,
       "error": null
     },
     {
       "source_key": "defillama_hacks",
       "tier": "A",
       "pit": "archive_revisable",
-      "connected": false,
+      "connected": true,
       "entities": [
         "*"
       ],
       "n_entities": 1,
-      "records": 0,
+      "records": 39,
       "error": null
     },
     {
       "source_key": "ofac_sdn",
       "tier": "A",
       "pit": "forward_capture",
-      "connected": false,
+      "connected": true,
       "entities": [
         "*"
       ],
       "n_entities": 1,
-      "records": 0,
+      "records": 1,
       "error": null
     },
     {
       "source_key": "macro_calendar",
       "tier": "A",
       "pit": "forward_capture",
-      "connected": false,
+      "connected": true,
       "entities": [
         "*"
       ],
       "n_entities": 1,
-      "records": 0,
+      "records": 10,
       "error": null
     }
   ]

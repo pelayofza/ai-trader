@@ -1,0 +1,470 @@
+"""
+CODIFICACION DE EVENTOS: lo que `normalize.py` no puede hacer, y por que.
+
+EL PROBLEMA, QUE NO ES DE MATIZ
+-------------------------------
+Las dos varas de `normalize.py` —z contra la propia historia, z contra la seccion cruzada—
+suponen una serie que existe todos los dias. Una serie de eventos no lo es: es 99% ceros y
+un dia con algo. La mediana de esa serie es 0, su rango intercuartilico es 0, y una z
+contra ella es o NaN o un numero enorme sin significado. Peor: rellenar los huecos con
+ceros y normalizar produce una feature que parece razonable, no falla en ningun test de
+forma y no significa NADA.
+
+Asi que las de evento se codifican de otra manera, y la diferencia vive en el codigo:
+
+    `<fuente>_ahead`    proximidad al PROXIMO evento, en [0, 1]. 1 = hoy; 0 = no hay
+                        ninguno dentro del tope. Es el "dias-al-evento" del catalogo, dado
+                        la vuelta y ACOTADO a proposito (ver DAYS_AHEAD_CAP).
+    `<fuente>_active`   frescura del ULTIMO evento, en [0, 1]. 1 = hoy; 0 = hace mas de la
+                        ventana. Es lo unico que se puede codificar de un evento que no se
+                        anuncia (un hack).
+    `<fuente>_mag`      magnitud del evento que domina —el mas cercano en el tiempo—,
+                        NORMALIZADA por su escala declarada y recortada. Con signo.
+    `<fuente>_seen`     1 si esa entidad tiene calendario en esa fuente, 0 si no. Es la
+                        pieza que distingue "no hay evento" de "no se de eventos".
+
+EL TOPE NO ES UN DETALLE DE IMPLEMENTACION
+------------------------------------------
+"Dias hasta el proximo desbloqueo" es infinito cuando no hay ninguno, y el infinito no
+entra en un vector de observacion. La salida perezosa es escribir 0 —o 9999— y las dos son
+mentiras distintas: el 0 dice "es hoy" y el 9999 aplasta la escala de todo lo demas. Con un
+tope declarado (`DAYS_AHEAD_CAP`) y la cuenta invertida, "no hay nada a la vista" es un 0
+que significa exactamente eso, y el rango es finito por construccion.
+
+Y el tope hace ademas un trabajo que no se ve: es lo que mantiene HONESTO usar el
+calendario de hoy para fechar el pasado. Las reuniones del FOMC de 2019 estan en el fichero
+de hoy, pero en 2019 tambien estaban publicadas —se anuncian con mas de un ano— asi que a
+30 dias vista la respuesta es la misma que se habria tenido entonces. A dos anos vista no
+lo seria.
+
+LO QUE SE ANUNCIA Y LO QUE NO
+-----------------------------
+Un desbloqueo, un ajuste de dificultad y una reunion del FOMC tienen fecha conocida ANTES.
+Un hack y una sancion, no. Mirar hacia adelante en las dos ultimas seria futuro puro, asi
+que `announced=False` apaga `_ahead` por codigo y no por convencion: lo unico que queda de
+un evento no anunciado es su estela.
+
+QUE FUENTE SE CODIFICA COMO EVENTO, Y POR QUE NO LO DECIDE EL TIER
+------------------------------------------------------------------
+Lo decide la CADENCIA (`cadence == 'event'`), que es lo que el catalogo ya declaraba. El
+tier dice de que NATURALEZA es la fuente —oferta mecanica frente a efecto estadistico— y
+acierta en cinco de las seis mecanicas; la sexta, `staking_queue`, es mecanica y sin embargo
+publica un NIVEL diario (cuantos validadores hay en cola), que se codifica con las dos z
+como cualquier serie continua. Enrutar por el tier habria puesto una z de evento sobre un
+nivel y un dias-al-evento sobre una cola. La cadencia no se equivoca en ese caso.
+"""
+from __future__ import annotations
+
+import json
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+from ai_trader.shared.clock import visible_cutoff
+from ai_trader.shared.signals import DAY, ENTITY, OBSERVED
+from ai_trader.signals.catalog import CATALOG, SignalSource
+
+# --- politica declarada -------------------------------------------------------------
+
+# Cadencia que dispara la codificacion de evento. Ver el docstring.
+EVENT_CADENCE = "event"
+
+SUFFIX_AHEAD = "_ahead"
+SUFFIX_ACTIVE = "_active"
+SUFFIX_MAG = "_mag"
+SUFFIX_SEEN = "_seen"
+
+# Tope de dias-al-evento. Treinta dias naturales: mas alla, la anticipacion de un evento de
+# oferta no se distingue del ruido, y ademas es la ventana dentro de la cual el calendario
+# de hoy coincide con el que estaba publicado entonces (ver el docstring).
+DAYS_AHEAD_CAP = 30.0
+
+# Ventana posterior. Mas corta que la de anticipacion a proposito: la reaccion a un evento
+# que ya paso se agota antes que la anticipacion del que viene, y una estela de treinta dias
+# convertiria cualquier fuente activa en un uno permanente.
+DAYS_ACTIVE_CAP = 10.0
+
+# Recorte de la magnitud, en las MISMAS unidades que `normalize.Z_CLIP`. Que coincidan no es
+# casualidad: el radar mezcla magnitudes de evento con z de series continuas, y dos escalas
+# distintas harian que una domine a la otra por construccion y no por informacion.
+MAGNITUDE_CLIP = 4.0
+
+
+@dataclass(frozen=True, slots=True)
+class EventSpec:
+    """
+    Como se lee UNA fuente de evento. Todo lo que aqui hay es una decision declarada.
+
+    `magnitude` es la columna que mide "cuanto"; `scale` es cuanto de esa columna vale UNA
+    unidad de magnitud —el equivalente a una sigma en la escala de las z— y `announced` dice
+    si el evento tiene fecha conocida de antemano.
+
+    `scale` es un orden de magnitud razonado, no un parametro ajustado: si se calibrara
+    contra el resultado, seria un grado de libertad mas, que es exactamente lo que esta
+    evolucion se compromete a no anadir.
+    """
+
+    magnitude: str | None
+    scale: float
+    announced: bool
+    reason: str = ""
+
+    def as_dict(self) -> dict:
+        return {
+            "magnitude": self.magnitude,
+            "scale": self.scale,
+            "announced": self.announced,
+            "reason": self.reason,
+        }
+
+
+EVENT_SPECS: dict[str, EventSpec] = {
+    "token_unlocks": EventSpec(
+        magnitude="unlock_pct_float",
+        scale=1.0,
+        announced=True,
+        reason="Un 1% del float en un dia es una unidad. El calendario de vesting se "
+               "publica con meses de antelacion (y se reescribe: por eso es revisable).",
+    ),
+    "btc_difficulty": EventSpec(
+        magnitude="difficulty_change_pct",
+        scale=5.0,
+        announced=True,
+        reason="Un ajuste del 5% es grande: la mediana historica esta en torno al 1-2%. La "
+               "fecha se estima con los bloques que faltan, no la anuncia nadie.",
+    ),
+    "defillama_hacks": EventSpec(
+        magnitude="hack_amount_usd",
+        scale=1e8,
+        announced=False,
+        reason="100 M$ comprometidos es una unidad. Un hack NO se anuncia: mirar hacia "
+               "adelante aqui seria futuro puro, asi que solo queda la estela.",
+    ),
+    "ofac_sdn": EventSpec(
+        magnitude="sdn_new_entries",
+        scale=10.0,
+        announced=False,
+        reason="Diez direcciones nuevas en una publicacion es un dia grande. La lista sale "
+               "sin preaviso.",
+    ),
+    "macro_calendar": EventSpec(
+        magnitude=None,
+        scale=1.0,
+        announced=True,
+        reason="No tiene magnitud: lo que aporta es CUANDO, y el cuando se sabe con meses "
+               "de antelacion. La magnitud queda en 0 y solo cuenta la proximidad.",
+    ),
+}
+
+
+def day_values(index: pd.Index) -> np.ndarray:
+    """Nivel `day` -> `datetime64[ns]` SIN huso.
+
+    `DatetimeIndex.to_numpy()` sobre un indice con huso devuelve un array de objetos
+    Timestamp, y comparar eso con una fecha en `searchsorted` revienta con "cannot compare
+    tz-naive and tz-aware". Todo el sistema es UTC (`shared/signals.py` lo garantiza), asi
+    que quitar el huso aqui no pierde informacion y es lo que hace comparable el array.
+    """
+    values = pd.DatetimeIndex(index)
+    return (values.tz_convert(None) if values.tz is not None else values).to_numpy()
+
+
+def as_naive(moment: pd.Timestamp) -> np.datetime64:
+    """La frontera del reloj, en la misma escala que `day_values`."""
+    stamp = pd.Timestamp(moment)
+    return np.datetime64(stamp.tz_convert(None) if stamp.tz is not None else stamp)
+
+
+def event_sources(catalog: Sequence[SignalSource] = CATALOG) -> tuple[SignalSource, ...]:
+    """Las fuentes que se codifican como evento. Es la cadencia, no el tier."""
+    return tuple(s for s in catalog if s.cadence == EVENT_CADENCE)
+
+
+def is_event_source(source: SignalSource) -> bool:
+    return source.cadence == EVENT_CADENCE
+
+
+def encoded_names(source_key: str) -> tuple[str, ...]:
+    """Las columnas que produce una fuente de evento, en orden canonico."""
+    return (
+        f"{source_key}{SUFFIX_AHEAD}",
+        f"{source_key}{SUFFIX_ACTIVE}",
+        f"{source_key}{SUFFIX_MAG}",
+        f"{source_key}{SUFFIX_SEEN}",
+    )
+
+
+def event_encoding_spec() -> dict:
+    """La politica, en un dict. Se publica con el dato, igual que `normalization_spec`."""
+    return {
+        "cadence": EVENT_CADENCE,
+        "days_ahead_cap": DAYS_AHEAD_CAP,
+        "days_active_cap": DAYS_ACTIVE_CAP,
+        "magnitude_clip": MAGNITUDE_CLIP,
+        "suffixes": {
+            "ahead": SUFFIX_AHEAD,
+            "active": SUFFIX_ACTIVE,
+            "magnitude": SUFFIX_MAG,
+            "seen": SUFFIX_SEEN,
+        },
+        "missing": "0.0 con `_seen` = 0 (la ausencia de dato se declara aparte)",
+        "sources": {key: spec.as_dict() for key, spec in sorted(EVENT_SPECS.items())},
+    }
+
+
+# --- codificacion --------------------------------------------------------------------
+
+
+def encode_at(
+    frame: pd.DataFrame,
+    source_key: str,
+    as_of: datetime,
+    *,
+    entities: Sequence[str] | None = None,
+    spec: EventSpec | None = None,
+) -> dict[str, dict[str, float]]:
+    """
+    Codifica UNA fuente de evento en el 'ahora' del reloj. `entidad -> columnas`.
+
+    Anti look-ahead, con el matiz que hace distinta a una fuente de evento: el pasado se
+    recorta con la MISMA frontera que las barras (`visible_cutoff`), pero el FUTURO no se
+    tira. Un calendario publicado hace meses es informacion disponible hoy, y borrarlo
+    "por si acaso" no seria prudencia: seria eliminar justo la propiedad por la que una
+    feature de evento vale algo. Lo que impide que eso sea futuro es `announced`, que
+    apaga la mirada hacia adelante en las fuentes que no se anuncian.
+    """
+    spec = spec or EVENT_SPECS.get(source_key) or EventSpec(None, 1.0, False)
+    names = encoded_names(source_key)
+    empty = dict.fromkeys(names, 0.0)
+
+    keys = list(entities or ())
+    out: dict[str, dict[str, float]] = {key: dict(empty) for key in keys}
+    if frame is None or frame.empty:
+        return out
+
+    cutoff = visible_cutoff(as_of)
+    magnitude = spec.magnitude if spec.magnitude in frame.columns else None
+
+    for entity, block in frame.groupby(level=ENTITY, sort=False):
+        entity = str(entity)
+        if keys and entity not in out:
+            continue
+        days = day_values(block.index.get_level_values(DAY))
+        values = (
+            pd.to_numeric(block[magnitude], errors="coerce").to_numpy(dtype=float)
+            if magnitude
+            else np.zeros(len(block), dtype=float)
+        )
+        out[entity] = encode_arrays(days, values, cutoff, source_key, spec)
+
+    return out
+
+
+def encode_arrays(
+    days: np.ndarray,
+    values: np.ndarray,
+    cutoff: pd.Timestamp,
+    source_key: str,
+    spec: EventSpec,
+) -> dict[str, float]:
+    """
+    EL NUCLEO de la codificacion: calendario ordenado de UNA entidad -> las cuatro columnas.
+
+    Trabaja sobre arrays y no sobre un frame porque lo llaman dos sitios con exigencias
+    distintas —`encode_at`, que es la API legible, y el radar, que pregunta una vez por
+    simbolo y por dia y no puede permitirse un `groupby` por consulta— y tener DOS
+    implementaciones de la misma cuenta seria tener dos codificaciones distintas en cuanto
+    alguien tocase una.
+    """
+    names = encoded_names(source_key)
+    encoded = dict.fromkeys(names, 0.0)
+    if days is None or len(days) == 0:
+        return encoded
+
+    # `_seen` mira el calendario ENTERO de la entidad, no solo el pasado visible: que una
+    # fuente cubra a este activo es un hecho de hoy, no una observacion fechada.
+    encoded[f"{source_key}{SUFFIX_SEEN}"] = 1.0
+
+    # El calendario llega ordenado (el frame canonico lo esta), asi que la frontera entre
+    # pasado y futuro es una busqueda binaria y no un barrido.
+    split = int(np.searchsorted(days, as_naive(cutoff), side="left"))
+
+    weight_active, magnitude_active = 0.0, 0.0
+    if split > 0:
+        elapsed = (cutoff - pd.Timestamp(days[split - 1], tz="UTC")).days
+        weight_active = max(0.0, 1.0 - elapsed / DAYS_ACTIVE_CAP)
+        magnitude_active = values[split - 1]
+
+    weight_ahead, magnitude_ahead = 0.0, 0.0
+    if spec.announced and split < len(days):
+        remaining = (pd.Timestamp(days[split], tz="UTC") - cutoff).days
+        weight_ahead = max(0.0, 1.0 - remaining / DAYS_AHEAD_CAP)
+        magnitude_ahead = values[split]
+
+    encoded[f"{source_key}{SUFFIX_ACTIVE}"] = weight_active
+    encoded[f"{source_key}{SUFFIX_AHEAD}"] = weight_ahead
+    # DOMINA EL MAS CERCANO EN EL TIEMPO. En cualquier instante o se esta en la antesala de
+    # un evento o en su estela; mezclar las dos magnitudes en una media produciria un
+    # numero que no describe ninguna de las dos situaciones.
+    chosen = magnitude_ahead if weight_ahead >= weight_active else magnitude_active
+    encoded[f"{source_key}{SUFFIX_MAG}"] = scaled_magnitude(chosen, spec.scale)
+    return encoded
+
+
+def scaled_magnitude(value: float, scale: float) -> float:
+    """Magnitud en unidades declaradas y recortada al mismo tope que las z."""
+    if value is None or not np.isfinite(value) or scale <= 0:
+        return 0.0
+    return float(np.clip(value / scale, -MAGNITUDE_CLIP, MAGNITUDE_CLIP))
+
+
+def encode_series(
+    frame: pd.DataFrame,
+    source_key: str,
+    days: Sequence[datetime],
+    *,
+    entities: Sequence[str] | None = None,
+) -> pd.DataFrame:
+    """
+    La version DENSA: las mismas columnas, un dia por fila. Para publicar e inspeccionar.
+
+    Llama a `encode_at` dia a dia en vez de reimplementar la cuenta vectorizada. Es mas
+    lento y es deliberado: dos implementaciones de la misma codificacion terminan
+    divergiendo, y la version que corre en la decision es la de `encode_at`.
+    """
+    keys = list(entities or _entities_of(frame))
+    rows: list[dict] = []
+    for day in days:
+        encoded = encode_at(frame, source_key, day, entities=keys)
+        for entity, values in encoded.items():
+            rows.append({ENTITY: entity, DAY: day, **values})
+    if not rows:
+        return pd.DataFrame(columns=[*encoded_names(source_key)])
+    out = pd.DataFrame(rows).set_index([ENTITY, DAY]).sort_index()
+    return out[list(encoded_names(source_key))]
+
+
+def _entities_of(frame: pd.DataFrame) -> tuple[str, ...]:
+    if frame is None or frame.empty:
+        return ()
+    return tuple(sorted({str(e) for e in frame.index.get_level_values(ENTITY)}))
+
+
+# --- el recuento que sustituye a la creencia ------------------------------------------
+
+
+def pool_report(frames: Mapping[str, pd.DataFrame]) -> dict:
+    """
+    CUANTOS EVENTOS HAY, DE VERDAD, POR FUENTE. Es la cifra de la que colgaba todo.
+
+    La unidad de observacion es el EVENTO NORMALIZADO, no el token: catorce desbloqueos de
+    un token son catorce, pero catorce por veinte activos son doscientos ochenta eventos
+    COMPARABLES entre si, porque la magnitud esta en % del float y no en unidades del
+    token. Ese es el sentido de `pooled`: los eventos de todas las entidades de la fuente
+    puestos en la misma distribucion.
+
+    `per_entity` va al lado y no es decorativo: una fuente con 600 eventos repartidos en
+    una sola entidad (los hacks son de mercado) y otra con 600 repartidos en 24 activos
+    sostienen inferencias distintas, y el numero agregado no distingue las dos.
+    """
+    out: dict[str, dict] = {}
+    for source in event_sources():
+        frame = frames.get(source.key)
+        spec = EVENT_SPECS.get(source.key)
+        row = {
+            "tier": source.tier,
+            "cadence": source.cadence,
+            "announced": bool(spec and spec.announced),
+            "magnitude": spec.magnitude if spec else None,
+            "pooled_events": 0,
+            "entities": 0,
+            "events_per_entity": 0.0,
+            "with_magnitude": 0,
+            "first_day": None,
+            "last_day": None,
+        }
+        if frame is not None and not frame.empty:
+            days = frame.index.get_level_values(DAY)
+            per_entity = frame.groupby(level=ENTITY, sort=True).size()
+            magnitude = spec.magnitude if spec else None
+            row.update(
+                pooled_events=int(len(frame)),
+                entities=int(per_entity.size),
+                events_per_entity=round(float(len(frame)) / float(per_entity.size), 2),
+                # Un evento cuya magnitud no se pudo derivar (falta el denominador: el
+                # float, el volumen) cuenta como evento y NO como magnitud. Son dos
+                # muestras distintas y confundirlas es lo que hace creer que hay mas.
+                with_magnitude=(
+                    int(pd.to_numeric(frame[magnitude], errors="coerce").notna().sum())
+                    if magnitude and magnitude in frame.columns
+                    else 0
+                ),
+                first_day=days.min().date().isoformat(),
+                last_day=days.max().date().isoformat(),
+                observations=int(frame[OBSERVED].sum()) if OBSERVED in frame else int(len(frame)),
+            )
+        out[source.key] = row
+
+    return {
+        "spec": event_encoding_spec(),
+        "n_event_sources": len(out),
+        "pooled_events_total": sum(r["pooled_events"] for r in out.values()),
+        "sources": dict(sorted(out.items())),
+    }
+
+
+# El recuento publicado. Va en data/ y no en .cache/ por el mismo motivo que el registro de
+# profundidad: es la EVIDENCIA que sustituye a una creencia ("son muestras de decenas"), y
+# lo que sustituye a una creencia tiene que poder citarse con fecha.
+EVENT_POOL_REPORT = Path("data") / "signals" / "event_pool.json"
+
+
+def write_pool_report(report: dict, path: Path | str = EVENT_POOL_REPORT) -> Path:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    return target
+
+
+def load_pool_report(path: Path | str = EVENT_POOL_REPORT) -> dict | None:
+    """El ultimo recuento, o None si nunca se ha corrido: los generadores de documentacion
+    degradan a prosa sin cifras en vez de romperse."""
+    target = Path(path)
+    if not target.exists():
+        return None
+    try:
+        return json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):  # pragma: no cover - fichero corrupto
+        return None
+
+
+__all__ = [
+    "DAYS_ACTIVE_CAP",
+    "EVENT_POOL_REPORT",
+    "DAYS_AHEAD_CAP",
+    "EVENT_CADENCE",
+    "EVENT_SPECS",
+    "MAGNITUDE_CLIP",
+    "SUFFIX_ACTIVE",
+    "SUFFIX_AHEAD",
+    "SUFFIX_MAG",
+    "SUFFIX_SEEN",
+    "EventSpec",
+    "as_naive",
+    "day_values",
+    "encode_arrays",
+    "encode_at",
+    "encode_series",
+    "scaled_magnitude",
+    "encoded_names",
+    "event_encoding_spec",
+    "event_sources",
+    "is_event_source",
+    "load_pool_report",
+    "pool_report",
+    "write_pool_report",
+]

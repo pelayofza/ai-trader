@@ -78,6 +78,20 @@ vol_coef = 0.02
 impact_coef = 0.60
 max_slippage_bps = 500.0
 
+# Radar de senales externas. APAGADO por defecto: encenderlo hace que el sistema lea el
+# archivo crudo de data/signals_raw/ y construya el bloque de observacion de senales
+# (tono, intensidad y cobertura, por activo y de mercado).
+#
+# Con enabled = false el radar existe pero sale vacio: cobertura 0 y todas las puertas de
+# senales se saltan solas. Sin credenciales, sin archivo o con medio catalogo caido, el
+# arranque es el mismo; lo unico que cambia es cuanta cobertura hay, y eso se ve en el log.
+#
+# Aqui NO hay ningun umbral, y es deliberado: los pisos de tono, el minimo de cobertura y
+# las escalas de las magnitudes son constantes razonadas en codigo para que no se puedan
+# ajustar contra el resultado. Ver observation/signal_radar.py y signals/events.py.
+[signals]
+enabled = false
+
 # Estrategias activas. `type` se resuelve contra el registro de strategies/registry.py.
 # Este bloque es el formato que emitira el generador de estrategias con IA.
 [[strategies]]

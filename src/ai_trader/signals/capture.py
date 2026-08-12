@@ -3,7 +3,7 @@ CAPTURA: recorre el catalogo y archiva. Se arranca YA, antes de que nada este ca
 
 POR QUE ANTES QUE NADA
 ----------------------
-Seis de las diecisiete fuentes del catalogo son `pit='forward_capture'`: su pasado no se
+Cinco de las diecisiete fuentes del catalogo son `pit='forward_capture'`: su pasado no se
 puede descargar porque nadie lo publica. Para esas, la profundidad historica del sistema
 no depende de escribir mejor codigo mas adelante, sino de UNA sola variable —desde cuando
 se esta capturando— y esa variable solo avanza con el calendario. Cada dia que la captura

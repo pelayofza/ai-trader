@@ -99,46 +99,57 @@ PIT_LABEL = {
     "forward_capture": "solo hacia adelante",
     "archive_revisable": "backfill revisable",
     "derived_from_price": "derivada del precio",
+    "chain_immutable": "registro inmutable",
 }
 
 
 def _signals_block(s):
-    """Seccion 4.3: la plataforma de ingesta de senales externas.
+    """Seccion 2.2: la plataforma de ingesta de senales externas.
 
-    Va en §4, pegada al espacio de observacion, porque es de lo que trata: de ampliarlo.
-    Y va con las dos cifras juntas por delante —cuantas conectadas y cuantas con
-    profundidad MEDIDA— porque la diferencia entre las dos es el contenido: tener
-    adaptador no es tener historia, y solo lo segundo permite backtestear."""
+    Va en el capitulo de DATOS, detras de la captura de precio y delante del generador
+    sintetico, porque es exactamente eso: el segundo sustrato de datos del sistema. Y va
+    con las dos cifras juntas por delante —cuantas conectadas y cuantas con profundidad
+    MEDIDA— porque la diferencia entre las dos es el contenido: tener adaptador no es
+    tener historia, y solo lo segundo permite backtestear."""
     if not s:
         return ""
 
     m, e, n = s["summary"], s["entities"], s["normalization"]
+    radar, events = s.get("radar", {}), s.get("events", {})
+    spec = events.get("spec", {})
     rows = [
-        (key, tier, PIT_LABEL.get(pit, pit), nf, conn, hist, measured, days)
-        for key, tier, pit, nf, conn, hist, measured, days in s["rows"]
+        (key, enc, PIT_LABEL.get(pit, pit), nf, conn, hist, measured, days)
+        for key, enc, pit, nf, conn, hist, measured, days in s["rows"]
     ]
     table = _rows(
         rows,
-        ["Fuente", "Tier", "Point-in-time", "Features", "Adaptador", "Declarada",
+        ["Fuente", "Codificación", "Point-in-time", "Features", "Adaptador", "Declarada",
          "MEDIDA", "Días"],
     )
+    pool_table = _rows(
+        events.get("rows", []),
+        ["Fuente de evento", "Eventos pooled", "Entidades", "Anunciado", "Primer día",
+         "Último día"],
+    ) if events.get("rows") else ""
     return f"""
-<h3>4.3 · Señales externas: la plataforma de ingesta y su profundidad medida</h3>
-<p>Todo lo anterior se calcula sobre <b>precio y volumen</b>. El único canal de contexto que existe hoy es
-el bloque de régimen de §4.2, y está construido sobre las propias barras: el sistema no tenía ninguna
-fuente de datos externa a OHLCV. El catálogo declara {m['n_sources']} fuentes que producirían
-{m['n_features']} features; de ellas <b>{s['n_connected']} tienen adaptador</b> —el lote continuo, tier B—,
+<h3>2.2 · Señales externas: diecisiete fuentes, una sola vía hasta la decisión</h3>
+<p>La captura de §2.1 produce <b>precio y volumen</b>, y durante toda la vida del proyecto eso fue todo lo
+que el sistema podía ver: su único canal de contexto era el bloque de régimen (§4.2), construido sobre las
+propias barras. Éste es el segundo sustrato de datos, y el único que trae información de fuera del precio.
+El catálogo declara {m['n_sources']} fuentes que producen {m['n_features']} features; hoy
+<b>{s['n_connected']} tienen adaptador</b> —el catálogo entero, evento incluido—,
 <b>{s['n_measured']} tienen profundidad medida</b> y <b>{m['n_backtestable']} pueden entrar en un
 backtest</b>. Que las tres cifras no coincidan es el punto: tener adaptador no es tener historia, y tener
-historia solo cuenta si se ha comprobado.</p>
+historia solo cuenta si se ha comprobado. Y todas ellas llegan ya al espacio de observación y a la
+decisión, en <i>backtest</i> y en vivo.</p>
 
 <div class="why"><b>Por qué el esqueleto antes que las fuentes.</b> El valor no está en conectar
 <i>una</i> fuente, está en que la fuente N+1 cueste casi cero: un adaptador, una entrada de catálogo y un
-test. Las once del primer lote comparten puerto, archivo, esquema, normalización y sonda; ninguna toca el
-runner ni las estrategias. Y hay un motivo para arrancar la captura aunque nada esté cableado:
-<b>{m['by_pit']['forward_capture']} de las {m['n_sources']}</b> fuentes son <i>forward capture</i> —nadie
-publica su pasado—, así que su profundidad histórica no depende de escribir mejor código después sino del
-calendario. Cada día sin capturar es profundidad que no se recupera.</div>
+test. Las diecisiete comparten puerto, archivo, esquema, normalización y sonda. Y hay un motivo para
+arrancar la captura antes que nada: <b>{m['by_pit']['forward_capture']} de las {m['n_sources']}</b> fuentes
+son <i>forward capture</i> —nadie publica su pasado—, así que su profundidad histórica no depende de
+escribir mejor código después sino del calendario. Cada día sin capturar es profundidad que no se
+recupera.</div>
 
 <p>Dos campos del catálogo sostienen la honestidad del resto. <span class="mono">history_from</span> es la
 primera fecha con dato <b>comprobado por nosotros</b>, no la que anuncia el proveedor. Esa comprobación es
@@ -185,12 +196,96 @@ FRED discontinuó las series de oro de la LBMA. Ninguno de los dos se rellena co
 significaría otra cosa: el hueco se declara y aparece como cobertura cero.</li>
 </ul>
 
-<p><b>Dos puertas.</b> El tier <b>A</b> (mecánica: desbloqueos, colas de staking, dificultad, hacks,
-sanciones) es oferta calendarizada con muestras de <i>decenas</i>, y entra como <b>elegibilidad</b> —una
-guarda que veta operar— y nunca como feature de un optimizador: sobre catorce observaciones, un CEM libre
-construye una estrategia preciosa y falsa. El tier <b>B</b> (estadística: sentimiento, flujos de ETF,
-macro, actividad de desarrollo, dispersión de <i>funding</i>) entra como features continuas, esperando
-efectos pequeños y decadentes. La separación vive en el catálogo, no en un comentario.</p>
+<p><b>Una sola vía, y el <span class="mono">tier</span> pasó a describir en vez de enrutar.</b> Durante una
+fase el diseño fueron <i>dos puertas</i>: el tier <b>A</b> (desbloqueos, colas de staking, dificultad,
+hacks, sanciones) entraría como <b>elegibilidad</b> —una guarda que veta operar— y solo el <b>B</b>
+(sentimiento, flujos de ETF, macro, actividad de desarrollo, dispersión de <i>funding</i>) como features.
+La bifurcación se retiró, y conviene decir por qué con precisión: la defensa que la justificaba —«muestras
+de <i>decenas</i>; sobre catorce observaciones un CEM libre construye una estrategia preciosa y falsa»—
+descansaba en un número <b>que nadie había medido</b>. Al medirlo con la misma sonda que corrigió los
+<span class="mono">history_from</span> del folleto, resultó falso por un factor de diez.</p>
+
+{pool_table}
+
+<p>Son <b>{events.get('pooled_total', 0)} eventos</b> en total, publicados en
+<span class="mono">data/signals/event_pool.json</span>. Y donde la muestra <i>sí</i> es corta, la razón es
+también una medición y no una propiedad de la fuente: el endpoint de desbloqueos de DefiLlama pasó a
+responder <b>402 Payment Required</b> y el de colas de staking, <b>401 Unauthorized</b>. La unidad de esa
+cuenta es el <b>evento normalizado</b> —% del <i>float</i>, % del ADV— y no el token, que es lo que permite
+ponerlos todos en la misma distribución: catorce desbloqueos por token son cientos a través del universo.</p>
+
+<p>Así que <b>todas las señales fluyen al motor por la misma vía</b> —features al espacio de observación,
+en <i>backtest</i> y en vivo— y lo que determina la <b>codificación</b> no es el tier sino la
+<b>cadencia</b>: {radar.get('n_event', 0)} fuentes de evento y {radar.get('n_continuous', 0)} continuas. La
+distinción no es cosmética: <span class="mono">staking_queue</span> es mecánica (tier A) y publica un
+<b>nivel</b> diario, así que enrutar por el tier le habría puesto un días-al-evento a una cola de
+validadores.</p>
+
+<h4>Por qué los eventos no pasan por la misma normalización</h4>
+<p>Una z contra una serie que es <b>99 % ceros</b> no significa nada: su mediana es 0, su rango
+intercuartílico es 0 y el resultado es o NaN o un número enorme. Peor: rellenar los huecos con ceros y
+normalizar produce una feature que <i>parece</i> razonable, no falla ningún test de forma y no significa
+nada. Las de evento se codifican aparte, y la diferencia vive en el código: proximidad al próximo evento
+<b>acotada a {_n(spec.get('days_ahead_cap', 0), 0)} días</b>, estela del último acotada a
+{_n(spec.get('days_active_cap', 0), 0)}, magnitud dividida por una escala declarada por fuente y recortada
+a <b>±{_n(spec.get('magnitude_clip', 0), 0)}</b> —el mismo tope que las z, para que ninguna domine a la
+otra por construcción—, y una marca de si esa entidad <i>tiene</i> calendario en esa fuente.</p>
+
+<div class="why"><b>El tope no es un detalle de implementación.</b> «Días hasta el próximo desbloqueo» es
+infinito cuando no hay ninguno, y el infinito no entra en un vector de observación. Las dos salidas
+perezosas mienten de formas distintas: un 0 diría «es hoy» y un 9999 aplastaría la escala de todo lo demás.
+Con un tope declarado y la cuenta invertida, «no hay nada a la vista» es un 0 que significa exactamente
+eso. Y el tope hace un segundo trabajo que no se ve: es lo que mantiene honesto usar el calendario de
+<i>hoy</i> para fechar el pasado, porque las reuniones del FOMC de 2019 también estaban publicadas en 2019
+—a treinta días vista la respuesta es la que se habría tenido entonces; a dos años, no—. Lo que no se
+anuncia (un <i>hack</i>, una sanción) tiene la mirada hacia adelante apagada <b>por código</b>: solo queda
+su estela.</div>
+
+<h4>El radar: de {m['n_features']} columnas crudas a seis números</h4>
+<p>{m['n_features']} columnas no son un espacio de observación: son {m['n_features']} grados de libertad
+esperando a que alguien los pondere. El radar (<span class="mono">observation/signal_radar.py</span>, con
+la forma exacta del proveedor de régimen de §4.2: <span class="mono">features(symbol)</span>, memo por el
+«ahora» del reloj y el mismo recorte anti-<i>look-ahead</i>) las reduce a <b>tres ejes</b> publicados por
+<b>dos bloques</b>: <span class="mono">{' · '.join(radar.get('features', [])[:3])}</span> del activo y
+<span class="mono">{' · '.join(radar.get('features', [])[3:])}</span> del mercado, iguales para todos los
+símbolos ese día. El <b>tono</b> suma solo las {radar.get('n_polarity', 0)} features con polaridad
+declarada y razonada una a una; lo que no está en esa tabla no es un olvido, es una feature cuya dirección
+exigiría una hipótesis que nadie ha medido. La <b>intensidad</b> no tiene signo, y es el único eje en el
+que momentum y reversión a la media quieren cosas opuestas: la primera la usa como confirmación (piso) y
+la segunda como filtro de catástrofe (techo). En el tono las dos ponen un <b>piso</b>, porque el modo de
+fallo característico de la reversión es comprar una caída de −3 σ que resulta ser el primer día de un
+reprecio permanente.</p>
+
+<div class="note"><b>La trampa de los tres estados, y el invariante que la desactiva.</b> La convención del
+espacio de observación es «feature no disponible = 0.0 neutro» (§4.2), y con eventos es peor que peligrosa:
+<i>no hay desbloqueo</i> y <i>no sé de desbloqueos</i> se escriben con el mismo cero. La <b>cobertura</b>
+es la feature que los distingue, y con ella el invariante central: <b>una puerta de señales nunca bloquea
+por falta de datos</b>. Por debajo del {radar.get('min_coverage_pct', 0)} % de las fuentes del bloque, la
+puerta <b>no se evalúa</b> —falla abierta—. Ese umbral es una <b>constante, no un parámetro</b>: si fuera
+sorteable, un sorteo del optimizador podría subirlo hasta convertir el radar en un filtro de
+<i>disponibilidad de datos</i>, que rankearía por qué fuentes tenían cobertura en cada tramo de historia en
+vez de por lo que dicen.</div>
+
+<div class="why"><b>Qué sustituye a la puerta, y qué queda sin cubrir.</b> Dos límites que se pueden
+comprobar y un test que falta. <b>Primero:</b> ninguna feature —de ningún tier— entra en el espacio de
+búsqueda del optimizador, y los umbrales de las puertas son constantes declaradas en código, no parámetros
+sorteables; el CEM solo reconstruye <span class="mono">strategies</span>, así que el límite es estructural y
+la huella de las 16 configuraciones publicadas no se mueve. <b>Segundo:</b> el tamaño de muestra se
+<i>mide</i> con la sonda en vez de declararse, y se amplía por <i>pooling</i> del evento normalizado —la
+unidad de observación es el evento comparable (% del <i>float</i>, % del ADV), no el token, así que catorce
+desbloqueos por token son cientos a través del universo—. <b>Lo que falta,</b> y se escribe porque callarlo
+sería el error que este documento existe para no cometer: limitar los grados de libertad <i>reduce</i> el
+riesgo de sobreajuste, no lo <i>mide</i>. El instrumento que lo mediría es el <b>IC de break-even</b> —barrer
+la capacidad predictiva ρ de un canal de observación sintético, con ρ = 0 como grupo de control, de modo que
+la pregunta que se le hace al histórico real sea una sola cifra— y todavía no existe. Hasta entonces, una
+feature de muestra corta puede estar sobreajustada sin que el sistema pueda detectarlo.</div>
+
+<div class="note"><b>No hay veto.</b> Con la unificación se decidió que ninguna señal bloquee: no existe
+guarda de elegibilidad por señales ni lista negra, y toda señal actúa como feature. La consecuencia se
+declara en vez de silenciarse: nada impide hoy abrir posición en un activo <b>sancionado, deslistado o con
+el mercado detenido</b>. Esa guarda es <i>operativa</i> y no de alfa —vetar un activo sancionado no es una
+estrategia, es una restricción administrativa—, así que vive aparte y su riesgo, mientras el dinero sea de
+papel y el universo se configure a mano, es teórico.</div>
 
 <h4>Las cuatro decisiones de diseño, y qué se paga si se toman al revés</h4>
 <ul>
@@ -202,7 +297,7 @@ efecto secundario, la mitad frágil se testea sin red y en milisegundos.</li>
 <li><b>El crudo va en <span class="mono">data/</span> y no en <span class="mono">.cache/</span>.</b>
 Append-only, en <span class="mono">data/signals_raw/&lt;fuente&gt;/&lt;entidad&gt;/&lt;mes&gt;.jsonl.gz</span>,
 con su <span class="mono">fetched_at</span>. No se re-deriva: se <b>guarda</b>. Es el mismo principio por el
-que se guarda el <span class="mono">spec.json</span> de cada escenario (§2.4). Nada se sobrescribe: cuando
+que se guarda el <span class="mono">spec.json</span> de cada escenario (§2.6). Nada se sobrescribe: cuando
 una fuente revisable reescribe el pasado, la línea vieja sigue ahí, y comparar las dos es la única forma de
 medir cuánto revisa. Lo derivado vive en <span class="mono">.cache/signals/</span> y es desechable.</li>
 <li><b>El esquema diario es propio.</b> <span class="mono">(entidad, día) → features + observed</span>, y
@@ -222,18 +317,32 @@ cobertura <b>{_n(e['coverage_pct'], 1)} %</b> ({e['by_source']['rule']} por regl
 {e['by_source']['override']} por override, {e['by_source']['unmapped']} sin resolver).</li>
 </ul>
 
-<div class="note"><b>Nada de esto está cableado.</b> Ni a las estrategias, ni al runner, ni al espacio de
-búsqueda del optimizador. El catálogo declara, la captura archiva ({s['records']} registros hoy), la sonda
-mide y la normalización publica. El cableado es un paso posterior y tiene su propia compuerta: con las
-puertas de señal en su valor neutro, la validación multiventana debe devolver <b>exactamente</b> los scores
-ya publicados.</div>
+<h4>El cableado, en los dos sitios, y su compuerta</h4>
+<p>El catálogo declara, la captura archiva ({s['records']} registros hoy), la sonda mide, la normalización
+publica y el radar lo lleva a la decisión. Las estrategias reciben el proveedor por el mismo bucle
+<i>duck-typed</i> que ya usaban para el régimen, y ese bucle es idéntico en el motor de <i>backtest</i> y
+en el proceso en vivo: tener dos comportamientos según dónde corre el sistema es un defecto, no una fase.
+De paso se cerró un hueco anterior —el proveedor de régimen <b>no se adjuntaba en producción</b>, así que
+cualquier configuración elegida con filtros de régimen activos se comportaba distinto en <i>paper</i> que
+en el <i>backtest</i> que la seleccionó— con un <span class="mono">Mapping</span> perezoso sobre el
+servicio de datos que no obligó a cambiar una sola línea del proveedor de régimen.</p>
+
+<div class="note"><b>La compuerta se cumplió.</b> Con las puertas de señal en su valor neutro, la
+validación multiventana devuelve los scores <b>idénticos</b> a los ya publicados —cinco unidades
+reproducidas, quince ventanas OOS cada una, hasta el último decimal— y hay un test que lo comprueba contra
+el fichero publicado. Adjuntar el radar no movió un solo número, que es la única forma de que la evidencia
+anterior siga hablando del sistema que corre. Los <i>defaults</i> de las puertas, además, no son
+permisivos: son <b>imposibles de activar</b>, porque el tono vive en ±{n['clip']} y la intensidad en
+[0, {n['clip']}] por el recorte de las z, y los umbrales por defecto están en el borde exacto de ese
+intervalo. Es la mejora concreta sobre <span class="mono">min_relative_strength = −1.0</span>, que se
+documentó como «sin filtro» sin serlo: la fuerza relativa no está acotada y un −1.0 es alcanzable.</div>
 """
 
 
 def _activity_block(a):
-    """Seccion 5.6b: el suelo de actividad, sus dos condiciones y de donde sale cada una.
+    """Seccion 4.10: el suelo de actividad, sus dos condiciones y de donde sale cada una.
 
-    Va pegada al gate (§5.6) y no en una seccion suelta porque es la segunda mitad del
+    Va pegada al gate (§4.9) y no en una seccion suelta porque es la segunda mitad del
     mismo veredicto: sin ella, "batir a los baselines" se puede conseguir sin operar."""
     if not a:
         return (
@@ -263,17 +372,17 @@ def _activity_block(a):
     )
     lost = ", ".join(f"<span class='mono'>{c}</span>" for c in g["lost"]) or "ninguna"
     return f"""
-<h3>5.6b · El suelo de actividad: quién puede ganar el ranking</h3>
+<h3>4.10 · El suelo de actividad: quién puede ganar el ranking</h3>
 <p>El headline de una ventana en la que la estrategia <b>no abre ninguna posición</b> es
 <b>0 exacto</b>: la curva es una recta, luego Sharpe 0, rotación 0 y caída 0. No es una nota mala ni
 buena, es la <i>ausencia</i> de nota — y sin embargo entra en la distribución como un número más. Como
 la recompensa es el CVaR (la media del peor cuartil) y un cero le gana a cualquier cosa que arriesgue y
 pierda, en un periodo donde casi todo lo que se juega pierde <b>el ranking se ordena por inactividad</b>.
-Medido sobre el material del §2.9: Spearman(recompensa, operaciones por ventana) =
+Medido sobre el material del §4.11: Spearman(recompensa, operaciones por ventana) =
 <b>{_n(m["spearman_reward_activity"], 2)}</b> en el lado real, y
 {_n(m["cvar_tail_empty_pct"], 1)} % de las ventanas que <i>fijan</i> la recompensa estaban vacías.</p>
 <div class="why"><b>Por qué un requisito y no una penalización.</b> Penalizar la baja rotación ya existe
-—es λ (§5.2b)— y el estudio de pesos midió que <b>no estabiliza nada</b>: el rank IC es máximo sin
+—es λ (§4.5)— y el estudio de pesos midió que <b>no estabiliza nada</b>: el rank IC es máximo sin
 penalizar. Restar más puntos por operar poco sería cobrar dos veces la misma factura y degradar el
 ranking. Lo que faltaba no era un descuento sino una <b>condición de entrada</b>: no perder es legítimo,
 lo que no lo es es ganar un ranking de estrategias sin haber jugado. Por eso la recompensa de una
@@ -309,11 +418,11 @@ del ranking entre mitades del histórico sale <b>más alta</b> con las inactivas
 mismo tamaño: {_n(rep["random_same_size_mean"], 3)}). Se entiende en cuanto se mide: una configuración
 que no opera puntúa 0 en todos los bloques y su puesto no se mueve jamás. Es estabilidad de cementerio,
 así que la reproducibilidad se publica como <b>control</b> y no como criterio.</div>
-<p>Efecto sobre el gate en el material del §2.9: de <b>{len(g["approved_without_floor"])}</b>
+<p>Efecto sobre el gate en el material del §4.11: de <b>{len(g["approved_without_floor"])}</b>
 configuraciones aprobadas se pasa a <b>{len(g["approved_with_floor"])}</b>. Pierden la aprobación
 {g["n_lost"]}: {lost} — todas ellas por no operar, no por puntuar peor.</p>
 <div class="note"><b>Dónde NO cambia nada, que delimita el alcance.</b> El estudio de validación
-multiventana (§3.7) se re-corrió entero con el suelo puesto y sus veredictos salieron
+multiventana (§4.8) se re-corrió entero con el suelo puesto y sus veredictos salieron
 <b>idénticos</b> (7 aprobadas en walk-forward, 6 en CPCV, sobre 32 unidades): allí las cuatro
 configuraciones operan de sobra. El requisito no recorta aprobaciones en general — muerde
 exactamente donde la inactividad estaba ganando.</div>
@@ -325,11 +434,11 @@ código: <span class="mono">scoring/activity.py</span> y
 
 
 def _sessions_block(s):
-    """La limitacion MEDIDA de la convencion intrabar (§3.3).
+    """Seccion 3.5: la limitacion MEDIDA de la convencion de llenado (§3.4).
 
-    Va dentro de la 3.3 y no en una seccion propia a proposito: es la evidencia que
-    sostiene -o corrige- la convencion que esa seccion describe, y separarlas dejaria la
-    convencion justificada solo por prudencia, que es como estaba antes de medirla."""
+    Va inmediatamente detras de la convencion que sostiene -o corrige-, porque separarlas
+    dejaria esa convencion justificada solo por prudencia, que es como estaba antes de
+    medirla."""
     if not s:
         return (
             "<div class=\"note\"><b>Limitación no cuantificada.</b> La fracción de formación de "
@@ -386,7 +495,7 @@ def _sessions_block(s):
         f"({_n(lat.get('slip_bps_median'), 1)} pb) y se ha gastado "
         f"{_pc(lat.get('path_share_of_range_median'), 1)} de ese rango. Esa fracción de rango parece "
         "modesta, pero es el denominador equivocado: frente al coste de entrada que el motor "
-        f"<i>sí</i> cobra ({_n(s['reference_cost_bps'], 1)} pb de referencia, §3.4), llegar una hora "
+        f"<i>sí</i> cobra ({_n(s['reference_cost_bps'], 1)} pb de referencia, §3.6), llegar una hora "
         f"tarde cuesta <b>{_n(_ratio(lat.get('slip_bps_median'), s['reference_cost_bps']), 1)}×</b>. "
         "El backtest supone ejecución instantánea a las 00:00 UTC: la suposición no sesga el precio "
         "—el hueco es cero— pero pone un <b>techo a la puntualidad</b> con la que el ciclo real tiene "
@@ -425,7 +534,9 @@ def _sessions_block(s):
         f"{_n(trend['sign_test_p'], 4)}; umbral declarado {_pc(trend['threshold'], 0)}).{mechanism}"
     )
 
-    return f"""{limitation}
+    return f"""
+<h3>3.5 · Dónde se forma el precio dentro de la barra diaria</h3>
+{limitation}
 <p>La medición sale de abrir la vela diaria con barras <b>1H</b> y repartir el día UTC en tres
 sesiones. Los cortes <b>no son redondos</b>: cada frontera es la hora de una apertura de mercado real,
 tomada en su versión más temprana del año (los mercados de referencia cambian de hora UTC dos veces al
@@ -476,7 +587,7 @@ def _ic_grid(c):
 
 
 def _calibration_block(c):
-    """Seccion 5.2b: la calibracion de λ y κ, con la evidencia que la sostiene."""
+    """Seccion 4.5: la calibracion de λ y κ, con la evidencia que la sostiene."""
     if not c:
         return (
             "<div class=\"note\"><b>Limitación declarada.</b> El informe de calibración "
@@ -485,7 +596,7 @@ def _calibration_block(c):
             "<span class=\"mono\">python -m ai_trader.scoring.weight_study</span>.</div>"
         )
     return f"""
-<h3>5.2b · De dónde salen λ y κ (calibración medida)</h3>
+<h3>4.5 · De dónde salen λ y κ (calibración medida)</h3>
 <p>λ y κ no son una preferencia estética: son una <b>regla de selección</b>, y una regla de selección se
 juzga por lo que elige. Se han barrido en rejilla
 (λ ∈ {{{", ".join(_n(x, 2) for x in c["lambdas"])}}} × κ ∈ {{{", ".join(_n(x, 1) for x in c["kappas"])}}})
@@ -549,7 +660,7 @@ una suposición.
 {_n(c["implied_p25"], 1)}–{_n(c["implied_p75"], 1)}: depende de la volatilidad de cada configuración, no es
 una constante, y por eso ninguna λ fija puede "tarifar" los costes). Lejos de duplicar la factura, λ era
 —y sigue siendo— un <b>margen de seguridad</b> pequeño sobre el modelo de costes.</p>
-<p><b>Vigencia tras el modelo de costes por microestructura (§3.4).</b> Este estudio se midió con el
+<p><b>Vigencia tras el modelo de costes por microestructura (§3.6).</b> Este estudio se midió con el
 deslizamiento plano que entonces cobraba el motor. El modelo actual cobra <b>más</b> fricción, y sobre
 todo la reparte por símbolo y por tamaño: eso <b>refuerza</b> la conclusión —la rotación ya se paga
 dentro del Sharpe, y λ es un margen aún más pequeño en términos relativos—, no la invierte. Re-medir la
@@ -634,10 +745,10 @@ def _acceptance_table(acceptance):
 
 
 def _validation_block(v):
-    """Seccion 3.7: como se parte el tiempo, y cuanto cambia la respuesta segun como."""
+    """Seccion 4.8: como se parte el tiempo, y cuanto cambia la respuesta segun como."""
     if not v:
         return (
-            "<h3>3.7 · Partición temporal: de un corte a una distribución de ventanas</h3>"
+            "<h3>4.8 · Partición temporal: de un corte a una distribución de ventanas</h3>"
             "<p>Cada muestra se evalúa en <b>varias</b> ventanas out-of-sample disjuntas "
             "(walk-forward o CPCV) con purga y embargo entre entrenamiento y test, y sus "
             "puntuaciones se agregan con el mismo CVaR@25% que rankea el resto del sistema. "
@@ -650,13 +761,13 @@ def _validation_block(v):
         )
     o, tail, std = v["opt_wf"], v["opt_tail"], v["std"]
     return f"""
-<h3>3.7 · Partición temporal: de un corte a una distribución de ventanas</h3>
+<h3>4.8 · Partición temporal: de un corte a una distribución de ventanas</h3>
 <p>Un backtest se puede partir en entrenamiento y test de muchas formas, y <b>la forma elegida cambia la
 respuesta</b>. El sistema partía cada muestra con un único corte temporal 70/30. Eso tenía tres problemas
 distintos, y sólo el primero es evidente:</p>
 <ul>
 <li><b>Un número no tiene cola.</b> La unidad de evaluación de este proyecto es la distribución y su
-estadístico es el CVaR (§5.3) — pero el CVaR de una lista de un elemento <b>es</b> ese elemento. El
+estadístico es el CVaR (§4.6) — pero el CVaR de una lista de un elemento <b>es</b> ese elemento. El
 estadístico robusto existía sin tener sobre qué ser robusto dentro de la muestra.</li>
 <li><b>La dispersión temporal era inobservable.</b> Con una sola ventana no hay forma de saber cuánto
 depende el resultado del tramo de historia que tocó. No es que fuera pequeña: es que no se medía.</li>
@@ -690,7 +801,7 @@ al test es entrenar con su eco. Sólo muerde en CPCV, donde hay entrenamiento <i
 <div class="why"><b>Lo que la purga no hace, dicho claro.</b> Dentro de un backtest no se ajusta nada: la
 configuración entra fija y el motor construye reloj, estado y estrategias <b>nuevos</b> por ventana, de
 modo que el entrenamiento de un fold no influye en su test. Purgar y embargar por tanto <b>no mejoran ni
-empeoran</b> ninguna cifra out-of-sample, y hay un test que fija ese invariante (§6). Sirven para otras
+empeoran</b> ninguna cifra out-of-sample, y hay un test que fija ese invariante (§4.14). Sirven para otras
 dos cosas, ambas reales: que la referencia in-sample que se reporta no esté contaminada por operaciones
 que siguen vivas dentro del test, y que la geometría ya sea correcta cuando algo <b>sí</b> se ajuste
 sobre el entrenamiento — el optimizador del bucle exterior, o una política aprendida. Presentarlo de otro
@@ -730,7 +841,7 @@ decide.</div>
 <p>Frente al CVaR@25% de las ventanas, el corte único puntúa <b>{_n(tail["median"], 3)}</b> más alto
 (IQR {_n(tail["p25"], 2)} … {_n(tail["p75"], 2)}), y positivo en más de tres de cada cuatro unidades. No
 es un sesgo del corte: es que <b>el CVaR de un solo número es ese número</b>. El sistema rankea por la
-cola mala (§5.3) y, con una sola ventana, no había cola que promediar — el estadístico robusto se
+cola mala (§4.6) y, con una sola ventana, no había cola que promediar — el estadístico robusto se
 degradaba silenciosamente a "el resultado del último 30% del rango". Ésta es la brecha estructural, y es
 la que justifica el cambio.</p>
 <h4>2 · El ruido temporal es mayor que la señal que se quiere medir</h4>
@@ -761,7 +872,7 @@ muestras</b>: "{v["flips"]["walk_forward"]} de {v["flips"]["n_samples"]}" es una
 intervalo de confianza de esa proporción cubre medio rango, y afirmar "la mitad de las veces" como cifra
 sería sobre-leer el dato. Las ventanas de un mismo esquema <b>comparten historia</b> (en CPCV cada tramo
 entra en varios folds), así que la dispersión medida no son observaciones independientes y no debe leerse
-como un error estándar. Y el camino que usa el optimizador (§5.5) sigue puntuando cada muestra con el
+como un error estándar. Y el camino que usa el optimizador (§4.12) sigue puntuando cada muestra con el
 corte único: cablear ahí el esquema multiventana es la evolución pendiente. Los
 {v["leakage"]["folds_audited"]} folds ejecutados pasaron la auditoría de fuga temporal. Evidencia completa
 en <span class="mono">data/validation/report_{v["library"]}.json</span> ({v["generated_at"]}); un backtest
@@ -769,10 +880,10 @@ suelto se corre con <span class="mono">ai-trader backtest --validation cpcv</spa
 
 
 def _fidelity_block(f):
-    """Seccion 2.8: ¿se parece este mundo al real? Con la evidencia que lo responde."""
+    """Seccion 2.10: ¿se parece este mundo al real? Con la evidencia que lo responde."""
     if not f:
         return (
-            "<h3>2.8 · Fidelidad contra el mercado real</h3>"
+            "<h3>2.10 · Fidelidad contra el mercado real</h3>"
             "<div class=\"note\"><b>Limitación declarada.</b> El informe de fidelidad "
             "(<span class=\"mono\">data/fidelity/</span>) no está disponible en este árbol, así "
             "que este documento no puede citar las cifras que comparan el mundo sintético con el "
@@ -791,7 +902,7 @@ def _fidelity_block(f):
         return "—" if row is None else _n(row[field], decimals)
 
     return f"""
-<h3>2.8 · Fidelidad contra el mercado real (validación externa)</h3>
+<h3>2.10 · Fidelidad contra el mercado real: el test que el generador puede fallar</h3>
 <p>Las secciones anteriores comparan el mundo sintético <b>consigo mismo</b>: una librería tiene colas
 y agrupamiento donde otra no los tenía. Eso no dice que los tenga <b>en la magnitud del mercado</b>.
 Esta sección responde esa pregunta contra el histórico diario real de
@@ -895,7 +1006,7 @@ la <b>mediana</b> de la sección cruzada y no sobre su cola: lo que este generad
 un año cualquiera, no la historia de sus outliers.
 <p><b>Consecuencia honesta:</b> lo que se mida sobre este sustrato ya no subestima la pérdida de cola
 del mercado típico —los drawdowns, los huecos que se saltan un stop y el peor cuartil que puntúa el CVaR
-(§5) están ahora en el orden correcto— pero sigue siendo optimista para un escenario de manía. Ésa es la
+(§4) están ahora en el orden correcto— pero sigue siendo optimista para un escenario de manía. Ésa es la
 frontera del generador, y se declara en vez de disimularse.</p>
 <p>Hay un segundo límite medido, y va en dirección contraria a la mejora: la <b>ordenación</b> de las
 colas y el agrupamiento entre activos (<i>rank corr</i> en la tabla) es floja e incluso negativa. El
@@ -907,7 +1018,7 @@ la cobertura y la mediana no lo ocultan: por eso las tres lecturas se publican p
 <p>Autocorrelación real {_n(ac["real_median"], 3)} frente a {_n(ac["synth_median"], 3)} sintética. Aquí
 un ratio lejos de 1 <b>no es un defecto: es el diseño</b>. El mercado no regala estructura serial —si la
 regalara sería dinero gratis— mientras que el generador la fija a propósito, con signo según el régimen
-(§2.6), para que la reversión a la media y el momentum tengan algo real que capturar. Lo que sí es una
+(§2.8), para que la reversión a la media y el momentum tengan algo real que capturar. Lo que sí es una
 advertencia es la magnitud: el <i>edge</i> sintético es <b>más limpio</b> que cualquier cosa que el
 mercado ofrezca, así que un rendimiento medido aquí no se traslada a un rendimiento allí.</p>
 <div class="note"><b>Límites de este estudio.</b> Solo criptomonedas: la renta variable del universo va
@@ -924,13 +1035,15 @@ reproducible con <span class="mono">python -m ai_trader.synthetic.fidelity_study
 
 
 def _transfer_block(t):
-    """Seccion 2.9: ¿ordena el mundo sintetico las estrategias como el real?
+    """Seccion 4.11: ¿ordena el mundo sintetico las estrategias como el real?
 
-    Es la pregunta que §2.8 NO responde. La fidelidad mide parecido estadistico; esto mide
-    si el orden se traslada, que es lo unico que el producto le pide al generador."""
+    Es la pregunta que §2.10 NO responde, y va en el capitulo de ESTRATEGIAS y no en el de
+    datos porque lo que compara son dos ORDENACIONES DE ESTRATEGIAS. La fidelidad mide
+    parecido estadistico; esto mide si el orden se traslada, que es lo unico que el
+    producto le pide al generador."""
     if not t:
         return (
-            "<h3>2.9 · Transferencia de ranking</h3>"
+            "<h3>4.11 · Transferencia de ranking</h3>"
             "<div class=\"note\"><b>Limitación declarada.</b> El informe de transferencia "
             "(<span class=\"mono\">data/transfer/</span>) no está disponible en este árbol, así que "
             "este documento <b>no puede afirmar</b> que el mundo sintético ordene las estrategias "
@@ -992,18 +1105,18 @@ el mercado, de modo que seguirlo sería peor que elegir al azar. {v["flow"]}.</d
         veredicto = f"""<div class="note"><b>Veredicto: no hay transferencia medible.</b>
 ρ = {_n(t["rho"], 3)}, por debajo del umbral de {_n(v["threshold"], 2)} declarado antes de mirar el
 resultado. La consecuencia operativa, y este documento la asume: <b>{v["flow"]}</b>. La librería
-sintética sigue siendo válida para lo que sí está medido —fidelidad de los hechos estilizados (§2.8),
+sintética sigue siendo válida para lo que sí está medido —fidelidad de los hechos estilizados (§2.10),
 banco de estrés y regresión determinista— pero <b>no</b> como juez que ordena candidatas.</div>"""
 
     return f"""
-<h3>2.9 · Transferencia de ranking: ¿ordena el sintético como el mercado?</h3>
-<p>§2.8 responde si el mundo sintético <b>se parece</b> al mercado. No responde lo único que el producto
+<h3>4.11 · Ordenación en datos reales y sintéticos: ¿ordena el sintético como el mercado?</h3>
+<p>§2.10 responde si el mundo sintético <b>se parece</b> al mercado. No responde lo único que el producto
 le pide de verdad: que si una configuración es mejor que otra ahí, <b>tienda a serlo también aquí</b>.
 No son la misma pregunta —un generador puede clavar las colas y ordenar al revés, y ninguna métrica de
 fidelidad lo detectaría—, así que se mide aparte y con su propio umbral.</p>
 <p>El diseño persigue una sola cosa: que entre los dos lados <b>lo único que cambie sea el mundo del que
 salen los precios</b>. Las mismas <b>{t["n_configs"]}</b> configuraciones (la rejilla del estudio de
-pesos de §5.2b: hipercubo latino con semilla {t["study_seed"]} sobre las dos primitivas), el mismo
+pesos de §4.5: hipercubo latino con semilla {t["study_seed"]} sobre las dos primitivas), el mismo
 config, el mismo universo de <b>{len(t["symbols"])}</b> pares —los que existen a la vez en el mercado y
 en la librería—, el mismo esquema CPCV con {val["n_folds"]} ventanas OOS, la misma purga de
 {val["purge_days"]} días y el mismo embargo de {val["embargo_days"]}. Y la misma <b>longitud de
@@ -1066,6 +1179,136 @@ reproducible con <span class="mono">python -m ai_trader.scoring.transfer_study -
 if t["is_fallback"] else ""}; {t["generated_at"]}).</p>"""
 
 
+def _market_block(m):
+    """Seccion 2.1: la captura de datos REALES.
+
+    Es la seccion que faltaba. La documentacion empezaba por el generador sintetico, y
+    eso dejaba sin describir el sustrato del que sale TODA la evidencia externa del
+    proyecto -fidelidad, transferencia, sesiones- y el unico que se usa en vivo."""
+    if not m:
+        return "<h3>2.1 · Captura de datos reales</h3><p>Sin datos de configuración.</p>"
+    return f"""
+<h3>2.1 · Captura de datos reales</h3>
+<p>El sistema opera sobre <b>velas diarias</b> (OHLCV) de {m["n_symbols"]} pares de criptomoneda contra
+<i>stablecoin</i>, leídas de <span class="mono">{m["exchange"]}</span> a través de un adaptador CCXT que
+pagina en lotes de {m["batch"]} barras hasta cubrir el rango pedido. Cada ciclo de decisión pide
+{m["lookback_days"]} días de historia por símbolo: lo justo para que las medias largas, el canal de
+Donchian y las ventanas de volatilidad estén calientes el primer día.</p>
+<table><thead><tr><th>Clase de activo</th><th>Proveedor</th><th>Qué se usa hoy</th></tr></thead><tbody>
+<tr><td>Criptomonedas</td><td class=mono>ccxt · {m["exchange"]}</td><td><b>El universo operado.</b> Cotiza
+24/7, así que hay una barra por día natural.</td></tr>
+<tr><td>Renta variable</td><td class=mono>alpaca</td><td>Proveedor implementado y <b>sin estrategia
+detrás</b>: la clase de activo está aparcada a propósito (§6).</td></tr>
+<tr><td>Mercados de predicción</td><td class=mono>polymarket (gamma / CLOB)</td><td>Precio vivo y libro,
+pero <b>no hay OHLCV histórico</b>: no se puede backtestear, sólo capturar hacia adelante.</td></tr>
+</tbody></table>
+<div class="why"><b>Tres decisiones que hacen que el dato real sea auditable.</b>
+<ul>
+<li><b>Caché en disco, no memoria.</b> Las barras se guardan en
+<span class="mono">{m["cache_dir"]}/&lt;símbolo&gt;_&lt;timeframe&gt;.parquet</span> y se reutilizan. El
+estudio de fidelidad y el de transferencia se pueden repetir <b>sin red</b>, que es lo que hace que dos
+regeneraciones den lo mismo aunque el exchange esté caído o haya cambiado el pasado.</li>
+<li><b>Ventanas históricas cerradas, no «hasta hoy».</b> Cada estudio declara su rango como constante. Si
+el final se moviera con la fecha de ejecución, dos ejecuciones del mismo estudio no serían comparables y
+la palabra «reproducible» no significaría nada.</li>
+<li><b>El corte anti-<i>look-ahead</i> vive en la fuente de datos</b>, no en la estrategia (§3.2). Da
+igual quién pida las barras —una estrategia, el bloque de régimen, el radar de señales—: nadie puede ver
+la barra de hoy, porque la capa que las sirve no la devuelve.</li>
+</ul></div>
+<div class="note"><b>El universo operado y el sintético no son el mismo, y la asimetría es deliberada.</b>
+Aquí sólo hay cripto: es donde está toda la evidencia empírica del repositorio. El universo del generador
+(§2.5) tiene {m["n_synthetic_assets"]} activos incluyendo renta variable y refugios, porque los factores
+compartidos son lo que hace que un escenario de tipos signifique algo para cripto. La regla que mantiene
+los dos ficheros consistentes: <b>éste tiene que ser operable hoy</b> —un símbolo deslistado falla en
+silencio en cada ciclo, que fue el caso de MATIC/USDT— y el sintético tiene que coincidir con el universo
+declarado en código.</div>"""
+
+
+def _risk_gate_block(t):
+    """Seccion 3.3: el motor de riesgo, con los limites REALES del config operado.
+
+    Publicar los numeros y no solo el mecanismo es lo que convierte 'hay control de
+    riesgo' en algo que se puede auditar."""
+    if not t:
+        return ""
+    return f"""
+<h3>3.3 · El motor de riesgo: la puerta única, con sus números</h3>
+<p>Una señal no es una orden. Toda señal —venga de la estrategia que venga— pasa por el motor de riesgo,
+que decide si se ejecuta, con cuánto tamaño y con qué salidas. No hay ninguna vía que lo esquive: es la
+única función que convierte señal en orden.</p>
+<table><thead><tr><th>Límite</th><th class=n>valor</th><th>qué impide</th></tr></thead><tbody>
+<tr><td>Confianza mínima por operación</td><td class='n mono'>{_n(t["min_confidence"], 2)}</td>
+<td>Que una señal débil abra posición sólo porque no había nada mejor.</td></tr>
+<tr><td>Tamaño máximo por posición</td><td class='n mono'>{_n(t["max_position_size_usd"], 0)} $</td>
+<td>Que un trade concentre la cuenta. Con equity conocido manda además la fracción de riesgo
+({_pc(t["risk_fraction_per_trade"], 0)} del capital), de modo que el tamaño <b>compone</b>.</td></tr>
+<tr><td>Exposición máxima por símbolo / total</td>
+<td class='n mono'>{_n(t["max_symbol_exposure_usd"], 0)} $ / {_n(t["max_total_exposure_usd"], 0)} $</td>
+<td>Que varias señales del mismo activo, o del mismo día, se acumulen en una apuesta única.</td></tr>
+<tr><td>Posiciones abiertas simultáneas</td><td class='n mono'>{t["max_open_positions"]}</td>
+<td>Que la cartera se convierta en un índice por goteo.</td></tr>
+<tr><td>Pérdida diaria máxima</td><td class='n mono'>{_n(t["max_daily_loss_usd"], 0)} $</td>
+<td>Que un mal día siga abriendo posiciones nuevas.</td></tr>
+<tr><td>Stop / objetivo por defecto</td>
+<td class='n mono'>−{_n(t["default_stop_loss_pct"], 0)} % / +{_n(t["default_take_profit_pct"], 0)} %</td>
+<td>Que una posición quede sin salida definida. La estrategia puede proponer los suyos, pero
+<b>nunca más lejos</b> de {_n(t["max_stop_distance_pct"], 0)} %.</td></tr>
+<tr><td>Vida máxima de una posición</td><td class='n mono'>{t["max_holding_days"]} días</td>
+<td>Que una posición sin desenlace se quede indefinidamente ocupando exposición. Es también el número que
+fija la <b>purga</b> de la validación temporal (§4.8): no es una coincidencia, es la misma magnitud.</td></tr>
+<tr><td>Enfriamiento por símbolo / operaciones por ciclo</td>
+<td class='n mono'>{t["cooldown_hours"]} h / {t["max_trades_per_cycle"]}</td>
+<td>Que el sistema reabra lo que acaba de cerrar, y que un ciclo raro dispare una ráfaga.</td></tr>
+</tbody></table>
+<div class="why"><b>Por qué el riesgo es dueño del stop y no la estrategia.</b> Una estrategia optimiza su
+propia señal; el stop es una decisión de <b>cartera</b>, no de señal. Si cada estrategia pudiera fijar el
+suyo, el optimizador aprendería a ensancharlo hasta que dejara de doler — que es exactamente cómo se
+fabrica una curva de equity bonita con una cola desastrosa. Por eso el riesgo puede <b>recortar</b> lo que
+propone la estrategia, nunca al revés.</div>"""
+
+
+def _pnl_block(t):
+    """Seccion 3.9: como se registra el resultado de un trade.
+
+    Es la mitad del ciclo que nunca estuvo escrita: el documento explicaba como se
+    decide y como se llena, y daba por hecha la contabilidad."""
+    if not t:
+        return ""
+    return f"""
+<h3>3.9 · Cómo se registra el resultado: PnL, equity y rotación</h3>
+<p>Una posición se cierra por una de tres causas —<span class="mono">stop_loss</span>,
+<span class="mono">take_profit</span> o <span class="mono">max_holding_days</span>— y en las tres el
+cierre <b>pasa por el motor de ejecución</b>, igual que la entrada: se le cobran su deslizamiento y su
+comisión. Cerrar «a precio de mercado» sin pagar la salida es el atajo clásico que convierte una
+estrategia mediocre en una rentable sobre el papel.</p>
+<div class="formula">PnL_neto = (precio_salida − precio_entrada) × tamaño × dirección − comisiones(entrada + salida)</div>
+<p>La comisión es <span class="mono">fee_rate = {_pc(t["fee_rate"], 1)}</span> del <i>notional</i>
+llenado, en <b>cada</b> pata, y sigue al tamaño <b>realmente ejecutado</b>, no al pedido: si la orden se
+llenó a medias por el techo de capacidad (§3.7), se cobra la mitad. El PnL registrado en cada posición
+cerrada es siempre el neto.</p>
+<p>Con eso se construyen las tres magnitudes que el resto del documento usa:</p>
+<table><thead><tr><th>Magnitud</th><th>Cómo se calcula</th><th>Dónde se usa</th></tr></thead><tbody>
+<tr><td><b>Equity</b></td><td>Capital inicial ({_n(t["starting_equity"], 0)} $ en backtest) + PnL neto
+realizado acumulado + PnL no realizado de lo abierto, valorado al cierre del día.</td>
+<td>Es la serie de la que salen Sharpe, drawdown y CAGR (§4.4).</td></tr>
+<tr><td><b>PnL diario realizado</b></td><td>Suma de los cierres del día. Se reinicia cada día.</td>
+<td>Alimenta el límite de pérdida diaria del motor de riesgo (§3.3).</td></tr>
+<tr><td><b>Rotación (<i>turnover</i>)</b></td><td><i>Notional</i> movido por día en unidades del capital
+inicial, contando <b>las dos patas</b> de cada operación.</td>
+<td>Es el término que penaliza la métrica de cabecera (§4.4), y lo que permite comprobar que las
+comisiones cobradas cuadran con el <span class="mono">fee_rate</span> configurado (§4.5).</td></tr>
+</tbody></table>
+<div class="why"><b>Por qué el equity se marca a mercado todos los días y no sólo al cerrar.</b> Si sólo
+contara el PnL realizado, la curva sería una escalera plana entre cierres y el drawdown mediría cuándo se
+decidió cerrar, no cuánto se sufrió. Marcar a diario es lo que hace que el máximo drawdown y la
+volatilidad describan la experiencia real de tener la posición abierta.</div>
+<div class="note"><b>Lo que la contabilidad guarda hoy, y lo que no.</b> El estado persistido tiene la
+<i>foto</i> —posiciones abiertas y cerradas, PnL realizado, equity— pero no la <i>película</i>: qué se
+decidió cada ciclo, con qué precio de referencia y cuánto deslizamiento se cobró. Ese diario de ciclos es
+justamente el material con el que se medirá la divergencia entre lo ejecutado en vivo y lo que predice el
+<i>backtest</i>, y por eso es parte de la evolución de paper trading (§5, §6).</div>"""
+
+
 def _factor_table(factors):
     body = "".join(f"<tr><td class=mono>{f}</td><td>{d}</td></tr>" for f, d in factors)
     return ("<table><thead><tr><th>Factor</th><th>Interpretación</th></tr></thead>"
@@ -1089,6 +1332,7 @@ def render_html(f: dict) -> str:
         "NASSETS": f.get("n_assets", 35),
         "NASSETS_MINUS_ONE": int(f.get("n_assets", 35)) - 1,
         "NCRYPTO": f.get("n_crypto", 12),
+        "NCRYPTOLIVE": (f.get("market") or {}).get("n_symbols", "—"),
         "NEQUITY": f.get("n_equity", 20),
         "NMACRO": f.get("n_macro", 3),
         "NOWN": f.get("n_own", "—"),
@@ -1111,6 +1355,9 @@ def render_html(f: dict) -> str:
         "MR_PARAMS": _rows(f.get("mr_params", []), ["Parámetro", "Valor"]),
         "SPACE_MOM": _rows(f.get("space_mom", []), ["Parámetro", "Rango CEM"]),
         "SPACE_MR": _rows(f.get("space_mr", []), ["Parámetro", "Rango CEM"]),
+        "MARKET": _market_block(f.get("market")),
+        "RISKGATE": _risk_gate_block(f.get("trade")),
+        "PNL": _pnl_block(f.get("trade")),
         "CALIBRATION": _calibration_block(f.get("calibration")),
         "FIDELITY": _fidelity_block(f.get("fidelity")),
         "TRANSFER": _transfer_block(f.get("transfer")),
@@ -1145,61 +1392,128 @@ Las cifras marcadas son extraídas del repositorio en el momento de generar este
 <div class="toc noprint">
 <b>Contenido</b>
 <ol>
-<li><a href="#s1">Propósito, alcance y principios</a></li>
-<li><a href="#s2">Los datos, primero</a></li>
-<li><a href="#s3">Metodología de backtest</a></li>
-<li><a href="#s4">Estrategias y espacio de observación</a></li>
-<li><a href="#s5">Evaluación y scoring</a></li>
-<li><a href="#s6">Tests y garantías</a></li>
-<li><a href="#s7">Limitaciones conocidas y hoja de ruta</a></li>
-<li><a href="#s8">Reproducibilidad</a></li>
-<li><a href="#s9">Glosario</a></li>
+<li><a href="#s1">Resumen ejecutivo</a></li>
+<li><a href="#s2">Datos</a> — captura real, señales externas, generación sintética y sus tests</li>
+<li><a href="#s3">Trade</a> — cómo se ejecuta una operación, qué cuesta y cómo se contabiliza</li>
+<li><a href="#s4">Estrategias</a> — recompensa, ordenación y validación</li>
+<li><a href="#s5">Resultados</a></li>
+<li><a href="#s6">Limitaciones y evoluciones</a></li>
+</ol>
+<b>Anexos</b>
+<ol type="A">
+<li><a href="#a1">Reproducibilidad</a></li>
+<li><a href="#a2">Glosario</a></li>
 </ol>
 </div>
 
-<h2 id="s1">1 · Propósito, alcance y principios</h2>
-<p class="lead">AI-Trader es una herramienta de inversión cuantitativa (criptomonedas, renta variable
-y mercados de predicción tipo Polymarket) que hoy opera en <b>paper trading</b>. Combina un motor
-de riesgo, un motor de ejecución en papel, un backtest de alta fidelidad y un <b>generador de
-mercados sintéticos deterministas</b> sobre el que se desarrollan y estresan estrategias. Ese
-generador reproduce las propiedades estadísticas del mercado (§2.8), pero <b>no</b> su ordenación de
-estrategias (§2.9): el ranking que decide sale del histórico real.</p>
+<h2 id="s1">1 · Resumen ejecutivo</h2>
+<p class="lead">AI-Trader es una herramienta de inversión cuantitativa que hoy opera en <b>paper
+trading</b> sobre criptomonedas. Junta cinco piezas que normalmente viven separadas: la captura de datos
+de mercado, una plataforma de señales externas, un generador de mercados sintéticos deterministas, un
+motor de ejecución con costes y capacidad realistas, y un aparato de evaluación que decide qué estrategia
+merece operar. Este capítulo recorre la cadena entera; los cinco siguientes la detallan.</p>
 
-<h3>Qué es y qué no es (todavía)</h3>
+<h3>1.1 · El recorrido, de punta a punta</h3>
+<p>Una sola operación atraviesa trece etapas, y cada una tiene su propia sección en este documento. El
+orden importa: nada de lo que viene después puede arreglar un error cometido antes.</p>
+<table><thead><tr><th class="n">#</th><th>Etapa</th><th>Qué ocurre</th><th>Detalle</th></tr></thead><tbody>
+<tr><td class="n">1</td><td><b>Captura de precio</b></td><td>Velas diarias de %%NCRYPTOLIVE%% pares
+cripto, cacheadas en disco para que cualquier estudio se pueda repetir sin red.</td><td>§2.1</td></tr>
+<tr><td class="n">2</td><td><b>Señales externas</b></td><td>Diecisiete fuentes fuera del precio —flujos de
+ETF, macro, cadena, atención, oferta desbloqueada— normalizadas y con su profundidad histórica
+<i>medida</i>, no declarada.</td><td>§2.2</td></tr>
+<tr><td class="n">3</td><td><b>Mundos sintéticos</b></td><td>Una IA diseña la física de cada escenario
+macro y un motor determinista la convierte en velas con colas gruesas, agrupamiento de volatilidad y
+estructura serial.</td><td>§2.3–2.8</td></tr>
+<tr><td class="n">4</td><td><b>Observación</b></td><td>Lo que la política ve en el momento de decidir:
+mercado propio, contexto cross-sectional y el radar de señales. Sólo datos hasta el cierre de
+ayer.</td><td>§4.2</td></tr>
+<tr><td class="n">5</td><td><b>Señal</b></td><td>Dos primitivas paramétricas de regímenes opuestos
+—momentum y reversión a la media— proponen entrada, confianza y salidas.</td><td>§4.1</td></tr>
+<tr><td class="n">6</td><td><b>Riesgo</b></td><td>Puerta única: tamaño, exposición, confianza mínima,
+pérdida diaria y propiedad del stop. Ninguna señal la esquiva.</td><td>§3.3</td></tr>
+<tr><td class="n">7</td><td><b>Ejecución</b></td><td>Se llena al <i>open</i> del día siguiente, pagando
+medio spread, volatilidad e impacto por tamaño, con techo de capacidad y fills parciales.</td>
+<td>§3.4–3.8</td></tr>
+<tr><td class="n">8</td><td><b>Contabilidad</b></td><td>PnL neto de comisiones en las dos patas, equity
+marcado a mercado a diario y rotación medida.</td><td>§3.9</td></tr>
+<tr><td class="n">9</td><td><b>Puntuación</b></td><td>Cada muestra da un <i>headline</i> fuera de muestra
+(Sharpe penalizado) y la distribución se agrega por su cola: CVaR@25%.</td><td>§4.3–4.6</td></tr>
+<tr><td class="n">10</td><td><b>Validación</b></td><td>Arquetipos macro enteros reservados como hold-out,
+y varias ventanas temporales por muestra con purga y embargo.</td><td>§4.7–4.8</td></tr>
+<tr><td class="n">11</td><td><b>Veredicto</b></td><td>Aprueba quien bate al mejor rival pasivo <i>y</i>
+supera el suelo de actividad. Y se comprueba si el orden sintético se parece al real.</td>
+<td>§4.9–4.11</td></tr>
+<tr><td class="n">12</td><td><b>Búsqueda</b></td><td>Optimización de caja negra (CEM) sobre los
+parámetros, con el resultado descontado por el número de intentos (DSR/PBO).</td><td>§4.12–4.13</td></tr>
+<tr><td class="n">13</td><td><b>En vivo</b></td><td>El mismo camino, con reloj real y dinero de papel.
+Es la etapa que aún no ha producido resultados.</td><td>§5</td></tr>
+</tbody></table>
+<div class="why"><b>La propiedad que sostiene todo lo anterior:</b> las etapas 4 a 8 son <b>el mismo
+código</b> en <i>backtest</i> y en vivo. El motor de <i>backtest</i> no reimplementa la lógica de trading:
+inyecta un reloj simulado y una fuente de datos con anti-<i>look-ahead</i>, y hace avanzar el mismo
+orquestador que operaría con dinero (§3.1). Lo que se optimiza es, literalmente, lo que se ejecutaría.</div>
+
+<h3>1.2 · Qué es y qué no es (todavía)</h3>
 <ul>
 <li><b>Es:</b> un banco de pruebas honesto para diseñar, evaluar y optimizar estrategias contra un
-universo de %%NASSETS%% activos y una batería de regímenes macro sintéticos, ejecutando exactamente
-el mismo camino que se usaría en vivo.</li>
-<li><b>No es (aún):</b> no mueve dinero real; no hay todavía una estrategia optimizada de renta
-variable o de mercados de predicción; y la "inteligencia" de optimización está en fase de
-<b>optimización de caja negra</b> (CEM sobre parámetros), no de aprendizaje por refuerzo por
-gradiente de política.</li>
+universo de %%NASSETS%% activos y una batería de regímenes macro sintéticos, ejecutando exactamente el
+mismo camino que se usaría en vivo.</li>
+<li><b>No es (aún):</b> no mueve dinero real; no hay estrategia de renta variable ni de mercados de
+predicción; la «inteligencia» de optimización está en fase de <b>caja negra</b> (CEM sobre parámetros), no
+de aprendizaje por refuerzo por gradiente de política; y no hay todavía un historial en vivo con el que
+medir la divergencia frente al <i>backtest</i>.</li>
 </ul>
 
-<h3>Principios rectores</h3>
+<h3>1.3 · Los cuatro resultados que condicionan lo demás</h3>
+<p>Este proyecto publica mediciones, no impresiones, y cuatro de ellas explican por qué el sistema está
+construido como está. Dos salieron como se esperaba y dos no; las cuatro se reportan igual.</p>
+<table><thead><tr><th>Pregunta</th><th>Respuesta medida</th><th>Consecuencia</th></tr></thead><tbody>
+<tr><td>¿Se parece el mundo sintético al mercado?</td><td class="ok">Sí, y con umbrales que el estudio
+puede fallar: cobertura del 98 %, colas y agrupamiento en la magnitud real.</td><td>El generador vale
+como banco de estrés y de regresión (§2.10).</td></tr>
+<tr><td>¿<b>Ordena</b> las estrategias como el mercado?</td><td class="pend"><b>No.</b> ρ ≈ 0 sobre las 16
+configuraciones, y negativo entre las que operan de verdad.</td><td>El sintético deja de ser criterio de
+selección: el ranking que decide sale del histórico real (§4.11).</td></tr>
+<tr><td>¿Sobre-estimaba el corte único 70/30?</td><td class="pend">No sobre-estima: es <b>arbitrario</b>.
+Mover la ventana mueve el resultado varias veces más que cambiar de estrategia.</td><td>Elegir con una
+sola ventana es elegir por el tramo de historia que tocó (§4.8).</td></tr>
+<tr><td>¿Qué estaba ganando el ranking real?</td><td class="pend">La <b>inactividad</b>:
+ρ(recompensa, operaciones) = −0,84. Una curva plana puntúa cero exacto y en un periodo bajista ese cero
+gana.</td><td>Rankear exige operar: hay un suelo de actividad medido (§4.10).</td></tr>
+</tbody></table>
+
+<h3>1.4 · Principios rectores</h3>
 <p>Todo el diseño se somete a cuatro principios. No son eslóganes: cada uno se traduce en decisiones
 concretas de código verificadas por tests.</p>
 <div class="why"><b>Honestidad estadística.</b> La unidad de evaluación es la <b>distribución</b>
 sobre muchas muestras, nunca un único camino. <i>Por qué:</i> un solo path es ruido; publicar solo
 la media esconde la cola. Se reporta la dispersión y se optimiza un estadístico consciente de la cola
-(§5).</div>
+(§4.3–4.6).</div>
 <div class="why"><b>Anti-look-ahead por diseño.</b> En cada decisión solo se usan datos hasta el
 cierre del día anterior. <i>Por qué:</i> el sesgo de futuro es la causa número uno de backtests
 engañosos; aquí es imposible por construcción, no por disciplina (§3.2).</div>
 <div class="why"><b>Determinismo total.</b> La terna (especificación, universo, semilla) produce las
 mismas velas byte a byte; toda la cadena va sembrada. <i>Por qué:</i> reproducibilidad y
-auditabilidad — cualquier resultado se puede regenerar y verificar.</div>
+auditabilidad — cualquier resultado se puede regenerar y verificar (anexo A).</div>
 <div class="why"><b>No romper el contrato en vivo.</b> Lo que se optimiza se ejecuta por el mismo
 camino estrategia → riesgo → ejecución. <i>Por qué:</i> elimina la divergencia backtest/live, que es
 la fuente clásica de sorpresas en producción (§3.1).</div>
 
-<h2 id="s2">2 · Los datos, primero</h2>
-<p class="lead">La calidad de todo lo demás depende de la calidad del sustrato de datos. Por eso la
-auditoría empieza aquí, no por el código.</p>
+<h2 id="s2">2 · Datos</h2>
+<p class="lead">La calidad de todo lo demás depende de la calidad del sustrato de datos, así que la
+auditoría empieza aquí y no por el código. Hay tres sustratos y conviene no confundirlos: el
+<b>mercado real</b> (§2.1), las <b>señales externas</b> (§2.2) y los <b>mundos sintéticos</b> (§2.3–2.8).
+Los dos últimos existen porque el primero es escaso: un único camino de la historia, y sólo el que
+ocurrió.</p>
 
-<h3>2.1 · Por qué datos sintéticos</h3>
-<p>La herramienta se desarrolla y evalúa sobre mercados <b>sintéticos</b>, no sobre el histórico real.
-Las razones, y sus contrapartidas, son explícitas:</p>
+%%MARKET%%
+
+%%SIGNALS%%
+
+<h3>2.3 · Por qué además datos sintéticos</h3>
+<p>El desarrollo y buena parte de la evaluación se hacen sobre mercados <b>sintéticos</b>. Las razones, y
+sus contrapartidas, son explícitas:</p>
 <ul>
 <li><b>Independencia temporal por diseño.</b> Al no solaparse con ningún periodo histórico real, se
 elimina el <i>data-snooping</i> sobre eventos ya conocidos: no se puede, ni sin querer, ajustar a la
@@ -1207,20 +1521,18 @@ crisis de 2008 o al COVID.</li>
 <li><b>Control del régimen.</b> Podemos generar a voluntad crisis, rangos laterales, tendencias,
 shocks de tipos o inviernos cripto, y en la proporción que necesitemos para estresar una estrategia.</li>
 <li><b>Volumen ilimitado y hold-out honesto.</b> Generamos tantas muestras como haga falta para una
-estadística robusta, y podemos reservar <b>arquetipos macro enteros</b> como validación (§5.3).</li>
+estadística robusta, y podemos reservar <b>arquetipos macro enteros</b> como validación (§4.7).</li>
 </ul>
-<div class="note"><b>Contrapartida reconocida.</b> Un mercado sintético solo es útil si se parece al
-real en sus propiedades estadísticas (<i>stylized facts</i>). De ahí la validación interna de §2.7 y,
-sobre todo, la validación <b>externa contra el histórico real</b> de §2.8 — que es la que dice en qué
-se parece y en qué no.</div>
-<div class="note"><b>Y una contrapartida que resultó ser mayor de lo previsto.</b> Parecerse no basta:
-lo que el sistema le pide al generador es que <b>ordene</b> las estrategias como el mercado. Eso se
-midió aparte (§2.9) y la respuesta fue que <b>no</b>. Por eso las tres razones de arriba siguen siendo
-válidas para lo que el sintético hace bien —cubrir regímenes que la historia no dio, estresar, dar
-hold-out de arquetipos y regresión determinista— pero <b>ya no</b> para decidir qué configuración es
-mejor. El ranking que decide tiene que salir del histórico real.</div>
+<div class="note"><b>Las dos contrapartidas, y la segunda resultó mayor que la primera.</b> La conocida:
+un mercado sintético sólo es útil si se parece al real en sus propiedades estadísticas, y por eso existen
+la validación interna de §2.9 y sobre todo la externa contra el histórico real de §2.10. La que no se
+había previsto: parecerse no basta. Lo que el sistema le pide al generador es que <b>ordene</b> las
+estrategias como el mercado, se midió aparte (§4.11) y la respuesta fue que <b>no</b>. Las tres razones de
+arriba siguen valiendo para lo que el sintético hace bien —cubrir regímenes que la historia no dio,
+estresar, dar hold-out de arquetipos y regresión determinista— pero ya no para decidir qué configuración
+es mejor.</div>
 
-<h3>2.2 · El modelo de factores</h3>
+<h3>2.4 · El modelo de factores</h3>
 <p>El retorno diario de cada activo se construye con un modelo de factores:</p>
 <div class="formula">r_i(t) = tilt_i + Σ_k β_ik · f_k(t) + idio_i · ε_i(t)</div>
 <p>Las correlaciones entre activos <b>emergen</b> de que comparten exposición (β) a un puñado de
@@ -1237,30 +1549,30 @@ correlaciones sueltas.</div>
 idiosincráticas que los factores comunes no capturan (p.ej. un embargo de petróleo que levanta a una
 petrolera por encima del factor de materias primas).</p>
 
-<h3>2.3 · El universo</h3>
+<h3>2.5 · El universo sintético</h3>
 <p>%%NASSETS%% activos: %%NCRYPTO%% criptomonedas, %%NEQUITY%% de renta variable (índices y nombres
 por sector) y %%NMACRO%% de macro/refugio (oro, bonos largos, dólar). La mezcla es deliberada para que
 las correlaciones cruzadas tengan sentido: las financieras cargan tipos en positivo, la energía carga
 materias primas, y los refugios cargan la renta variable en negativo. Cada activo declara además su
 <b>liquidez</b> (volumen típico negociado en dólares al día), que abarca más de dos órdenes de magnitud
 entre un índice amplio y un altcoin: es el eje que hace que ejecutar cueste distinto en cada mercado
-(§3.4). El universo se guarda de forma autocontenida en el manifiesto de cada librería (precio inicial,
+(§3.6). El universo se guarda de forma autocontenida en el manifiesto de cada librería (precio inicial,
 betas, volatilidad idiosincrática y liquidez), de modo que se pueda reconstruir el universo exacto y
 regenerar datos idénticos aunque el código cambie.</p>
 <div class="note"><b>Por qué el universo sintético y el operado no son el mismo (el caso MATIC/USDT).</b>
 Binance deslistó ese par (el token migró a POL), así que está <b>retirado</b> del universo que se opera
-en vivo (<span class="mono">config/default.toml</span>): allí un símbolo muerto falla en silencio en cada
-ciclo. En el universo sintético se <b>mantiene a propósito</b>, y esa asimetría es la decisión, no un
-descuido: aquí no cotiza nada contra un exchange — el símbolo es solo la etiqueta de un perfil de cargas
-factoriales y las velas las genera el motor —, tiene contraparte real en la ventana con la que se mide
-la fidelidad (2017-2026, y el informe publicado lo lista sin símbolos ausentes), y retirarlo cambiaría el
-universo de %%NASSETS%% a %%NASSETS_MINUS_ONE%% activos, desincronizando toda la evidencia ya publicada
-sobre %%NASSETS%%: la calibración de pesos y el propio estudio de fidelidad habría que re-medirlos.
-<b>Límite declarado:</b> si el estudio de fidelidad se vuelve a correr sobre una ventana reciente,
-MATIC/USDT no tendrá datos reales y aparecerá como ausente; ese es el momento de renombrarlo a POL/USDT
-y republicar las mediciones, no antes.</div>
+en vivo (§2.1): allí un símbolo muerto falla en silencio en cada ciclo. En el universo sintético se
+<b>mantiene a propósito</b>, y esa asimetría es la decisión, no un descuido: aquí no cotiza nada contra un
+exchange — el símbolo es solo la etiqueta de un perfil de cargas factoriales y las velas las genera el
+motor —, tiene contraparte real en la ventana con la que se mide la fidelidad (2017-2026, y el informe
+publicado lo lista sin símbolos ausentes), y retirarlo cambiaría el universo de %%NASSETS%% a
+%%NASSETS_MINUS_ONE%% activos, desincronizando toda la evidencia ya publicada sobre %%NASSETS%%: la
+calibración de pesos y el propio estudio de fidelidad habría que re-medirlos. <b>Límite declarado:</b> si
+el estudio de fidelidad se vuelve a correr sobre una ventana reciente, MATIC/USDT no tendrá datos reales y
+aparecerá como ausente; ese es el momento de renombrarlo a POL/USDT y republicar las mediciones, no
+antes.</div>
 
-<h3>2.4 · El diseñador de escenarios (la única pieza con IA)</h3>
+<h3>2.6 · El diseñador de escenarios (la única pieza con IA)</h3>
 <p>Un modelo de lenguaje (Claude) diseña la "física" de cada escenario macro y la emite como
 <b>JSON estricto</b>: fases temporales (cada una con deriva y volatilidad por factor), shocks
 discretos y tilts por activo. Ese objeto — el <i>ScenarioSpec</i> — es 100% serializable y auditable.</p>
@@ -1275,25 +1587,24 @@ determinista.</p>
 <div class="note"><b>Reproducibilidad de la IA: no la hay, y no puede haberla.</b> Dos llamadas con el
 mismo prompt y el mismo modelo devuelven escenarios distintos. Antes esto se atribuía a
 <span class="mono">temperature=1.0</span>; la realidad es más fuerte: los modelos actuales
-(<span class="mono">claude-opus-4-8</span>, familia Opus&nbsp;4.7+) <b>retiraron los parámetros de
-muestreo</b> — enviar <span class="mono">temperature</span>, <span class="mono">top_p</span> o
-<span class="mono">top_k</span> devuelve un error 400 —, así que ya no existe ninguna palanca con la que
-forzar determinismo. Rehacer una librería con IA produce <i>siempre</i> una librería nueva.
-<br><br><b>Mitigación: no se re-deriva, se guarda.</b> El <i>spec.json</i> es la salida cara e
+<b>retiraron los parámetros de muestreo</b> — enviar <span class="mono">temperature</span>,
+<span class="mono">top_p</span> o <span class="mono">top_k</span> devuelve un error 400 —, así que ya no
+existe ninguna palanca con la que forzar determinismo. Rehacer una librería con IA produce <i>siempre</i>
+una librería nueva. <b>Mitigación: no se re-deriva, se guarda.</b> El <i>spec.json</i> es la salida cara e
 insustituible y se persiste en disco; todo lo que va detrás (caminos, velas, backtests, métricas) es
 determinista dado el spec y la semilla. La reproducibilidad del proyecto descansa en el artefacto
 guardado, no en la llamada a la IA. <b>Límite declarado:</b> el manifiesto registra la <i>clase</i> del
 diseñador, no el identificador del modelo; dos librerías generadas con modelos distintos son
 indistinguibles por el manifiesto.</div>
 
-<h3>2.5 · Del spec a las velas (el motor numérico)</h3>
+<h3>2.7 · Del spec a las velas (el motor numérico)</h3>
 <p>El motor convierte un spec en velas OHLCV multi-activo de forma <b>determinista</b> (vía
 <span class="mono">numpy.default_rng(seed)</span>). Las fases se expanden a series diarias de deriva y
 volatilidad; los shocks se suman como deriva puntual en su día. Las velas son válidas por construcción
 (máximo ≥ cuerpo ≥ mínimo, precios positivos). La apertura de cada día parte del cierre anterior más un
 hueco nocturno; las mechas se escalan por la volatilidad de ese día.</p>
 
-<h3>2.6 · La microestructura estadística: por qué un generador ingenuo miente</h3>
+<h3>2.8 · La microestructura estadística: por qué un generador ingenuo miente</h3>
 <p>Este es el corazón de la auditoría de datos. Un generador ingenuo — ruido gaussiano independiente,
 volatilidad constante — <b>miente sistemáticamente en la dirección de hacer las estrategias parecer
 mejores y más seguras de lo que son</b>. Y un optimizador es exactamente la herramienta que
@@ -1327,15 +1638,16 @@ definida positiva (sigue emergiendo de factores compartidos) y tienen <b>valores
 defecto</b>: con la microestructura desactivada, el mundo vuelve a ser el gaussiano independiente
 original, byte a byte. Eso permitió introducirlas sin invalidar la librería previa.</div>
 
-<h3>2.7 · Validación: del mundo que miente (ai_v1) al mundo realista (ai_v2)</h3>
+<h3>2.9 · Primer test de viabilidad: del mundo que miente (ai_v1) al mundo realista (ai_v2)</h3>
 <p>La microestructura se asigna a los escenarios existentes mediante un <b>retrofit determinista</b>:
 una función que deriva el carácter de cada fase de su propia semántica (una fase direccional → tendencia;
 una fase plana → reversión; una fase de crisis, medida por la volatilidad de la renta variable → colas,
 saltos y agrupamiento). Se reusa así el diseño caro de la IA sin volver a llamarla, y se produce una
 nueva librería (<span class="mono">ai_v2</span>) conservando la anterior para comparar.</p>
-<p>La librería actual, <span class="mono">ai_v2</span>, contiene <b>%%V2SCEN%% escenarios × %%V2PATHS%%
-caminos = %%V2SAMPLES%% muestras</b>, con horizonte de %%V2HORIZON%% días. La tabla compara sus
-<i>stylized facts</i> con los de la librería anterior (independiente e ingenua):</p>
+<p>La librería de referencia del <i>scoring</i>, <span class="mono">ai_v2</span>, contiene
+<b>%%V2SCEN%% escenarios × %%V2PATHS%% caminos = %%V2SAMPLES%% muestras</b>, con horizonte de
+%%V2HORIZON%% días. La tabla compara sus <i>stylized facts</i> con los de la librería anterior
+(independiente e ingenua):</p>
 <table><thead><tr><th>Propiedad estadística</th><th class="n">ai_v1 (iid)</th><th class="n">ai_v2</th><th>Lectura</th></tr></thead>
 <tbody>
 <tr><td>Dispersión de la autocorrelación entre escenarios</td><td class="n mono">%%SFV1SPREAD%%</td><td class="n mono">%%SFV2SPREAD%%</td><td>Diversidad de régimen serial</td></tr>
@@ -1347,35 +1659,70 @@ caminos = %%V2SAMPLES%% muestras</b>, con horizonte de %%V2HORIZON%% días. La t
 todos los escenarios eran indistinguibles del ruido; en <span class="mono">ai_v2</span> hay regímenes
 que tienden y regímenes que revierten, la volatilidad se agrupa y las colas engordan.</p>
 <div class="why"><b>Sustrato por defecto de la evaluación.</b> El harness de puntuación y optimización
-(§5) corre sobre <span class="mono">ai_v2</span> por defecto — es una constante única
+(§4) corre sobre <span class="mono">ai_v2</span> por defecto — es una constante única
 (<span class="mono">DEFAULT_LIBRARY_ID</span>) y hay un test que la fija. La librería anterior
 (<span class="mono">ai_v1</span>) se conserva únicamente como referencia comparativa: para evaluar sobre
 ella hay que pedirla <b>explícitamente</b>. Importa porque optimizar contra ruido independiente premia
 justo los sesgos optimistas que el retrofit vino a corregir.</div>
 <div class="note"><b>Esta tabla compara el mundo sintético consigo mismo.</b> Dice que ai_v2 dejó de
 ser ruido independiente, no que sus colas o su agrupamiento tengan el tamaño de los del mercado. Esa es
-otra pregunta, y se responde con datos reales en §2.8.</div>
+otra pregunta, y se responde con datos reales en §2.10.</div>
 
 %%FIDELITY%%
 
-%%TRANSFER%%
+<h3>2.11 · Qué garantizan los tests sobre los datos</h3>
+<p>La base cuenta con <b>%%NTESTS%% tests</b> automatizados y <i>linting</i> (ruff) sobre todo el código.
+Más allá del número importa <b>qué</b> se garantiza, así que la lista va repartida por capítulos: aquí los
+invariantes del sustrato, en §3.10 los de una operación y en §4.14 los del ranking.</p>
+<ul>
+<li><b>Determinismo:</b> la misma semilla produce las mismas velas, byte a byte.</li>
+<li><b>Validez de las velas:</b> máximo ≥ cuerpo ≥ mínimo y precios positivos, en todos los regímenes,
+incluidos los que activan saltos.</li>
+<li><b>Estructura de correlación:</b> activos que cargan el mismo factor correlacionan positivamente; un
+shock mueve al activo que lo carga.</li>
+<li><b>Microestructura ajustada en varianza:</b> añadir colas, agrupamiento o autocorrelación no cambia
+la volatilidad total; la autocorrelación tiene el signo esperado (negativo → reversión, positivo →
+tendencia).</li>
+<li><b>Neutralidad de los valores por defecto:</b> con la microestructura desactivada, el generador
+reproduce exactamente el mundo previo.</li>
+<li><b>El medidor de fidelidad mide lo que dice:</b> recupera el signo y el tamaño de una autocorrelación
+conocida, distingue una serie con colas t-Student de una gaussiana y una con volatilidad agrupada de una
+plana, devuelve NaN (no 0) cuando la serie es degenerada, y su correlación de rangos da +1 y −1 en
+órdenes idénticos e invertidos. El estudio completo es determinista y declara los símbolos sin
+contraparte real en vez de rellenarlos.</li>
+<li><b>Las señales no pueden mentir sobre su profundidad:</b> un test compara el
+<span class="mono">history_from</span> declarado en el catálogo con el registro de mediciones de la sonda
+y falla si alguien declara una fecha que el registro no respalda.</li>
+<li><b>Puente al backtest:</b> el output del generador es directamente consumible por el motor de
+backtest, y el ciclo completo (estrategia → riesgo → ejecución) funciona sobre datos sintéticos.</li>
+</ul>
 
-<h2 id="s3">3 · Metodología de backtest</h2>
+<h2 id="s3">3 · Trade: cómo se ejecuta una operación</h2>
+<p class="lead">Este capítulo sigue <b>una sola operación</b> desde que existe una barra cerrada hasta que
+su resultado entra en la curva de equity: quién decide, quién autoriza, a qué precio se llena, qué cuesta
+y cómo se apunta. Todo lo que el capítulo 4 puntúa sale de aquí, así que cualquier optimismo escondido en
+estas ocho secciones contamina todas las cifras del documento.</p>
 
 <h3>3.1 · Se conduce el sistema real, no una réplica</h3>
 <p>El backtest <b>no reimplementa</b> la lógica de trading. Inyecta un reloj simulado, una fuente de
 datos con anti-look-ahead, un modelo de mercado intrabar y un estado en memoria, y hace avanzar el
 <b>mismo orquestador que operaría en vivo</b> un día a la vez.</p>
 <div class="why"><b>Por qué.</b> Elimina de raíz toda una clase de divergencia backtest/live —la causa
-número uno de sorpresas en producción—. Lo que se testea es, literalmente, lo que se ejecutaría.</div>
+número uno de sorpresas en producción—. Lo que se testea es, literalmente, lo que se ejecutaría. La única
+costura que cambia es el <b>modelo de mercado</b>: en vivo se entra al precio de la señal y se valora
+contra el último cierre; en backtest se entra al <i>open</i> siguiente y los stops se comprueban contra el
+máximo y el mínimo de la barra (§3.4).</div>
 
 <h3>3.2 · Anti-look-ahead</h3>
 <p>La fuente de datos solo devuelve barras <b>estrictamente anteriores</b> al día del reloj: la decisión
 se toma con el cierre de ayer, nunca con el de hoy (que aún no ha cerrado desde el punto de vista de la
-decisión). El bloque de observación cross-sectional (§4.3) usa exactamente el mismo corte temporal, para
-que ninguna feature de mercado adelante información.</p>
+decisión). El bloque de observación cross-sectional (§4.2) y el radar de señales (§2.2) usan exactamente
+el mismo corte temporal, para que ninguna feature adelante información. El corte vive en la <b>capa que
+sirve los datos</b>, no en cada consumidor: así no depende de que nadie se despiste.</p>
 
-<h3>3.3 · El modelo de mercado intrabar y su convención pesimista</h3>
+%%RISKGATE%%
+
+<h3>3.4 · El llenado y la convención pesimista</h3>
 <p>La ejecución es deliberadamente conservadora:</p>
 <ul>
 <li>La decisión se toma con la barra <b>cerrada</b>; la <b>entrada</b> se ejecuta al <b>open del día
@@ -1388,11 +1735,12 @@ siguiente</b> (no al cierre con el que se decidió).</li>
 intrabar, preferimos <b>subestimar</b> el resultado: si una estrategia parece buena aquí, tiene margen.</div>
 <p>Toda esa convención trata las <b>24 horas</b> de la vela como un bloque opaco, y durante mucho tiempo
 se justificó solo por prudencia. Prudente no es lo mismo que <i>medido</i>: la pregunta de cuánta
-formación de precio cae en la ventana que el motor no ve tiene una respuesta numérica, y aquí está.</p>
+formación de precio cae en la ventana que el motor no ve tiene una respuesta numérica, y es la siguiente
+sección.</p>
 
 %%SESSIONS%%
 
-<h3>3.4 · Costes de ejecución: spread, volatilidad e impacto</h3>
+<h3>3.6 · Costes de ejecución: spread, volatilidad e impacto</h3>
 <p>Cada ejecución paga comisiones y deslizamiento (<i>slippage</i>). El deslizamiento <b>no es una
 constante</b>: se calcula orden a orden como suma de tres términos, cada uno responsable de una
 pregunta distinta:</p>
@@ -1414,7 +1762,7 @@ dólares en un altcoin ilíquido cuesta lo mismo que moverlos en BTC. Eso no es 
 conservadora: es un <b>subsidio</b> a las estrategias que rotan mucho y operan lo pequeño e ilíquido,
 justo donde un backtest tiende a encontrar señales espurias.</div>
 
-<h3>3.5 · Techo de capacidad y fills parciales</h3>
+<h3>3.7 · Techo de capacidad y fills parciales</h3>
 <p>Ninguna orden puede consumir más de una <b>fracción del volumen de la barra</b> (10% por defecto).
 Lo que exceda ese techo <b>no se llena</b>: la orden queda <i>parcialmente llenada</i> y la posición se
 abre por el tamaño realmente ejecutado. Si la barra no da ni para eso, la orden se <b>rechaza</b>.</p>
@@ -1425,7 +1773,7 @@ tamaño</b>, que con la ley de raíz cuadrada puede ser varias veces el de la en
 cerrada en el estado del sistema pero pagada solo a medias: una contabilidad optimista escondida en un
 detalle de ejecución. Se prefiere cobrar de más al salir que dejar el agujero.</div>
 
-<h3>3.6 · El volumen como proxy de liquidez</h3>
+<h3>3.8 · El volumen como proxy de liquidez</h3>
 <p>La columna <span class="mono">volume</span> de las velas, que antes era decorativa (ninguna pieza la
 consultaba), es hoy el <b>eje de liquidez</b> del sistema: el generador la escala al volumen típico
 negociado de cada activo, y el motor de ejecución la lee para el impacto y la capacidad. La liquidez se
@@ -1433,7 +1781,7 @@ estima con la <b>mediana</b> de las últimas 20 barras <b>ya cerradas</b> —nun
 razones: el mismo corte anti-look-ahead que usa la estrategia, y porque el volumen se dispara los días
 de movimiento fuerte, de modo que tomar ese pico como capacidad regalaría profundidad justo en los días
 en que de verdad escasea.</p>
-<div class="note"><b>Limitación.</b> Los baselines pasivos (§5.6) siguen pagando un coste plano de
+<div class="note"><b>Limitación.</b> Los baselines pasivos (§4.9) siguen pagando un coste plano de
 referencia, no el modelo completo: solo hacen dos operaciones sobre los activos más líquidos, y darles
 el coste barato endurece el listón que la estrategia debe superar, que es la dirección prudente del
 error.</div>
@@ -1443,15 +1791,32 @@ techo de capacidad no llega a morder. Los términos de impacto y capacidad son l
 resultado <b>deje de escalar</b> cuando el capital crece, que es exactamente la pregunta que un
 backtest con costes planos no puede responder.</div>
 
-%%VALIDATION%%
+%%PNL%%
 
-<h3>3.8 · El motor de riesgo como puerta única</h3>
-<p>Toda señal, venga de donde venga, pasa por el motor de riesgo antes de convertirse en orden. El riesgo
-es <b>dueño</b> del stop y el take-profit (puede recortar lo que propone la estrategia), y aplica los
-límites de exposición por símbolo y total, la confianza mínima por operación y el límite de pérdida
-diaria. <i>Por qué puerta única:</i> ninguna orden puede esquivar el control de riesgo.</p>
+<h3>3.10 · Qué garantizan los tests sobre una operación</h3>
+<ul>
+<li><b>Anti-look-ahead:</b> tests dedicados verifican que la barra de hoy queda excluida y la de ayer
+incluida, tanto en la fuente de datos como en el ensamblador de régimen. En la validación multiventana se
+comprueba además a nivel de ejecución: borrar todas las barras <b>posteriores</b> a una ventana no cambia
+ni un decimal de su curva de equity.</li>
+<li><b>Contabilidad honesta:</b> el PnL es neto de comisiones; las salidas (stop / take-profit / tiempo)
+pasan por el motor de ejecución para pagar costes reales, y las comisiones siguen al tamaño
+<b>llenado</b>, no al pedido.</li>
+<li><b>Los costes discriminan:</b> un altcoin ilíquido paga más deslizamiento que BTC por el mismo
+notional; el coste crece con el tamaño de forma cóncava (4× tamaño → 2× impacto) y con la volatilidad;
+sin dato de liquidez no se inventa impacto. Una orden por encima del techo de capacidad se llena
+<b>parcialmente</b>.</li>
+<li><b>El riesgo es puerta única:</b> ninguna orden se construye sin decisión de riesgo, y el stop
+propuesto por una estrategia no puede quedar más lejos del máximo declarado.</li>
+<li><b>El modelo de mercado se comporta como se documenta:</b> con stop y objetivo tocados en la misma
+barra gana el stop, y un hueco por debajo del stop se llena al open.</li>
+</ul>
 
-<h2 id="s4">4 · Estrategias y espacio de observación</h2>
+<h2 id="s4">4 · Estrategias</h2>
+<p class="lead">Aquí se decide <b>qué</b> se opera. El capítulo va en el orden en que se construye una
+decisión de selección: las estrategias que existen, lo que ven, cómo se puntúa una muestra, cómo se
+agrega la distribución, cómo se parte el tiempo, contra quién compite, qué se exige para poder competir,
+si el orden sintético se parece al real, cómo se busca y cuánto hay que descontar por haber buscado.</p>
 
 <h3>4.1 · Dos primitivas de regímenes opuestos</h3>
 <p>El sistema arranca con dos estrategias paramétricas, puras y <b>sin IA</b>, elegidas como regímenes
@@ -1478,43 +1843,39 @@ variante no requiere escribir código. Parámetros por defecto:</p>
 <p>Se define de forma <b>explícita</b> y con <b>orden estable</b> lo que la política ve en cada momento de
 decisión — el contrato de entrada para el aprendizaje futuro. El cierre de un solo activo no basta.
 Contiene %%NOWN%% features del <b>mercado del propio activo</b> (retornos a varios horizontes, tendencia,
-RSI/MACD, volatilidad ATR y realizada, posición en el canal de Donchian, drawdown) y %%NREGIME%%
+RSI/MACD, volatilidad ATR y realizada, posición en el canal de Donchian, drawdown), %%NREGIME%%
 features <b>cross-sectional / de régimen</b> (fuerza relativa al mercado, correlación móvil, amplitud del
-mercado, volatilidad agregada), más un <i>one-hot</i> de clase de activo.</p>
+mercado, volatilidad agregada), un <i>one-hot</i> de clase de activo y los seis números del <b>radar de
+señales</b> (§2.2).</p>
 <div class="why"><b>Por qué explícito y por qué cross-sectional.</b> Una política necesita situar al
 activo en su contexto: no es lo mismo una sobreventa cuando todo el mercado cae (cuchillo) que cuando el
-activo es un rezagado en un mercado sano. El bloque de régimen se inyecta como colaborador
-<b>opcional</b>: si no está presente, la observación degrada a un solo activo y el contrato en vivo no se
-rompe.</div>
+activo es un rezagado en un mercado sano. Los bloques de contexto se inyectan como colaboradores
+<b>opcionales</b>: si no están presentes, la observación degrada a un solo activo y el contrato en vivo no
+se rompe.</div>
 <div class="note"><b>Cautela documentada.</b> El volumen sintético es un proxy simplista; las features
 que dependen de él están marcadas como tales y deben interpretarse con cuidado.</div>
 
-%%SIGNALS%%
-
-<h2 id="s5">5 · Evaluación y scoring</h2>
-
-<h3>5.1 · La unidad de evaluación es la distribución</h3>
+<h3>4.3 · La unidad de evaluación es la distribución</h3>
 <p>Una estrategia no se juzga por un camino, sino por la <b>distribución de su resultado</b> sobre las
 %%V2SAMPLES%% muestras (escenarios × caminos). Puntuar sobre un solo camino es medir ruido; se ha
 verificado que un único path no es informativo.</p>
-<p>Esa dispersión es <b>entre mundos</b>. Hay una segunda, ortogonal y hasta ahora invisible: la que hay
-<b>dentro de un mundo</b>, entre tramos de su propia historia. La validación multiventana (§3.7) la mide,
-y resulta no ser pequeña. Conviene no confundirlas: la primera pregunta "¿funciona en escenarios
-distintos?", la segunda "¿funciona en momentos distintos del mismo escenario?".</p>
-<div class="note"><b>Estado.</b> Lo que hoy alimenta al optimizador (§5.5) es la primera dispersión: cada
+<p>Esa dispersión es <b>entre mundos</b>. Hay una segunda, ortogonal: la que hay <b>dentro de un mundo</b>,
+entre tramos de su propia historia. La validación multiventana (§4.8) la mide, y resulta no ser pequeña.
+Conviene no confundirlas: la primera pregunta "¿funciona en escenarios distintos?", la segunda "¿funciona
+en momentos distintos del mismo escenario?".</p>
+<div class="note"><b>Estado.</b> Lo que hoy alimenta al optimizador (§4.12) es la primera dispersión: cada
 muestra sigue aportando <b>un</b> número, obtenido con el corte único. Componer las dos agregaciones —el
 CVaR entre ventanas y el CVaR entre muestras— no es automático: encadenar dos veces la cola puede ser
-excesivamente conservador, y esa decisión se tomará midiendo, no razonando (§7).</div>
+excesivamente conservador, y esa decisión se tomará midiendo, no razonando (§6).</div>
 
-<h3>5.2 · La métrica de cabecera: Sharpe penalizado</h3>
+<h3>4.4 · La métrica de cabecera: Sharpe penalizado</h3>
 <p>La puntuación de una muestra es su <b>headline score fuera de muestra</b>:</p>
 <p style="text-align:center"><span class="mono"><b>Sharpe<sub>OOS</sub> − λ·turnover − κ·maxDD</b></span>
 &nbsp;&nbsp;(λ sobre la rotación diaria, κ sobre el drawdown en fracción; ambos <b>medidos</b>, no
-supuestos: λ = %%LAMBDA%% y κ = %%KAPPA%% — ver §5.2b)</p>
-<p>El <b>turnover</b> es una métrica nueva del motor: el <i>notional</i> rotado por día en unidades del
-capital inicial, contando las dos patas de cada operación. Un turnover de 0,20 significa "cada día rota
-el 20% de la cartera", así que mide <i>churn</i> de verdad — tamaño por frecuencia — y no solo el número
-de operaciones.</p>
+supuestos: λ = %%LAMBDA%% y κ = %%KAPPA%% — ver §4.5)</p>
+<p>El <b>turnover</b> es el <i>notional</i> rotado por día en unidades del capital inicial, contando las
+dos patas de cada operación (§3.9). Un turnover de 0,20 significa "cada día rota el 20% de la cartera",
+así que mide <i>churn</i> de verdad — tamaño por frecuencia — y no solo el número de operaciones.</p>
 <div class="why"><b>Por qué no el Calmar (la métrica que esto sustituye).</b> Durante una fase la
 cabecera fue el Calmar out-of-sample (retorno anualizado dividido por el máximo drawdown). Era una mala
 elección por tres razones, y se documentan porque explican el diseño del sustituto:
@@ -1533,7 +1894,7 @@ aditiva</b> (ni denominador ni descarte binario), el Sharpe no se puede inflar d
 plana puntúa 0, no infinito) y la rotación tiene un precio explícito, de modo que el óptimo degenerado
 desaparece <i>por construcción</i>, no por vigilancia. Nótese que las dos puertas que de verdad cerraban el
 óptimo degenerado son el Sharpe y el precio de la rotación, <b>no</b> el término de drawdown: por eso la
-calibración de §5.2b puede dejarlo en cero sin reabrir ninguna de ellas.</div>
+calibración de §4.5 puede dejarlo en cero sin reabrir ninguna de ellas.</div>
 <div class="note"><b>Anualizar: dos unidades que no son la misma.</b> El Sharpe de la cabecera está
 anualizado, y anualizar mal lo desplaza sistemáticamente. Hay que separar dos casos:
 <ul>
@@ -1554,9 +1915,10 @@ natural. El factor se resuelve una sola vez, se aplica por igual a la estrategia
 métricas como <span class="mono">periods_per_year</span>, para que las cifras publicadas sean
 interpretables sin mirar el código. El universo sintético mezcla cripto y renta variable, así que todas
 las cifras de este documento están anualizadas por 365.</div>
+
 %%CALIBRATION%%
 
-<h3>5.3 · El estadístico de recompensa: CVaR al 25%</h3>
+<h3>4.6 · El estadístico de recompensa: CVaR al 25%</h3>
 <p>Los headline scores de todas las muestras se agregan con el <b>CVaR@25%</b> — la media del peor
 cuartil (<i>Expected Shortfall</i>). Ese número <b>es</b> la recompensa que optimiza el buscador y el
 criterio con el que se ordena el ranking.</p>
@@ -1568,7 +1930,7 @@ a veces sorprende bien no compra con eso su cola mala) y no depende de un λ arb
 estable que un único cuantil (P25). Se reportan igualmente media, desviación y P25 para no ocultar la
 forma de la distribución.</div>
 
-<h3>5.4 · Hold-out de escenarios enteros</h3>
+<h3>4.7 · Hold-out de escenarios enteros</h3>
 <p>Los escenarios se reparten en entrenamiento y validación de forma determinista, reservando
 <b>arquetipos macro completos</b> como hold-out (aproximadamente 22 train / 8 validación).</p>
 <div class="why"><b>Por qué escenarios enteros y no caminos sueltos.</b> Si un camino de validación
@@ -1576,20 +1938,9 @@ perteneciera a un escenario que también está en entrenamiento, sería <b>fuga 
 ya habría visto esa "física" y el hueco de sobreajuste quedaría enmascarado. Partir por escenario lo
 impide.</div>
 
-<h3>5.5 · El optimizador: Cross-Entropy Method</h3>
-<p>La mejora de las primitivas se plantea, en esta fase, como <b>optimización de caja negra</b> de sus
-parámetros mediante el método de entropía cruzada (CEM): se muestrean parámetros de una gaussiana, se
-conserva el cuartil élite y se reajusta la gaussiana hacia él, iterando. Es determinista con semilla.</p>
-<div class="why"><b>Por qué caja negra primero.</b> Es "RL-lite" honesto que encaja con el backtest
-existente sin nueva teoría, y deja la interfaz limpia para enchufar después aprendizaje por refuerzo por
-gradiente por-paso si se decide extender el contrato de la estrategia.</div>
-<p>Rangos de búsqueda sobre los que opera el CEM:</p>
-<h4>Momentum</h4>
-%%SPACE_MOM%%
-<h4>Reversión a la media</h4>
-%%SPACE_MR%%
+%%VALIDATION%%
 
-<h3>5.6 · Baselines: el listón que hay que superar para «aprobar»</h3>
+<h3>4.9 · Baselines: el listón que hay que superar para «aprobar»</h3>
 <p>Una estrategia no funciona porque su puntuación sea positiva: funciona si bate a lo que consigue
 cualquiera <b>sin hacer nada</b>. Sobre cada muestra se construyen tres alternativas pasivas:</p>
 <table><thead><tr><th>Baseline</th><th>Qué hace</th></tr></thead><tbody>
@@ -1603,7 +1954,7 @@ cualquiera <b>sin hacer nada</b>. Sobre cada muestra se construyen tres alternat
 recompensas agregadas: el CVaR@25% de la estrategia contra el del <b>mejor</b> baseline, sobre las
 muestras de validación — batir baselines en escenarios que el optimizador ya vio no probaría nada.</p>
 <p>Y exige una segunda condición, añadida después de medir que la primera sola no bastaba: la estrategia
-tiene que ser <b>rankeable</b>, es decir, superar el suelo de actividad de §5.6b. Una curva plana puntúa
+tiene que ser <b>rankeable</b>, es decir, superar el suelo de actividad de §4.10. Una curva plana puntúa
 0 exacto y bate a los pasivos en cualquier periodo bajista sin haber abierto una posición; eso no es
 batirlos, es no haber jugado.</p>
 <div class="why"><b>Por qué en la cola y no en la media.</b> El gate se juega con el mismo estadístico
@@ -1617,7 +1968,26 @@ un filtro superado. Lo mismo vale para la actividad: si no se ha medido, no se d
 
 %%ACTIVITY%%
 
-<h3>5.7 · Descuento del sobreajuste por múltiples pruebas</h3>
+%%TRANSFER%%
+
+<h3>4.12 · El optimizador: Cross-Entropy Method</h3>
+<p>La mejora de las primitivas se plantea, en esta fase, como <b>optimización de caja negra</b> de sus
+parámetros mediante el método de entropía cruzada (CEM): se muestrean parámetros de una gaussiana, se
+conserva el cuartil élite y se reajusta la gaussiana hacia él, iterando. Es determinista con semilla.</p>
+<div class="why"><b>Por qué caja negra primero.</b> Es "RL-lite" honesto que encaja con el backtest
+existente sin nueva teoría, y deja la interfaz limpia para enchufar después aprendizaje por refuerzo por
+gradiente por-paso si se decide extender el contrato de la estrategia.</div>
+<p>Rangos de búsqueda sobre los que opera el CEM:</p>
+<h4>Momentum</h4>
+%%SPACE_MOM%%
+<h4>Reversión a la media</h4>
+%%SPACE_MR%%
+<div class="note"><b>Lo que NO entra en el espacio de búsqueda.</b> Ninguna feature de señal, ningún
+umbral de puerta y ningún parámetro del radar (§2.2). Son constantes declaradas en código, y hay un test
+que lo demuestra: añadir una dimensión <b>sustituye</b> el espacio publicado en vez de ampliarlo. Es lo
+que mantiene fija la huella de las 16 configuraciones sobre las que se ha medido todo lo demás.</div>
+
+<h3>4.13 · Descuento del sobreajuste por múltiples pruebas</h3>
 <p>Buscar sobre un espacio de parámetros garantiza encontrar algo que brilla <i>aunque no haya nada que
 encontrar</i>: con suficientes intentos sobre puro ruido, el mejor Sharpe esperado crece solo. La
 herramienta pone número a ese efecto por dos vías independientes.</p>
@@ -1635,99 +2005,155 @@ corrigiendo además por asimetría y colas gruesas de los retornos.</p>
 <i>elegir</i> por backtest acierta?". La segunda es la que importa cuando lo que se publica no es un
 número sino un método.</div>
 
-<h2 id="s6">6 · Tests y garantías</h2>
-<p>La base cuenta con <b>%%NTESTS%% tests</b> automatizados y <i>linting</i> (ruff) sobre todo el
-código. Más allá del número, importa <b>qué</b> se garantiza. Los tests se agrupan por invariante:</p>
+<h3>4.14 · Qué garantizan los tests sobre el ranking</h3>
 <ul>
-<li><b>Determinismo:</b> la misma semilla produce las mismas velas y las mismas curvas de equity.</li>
-<li><b>Validez de las velas:</b> máximo ≥ cuerpo ≥ mínimo y precios positivos, en todos los regímenes,
-incluidos los que activan saltos.</li>
-<li><b>Anti-look-ahead:</b> tests dedicados verifican que la barra de hoy queda excluida y la de ayer
-incluida, tanto en la fuente de datos como en el ensamblador de régimen. En la validación multiventana
-se comprueba además a nivel de ejecución: borrar todas las barras <b>posteriores</b> a una ventana no
-cambia ni un decimal de su curva de equity.</li>
-<li><b>No hay fuga temporal entre folds:</b> para cada esquema (walk-forward anclado y rodante, CPCV,
-corte único) se comprueba <b>día a día</b> —sobre fechas explícitas, no sobre los intervalos que
-construyeron el fold— que ningún día aparece a la vez en entrenamiento y test, y que los huecos
-respetan la purga y el embargo declarados. El auditor se ejercita también en negativo: folds con solape
-y folds con purga insuficiente <b>deben</b> hacer fallar la ejecución antes de gastar cómputo. Se fija
-además el invariante que delimita qué hace la purga: purgar cambia la ventana in-sample y <b>no</b>
-la out-of-sample; y dos folds con el mismo test y entrenamientos distintos dan idéntico resultado OOS,
-que es lo que legitima reutilizar tramos ya corridos entre folds.</li>
-<li><b>Estructura de correlación:</b> activos que cargan el mismo factor correlacionan positivamente; un
-shock mueve al activo que lo carga.</li>
-<li><b>Microestructura ajustada en varianza:</b> añadir colas, agrupamiento o autocorrelación no cambia
-la volatilidad total; la autocorrelación tiene el signo esperado (negativo → reversión, positivo →
-tendencia).</li>
-<li><b>Neutralidad de los valores por defecto:</b> con la microestructura desactivada, el generador
-reproduce exactamente el mundo previo.</li>
-<li><b>Puente al backtest:</b> el output del generador es directamente consumible por el motor de
-backtest, y el ciclo completo (estrategia → riesgo → ejecución) funciona sobre datos sintéticos.</li>
-<li><b>Contabilidad honesta:</b> el PnL es neto de comisiones; las salidas (stop/take-profit/tiempo)
-pasan por el motor de ejecución para pagar costes reales.</li>
-<li><b>Los costes discriminan:</b> un altcoin ilíquido paga más deslizamiento que BTC por el mismo
-notional; el coste crece con el tamaño de forma cóncava (4× tamaño → 2× impacto) y con la volatilidad;
-sin dato de liquidez no se inventa impacto. Una orden por encima del techo de capacidad se llena
-<b>parcialmente</b> y las comisiones siguen al tamaño llenado, no al pedido.</li>
-<li><b>La métrica de cabecera no tiene óptimo degenerado:</b> hay tests que fijan que una curva plana
-puntúa 0 (no infinito), que el drawdown penaliza de forma aditiva y no en el denominador, y que rotar
-más con la misma curva de equity puntúa peor.</li>
+<li><b>La métrica de cabecera no tiene óptimo degenerado:</b> una curva plana puntúa 0 (no infinito), el
+drawdown penaliza de forma aditiva y no en el denominador, y rotar más con la misma curva de equity
+puntúa peor.</li>
 <li><b>El ranking compite por la cola:</b> una distribución con mejor media pero peor cuartil malo pierde,
 y la varianza al alza no se castiga.</li>
 <li><b>El filtro de baselines no se puede esquivar:</b> sin ningún baseline disponible el veredicto es
 "no aprueba", y los baselines pagan las mismas comisiones que la estrategia.</li>
-<li><b>El medidor de fidelidad mide lo que dice:</b> recupera el signo y el tamaño de una
-autocorrelación conocida, distingue una serie con colas t-Student de una gaussiana y una con
-volatilidad agrupada de una plana, devuelve NaN (no 0) cuando la serie es degenerada, y su
-correlación de rangos da +1 y −1 en órdenes idénticos e invertidos. El estudio completo es
-determinista y declara los símbolos sin contraparte real en vez de rellenarlos.</li>
+<li><b>No hay fuga temporal entre folds:</b> para cada esquema (walk-forward anclado y rodante, CPCV,
+corte único) se comprueba <b>día a día</b> —sobre fechas explícitas, no sobre los intervalos que
+construyeron el fold— que ningún día aparece a la vez en entrenamiento y test, y que los huecos respetan
+la purga y el embargo declarados. El auditor se ejercita también en negativo: folds con solape y folds
+con purga insuficiente <b>deben</b> hacer fallar la ejecución antes de gastar cómputo. Y se fija el
+invariante que delimita qué hace la purga: purgar cambia la ventana in-sample y <b>no</b> la
+out-of-sample; dos folds con el mismo test y entrenamientos distintos dan idéntico resultado OOS.</li>
 <li><b>El descuento por múltiples pruebas discrimina:</b> un caso de habilidad genuina da PBO ≈ 0 y uno
 de sobreajuste puro da PBO ≈ 1; probar más configuraciones sube el listón del DSR.</li>
+<li><b>El espacio de búsqueda no crece por la puerta de atrás:</b> el CEM sólo reconstruye estrategias, y
+ninguna feature de observación o de señal puede convertirse en parámetro sorteable.</li>
 </ul>
 
-<h2 id="s7">7 · Limitaciones conocidas y hoja de ruta</h2>
-<p>Declarar los huecos es parte de la honestidad de la herramienta. Estado actual:</p>
-<table><thead><tr><th>Área</th><th>Estado</th><th>Por qué importa</th></tr></thead><tbody>
-<tr><td>Realismo del generador (colas, agrupamiento, estructura serial, saltos)</td><td class="ok">Hecho</td><td>El sustrato dejó de mentir en la dirección optimista.</td></tr>
-<tr><td>Cableado del sustrato realista en el scoring (<span class="mono">ai_v2</span> por defecto)</td><td class="ok">Hecho</td><td>Lo que se optimiza se mide contra el mundo realista, no contra ruido iid.</td></tr>
-<tr><td>Métrica y ranking honestos (headline penalizado, CVaR@25%, baselines, DSR/PBO)</td><td class="ok">Hecho</td><td>El óptimo degenerado del Calmar desapareció, y ganar exige batir a no hacer nada.</td></tr>
-<tr><td>Calibración con evidencia de los pesos λ (turnover) y κ (drawdown)</td><td class="ok">Hecho</td><td>Medidos por barrido en rejilla (§5.2b): la superficie es plana y λ no duplica los costes ya pagados.</td></tr>
-<tr><td>Costes que muerden (slippage por símbolo/vol/tamaño; fills parciales)</td><td class="ok">Hecho</td><td>La fricción dejó de ser una constante: el coste distingue BTC de un altcoin ilíquido y el tamaño tiene techo (§3.4-3.6).</td></tr>
-<tr><td>Validación temporal multiventana (walk-forward y CPCV con purga y embargo)</td><td class="ok">Hecho</td><td>Implementada, auditada contra fuga temporal y <b>medida</b>: el corte único no estaba sesgado al alza, pero degradaba el CVaR a un solo número y escondía una dispersión entre ventanas capaz de cambiar qué configuración gana (§3.7).</td></tr>
-<tr><td>Validación sintético-vs-real (correlación de rangos con CCXT)</td><td class="ok">Hecho</td><td>Medida contra ocho años de histórico real: el nivel de riesgo y el orden de las correlaciones cruzadas se sostienen (§2.8).</td></tr>
-<tr><td>Transferencia de ranking real-vs-sintético</td><td class="ok">Hecho</td><td><b>Medida, y con resultado negativo:</b> el mundo sintético pasa todos los umbrales de fidelidad y aun así <b>no ordena</b> las estrategias como el mercado (§2.9). Que esté "hecho" significa que la pregunta está respondida, no que la respuesta fuera la deseada — y esa respuesta es la que reordena el trabajo pendiente.</td></tr>
-<tr><td>Plataforma de ingesta de señales externas (esqueleto)</td><td class="ok">Hecho</td><td>Catálogo con <span class="mono">history_from</span> medido y <span class="mono">pit</span>, puerto de dos capas, archivo crudo append-only, captura y auditoría de cobertura (§4.3). «Hecho» es el <b>esqueleto</b>, no la ingesta: hoy hay <b>0 fuentes conectadas</b> y <b>0 con historia medida</b>, y las dos cifras se publican en vez de esconderse. La captura ya corre, que es lo único que no se puede recuperar después.</td></tr>
-<tr><td>Limpieza de consistencia (universo, anualización, reproducibilidad del diseñador)</td><td class="ok">Hecho</td><td>La anualización distingue clase de activo (252 sesiones / 365 días naturales) y se reporta; la no-reproducibilidad del diseñador está documentada y su petición ya no envía parámetros de muestreo retirados; MATIC/USDT queda fuera del universo operado y dentro del sintético, con el motivo escrito.</td></tr>
+<h2 id="s5">5 · Resultados</h2>
+<p class="lead">Este capítulo está <b>vacío a propósito</b>, y decirlo es más honesto que llenarlo con
+cifras de backtest presentadas como resultados. Un backtest es una medición sobre historia; un resultado
+es lo que hace el sistema cuando corre. Hasta que el paper trading acumule meses de calendario no hay
+nada que publicar aquí.</p>
+<p>Cuando lo haya, éste es el contenido comprometido, y el orden no es casual: primero lo que se ejecutó,
+después lo que rindió, y sólo al final la comparación con lo que el <i>backtest</i> prometía.</p>
+<table><thead><tr><th>Bloque</th><th>Qué se publicará</th><th>De dónde sale</th></tr></thead><tbody>
+<tr><td><b>Diario de ciclos</b></td><td>Qué se decidió cada ciclo, con qué precio de referencia, qué
+aprobó el riesgo y cuánto deslizamiento se cobró.</td><td>Registro append-only del runner (§3.9), hoy
+pendiente.</td></tr>
+<tr><td><b>Curva de equity y posiciones</b></td><td>Equity marcado a mercado, posiciones abiertas y
+cerradas con PnL neto de comisiones.</td><td>Estado persistido del runner (§3.9).</td></tr>
+<tr><td><b>Riesgo desplegado</b></td><td>Exposición real frente a los límites, número de posiciones y
+drawdown de cuenta.</td><td>Motor de riesgo (§3.3).</td></tr>
+<tr><td><b>Divergencia live-vs-backtest</b></td><td>La cifra que justifica todo el capítulo 3: cuánto se
+aparta lo ejecutado de lo que el motor predecía, separando precio de llenado, coste y latencia.</td>
+<td>Diario de ciclos contra el mismo periodo re-simulado.</td></tr>
+</tbody></table>
+<div class="why"><b>Por qué esto no se puede acelerar.</b> Es la única parte del proyecto que consume
+<b>tiempo de calendario</b> y no cómputo: la divergencia entre lo ejecutado y lo simulado necesita meses
+de operaciones para ser medible. Por eso arrancar el paper trading es la evolución número 1 (§6) aunque
+no requiera desarrollo nuevo: cada semana sin correr es una semana perdida al final.</div>
+
+<h2 id="s6">6 · Limitaciones y evoluciones</h2>
+<p class="lead">Declarar los huecos es parte de la honestidad de la herramienta. Este capítulo tiene tres
+partes: lo que está cerrado y medido, lo que sigue abierto y en qué orden, y los límites que no se van a
+cerrar porque son estructurales.</p>
+
+<h3>6.1 · Lo que está cerrado, y qué significa «cerrado»</h3>
+<p>Cerrado significa <b>medido y publicado</b>, no «salió bien». Dos de estas líneas devolvieron el
+resultado que no se quería, y están igual de cerradas: la pregunta tiene respuesta.</p>
+<table><thead><tr><th>Área</th><th>Qué quedó establecido</th></tr></thead><tbody>
+<tr><td>Realismo del generador</td><td>Colas, agrupamiento, estructura serial y saltos, con valores
+neutros por defecto: el sustrato dejó de mentir en la dirección optimista (§2.8).</td></tr>
+<tr><td>Fidelidad contra el mercado real</td><td>Cobertura del 98 % y nueve umbrales que el estudio puede
+fallar. La ordenación entre activos sigue floja, y se publica (§2.10).</td></tr>
+<tr><td>Transferencia de ranking</td><td><b>Resultado negativo y aceptado:</b> el mundo sintético pasa
+todos los umbrales de fidelidad y aun así no ordena las estrategias como el mercado (§4.11).</td></tr>
+<tr><td>Métrica y ranking</td><td>Headline penalizado, CVaR@25%, baselines pasivos con las mismas
+comisiones, DSR y PBO: el óptimo degenerado del Calmar desapareció (§4.4–4.13).</td></tr>
+<tr><td>Pesos λ y κ</td><td>Medidos por barrido en rejilla sobre cientos de backtests: la superficie es
+plana, penalizar no estabiliza y los costes ya están dentro del Sharpe (§4.5).</td></tr>
+<tr><td>Suelo de actividad</td><td>Rankear exige operar. El umbral es medido, el barrido se publica
+entero y el gate pasa de siete aprobadas a una (§4.10).</td></tr>
+<tr><td>Costes que muerden</td><td>Deslizamiento por símbolo, volatilidad y tamaño con ley de raíz
+cuadrada, techo de capacidad y fills parciales (§3.6–3.8).</td></tr>
+<tr><td>Ventana ciega del backtest</td><td>Medida por sesión horaria: el hueco cierre→open es
+<b>cero</b> (0,55 pb), pero llegar una hora tarde cuesta varias veces el coste modelado (§3.5).</td></tr>
+<tr><td>Validación temporal multiventana</td><td>Walk-forward y CPCV con purga y embargo, auditados
+contra fuga. El corte único no estaba sesgado: estaba <b>arbitrario</b> (§4.8).</td></tr>
+<tr><td>Plataforma de señales externas</td><td>Diecisiete fuentes con adaptador, profundidad medida por
+sonda y cableado al espacio de observación en backtest y en vivo, con la compuerta cumplida: los scores
+publicados no se movieron (§2.2).</td></tr>
+<tr><td>Limpieza de consistencia</td><td>Anualización por clase de activo, no-reproducibilidad del
+diseñador documentada, y el universo operado separado del sintético con el motivo escrito
+(§2.1, §2.5, §4.4).</td></tr>
 </tbody></table>
 
-<h3>7.1 · Lo que queda abierto, por criticidad</h3>
-<p>El orden no es de gusto: responde a una asimetría de coste. Una estrategia añadida hoy se re-evalúa
-gratis cuando el juez mejore; un juez malo contamina todo lo que puntúe mientras siga malo. Por eso el
-sustrato y el juez van delante de la cosecha. El paper trading en vivo se lanza en paralelo porque es lo
-único que compra tiempo de calendario, que no se puede comprimir después.</p>
-<p>A esta lista se le ha añadido, desde §4.3, un frente nuevo que no estaba: <b>conectar las fuentes de
-señal</b>. El esqueleto de ingesta ya está construido y vacío, así que el trabajo pendiente es escribir
-adaptadores —cada uno independiente del anterior— y, solo después, cablear las features a las estrategias.
-Va antes de dar el generador por perdido porque la transferencia de §2.9 se midió con estrategias que solo
-ven precio y volumen, y ese es un motivo suficiente para que no transfiera.</p>
-<table><thead><tr><th>#</th><th>Trabajo pendiente</th><th>Por qué está donde está</th></tr></thead><tbody>
-<tr><td>1</td><td>Mover el sustrato primario del ranking al histórico <b>real</b> (el sintético, a capa de estrés y veto)</td><td>Es la consecuencia directa de §2.9, y no admite interpretación porque el umbral estaba declarado antes de mirar. El generador pasa todos los umbrales de fidelidad y aun así no ordena; sin embargo el CEM, <span class="mono">sample_eval</span> y todo el <i>scoring</i> siguen puntuando exclusivamente sobre librerías sintéticas. Mientras eso no cambie, el sistema elige con un juez del que ya se sabe que no transfiere.</td></tr>
-<tr><td>2</td><td>Una configuración que no opera no puede ganar el ranking</td><td>Lo destapó el propio estudio de transferencia: en el lado real, Spearman(recompensa, operaciones) = −0,84. Una curva plana puntúa headline <b>cero exacto</b>, y en un periodo donde casi todo lo que arriesga pierde, ese cero gana y hasta aprueba el <i>gate</i>. No es un error de cálculo —no perder es legítimo— pero sí una regla de selección degenerada para un sistema cuyo propósito es operar, y contamina cualquier ranking que se mida encima.</td></tr>
-<tr><td>3</td><td>Cablear el CPCV en el optimizador, en dos etapas</td><td>El CEM sigue puntuando con el corte único que el propio estudio desacredita. No está sesgado, está arbitrario — y arbitrario es letal para un optimizador que escala el relieve del paisaje. Criba barata + finalistas con CPCV completo, agregando por <i>pooling</i> de todos los folds, no CVaR de CVaR.</td></tr>
-<tr><td>4</td><td>Paper trading corriendo en vivo, con diario de ciclos</td><td>Cero desarrollo pendiente y en paralelo a todo lo demás: la divergencia live-vs-backtest necesita meses para ser medible, así que cada semana sin correr es una semana perdida al final.</td></tr>
-<tr><td>5–9</td><td>Rigor del juez: re-correr la validación con el ensemble completo; alinear los bloques del PBO con fronteras de escenario; reportar el recuento de muestras fallidas junto al reward; declarar que el DSR asume intentos independientes; arreglar la <i>ordenación</i> de colas y agrupamiento entre activos</td><td>Cinco arreglos baratos sobre cifras que se publican como garantía. El estudio de validación corrió con un camino por escenario; los bloques del PBO pueden partir un escenario en dos (la misma fuga de arquetipo que el hold-out evita); la penalización por fallo domina la cola del CVaR; el CEM no produce los intentos independientes que el DSR supone; y el generador acierta la magnitud de las colas pero no <i>qué</i> activo las tiene (§2.8), que es un candidato natural a explicar por qué tampoco acierta qué estrategia gana.</td></tr>
-<tr><td>10</td><td>Optimización CEM completa sobre el sustrato corregido</td><td>Bloqueada a propósito, y ahora con más motivo: correrla antes de arreglar el sustrato del ranking es gastar cómputo caro en un ganador elegido por un juez que no transfiere.</td></tr>
-<tr><td>11</td><td>Nuevas estrategias cripto</td><td><b>No priorizada, deliberadamente.</b> Solo 6 de 32 filas aprueban el gate bajo CPCV, y eso admite dos lecturas — estrategias flojas o juez ruidoso. Hasta saber cuál, cada candidato nuevo multiplica el problema de múltiples pruebas y sube el listón del DSR de todos los demás.</td></tr>
-<tr><td>12–13</td><td>Re-medición de λ y κ con los costes nuevos; modelo de IA anotado en el manifiesto</td><td>Impacto bajo con evidencia detrás: la superficie de pesos ya salió plana sobre 480 backtests y el modelo de costes nuevo solo refuerza la conclusión.</td></tr>
-<tr><td>14–15</td><td>Renta variable y mercados de predicción</td><td><b>Segundo plano explícito.</b> Toda la evidencia empírica del repo es cripto; la pata de renta variable del generador no tiene ni un dato real detrás, no existe estrategia de acciones, y el universo de megacaps arrastra sesgo de supervivencia estructural. Polymarket no tiene histórico que backtestear: el paper trading en vivo es lo que empezará a generarlo.</td></tr>
+<h3>6.2 · Lo que queda abierto, por criticidad</h3>
+<p>El orden responde a una asimetría de coste: una estrategia añadida hoy se re-evalúa gratis cuando el
+juez mejore; un juez malo contamina todo lo que puntúe mientras siga malo. Por eso el sustrato y el juez
+van delante de la cosecha, y el paper trading se lanza en paralelo porque es lo único que compra tiempo de
+calendario.</p>
+<table><thead><tr><th class="n">#</th><th>Trabajo pendiente</th><th>Por qué está donde está</th></tr></thead><tbody>
+<tr><td class="n">1</td><td><b>Paper trading en vivo</b>, con diario de ciclos</td><td>Cero desarrollo
+pendiente y en paralelo a todo lo demás. Es lo único que no se puede comprimir después (§5).</td></tr>
+<tr><td class="n">2</td><td><b>Canal de observación sintético: barrido de ρ y break-even del IC</b></td>
+<td>Es el <b>test de falsación</b> que el radar de señales dejó abierto. Hoy limitar los grados de
+libertad <i>reduce</i> el riesgo de sobreajuste pero no lo <i>mide</i>: hasta que exista una cifra de
+capacidad predictiva mínima —con ρ = 0 como control— una feature de muestra corta puede estar
+sobreajustada y el sistema no puede saberlo.</td></tr>
+<tr><td class="n">3–5</td><td>Que el <b>generador emita las señales</b> y re-medir la transferencia de
+forma pareada; lote caro de fuentes (apalancamiento observable, opciones, atención legal); índice de
+estrés de vendedores forzados</td><td>La transferencia de §4.11 se midió con estrategias que sólo ven
+precio y volumen, sobre un mundo cuyo único <i>edge</i> es un AR(1) colocado por régimen. Ampliar el
+espacio de inputs <b>en los dos lados</b> es lo que convierte «no transfiere» en una conclusión y no en
+un artefacto del instrumento.</td></tr>
+<tr><td class="n">6–11</td><td><b>Rigor del juez:</b> CPCV en dos etapas dentro del optimizador;
+re-correr la validación con el ensemble completo; alinear los bloques del PBO con fronteras de escenario;
+reportar el recuento de muestras fallidas junto al reward; declarar que el DSR asume intentos
+independientes; arreglar la <i>ordenación</i> de colas y agrupamiento entre activos</td><td>Seis arreglos
+sobre cifras que se publican como garantía. El CEM sigue puntuando con el corte único que su propio
+estudio desacredita; los bloques del PBO pueden partir un escenario en dos (la misma fuga de arquetipo que
+el hold-out evita); la penalización por fallo domina la cola del CVaR; el CEM no produce los intentos
+independientes que el DSR supone.</td></tr>
+<tr><td class="n">12</td><td><b>Contingencia:</b> mover el sustrato primario del ranking al histórico
+real</td><td>Es la consecuencia directa de §4.11 si los frentes 2–5 no cambian el resultado. Está
+<b>bloqueada</b> a propósito: es un cambio caro y sería prematuro hacerlo antes de saber si el problema
+era el generador o el espacio de inputs con el que se le preguntó.</td></tr>
+<tr><td class="n">13–14</td><td>Optimización CEM completa; presupuesto de latencia de ejecución</td>
+<td>La primera está bloqueada por el juez: gastar cómputo caro en un ganador elegido por un juez que no
+transfiere es tirar el cómputo. La segunda sale de §3.5 — el hueco es cero, pero la puntualidad tiene un
+precio medido.</td></tr>
+<tr><td class="n">15–18</td><td>Nuevas estrategias cripto; re-medir λ y κ con los costes nuevos; anotar el
+modelo de IA en el manifiesto; guarda operativa por símbolo (sanciones, deslistado, halt)</td>
+<td><b>No prioritarias, y por motivos distintos.</b> Añadir candidatos a un juez en el que aún no se
+confía multiplica el problema de múltiples pruebas; la superficie de pesos ya salió plana sobre 480
+backtests; y la guarda operativa cubre un riesgo que, mientras el dinero sea de papel y el universo se
+configure a mano, sigue siendo teórico.</td></tr>
+<tr><td class="n">19–20</td><td>Renta variable y mercados de predicción</td><td><b>Segundo plano
+explícito.</b> Toda la evidencia empírica del repositorio es cripto; la pata de renta variable del
+generador no tiene ni un dato real detrás y el universo de megacaps arrastra sesgo de supervivencia.
+Polymarket no tiene histórico que backtestear: el paper trading en vivo es lo que empezará a
+generarlo.</td></tr>
 </tbody></table>
-<div class="note"><b>Foco: cripto.</b> Los <i>stocks</i> no salen del universo <b>sintético</b> — GLD, TLT y UUP
-son lo que hace que los escenarios de tipos y de dólar signifiquen algo para cripto vía los factores
-compartidos. La regla es: se genera con los 35 activos, se puntúa y se opera solo cripto.</div>
-<p class="tag">El dashboard de la herramienta mantiene el detalle accionable de cada mejora, con su
-evidencia medida y un prompt reproducible para abordarla.</p>
+<p class="tag">El dashboard mantiene el detalle accionable de cada evolución —evidencia medida, criterio
+de aceptación y prompt reproducible— con este mismo orden.</p>
 
-<h2 id="s8">8 · Reproducibilidad</h2>
+<h3>6.3 · Los límites que no se van a cerrar</h3>
+<p>No todo hueco es trabajo pendiente. Estos cuatro son propiedades del enfoque, y se declaran para que
+nadie los lea como promesas:</p>
+<ul>
+<li><b>El diseño con IA no es reproducible</b>, y ya no puede serlo: los modelos actuales retiraron los
+parámetros de muestreo. Lo que se guarda es el artefacto, no la llamada (§2.6).</li>
+<li><b>El histórico real es un único camino.</b> Todas las ventanas reales comparten los mismos ciclos de
+2018-2025. Comparar «lo que pasó» con «lo que podría pasar» es una asimetría que sólo se puede declarar,
+no eliminar (§2.10).</li>
+<li><b>El generador produce el cripto de un año cualquiera, no sus años de manía.</b> El umbral de
+aceptación está sobre la mediana; perseguir el p90 de curtosis rompería el nivel de volatilidad
+(§2.10).</li>
+<li><b>Foco cripto.</b> Los <i>stocks</i> no salen del universo <b>sintético</b> — GLD, TLT y UUP son lo
+que hace que los escenarios de tipos y de dólar signifiquen algo para cripto vía factores compartidos —,
+pero se puntúa y se opera sólo cripto (§2.1).</li>
+</ul>
+
+<h2 id="a1">A · Reproducibilidad</h2>
 <p>Toda la cadena es determinista y regenerable. Notas operativas:</p>
 <ul>
 <li><b>Generar una librería sintética</b> (llama a la IA una vez): diseña los escenarios y sintetiza el
@@ -1736,6 +2162,11 @@ ensemble Monte Carlo, guardando el manifiesto autocontenido y los <i>spec.json</
 <i>spec.json</i> guardados con las mismas semillas.</li>
 <li><b>Derivar la librería realista</b> (<span class="mono">ai_v2</span>): el retrofit determinista
 enriquece los escenarios con microestructura y regenera, conservando la librería anterior.</li>
+<li><b>Capturar datos reales:</b> las barras se cachean en disco, de modo que los estudios que las
+consumen (fidelidad, transferencia, sesiones) se repiten sin red y dan lo mismo.</li>
+<li><b>Capturar señales:</b> <span class="mono">ai-trader signals capture</span> archiva el crudo
+append-only y <span class="mono">ai-trader signals depth</span> mide la profundidad histórica real de
+cada fuente.</li>
 <li><b>Evaluar y optimizar:</b> el backtest corre sobre las muestras de la librería realista
 (<span class="mono">ai_v2</span>, el valor por defecto); el CEM optimiza el CVaR@25% del headline sobre el
 conjunto de entrenamiento y reporta la validación, el veredicto frente a los baselines y el descuento
@@ -1748,7 +2179,7 @@ por múltiples pruebas.</li>
 entorno virtual directamente para tests y regeneración. Los datos sintéticos generados no se versionan
 (se regeneran de forma determinista desde los <i>spec.json</i> y las semillas).</div>
 
-<h2 id="s9">9 · Glosario</h2>
+<h2 id="a2">B · Glosario</h2>
 <ul>
 <li><b>Factor / beta / idiosincrático:</b> fuente de riesgo común; sensibilidad de un activo a ella; la
 parte del retorno no explicada por los factores.</li>
@@ -1760,8 +2191,12 @@ drawdown, volatilidad total y volatilidad a la baja.</li>
 <li><b>CVaR@25% (Expected Shortfall):</b> media del peor 25% de los resultados; mide la cola.</li>
 <li><b>Turnover (rotación):</b> <i>notional</i> negociado por día en unidades del capital inicial,
 contando entrada y salida; 0,20 significa que cada día rota el 20% de la cartera.</li>
+<li><b>Fill parcial:</b> orden llenada por menos tamaño del pedido porque el techo de capacidad de la
+barra no daba para más.</li>
 <li><b>Baseline:</b> alternativa pasiva de referencia (comprar y mantener) que una estrategia debe batir
 para justificar su existencia.</li>
+<li><b>Rankeable:</b> configuración que supera el suelo de actividad y por tanto puede competir en el
+ranking y aprobar el gate.</li>
 <li><b>DSR (Deflated Sharpe Ratio):</b> Sharpe descontado por el número de configuraciones probadas;
 responde a "¿es creíble este resultado habiendo buscado tanto?".</li>
 <li><b>PBO (Probability of Backtest Overfitting):</b> con qué frecuencia la configuración ganadora dentro
@@ -1779,6 +2214,10 @@ correlación serial de los retornos no filtre el test en el entrenamiento poster
 <li><b>CEM:</b> método de entropía cruzada — optimización de caja negra por muestreo y élite.</li>
 <li><b>Stylized facts:</b> propiedades estadísticas robustas de los mercados reales (colas gruesas,
 agrupamiento de volatilidad, autocorrelación) que un buen simulador debe reproducir.</li>
+<li><b>Point-in-time (PIT):</b> propiedad de una serie de señal que garantiza que su valor en el día
+<i>t</i> es el que se conocía ese día, y no una revisión posterior.</li>
+<li><b>Forward capture:</b> fuente cuyo pasado nadie publica: su profundidad histórica sólo crece
+capturando, un día por día real.</li>
 </ul>
 <p class="meta">Fin del documento · AI-Trader · commit <span class="mono">%%COMMIT%%</span>.</p>
 """

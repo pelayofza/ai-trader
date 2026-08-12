@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import ssl
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -24,10 +25,22 @@ class JsonHttpConfig:
     # log —el log imprime la url y nada mas— porque una credencial en un fichero de log es
     # una credencial filtrada.
     headers: Mapping[str, str] = field(default_factory=dict)
+    # Bundle de certificados alternativo. Vacio = el del sistema, que es lo normal. Existe
+    # por un fallo MEDIDO: el almacen de Windows no valida la cadena de
+    # sanctionslistservice.ofac.treas.gov y urlopen aborta con CERTIFICATE_VERIFY_FAILED
+    # antes de llegar al servidor. Se pone por fuente, no de forma global, para que
+    # relajar la validacion nunca sea un efecto colateral invisible.
+    ca_bundle: str | None = None
 
 
 class JsonHttpClient:
-    """Cliente GET/POST JSON con reintentos y backoff. Compartido por los proveedores REST."""
+    """Cliente GET/POST con reintentos y backoff. Compartido por los proveedores REST.
+
+    Habla JSON (`get_json`/`post_json`) y tambien TEXTO PLANO (`get_text`), que hacia falta
+    el dia que una fuente publico su lista en XML: escribir un segundo cliente para eso
+    habria significado mantener la regla de reintentos —un 4xx que no es 429 no se
+    reintenta— en dos sitios.
+    """
 
     def __init__(self, base_url: str, config: JsonHttpConfig | None = None) -> None:
         self.base_url = base_url.rstrip("/")
@@ -41,6 +54,16 @@ class JsonHttpClient:
         headers: Mapping[str, str] | None = None,
     ) -> Any:
         return self._request(path, params=params, headers=headers)
+
+    def get_text(
+        self,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> str:
+        """El cuerpo tal cual, sin interpretarlo. Para XML, HTML o CSV."""
+        return self._request(path, params=params, headers=headers, parse=False) or ""
 
     def post_json(
         self,
@@ -69,6 +92,7 @@ class JsonHttpClient:
         params: dict[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
         data: bytes | None = None,
+        parse: bool = True,
     ) -> Any:
         url = f"{self.base_url}{path}"
         query = urlencode(params or {}, doseq=True)
@@ -88,11 +112,19 @@ class JsonHttpClient:
         )
 
         last_error: Exception | None = None
+        context = ssl.create_default_context(cafile=self.config.ca_bundle) if self.config.ca_bundle else None
 
         for attempt in range(self.config.max_retries):
             try:
-                with urlopen(request, timeout=self.config.timeout_seconds) as response:
-                    body = response.read().decode("utf-8").strip()
+                with urlopen(
+                    request, timeout=self.config.timeout_seconds, context=context
+                ) as response:
+                    # utf-8-sig y no utf-8: identico salvo que se come el BOM que algunos
+                    # servidores (el calendario de la Fed) ponen delante de su JSON y que
+                    # hace fallar a json.loads con un error que no se parece a la causa.
+                    body = response.read().decode("utf-8-sig", errors="replace").strip()
+                    if not parse:
+                        return body
                     # Un 2xx con cuerpo vacio no es un JSON roto: es la respuesta que da
                     # GitHub (202) mientras calcula sus estadisticas. Devolver None deja que
                     # el adaptador lo trate como "hoy no hay dato" en vez de reintentar tres

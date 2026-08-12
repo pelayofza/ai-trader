@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Mapping, Sequence
+from datetime import timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -15,8 +17,11 @@ from ai_trader.execution.paper import PaperExecutionEngine
 from ai_trader.execution.polymarket_paper import PolymarketPaperExecutionEngine
 from ai_trader.execution.router import ExecutionRouter
 from ai_trader.notifications.base import Notifier
+from ai_trader.observation.regime import MarketRegimeProvider
+from ai_trader.observation.signal_radar import SignalRadarProvider
 from ai_trader.risk.engine import RiskEngine
-from ai_trader.shared.clock import LiveClock
+from ai_trader.shared.clock import Clock, LiveClock
+from ai_trader.signals.feed import load_frames
 from ai_trader.strategies.registry import build_strategy
 
 logging.basicConfig(
@@ -55,6 +60,77 @@ def parse_chat_ids(raw: str) -> frozenset[int]:
     return frozenset(ids)
 
 
+class LiveUniverseBars(Mapping):
+    """
+    El universo entero visto como un `Mapping[str, DataFrame]`, en vivo.
+
+    Existe por un hueco conocido: `MarketRegimeProvider` se construye sobre un diccionario
+    `simbolo -> barras` porque en backtest ese diccionario ya esta cargado, y en vivo no
+    existe. La consecuencia era que `attach_regime_provider` NO SE LLAMABA en produccion,
+    asi que cualquier configuracion que el optimizador eligiera con filtros de regimen
+    activos se comportaba distinto en paper que en el backtest que la selecciono. Eso es
+    una discrepancia silenciosa entre lo que se mide y lo que se opera.
+
+    El adaptador es la forma barata de cerrarlo: `regime.py` no cambia NI UNA LINEA. Solo
+    necesita `for symbol in bars` y `bars.get(symbol)`, que es exactamente el contrato de
+    `Mapping`, y que no haga falta tocarlo es la comprobacion de que el adaptador es
+    correcto y no un parche con la forma de uno.
+
+    Las barras las sirve `MarketDataService`, que ya cachea en disco: pedir la ventana de
+    35 simbolos una vez por ciclo no es una descarga por simbolo y por dia.
+    """
+
+    def __init__(self, service: MarketDataService, symbols: Sequence[str], clock: Clock,
+                 *, lookback_days: int) -> None:
+        self._service = service
+        self._symbols = tuple(symbols)
+        self._clock = clock
+        self._lookback_days = lookback_days
+
+    def __iter__(self):
+        return iter(self._symbols)
+
+    def __len__(self) -> int:
+        return len(self._symbols)
+
+    def __getitem__(self, symbol: str):
+        end = self._clock.now()
+        bars = self._service.get_daily_bars(
+            symbol, end - timedelta(days=self._lookback_days), end
+        )
+        if bars is None:
+            # `Mapping.get` traduce esto a None, que es lo que el regimen ya trata como
+            # "este simbolo no cuenta hoy". Un DataFrame vacio diria lo mismo y ademas
+            # obligaria a que el consumidor supiera distinguirlos.
+            raise KeyError(symbol)
+        return bars
+
+
+def build_signal_radar(config: AppConfig, clock: Clock) -> SignalRadarProvider:
+    """
+    El radar de senales para el proceso en vivo. Apagado -> vacio, y el sistema arranca.
+
+    Con `[signals] enabled = false` (el defecto) no se toca el archivo: el radar sale vacio,
+    la cobertura es 0 y las puertas se saltan. Encendido pero sin datos —sin credenciales,
+    sin capturas todavia— pasa exactamente lo mismo, y se dice con un warning explicito en
+    vez de dejar que parezca que hay senales detras de la decision.
+    """
+    if not config.signals.enabled:
+        logger.info("Signal radar disabled ([signals] enabled = false): running without it")
+        return SignalRadarProvider(None, clock)
+
+    frames = load_frames(raw_root=config.signals.raw_root or None)
+    if not frames:
+        logger.warning(
+            "Signal radar ENABLED but the raw archive is empty (root=%s): coverage will be 0 "
+            "and every signal gate will be skipped. Run `signals capture` first.",
+            config.signals.raw_root or "data/signals_raw",
+        )
+    else:
+        logger.info("Signal radar built from %s sources: %s", len(frames), sorted(frames))
+    return SignalRadarProvider(frames, clock)
+
+
 def build_runner(
     config: AppConfig,
     market_data_service: MarketDataService,
@@ -72,6 +148,28 @@ def build_runner(
         config.execution,
         liquidity_provider=BarLiquidityProvider(market_data_service, clock),
     )
+
+    # Los MISMOS dos ensambladores que inyecta el backtest, con el mismo bucle duck-typed.
+    # Que aqui y en `backtest/engine.py::_build_runner` se enganchen igual es lo que hace
+    # que una configuracion elegida por el optimizador signifique lo mismo en los dos
+    # sitios; hasta hoy, el de regimen solo existia en backtest.
+    providers = {
+        "attach_regime_provider": MarketRegimeProvider(
+            LiveUniverseBars(
+                market_data_service,
+                config.runner.symbols,
+                clock,
+                lookback_days=config.runner.lookback_days,
+            ),
+            clock,
+        ),
+        "attach_signal_provider": build_signal_radar(config, clock),
+    }
+    for strategy in strategies:
+        for method, provider in providers.items():
+            attach = getattr(strategy, method, None)
+            if callable(attach):
+                attach(provider)
 
     return TradingRunner(
         config=config.runner,

@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pandas as pd
 import pytest
 
-from ai_trader.app.runner import RunnerConfig, TradingRunner
+from ai_trader.app.runner import RunnerConfig, SymbolCycleDiagnostics, TradingRunner
 from ai_trader.app.state_store import JsonStateStore
 from ai_trader.execution.paper import PaperExecutionConfig, PaperExecutionEngine
 from ai_trader.execution.polymarket_paper import PolymarketPaperExecutionEngine
 from ai_trader.execution.router import ExecutionRouter
 from ai_trader.risk.engine import RiskEngine
 from ai_trader.shared.instruments import AssetClass, OutcomeToken, PredictionMarket, Venue
+from ai_trader.shared.schemas import PositionStatus, Side, Signal
 from ai_trader.strategies.polymarket_threshold import (
     PolymarketThresholdConfig,
     PolymarketThresholdStrategy,
@@ -158,6 +161,145 @@ class TestPredictionOrdersGoThroughRisk:
         results = runner.run_cycle()
 
         assert results == []
+        assert runner.get_positions() == []
+
+
+class RecordingStrategy:
+    """Estrategia que solo apunta cuando la llaman. No decide nada."""
+
+    strategy_id = "recording"
+
+    def __init__(self, events: list[str], signal_factory=None) -> None:
+        self.events = events
+        self._signal_factory = signal_factory
+
+    def supports_symbol(self, symbol: str) -> bool:
+        self.events.append("supports_symbol")
+        return True
+
+    def generate_signal(self, symbol, context):
+        self.events.append("generate_signal")
+        return None if self._signal_factory is None else self._signal_factory(symbol)
+
+
+class RecordingMarketData(FakeMarketData):
+    def __init__(self, events: list[str], **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.events = events
+
+    def get_daily_bars(self, symbol, start, end):
+        self.events.append("load_bars")
+        return super().get_daily_bars(symbol, start, end)
+
+
+class TestGuardOrder:
+    """
+    EL ORDEN DE LAS GUARDAS DE `_process_symbol`, CONGELADO.
+
+    Hoy es: posicion abierta -> enfriamiento -> contexto de mercado -> estrategia ->
+    riesgo -> ejecucion. No estaba testeado, y es un orden con consecuencias medibles:
+
+    - Las dos guardas de ESTADO van antes de cargar barras y antes de llamar a ninguna
+      estrategia, asi que un simbolo ya abierto no cuesta ni una descarga ni un calculo.
+    - El RIESGO es la ultima puerta antes de ejecutar y no se puede esquivar: toda senal,
+      venga de donde venga, pasa por el. Ese agujero ya existio una vez (las ordenes de
+      prediccion se contaban como aprobadas sin evaluarlas).
+    - Cualquier puerta NUEVA de una estrategia -regimen, senales- vive DENTRO de
+      `generate_signal`, es decir, despues del contexto y antes del riesgo. Nunca puede
+      colarse por delante de las guardas de estado ni por detras del riesgo.
+    """
+
+    def _harness(self, tmp_path, limits, *, bars=None, signal=False, **overrides):
+        """Un runner cuyo camino completo queda apuntado en `events`, en orden.
+
+        Se ejercita `_process_symbol` DIRECTAMENTE: el ciclo entero mete antes el
+        mantenimiento de posiciones abiertas (que tambien lee precios) y taparia
+        exactamente lo que aqui se quiere ver.
+        """
+        events: list[str] = []
+        market_data = RecordingMarketData(events, bars=bars or {})
+
+        def make_signal(symbol: str) -> Signal:
+            return Signal(
+                strategy_id="recording",
+                symbol=symbol,
+                timeframe="1d",
+                timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                side=Side.BUY,
+                confidence=0.80,
+                entry_price=100.0,
+            )
+
+        strategy = RecordingStrategy(events, make_signal if signal else None)
+        runner, risk = build_runner(tmp_path, limits, market_data, [strategy], **overrides)
+
+        original_evaluate = risk.evaluate
+        original_execute = runner.execution_router.execute
+
+        def evaluate(signal, portfolio_state):
+            events.append("risk")
+            return original_evaluate(signal=signal, portfolio_state=portfolio_state)
+
+        def execute(order_request, reference_price=None):
+            events.append("execute")
+            return original_execute(order_request, reference_price=reference_price)
+
+        risk.evaluate = evaluate
+        runner.execution_router.execute = execute
+        return runner, events
+
+    def _process(self, runner, symbol: str = "BTC/USDT"):
+        return runner._process_symbol(symbol, SymbolCycleDiagnostics(symbol=symbol))
+
+    def test_el_orden_completo_es_el_declarado(self, tmp_path, limits):
+        runner, events = self._harness(
+            tmp_path, limits, bars={"BTC/USDT": build_bars([100.0] * 60)}, signal=True
+        )
+
+        self._process(runner)
+
+        assert events == ["load_bars", "supports_symbol", "generate_signal", "risk", "execute"]
+
+    def test_una_posicion_abierta_corta_antes_de_pedir_barras(
+        self, tmp_path, limits, make_position
+    ):
+        runner, events = self._harness(
+            tmp_path, limits, bars={"BTC/USDT": build_bars([100.0] * 60)}, signal=True
+        )
+        runner.state.positions.append(make_position(symbol="BTC/USDT"))
+
+        assert self._process(runner) == []
+        assert events == []
+
+    def test_el_enfriamiento_va_antes_del_contexto(self, tmp_path, limits, make_position):
+        runner, events = self._harness(
+            tmp_path, limits,
+            bars={"BTC/USDT": build_bars([100.0] * 60)},
+            signal=True,
+            symbol_cooldown_hours=48,
+        )
+        closed = make_position(symbol="BTC/USDT")
+        closed.status = PositionStatus.CLOSED
+        closed.closed_at = runner.clock.now()
+        runner.state.positions.append(closed)
+
+        assert self._process(runner) == []
+        assert events == []
+
+    def test_sin_barras_no_se_llama_a_ninguna_estrategia(self, tmp_path, limits):
+        runner, events = self._harness(tmp_path, limits)  # ningun simbolo devuelve barras
+
+        assert self._process(runner) == []
+        assert events == ["load_bars"]
+
+    def test_el_riesgo_es_la_ultima_puerta_antes_de_ejecutar(self, tmp_path, limits):
+        limits.min_confidence_per_trade = 0.99  # el riesgo rechaza todo
+        runner, events = self._harness(
+            tmp_path, limits, bars={"BTC/USDT": build_bars([100.0] * 60)}, signal=True
+        )
+
+        assert self._process(runner) == []
+        assert events == ["load_bars", "supports_symbol", "generate_signal", "risk"]
         assert runner.get_positions() == []
 
 

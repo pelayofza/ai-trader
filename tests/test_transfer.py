@@ -15,8 +15,12 @@ cuatro propiedades sin las cuales esa cifra no significaria nada:
 """
 from __future__ import annotations
 
+import dataclasses
+import json
 import math
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from unittest import mock
 
 import numpy as np
 import pandas as pd
@@ -54,9 +58,19 @@ from ai_trader.scoring.transfer_study import (
     trades_per_fold,
     verdict_for,
 )
+from ai_trader.scoring.search_space import SPACES, ParamDim, get_space
 from ai_trader.scoring.weight_calibration import candidate_specs, spearman
 from ai_trader.scoring.weight_study import FAMILIES, STUDY_SEED
+from ai_trader.strategies.mean_reversion import MeanReversionConfig
+from ai_trader.strategies.momentum_crypto import CryptoMomentumConfig
 from test_backtest_engine import FakeService, make_config, trending_df
+
+# Clase de configuracion de cada familia con espacio de busqueda. Sirve para comprobar que
+# toda dimension sorteable es un parametro que la estrategia sabe recibir.
+STRATEGY_CONFIGS = {
+    "crypto_momentum": CryptoMomentumConfig,
+    "mean_reversion": MeanReversionConfig,
+}
 
 UTC = timezone.utc
 
@@ -85,6 +99,145 @@ class TestGrid:
 
     def test_determinista(self):
         assert [s.params for s in build_specs()] == [s.params for s in build_specs()]
+
+
+# --------------------------------------------------- la huella de lo ya publicado ----
+
+
+class TestPublishedFingerprint:
+    """
+    LAS 16 CONFIGURACIONES PUBLICADAS SON UNA HUELLA, Y SE CONGELA AQUI.
+
+    `data/transfer/report_ai_v3.json` no es un informe cualquiera: es la evidencia con la
+    que se decidio que el sintetico NO ordena como el mercado. Esa cifra habla de 16
+    objetos concretos, con sus parametros escritos dentro del fichero. Si `build_specs()`
+    dejara de producir exactamente esos 16, el informe seguiria en disco diciendo lo
+    mismo y ya no seria sobre lo que hoy corre el sistema.
+
+    Y el modo de fallo no es hipotetico ni gradual, que es lo que hace que este test
+    tenga que existir ANTES de tocar nada: `candidate_specs` construye el hipercubo con
+    `rng.random((n, space.dim))`. El tamano del sorteo depende de `space.dim`. Anadir UNA
+    dimension al espacio de busqueda no le anade un campo a las 16 configuraciones: las
+    SUSTITUYE por 16 objetos distintos, porque cambia el numero de muestras que consume
+    el generador y, con el, todas las columnas. Es exactamente el motivo por el que los
+    umbrales de las senales no entran en `search_space.py`.
+    """
+
+    def _published(self) -> list[dict]:
+        report = json.loads(
+            (Path("data") / "transfer" / "report_ai_v3.json").read_text(encoding="utf-8")
+        )
+        return report["configs"]
+
+    def test_las_dieciseis_publicadas_siguen_siendo_las_que_salen_hoy(self):
+        published = self._published()
+        specs = build_specs(FAMILIES, 8)
+
+        assert [c["config_id"] for c in published] == [s.id for s in specs]
+        for config, spec in zip(published, specs):
+            assert config["params"] == spec.params, (
+                f"{spec.id} ya no es la configuracion con la que se publico el estudio de "
+                "transferencia"
+            )
+
+    def test_anadir_una_dimension_sustituye_las_dieciseis_no_las_amplia(self):
+        """La demostracion, no la advertencia. Se anade una dimension cualquiera al
+        espacio de momentum y se comprueba que NO aparece un campo nuevo en las mismas 16:
+        aparecen 16 configuraciones distintas."""
+        space = get_space("crypto_momentum")
+        widened = dataclasses.replace(
+            space,
+            dims=(*space.dims, ParamDim("min_signal_tone", -4.0, 0.0)),
+            finalize=lambda raw: {**space.finalize(raw), "min_signal_tone": raw["min_signal_tone"]},
+        )
+        before = candidate_specs("crypto_momentum", 8, seed=STUDY_SEED)
+
+        with mock.patch.dict(SPACES, {"crypto_momentum": widened}):
+            after = candidate_specs("crypto_momentum", 8, seed=STUDY_SEED)
+
+        shared = set(before[0].params) & set(after[0].params)
+        changed = [
+            key
+            for key in sorted(shared)
+            if [s.params[key] for s in before] != [s.params[key] for s in after]
+        ]
+        assert changed, (
+            "si esto no cambia nada, la huella ya no depende de space.dim y el motivo por "
+            "el que las features no entran en search_space habria dejado de ser cierto"
+        )
+
+    def test_las_puertas_neutras_devuelven_los_scores_YA_PUBLICADOS(self):
+        """
+        LA COMPUERTA DE LA EVOLUCION DE SENALES, ejecutable.
+
+        Adjuntar el radar a las estrategias no puede mover un solo score mientras los
+        umbrales esten en su valor inerte. Si moviera alguno, la evidencia publicada
+        (`data/transfer/`, `data/calibration/`, `data/activity/`) dejaria de hablar del
+        sistema que corre, y eso no se arregla regenerandola: significaria que algo no es
+        lo que creemos.
+
+        Se reproduce UNA unidad real completa —15 ventanas OOS de un CPCV— y se exige
+        igualdad score a score contra `units_ai_v3.json`. Cuesta ~25 s y es lo que vale la
+        pena pagar por no tener que fiarse de que "no deberia cambiar nada".
+        """
+        units_path = Path("data") / "transfer" / "units_ai_v3.json"
+        if not units_path.exists() or not Path(".cache/bars").exists():
+            pytest.skip("hacen falta las unidades publicadas y la cache de barras")
+
+        units = json.loads(units_path.read_text(encoding="utf-8"))
+        plan = units["plan"]
+        published = next(
+            r for r in units["rows"]
+            if r["config_id"] == "mean_reversion#00" and r["side"] == "real"
+            and r["unit_id"] == "w3"
+        )
+        window = next(w for w in plan["real"]["sub_windows"] if w["label"] == "w3")
+
+        from ai_trader.backtest.validation import SCHEME_CPCV
+        from ai_trader.config import load_config
+        from ai_trader.scoring.transfer_study import N_GROUPS, N_TEST_GROUPS
+        from ai_trader.synthetic.fidelity_study import build_service, fetch_real_bars
+
+        base = load_config(plan["config_path"])
+        config = dataclasses.replace(
+            base, runner=dataclasses.replace(base.runner, symbols=list(plan["symbols"]))
+        )
+        spec = {s.id: s for s in build_specs()}["mean_reversion#00"]
+        bars = fetch_real_bars(
+            plan["symbols"],
+            datetime.fromisoformat(plan["real"]["source_start"]),
+            datetime.fromisoformat(plan["real"]["window"]["end"]),
+            build_service(plan["exchange"], offline=True),
+        )
+
+        result = validate_multiwindow(
+            config, spec, bars,
+            datetime.fromisoformat(window["start"] + "T00:00:00+00:00"),
+            datetime.fromisoformat(window["end"] + "T00:00:00+00:00") + timedelta(days=1),
+            scheme=SCHEME_CPCV,
+            n_groups=N_GROUPS,
+            n_test_groups=N_TEST_GROUPS,
+            purge_days=plan["validation"]["purge_days"],
+            starting_equity=plan["validation"]["starting_equity"],
+            cvar_alpha=plan["validation"]["cvar_alpha"],
+            with_baselines=True,
+            compare_single_split=False,
+            block_cache={},
+            baseline_cache={},
+        )
+
+        assert [round(s, 6) for s in result.scores] == published["scores"]
+        assert [f.num_trades for f in result.folds] == published["trades_by_fold"]
+
+    def test_el_espacio_de_busqueda_solo_contiene_parametros_de_estrategia(self):
+        """El limite de grados de libertad es ESTRUCTURAL: el CEM solo reconstruye
+        `strategies`, y SPACES solo tiene dimensiones que `build_strategy` sabe recibir.
+        Ninguna feature de senal es sorteable, ni de evento ni continua."""
+        for strategy_type, space in SPACES.items():
+            fields = {f.name for f in dataclasses.fields(STRATEGY_CONFIGS[strategy_type])}
+            for dim in space.dims:
+                assert dim.name in fields, f"'{dim.name}' no es un parametro de {strategy_type}"
+            assert not any("signal" in dim.name for dim in space.dims)
 
 
 # ------------------------------------------------------------ geometria del real -----

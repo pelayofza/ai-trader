@@ -1,11 +1,10 @@
 """
-PRIMER LOTE CONECTADO: las once fuentes CONTINUAS (Tier B) del catalogo.
+EL CATALOGO ENTERO, CONECTADO: once fuentes continuas y seis de evento.
 
-Tier B son series con efectos pequenos y decadentes, y por eso entran como FEATURES y no
-como vetos: sentimiento, flujos de ETF, macro, oferta de stablecoins, ingresos de
-protocolo, cuota DEX/CEX, atencion por idioma, prima P2P, dispersion de funding, actividad
-de desarrollo y posicionamiento en futuros. Ninguna decide nada por si sola, y ninguna esta
-cableada a una estrategia: esta tarea llena el archivo, no el vector de observacion.
+Las once continuas (tier `B`) son series con efectos pequenos y decadentes: sentimiento,
+flujos de ETF, macro, oferta de stablecoins, ingresos de protocolo, cuota DEX/CEX, atencion
+por idioma, prima P2P, dispersion de funding, actividad de desarrollo y posicionamiento en
+futuros.
 
     guavy.py       Sentimiento por token. SOLO conteos crudos, nunca trend/signal.
     etf_flows.py   Flujos de ETF spot por EMISOR (TFTC, CC BY 4.0). BTC medido; ETH no hay.
@@ -17,19 +16,29 @@ cableada a una estrategia: esta tarea llena el archivo, no el vector de observac
     github.py      Commits diarios y contribuidores unicos.
     cftc.py        COT/TFF semanal, fechado el dia en que se PUBLICA.
 
+Las seis de evento (tier `A`) son oferta calendarizada y determinista, y viven juntas en un
+solo modulo porque comparten forma —una fila el dia que pasa algo, con su magnitud— y
+porque lo que las separaba del resto ya no existe:
+
+    events.py      Ajuste de dificultad, hacks, calendario macro, OFAC, unlocks, staking.
+
+TODAS VAN AL MISMO SITIO. El tier ya no enruta: describe la CODIFICACION que le toca a cada
+una (`signals/normalize.py` para las continuas, `signals/events.py` para las de evento) y
+las dos acaban en el mismo espacio de observacion, en backtest y en vivo.
+
 LO QUE COMPARTEN, QUE ES LO QUE HACE BARATA LA FUENTE N+1
 ---------------------------------------------------------
-Los nueve modulos tienen la misma forma: un `fetch_raw` que toca red y devuelve el payload
+Todos los modulos tienen la misma forma: un `fetch_raw` que toca red y devuelve el payload
 INTACTO, y un `daily_from_raw` PURO que lo traduce. Ninguno decide donde se guarda, ni
 cuando se llama, ni que entidades le tocan; ninguno normaliza nada —eso es
-`signals/normalize.py`, y es comun— y ninguno declara su propia profundidad: `history_from`
-sale de `signals/depth.py`, que lo MIDE.
+`signals/normalize.py` y `signals/events.py`, y es comun— y ninguno declara su propia
+profundidad: `history_from` sale de `signals/depth.py`, que lo MIDE.
 
 REGISTRAR ES UN ACTO EXPLICITO
 ------------------------------
-`register_all()` es lo que pasa el registro de adaptadores de vacio a once. Se llama desde
-`signals/capture.py` al arrancar una captura, no al importar el catalogo: importar una
-lista de declaraciones no puede tener como efecto que exista un cliente HTTP. Y es
+`register_all()` es lo que pasa el registro de adaptadores de vacio a diecisiete. Se llama
+desde `signals/capture.py` al arrancar una captura, no al importar el catalogo: importar
+una lista de declaraciones no puede tener como efecto que exista un cliente HTTP. Y es
 idempotente, porque `register_adapter` rechaza el duplicado y aqui se ignora ese rechazo a
 proposito: llamarlo dos veces en el mismo proceso es normal (dos capturas, un test tras
 otro) y no deberia reventar.
@@ -49,6 +58,7 @@ from ai_trader.signals.adapters import (
     cftc,
     defillama,
     etf_flows,
+    events,
     fred,
     funding,
     github,
@@ -61,7 +71,7 @@ logger = logging.getLogger(__name__)
 
 # Modulos con adaptadores, en el orden en que se registran. El orden no importa para nada
 # salvo para el log, y por eso es el del catalogo: se lee al lado.
-MODULES = (guavy, etf_flows, fred, defillama, wikipedia, p2p, funding, github, cftc)
+MODULES = (guavy, etf_flows, fred, defillama, wikipedia, p2p, funding, github, cftc, events)
 
 
 def register_all() -> tuple[str, ...]:
@@ -83,6 +93,7 @@ __all__ = [
     "cftc",
     "defillama",
     "etf_flows",
+    "events",
     "fred",
     "funding",
     "github",

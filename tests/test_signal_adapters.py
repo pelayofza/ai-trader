@@ -43,7 +43,13 @@ from ai_trader.signals.adapters.common import (
     unix_day,
     wiki_stamp,
 )
-from ai_trader.signals.catalog import CATALOG, TIER_STATISTICAL, get_source, sources_by_tier
+from ai_trader.signals.catalog import (
+    CATALOG,
+    TIER_MECHANICAL,
+    TIER_STATISTICAL,
+    get_source,
+    sources_by_tier,
+)
 from ai_trader.signals.depth import (
     DEPTH_LEDGER,
     SourceDepth,
@@ -51,6 +57,7 @@ from ai_trader.signals.depth import (
     load_ledger,
     measure_depth,
     measured_history,
+    measured_span_days,
 )
 from ai_trader.signals.normalize import (
     MIN_CROSS_SECTION,
@@ -155,10 +162,19 @@ class TestRegistry:
         first = register_all()
         assert register_all() == first
 
-    def test_tier_a_stays_disconnected(self):
-        """Las mecanicas entran como ELEGIBILIDAD y no son parte de este lote."""
+    def test_tier_a_is_connected_too(self):
+        """LA INVERSION. Este test exigia lo contrario —que las mecanicas siguieran
+        desconectadas— porque iban a entrar por una puerta propia, la de elegibilidad. Esa
+        bifurcacion se retira: el tier describe la CODIFICACION, no el destino, y una
+        fuente sin adaptador no se puede ni medir. Que las seis esten conectadas es lo que
+        convirtio 'son muestras de decenas' en 463 ajustes y 621 hacks."""
         register_all()
-        assert not any(s.key in source_module.REGISTRY for s in CATALOG if s.tier == "A")
+        pending = [s.key for s in sources_by_tier(TIER_MECHANICAL) if s.key not in source_module.REGISTRY]
+        assert pending == []
+
+    def test_the_whole_catalog_is_connected(self):
+        register_all()
+        assert set(source_module.REGISTRY) == {s.key for s in CATALOG}
 
 
 # --- DefiLlama ------------------------------------------------------------------------
@@ -729,8 +745,10 @@ class TestDepth:
             json.dumps(
                 {
                     "sources": [
-                        {"source_key": "p2p_premium", "first_day": "2026-08-11", "days": 1},
-                        {"source_key": "cftc_cot", "first_day": "2018-04-13", "days": 714},
+                        {"source_key": "p2p_premium", "first_day": "2026-08-11",
+                         "last_day": "2026-08-11", "days": 1},
+                        {"source_key": "cftc_cot", "first_day": "2018-04-13",
+                         "last_day": "2026-08-07", "days": 714},
                     ]
                 }
             ),
@@ -741,6 +759,53 @@ class TestDepth:
         assert declarable["cftc_cot"] == date(2018, 4, 13)
         assert "p2p_premium" in measured_history(path, min_days=0)  # medido, pero no declarable
         assert get_source("p2p_premium").history_from is None
+
+    def test_the_window_is_calendar_days_and_not_a_row_count(self, tmp_path):
+        """La regla exige un ANO DE VENTANA, no 365 filas. El calendario del FOMC son ~60
+        fechas exactas repartidas en una decada: contando filas se quedaria fuera del
+        backtest teniendo nueve anos de historia, que es justo lo contrario de lo que la
+        regla quiere proteger."""
+        path = tmp_path / "depth.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "sources": [
+                        {"source_key": "macro_calendar", "first_day": "2017-02-01",
+                         "last_day": "2026-12-10", "days": 76},
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        assert measured_history(path)["macro_calendar"] == date(2017, 2, 1)
+        assert measured_span_days({"first_day": "2017-02-01", "last_day": "2026-12-10"}) == 3600
+        assert measured_span_days({"first_day": None, "last_day": None}) == 0
+
+    def test_a_partial_probe_does_not_erase_what_was_measured_before(self, tmp_path):
+        """Sondear una fuente sola es la operacion normal. Sin fusion, esa pasada borraria
+        del registro las otras dieciseis, y cada fila conserva SU measured_at."""
+        path = tmp_path / "depth.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "generated_at": "2026-01-01T00:00:00+00:00",
+                    "sources": [
+                        {"source_key": "cftc_cot", "first_day": "2018-04-13",
+                         "last_day": "2026-08-07", "days": 714},
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        measure_depth(
+            sources=[get_source("defillama_hacks")],
+            store=SignalStore(tmp_path / "raw"),
+            from_archive=True,
+            ledger_path=path,
+        )
+        keys = {row["source_key"] for row in load_ledger(path)["sources"]}
+        assert keys == {"cftc_cot", "defillama_hacks"}
+        assert measured_history(path)["cftc_cot"] == date(2018, 4, 13)
 
     def test_the_comparison_reports_both_directions(self, tmp_path):
         path = tmp_path / "depth.json"
