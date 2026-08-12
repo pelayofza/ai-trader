@@ -81,9 +81,17 @@ puesto un dias-al-evento a una cola de validadores.
 QUE SUSTITUYE A LA PUERTA, sin fingir que es equivalente: NINGUNA feature —de ningun tier—
 entra en `scoring/search_space.py`, y los umbrales de las puertas son constantes declaradas
 y razonadas en codigo, no parametros sorteables. Eso limita los grados de libertad, pero no
-es un test: mientras no exista el break-even de rho (barrido de capacidad predictiva sobre
-el generador, con rho=0 como grupo de control), el sistema NO tiene forma de falsar que una
-feature de muestra corta este siendo sobreajustada. Es un hueco declarado, no cerrado.
+es un test.
+
+EL TEST YA EXISTE (2026-08-12), y conviene saber que contesta y que no.
+`scoring/signal_study.py` barre la capacidad predictiva de un canal de observacion
+SINTETICO —con rho=0 como grupo de control— y publica el rho de BREAK-EVEN: a partir de
+que IC una senal hace que la estrategia bata al baseline despues de costes (evidencia en
+`data/signal_channel/`). Es una propiedad del DISENO, no de los datos, y por eso no se
+puede sobreajustar a ningun historico. Lo que NO contesta es cuanto rho tiene ninguna de
+las diecisiete fuentes de aqui abajo: eso se mide en el sustrato REAL, con la profundidad
+que la captura vaya comprando. Hasta que se mida, el break-even es un liston contra el que
+comparar, no un aprobado.
 
 ESTE MODULO NO CONECTA NADA. No importa `requests` ni ningun cliente: es una lista de
 declaraciones. Los adaptadores viven en `signals/adapters/` y se registran en

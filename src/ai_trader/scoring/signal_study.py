@@ -107,6 +107,7 @@ from ai_trader.scoring.transfer_study import (
     crypto_universe,
 )
 from ai_trader.scoring.weight_study import STUDY_SEED
+from ai_trader.shared import bars as bar_schema
 from ai_trader.synthetic.fidelity import CHANNEL_MAX_LAG, channel_facts
 from ai_trader.synthetic.scenarios import SignalChannel
 from ai_trader.synthetic.service import study_window
@@ -556,8 +557,12 @@ def run_units(plan: StudyPlan, specs: Sequence[StrategySpec], workers: int) -> l
     started = time.time()
     rows: list[dict] = []
     chunksize = max(1, len(specs) // 2)
+    # `imap_unordered` y no `imap`: las filas se ordenan igualmente al final, y con el
+    # ordenado el contador solo avanza cuando termina el PREFIJO completo, asi que con
+    # siete workers el progreso que se imprime va muy por detras del real y su ETA es
+    # falsa por un factor de dos o tres.
     with mp.Pool(workers, initializer=_init_worker, initargs=(payload,)) as pool:
-        for row in pool.imap(_run_task, tasks, chunksize=chunksize):
+        for row in pool.imap_unordered(_run_task, tasks, chunksize=chunksize):
             rows.append(row)
             if len(rows) % 16 == 0 or len(rows) == total:
                 elapsed = time.time() - started
@@ -567,7 +572,10 @@ def run_units(plan: StudyPlan, specs: Sequence[StrategySpec], workers: int) -> l
                     elapsed / len(rows) * (total - len(rows)) / 60.0,
                 )
     logger.info("Unidades corridas en %.1f min", (time.time() - started) / 60.0)
-    return sorted(rows, key=lambda r: (r["cell_id"], r["scenario_id"], r["path_index"], r["config_id"]))
+    return sorted(
+        rows,
+        key=lambda r: (r["cell_id"], r["scenario_id"], r["path_index"], r["config_id"]),
+    )
 
 
 def verify_determinism(
@@ -582,8 +590,9 @@ def verify_determinism(
     chosen = usable[::step][:n]
     tasks = [(r["config_id"], r["cell_id"], r["scenario_id"], r["path_index"]) for r in chosen]
 
+    payload = {"plan": plan, "specs": list(specs)}
     with mp.Pool(
-        min(len(tasks), 4), initializer=_init_worker, initargs=({"plan": plan, "specs": list(specs)},)
+        min(len(tasks), 4), initializer=_init_worker, initargs=(payload,)
     ) as pool:
         replays = pool.map(_run_task, tasks)
 
@@ -740,6 +749,7 @@ def cell_verdict(cell: Cell, scores: CellScores, config_ids: Sequence[str], alph
     beating_ranked = [c for c in beating if c in ranked]
 
     reward_val = None if selected is None else scores.reward(selected, SIDE_VALIDATION, alpha)
+    reward_train = None if selected is None else scores.reward(selected, SIDE_TRAIN, alpha)
     activity = None if selected is None else scores.activity(selected, SIDE_VALIDATION)
     return {
         **cell.as_dict(),
@@ -748,7 +758,7 @@ def cell_verdict(cell: Cell, scores: CellScores, config_ids: Sequence[str], alph
         "selection_fell_back": bool(usable and not ranked),
         "dropped": list(scores.dropped),
         "selected": selected,
-        "selected_reward_train": _round(None if selected is None else scores.reward(selected, SIDE_TRAIN, alpha)),
+        "selected_reward_train": _round(reward_train),
         "selected_reward_validation": _round(reward_val),
         "selected_rankable_validation": (
             None if selected is None else scores.rankable(selected, SIDE_VALIDATION)
@@ -878,39 +888,48 @@ def certify_channels(plan: StudyPlan, store: SyntheticStore | None = None) -> li
     la estrategia ya tiene en las barras y el break-even seria optimista.
     """
     store = store or SyntheticStore()
-    out: list[dict] = []
-    for cell in plan.cells:
-        channel = cell.channel
-        if channel is None:
-            continue
-        ics: list[float] = []
-        ac1s: list[float] = []
-        leaks: list[float] = []
-        profiles: list[dict[int, float]] = []
-        for scenario_id in plan.scenario_ids:
-            for path_index in range(plan.n_paths):
-                bars = {
-                    s: df
-                    for s, df in store.load_bars(plan.library_id, scenario_id, path_index).items()
-                    if s in plan.symbols
-                }
+    channels = [(cell, cell.channel) for cell in plan.cells if cell.channel is not None]
+    measured: dict[str, dict[str, list]] = {
+        cell.cell_id: {"ic": [], "ac1": [], "leak": [], "profile": []} for cell, _ in channels
+    }
+
+    # El bucle exterior es la MUESTRA y no la celda: las barras son las mismas para todas
+    # (la senal se deriva de ellas, no al reves), asi que leer el parquet una vez por celda
+    # seria leer cuatro veces lo mismo.
+    for scenario_id in plan.scenario_ids:
+        for path_index in range(plan.n_paths):
+            bars = {
+                s: df
+                for s, df in store.load_bars(plan.library_id, scenario_id, path_index).items()
+                if s in plan.symbols
+            }
+            closes = {
+                s: bar_schema.series(df, bar_schema.CLOSE).to_numpy(dtype=float)
+                for s, df in bars.items()
+            }
+            for cell, channel in channels:
                 panel = emit_signals(bars, [channel], seed=plan.emission_seed)
-                for symbol, frame in bars.items():
+                bucket = measured[cell.cell_id]
+                for symbol, series in closes.items():
                     values = panel.values.get((channel.name, symbol))
                     if values is None:
                         continue
                     facts = channel_facts(
-                        values,
-                        frame["close"].to_numpy(dtype=float),
-                        lead_days=channel.lead_days,
-                        max_lag=CHANNEL_MAX_LAG,
+                        values, series, lead_days=channel.lead_days, max_lag=CHANNEL_MAX_LAG
                     )
                     if facts is None:
                         continue
-                    ics.append(facts.ic)
-                    ac1s.append(facts.ac1)
-                    leaks.append(facts.past_leak)
-                    profiles.append(dict(facts.lead_lag))
+                    bucket["ic"].append(facts.ic)
+                    bucket["ac1"].append(facts.ac1)
+                    bucket["leak"].append(facts.past_leak)
+                    bucket["profile"].append(dict(facts.lead_lag))
+
+    out: list[dict] = []
+    for cell, channel in channels:
+        bucket = measured[cell.cell_id]
+        ics, ac1s, leaks, profiles = (
+            bucket["ic"], bucket["ac1"], bucket["leak"], bucket["profile"]
+        )
         out.append({
             "cell_id": cell.cell_id,
             "declared_ic": round(channel.expected_ic, 4),

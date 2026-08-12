@@ -50,6 +50,7 @@ from ai_trader.scoring.signal_study import (
 from ai_trader.shared.clock import HistoricalClock
 from ai_trader.shared.signals import DAY, ENTITY
 from ai_trader.signals.catalog import CATALOG
+from ai_trader.signals.normalize import Z_CLIP
 from ai_trader.strategies.momentum_crypto import CryptoMomentumConfig, CryptoMomentumStrategy
 from ai_trader.synthetic.engine import PathEngine, ar1_series
 from ai_trader.synthetic.fidelity import channel_checks, channel_facts, correlation
@@ -426,6 +427,29 @@ class TestProductionContract:
                 blocked += 1
         # La puerta corta por la mediana de una z: ni deja pasar todo ni bloquea todo.
         assert 40 < blocked < 110
+
+    def test_a_channel_that_stops_emitting_opens_the_gate(self):
+        """El invariante central del radar, ejercitado con el canal: una puerta NUNCA
+        bloquea por falta de datos. Un canal con cobertura ridicula deja huecos mayores que
+        `MAX_STALE_DAYS` y ahi la puerta se salta sola en vez de leer el ultimo valor
+        congelado como si fuera de hoy."""
+        bars = _bars(n=1_000, seed=17)
+        panel = emit_signals(bars, [_full_channel(coverage=0.2)], seed=6)
+        days = bars["BTC/USDT"].index
+        clock = HistoricalClock(days[0].to_pydatetime())
+        radar = panel.provider(clock)
+
+        skipped = evaluated = 0
+        for day in days[300:]:
+            clock.set(day.to_pydatetime())
+            features = radar.features("BTC/USDT")
+            if features["signal_coverage"] < MIN_SIGNAL_COVERAGE:
+                skipped += 1
+                # Sin cobertura no se decide nada, ni con el umbral mas exigente posible.
+                assert signal_gate_reason(features, min_tone=Z_CLIP) is None
+            else:
+                evaluated += 1
+        assert skipped > 0 and evaluated > 0  # el canal a ratos cubre y a ratos no
 
     def test_the_strategy_never_sees_todays_signal(self):
         """Mismo recorte anti look-ahead que las barras: lo visible es lo ESTRICTAMENTE
