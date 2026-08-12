@@ -14,6 +14,10 @@ from ai_trader.observation.signal_radar import (
 )
 from ai_trader.shared import bars as bar_schema
 from ai_trader.shared.clock import utc_now
+# El ATR vive en `shared/indicators.py` porque este modulo y `momentum_crypto.py` tenian
+# la MISMA funcion duplicada. Se importa con el nombre local de siempre para que ninguna
+# llamada de aqui abajo cambie (y porque `atr` a secas chocaria con la variable local).
+from ai_trader.shared.indicators import atr as _atr
 from ai_trader.shared.schemas import Side, Signal
 
 logger = logging.getLogger(__name__)
@@ -26,20 +30,6 @@ def _sma(series: pd.Series, window: int) -> pd.Series:
 def _rolling_std(series: pd.Series, window: int) -> pd.Series:
     # Desviacion muestral (ddof=1), coherente con volatility_pct del motor de metricas.
     return series.rolling(window=window, min_periods=window).std(ddof=1)
-
-
-def _atr(df: pd.DataFrame, window: int = 14) -> pd.Series:
-    high = bar_schema.series(df, bar_schema.HIGH)
-    low = bar_schema.series(df, bar_schema.LOW)
-    close = bar_schema.series(df, bar_schema.CLOSE)
-
-    prev_close = close.shift(1)
-    tr1 = high - low
-    tr2 = (high - prev_close).abs()
-    tr3 = (low - prev_close).abs()
-    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-
-    return tr.ewm(alpha=1 / window, adjust=False).mean()
 
 
 @dataclass(slots=True)
