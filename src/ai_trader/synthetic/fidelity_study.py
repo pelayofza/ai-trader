@@ -69,10 +69,13 @@ from ai_trader.synthetic.fidelity import (
     MIN_OBSERVATIONS,
     MIN_PAIR_OVERLAP,
     TARGET_METRIC_KEYS,
+    ChannelFacts,
     Estimate,
     SeriesFacts,
     aggregate_facts,
     aggregate_pairs,
+    channel_checks,
+    channel_facts,
     compare_cross_correlations,
     compare_metrics,
     estimate,
@@ -319,6 +322,83 @@ def measure_synthetic(
     return collector
 
 
+def measure_channels(
+    store: SyntheticStore,
+    library_id: str,
+    scenario_ids: Sequence[str],
+    symbols: Sequence[str],
+    n_paths: int,
+) -> tuple[dict[str, float], dict[str, dict[str, float]]]:
+    """
+    Los hechos de los CANALES DE OBSERVACION que declaren los escenarios de la libreria.
+
+    Es la extension del loop de calibracion legitimo a las senales: IC empirico,
+    autocorrelacion y perfil lead-lag son propiedades DEL MUNDO, medidas con estadisticos
+    que ninguna estrategia optimiza. Cerrar el loop sobre ellas sigue siendo medir hechos;
+    cerrarlo sobre el rendimiento de las estrategias seria sobreajuste con pasos extra.
+
+    Devuelve (declarado, medido). Vacio si ningun escenario declara canales, que es el caso
+    de todas las librerias publicadas hasta hoy: los canales del barrido de rho
+    (`scoring/signal_study.py`) se emiten POR CELDA sobre estas mismas barras y se
+    certifican alli, sin escribir quince librerias identicas salvo la senal.
+    """
+    # Import local: `fidelity.py` es numerico y puro, y este estudio no puede depender del
+    # emisor mas que cuando hay algo que emitir.
+    from ai_trader.synthetic.signal_channel import emit_signals
+
+    specs = {s.id: s for s in store.load_specs(library_id)}
+    channels = {
+        channel.name: channel
+        for scenario_id in scenario_ids
+        for channel in getattr(specs.get(scenario_id), "signals", ())
+    }
+    if not channels:
+        return {}, {}
+
+    facts: dict[str, list[ChannelFacts]] = {}
+    for scenario_id in scenario_ids:
+        declared = getattr(specs.get(scenario_id), "signals", ())
+        if not declared:
+            continue
+        try:
+            paths = store.load_scenario_paths(
+                library_id, scenario_id,
+                path_indices=range(n_paths), columns=[bar_schema.CLOSE],
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Sin caminos para medir canales en %s: %s", scenario_id, exc)
+            continue
+        for path_index in sorted(paths):
+            bars = {s: df for s, df in paths[path_index].items() if s in set(symbols)}
+            panel = emit_signals(bars, declared)
+            for channel in declared:
+                for symbol, frame in bars.items():
+                    values = panel.values.get((channel.name, symbol))
+                    if values is None:
+                        continue
+                    measured = channel_facts(
+                        values,
+                        bar_schema.series(frame, bar_schema.CLOSE).to_numpy(dtype=float),
+                        lead_days=channel.lead_days,
+                    )
+                    if measured is not None:
+                        facts.setdefault(channel.name, []).append(measured)
+
+    return (
+        {name: channel.expected_ic for name, channel in channels.items()},
+        {
+            name: {
+                "n_series": len(items),
+                "ic": float(np.median([f.ic for f in items])),
+                "ac1": float(np.median([f.ac1 for f in items])),
+                "past_leak": float(np.median([f.past_leak for f in items])),
+            }
+            for name, items in facts.items()
+            if items
+        },
+    )
+
+
 # ------------------------------------------------------------------ informe ---------
 
 
@@ -381,6 +461,7 @@ def build_report(
     synth: FactsCollector,
     *,
     min_coverage_pct: float = MIN_COVERAGE_PCT,
+    channels: tuple[dict[str, float], dict[str, dict[str, float]]] = ({}, {}),
 ) -> dict:
     """Ensambla el informe: plan, mediciones crudas de ambos mundos y comparaciones."""
     comparisons = compare_metrics(real.symbols(), synth.symbols())
@@ -390,8 +471,12 @@ def build_report(
     covered = [c.coverage_pct for c in targets if c.n]
     ranks = [c.rank_corr for c in targets if c.n and not np.isnan(c.rank_corr)]
 
+    declared_channels, measured_channels = channels
     acceptance = evaluate_acceptance(
-        [*comparisons, cross], synth.pooled(), min_coverage_pct=min_coverage_pct
+        [*comparisons, cross],
+        synth.pooled(),
+        min_coverage_pct=min_coverage_pct,
+        extra_checks=channel_checks(declared_channels, measured_channels),
     )
 
     return {
@@ -400,6 +485,13 @@ def build_report(
         "synthetic": synth.as_dict(),
         "metrics": [c.as_dict() for c in comparisons],
         "cross_correlation": cross.as_dict(),
+        "signal_channels": {
+            "declared": {k: round(v, 6) for k, v in sorted(declared_channels.items())},
+            "measured": {
+                k: {m: round(v, 6) for m, v in sorted(facts.items())}
+                for k, facts in sorted(measured_channels.items())
+            },
+        },
         "acceptance": acceptance.as_dict(),
         "summary": {
             "n_symbols": len(set(real.symbols()) & set(synth.symbols())),
@@ -458,6 +550,13 @@ def run_study(args: argparse.Namespace) -> dict:
     synth = measure_synthetic(
         store, args.library, scenario_ids, sorted(real_bars), args.paths, **options
     )
+    # Canales de observacion declarados por los escenarios, si los hay. Hoy ninguna
+    # libreria publicada declara ninguno y esto devuelve vacio sin leer un solo parquet.
+    channels = measure_channels(
+        store, args.library, scenario_ids, sorted(real_bars), args.paths
+    )
+    if channels[0]:
+        logger.info("Midiendo %d canal/es de observacion declarados", len(channels[0]))
 
     plan = StudyPlan(
         library_id=args.library,
@@ -477,7 +576,9 @@ def run_study(args: argparse.Namespace) -> dict:
         min_pair_overlap=args.min_pair_overlap,
         offline=args.offline,
     )
-    return build_report(plan, real, synth, min_coverage_pct=args.min_coverage_pct)
+    return build_report(
+        plan, real, synth, min_coverage_pct=args.min_coverage_pct, channels=channels
+    )
 
 
 def _print_report(report: dict) -> None:
@@ -508,6 +609,11 @@ def _print_report(report: dict) -> None:
         mark = "OK  " if check["passed"] else "FALLA"
         if check["kind"] == "coverage":
             detail = f"cobertura {check['value']:.0f}% >= {check['threshold']:.0f}%"
+        elif check["kind"] == "channel_ic":
+            band = check["band"]
+            detail = f"IC medido {check['value']:.3f} en [{band[0]:.3f}, {band[1]:.3f}]"
+        elif check["kind"] == "channel_leak":
+            detail = f"fuga al pasado {check['value']:.3f} <= {check['threshold']:.3f}"
         else:
             band = check["band"]
             span = "sin banda" if band is None else f"[{band[0]:.3f}, {band[1]:.3f}]"
