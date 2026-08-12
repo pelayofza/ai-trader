@@ -273,12 +273,13 @@ sorteables; el CEM solo reconstruye <span class="mono">strategies</span>, así q
 la huella de las 16 configuraciones publicadas no se mueve. <b>Segundo:</b> el tamaño de muestra se
 <i>mide</i> con la sonda en vez de declararse, y se amplía por <i>pooling</i> del evento normalizado —la
 unidad de observación es el evento comparable (% del <i>float</i>, % del ADV), no el token, así que catorce
-desbloqueos por token son cientos a través del universo—. <b>Lo que falta,</b> y se escribe porque callarlo
-sería el error que este documento existe para no cometer: limitar los grados de libertad <i>reduce</i> el
-riesgo de sobreajuste, no lo <i>mide</i>. El instrumento que lo mediría es el <b>IC de break-even</b> —barrer
-la capacidad predictiva ρ de un canal de observación sintético, con ρ = 0 como grupo de control, de modo que
-la pregunta que se le hace al histórico real sea una sola cifra— y todavía no existe. Hasta entonces, una
-feature de muestra corta puede estar sobreajustada sin que el sistema pueda detectarlo.</div>
+desbloqueos por token son cientos a través del universo—. <b>Y tercero,</b> el que faltaba: limitar los grados de
+libertad <i>reduce</i> el riesgo de sobreajuste pero no lo <i>mide</i>, y el instrumento que sí lo mide ya
+existe (§4.12). Es el <b>IC de break-even</b>: barrer la capacidad predictiva ρ de un canal de observación
+sintético, con ρ = 0 como grupo de control, de modo que la pregunta que se le hace al histórico real sea
+una sola cifra binaria. Lo que sigue faltando, y conviene no confundirlo, es el <b>otro lado</b> de esa
+pregunta: cuánto ρ tiene realmente cada una de estas diecisiete fuentes. Eso se mide en el sustrato real,
+con la profundidad que la captura vaya comprando día a día.</div>
 
 <div class="note"><b>No hay veto.</b> Con la unificación se decidió que ninguna señal bloquee: no existe
 guarda de elegibilidad por señales ni lista negra, y toda señal actúa como feature. La consecuencia se
@@ -801,7 +802,7 @@ al test es entrenar con su eco. Sólo muerde en CPCV, donde hay entrenamiento <i
 <div class="why"><b>Lo que la purga no hace, dicho claro.</b> Dentro de un backtest no se ajusta nada: la
 configuración entra fija y el motor construye reloj, estado y estrategias <b>nuevos</b> por ventana, de
 modo que el entrenamiento de un fold no influye en su test. Purgar y embargar por tanto <b>no mejoran ni
-empeoran</b> ninguna cifra out-of-sample, y hay un test que fija ese invariante (§4.14). Sirven para otras
+empeoran</b> ninguna cifra out-of-sample, y hay un test que fija ese invariante (§4.15). Sirven para otras
 dos cosas, ambas reales: que la referencia in-sample que se reporta no esté contaminada por operaciones
 que siguen vivas dentro del test, y que la geometría ya sea correcta cuando algo <b>sí</b> se ajuste
 sobre el entrenamiento — el optimizador del bucle exterior, o una política aprendida. Presentarlo de otro
@@ -872,7 +873,7 @@ muestras</b>: "{v["flips"]["walk_forward"]} de {v["flips"]["n_samples"]}" es una
 intervalo de confianza de esa proporción cubre medio rango, y afirmar "la mitad de las veces" como cifra
 sería sobre-leer el dato. Las ventanas de un mismo esquema <b>comparten historia</b> (en CPCV cada tramo
 entra en varios folds), así que la dispersión medida no son observaciones independientes y no debe leerse
-como un error estándar. Y el camino que usa el optimizador (§4.12) sigue puntuando cada muestra con el
+como un error estándar. Y el camino que usa el optimizador (§4.13) sigue puntuando cada muestra con el
 corte único: cablear ahí el esquema multiventana es la evolución pendiente. Los
 {v["leakage"]["folds_audited"]} folds ejecutados pasaron la auditoría de fuga temporal. Evidencia completa
 en <span class="mono">data/validation/report_{v["library"]}.json</span> ({v["generated_at"]}); un backtest
@@ -1032,6 +1033,122 @@ solo declarar.{" Sin contraparte real: " + ", ".join(f["missing"]) + "." if f["m
 <p class="tag">Evidencia completa: <span class="mono">data/fidelity/report_{f["library"]}.json</span> ·
 reproducible con <span class="mono">python -m ai_trader.synthetic.fidelity_study</span>
 ({f["n_scenarios"]} escenarios × {f["n_paths"]} caminos; {f["generated_at"]}).</p>"""
+
+
+def _signal_channel_block(s):
+    """Seccion 4.12: el break-even del IC.
+
+    Va detras de la transferencia y no en el capitulo de datos porque lo que publica es una
+    propiedad de la ESTRATEGIA —a partir de que capacidad predictiva una senal paga sus
+    costes— y no del generador. Es, ademas, el unico test de FALSACION del radar: sin el,
+    una feature de muestra corta puede estar sobreajustada y el sistema no tiene forma de
+    saberlo."""
+    if not s:
+        return (
+            "<h3>4.12 · Break-even del IC: cuándo paga una señal</h3>"
+            "<div class=\"note\"><b>Limitación declarada.</b> El informe del canal sintético "
+            "(<span class=\"mono\">data/signal_channel/</span>) no está disponible en este árbol, "
+            "así que este documento <b>no puede afirmar</b> desde qué capacidad predictiva una "
+            "señal externa paga sus costes. Mientras no exista, el radar de señales entra en la "
+            "decisión sin ningún test de falsación. Genéralo con "
+            "<span class=\"mono\">python -m ai_trader.scoring.signal_study</span>.</div>"
+        )
+
+    be = s["break_even"]
+    lead = (be["by_lead"] or [{}])[0]
+    ch, crit, rep = s["channel"], s["criterion"], s["reproduction"]
+    on = [r for r in s["rows"] if r["arm"] != "off"]
+    top = on[-1] if on else {}
+    reached = lead.get("break_even_rho") is not None
+    answer = (
+        f"ρ = {_n(lead.get('break_even_rho'), 2)}"
+        if reached
+        else f"por encima de {_n(lead.get('break_even_above'), 2)}"
+    )
+
+    rows = "".join(
+        f"<tr><td class=mono>{r['cell_id']}"
+        f"{' <span class=tag>(control)</span>' if r['arm'] == 'off' else ''}</td>"
+        f"<td class='n mono'>{'—' if r['expected_ic'] is None else _n(r['expected_ic'], 3)}</td>"
+        f"<td class='n mono'>{'—' if r['measured_ic'] is None else _n(r['measured_ic'], 3)}</td>"
+        f"<td class=mono>{r['selected'] or '—'}</td>"
+        f"<td class='n mono'>{_n(r['reward'], 3)}</td>"
+        f"<td class='n mono'>{_n(r['baseline'], 3)}</td>"
+        f"<td class='n mono'>{_n(r['margin'], 3)}</td>"
+        f"<td class='n mono'>{r['n_beating']}/{s['n_configs']}</td>"
+        f"<td>{'<b>sí</b>' if r['beats'] else 'no'}</td></tr>"
+        for r in s["rows"]
+    )
+
+    control = (
+        "El grupo de control salió <b>limpio</b>: con ρ = 0 la estrategia <b>no</b> bate al "
+        "baseline, así que lo que se mide en las demás celdas es información y no el ruido "
+        "persistente del canal ni el efecto de operar menos."
+        if be["control_clean"]
+        else "El grupo de control salió <b>sucio</b>: con ρ = 0 la estrategia ya bate al baseline, "
+        "así que el barrido <b>no publica break-even</b>. Lo que estaría midiendo es la puerta, "
+        "no la señal."
+    )
+    return f"""
+<h3>4.12 · Break-even del IC: desde qué capacidad predictiva paga una señal</h3>
+<p>El radar del §2.2 mete diecisiete fuentes en la decisión, y hasta aquí su única defensa contra el
+sobreajuste era <b>negativa</b>: ninguna feature entra en el espacio de búsqueda, así que el optimizador
+no puede ajustar umbrales contra el resultado. Eso limita los grados de libertad pero <b>no mide
+nada</b>. Esta sección es la medición, y contesta una sola pregunta: <b>¿a partir de qué capacidad
+predictiva ρ una señal externa hace que la estrategia bata al baseline después de costes?</b></p>
+<p>Sobre el mundo sintético, cuyo futuro ya está escrito, se simula el <b>canal de observación</b> —no la
+señal—:</p>
+<p class="mono" style="text-align:center">señal_t = ρ · z(retorno_t→t+h) + √(1−ρ²) · ruido_t</p>
+<div class="why"><b>Por qué el canal y no la señal.</b> Simular «el sentimiento de Twitter» —su nivel, su
+estacionalidad, su reacción a un hack— pide un generador aprendido de datos, y con él vuelve la
+circularidad que este proyecto evita desde el principio: el mundo contra el que se mide lo habríamos
+ajustado nosotros. El canal cuesta <b>cinco números interpretables</b>, y lo que se publica no son «los
+mejores parámetros» sino un <b>umbral</b>: una propiedad del <i>diseño</i> —de esta estrategia, con estos
+costes, con esta puerta— y no de ningún histórico. No se puede sobreajustar a datos que nunca
+entraron.</div>
+<table><thead><tr><th>celda</th><th class=n>IC declarado</th><th class=n>IC medido</th>
+<th>elegida en train</th><th class=n>recompensa OOS</th><th class=n>baseline</th><th class=n>margen</th>
+<th class=n>configs que baten</th><th>¿bate?</th></tr></thead><tbody>{rows}</tbody></table>
+<p><b>Respuesta: el break-even está {answer}</b> con un adelanto de {lead.get('lead_days', 1)} día.
+{control}</p>
+<div class="why"><b>Cómo se lee, declarado antes de correr.</b> El criterio vive en el código
+(<span class="mono">signal_study.CRITERION</span>) y viaja dentro del informe; uno elegido a la vista del
+resultado no sería un criterio.
+<ul>
+<li><b>Selección:</b> {crit["seleccion"]}.</li>
+<li><b>Lectura:</b> {crit["lectura"]} ({", ".join(s["split"]["validation"])}).</li>
+<li><b>Batir:</b> {crit["batir"]}.</li>
+<li><b>Control:</b> {crit["control"]}.</li>
+<li><b>Delta:</b> {crit["delta"]}.</li>
+</ul></div>
+<div class="note"><b>ρ = 0 es el test de falsación que no existía.</b> Una puerta que consulta una señal
+<i>sin información</i> sigue haciendo una cosa: <b>operar menos</b>. Y como la recompensa es el CVaR@25%
+y un cero le gana a cualquier cosa que arriesgue y pierda (§4.10), operar menos puede parecer talento.
+Por eso el valor de la información se lee siempre contra ρ = 0 —misma puerta, sin información— y nunca
+contra la celda sin puerta.</div>
+<div class="why"><b>0 = menos edge, nunca más.</b> Los mandos del canal van en positivo
+(<span class="mono">informative_share</span>, <span class="mono">coverage</span>) y no en negativo
+(<span class="mono">false_positive_rate</span>), para que un default olvidado degrade a «sin señal» y no
+a «señal perfecta». Un canal recién construido no emite nada. En el barrido los dos están al máximo
+(<span class="mono">{_n(ch["informative_share"], 2)}</span> y
+<span class="mono">{_n(ch["coverage"], 2)}</span>) para que ρ <i>sea</i> el IC entregado —medido:
+{_n(top.get('expected_ic'), 3)} declarado → {_n(top.get('measured_ic'), 3)} medido en la celda más
+informativa—, así que lo publicado es la cota <b>optimista</b>: bajarlos sólo puede empeorar el
+break-even.</div>
+<div class="note"><b>Tres controles que hacen legible el resultado.</b> (1) La emisión ocurre
+<b>después</b> de generar las velas, en un pase aparte y con su propio generador aleatorio: que no
+interfiera con el motor no es una promesa auditable a mano, es imposible por construcción. (2) Las
+estrategias reciben las señales por el <b>mismo contrato que en vivo</b>
+(<span class="mono">attach_signal_provider</span> + <span class="mono">signal_gate_reason</span>, mismo
+recorte anti-<i>look-ahead</i>), así que lo que se barre es lo que opera. (3) La celda sin canal
+reproduce {rep.get("compared", 0)} unidades del §4.11
+<b>{"score a score" if rep.get("identical") else "con discrepancias"}</b>, que es la prueba de que la
+costura del canal no movió nada del sistema.</div>
+<div class="note"><b>Separación por función, no por ventana.</b> Aquí no entra un solo dato real, y es
+deliberado: el sintético es el sustrato de <b>selección</b> (barrer ρ, rankear, decidir la puerta) y el
+real el de <b>verificación</b> (medir el ρ de una señal de verdad y estudiar la transferencia). Nunca el
+mismo dato haciendo las dos cosas. Al mercado real le queda por tanto una sola pregunta, y es binaria:
+<i>el ρ que mide mi señal, ¿está por encima de este umbral y con margen?</i></div>"""
 
 
 def _transfer_block(t):
@@ -1364,6 +1481,7 @@ def render_html(f: dict) -> str:
         "CALIBRATION": _calibration_block(f.get("calibration")),
         "FIDELITY": _fidelity_block(f.get("fidelity")),
         "TRANSFER": _transfer_block(f.get("transfer")),
+        "SIGNALCHANNEL": _signal_channel_block(f.get("signal_channel")),
         "VALIDATION": _validation_block(f.get("validation")),
         "SESSIONS": _sessions_block(f.get("sessions")),
         "ACTIVITY": _activity_block(f.get("activity")),
@@ -1448,7 +1566,7 @@ y varias ventanas temporales por muestra con purga y embargo.</td><td>§4.7–4.
 supera el suelo de actividad. Y se comprueba si el orden sintético se parece al real.</td>
 <td>§4.9–4.11</td></tr>
 <tr><td class="n">12</td><td><b>Búsqueda</b></td><td>Optimización de caja negra (CEM) sobre los
-parámetros, con el resultado descontado por el número de intentos (DSR/PBO).</td><td>§4.12–4.13</td></tr>
+parámetros, con el resultado descontado por el número de intentos (DSR/PBO).</td><td>§4.13–4.14</td></tr>
 <tr><td class="n">13</td><td><b>En vivo</b></td><td>El mismo camino, con reloj real y dinero de papel.
 Es la etapa que aún no ha producido resultados.</td><td>§5</td></tr>
 </tbody></table>
@@ -1676,7 +1794,7 @@ otra pregunta, y se responde con datos reales en §2.10.</div>
 <h3>2.11 · Qué garantizan los tests sobre los datos</h3>
 <p>La base cuenta con <b>%%NTESTS%% tests</b> automatizados y <i>linting</i> (ruff) sobre todo el código.
 Más allá del número importa <b>qué</b> se garantiza, así que la lista va repartida por capítulos: aquí los
-invariantes del sustrato, en §3.10 los de una operación y en §4.14 los del ranking.</p>
+invariantes del sustrato, en §3.10 los de una operación y en §4.15 los del ranking.</p>
 <ul>
 <li><b>Determinismo:</b> la misma semilla produce las mismas velas, byte a byte.</li>
 <li><b>Validez de las velas:</b> máximo ≥ cuerpo ≥ mínimo y precios positivos, en todos los regímenes,
@@ -1866,7 +1984,7 @@ verificado que un único path no es informativo.</p>
 entre tramos de su propia historia. La validación multiventana (§4.8) la mide, y resulta no ser pequeña.
 Conviene no confundirlas: la primera pregunta "¿funciona en escenarios distintos?", la segunda "¿funciona
 en momentos distintos del mismo escenario?".</p>
-<div class="note"><b>Estado.</b> Lo que hoy alimenta al optimizador (§4.12) es la primera dispersión: cada
+<div class="note"><b>Estado.</b> Lo que hoy alimenta al optimizador (§4.13) es la primera dispersión: cada
 muestra sigue aportando <b>un</b> número, obtenido con el corte único. Componer las dos agregaciones —el
 CVaR entre ventanas y el CVaR entre muestras— no es automático: encadenar dos veces la cola puede ser
 excesivamente conservador, y esa decisión se tomará midiendo, no razonando (§6).</div>
@@ -1973,7 +2091,9 @@ un filtro superado. Lo mismo vale para la actividad: si no se ha medido, no se d
 
 %%TRANSFER%%
 
-<h3>4.12 · El optimizador: Cross-Entropy Method</h3>
+%%SIGNALCHANNEL%%
+
+<h3>4.13 · El optimizador: Cross-Entropy Method</h3>
 <p>La mejora de las primitivas se plantea, en esta fase, como <b>optimización de caja negra</b> de sus
 parámetros mediante el método de entropía cruzada (CEM): se muestrean parámetros de una gaussiana, se
 conserva el cuartil élite y se reajusta la gaussiana hacia él, iterando. Es determinista con semilla.</p>
@@ -1990,7 +2110,7 @@ umbral de puerta y ningún parámetro del radar (§2.2). Son constantes declarad
 que lo demuestra: añadir una dimensión <b>sustituye</b> el espacio publicado en vez de ampliarlo. Es lo
 que mantiene fija la huella de las 16 configuraciones sobre las que se ha medido todo lo demás.</div>
 
-<h3>4.13 · Descuento del sobreajuste por múltiples pruebas</h3>
+<h3>4.14 · Descuento del sobreajuste por múltiples pruebas</h3>
 <p>Buscar sobre un espacio de parámetros garantiza encontrar algo que brilla <i>aunque no haya nada que
 encontrar</i>: con suficientes intentos sobre puro ruido, el mejor Sharpe esperado crece solo. La
 herramienta pone número a ese efecto por dos vías independientes.</p>
@@ -2008,7 +2128,7 @@ corrigiendo además por asimetría y colas gruesas de los retornos.</p>
 <i>elegir</i> por backtest acierta?". La segunda es la que importa cuando lo que se publica no es un
 número sino un método.</div>
 
-<h3>4.14 · Qué garantizan los tests sobre el ranking</h3>
+<h3>4.15 · Qué garantizan los tests sobre el ranking</h3>
 <ul>
 <li><b>La métrica de cabecera no tiene óptimo degenerado:</b> una curva plana puntúa 0 (no infinito), el
 drawdown penaliza de forma aditiva y no en el denominador, y rotar más con la misma curva de equity
@@ -2099,7 +2219,7 @@ fallar. La ordenación entre activos sigue floja, y se publica (§2.10).</td></t
 <tr><td>Transferencia de ranking</td><td><b>Resultado negativo y aceptado:</b> el mundo sintético pasa
 todos los umbrales de fidelidad y aun así no ordena las estrategias como el mercado (§4.11).</td></tr>
 <tr><td>Métrica y ranking</td><td>Headline penalizado, CVaR@25%, baselines pasivos con las mismas
-comisiones, DSR y PBO: el óptimo degenerado del Calmar desapareció (§4.4–4.13).</td></tr>
+comisiones, DSR y PBO: el óptimo degenerado del Calmar desapareció (§4.4–4.14).</td></tr>
 <tr><td>Pesos λ y κ</td><td>Medidos por barrido en rejilla sobre cientos de backtests: la superficie es
 plana, penalizar no estabiliza y los costes ya están dentro del Sharpe (§4.5).</td></tr>
 <tr><td>Suelo de actividad</td><td>Rankear exige operar. El umbral es medido, el barrido se publica

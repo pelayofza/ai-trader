@@ -26,6 +26,11 @@ from ai_trader.backtest.session_study import (
 from ai_trader.observation.features import OWN_ASSET_FEATURES
 from ai_trader.observation.regime import REGIME_FEATURES
 from ai_trader.scoring.activity_study import activity_report_path, load_activity_report
+from ai_trader.scoring.signal_study import (
+    DEFAULT_LIBRARY_ID as SIGNAL_LIBRARY,
+    load_signal_report,
+    report_path as signal_report_path,
+)
 from ai_trader.scoring.search_space import get_space
 from ai_trader.scoring.transfer_study import (
     DEFAULT_LIBRARY_ID as TRANSFER_LIBRARY,
@@ -313,6 +318,54 @@ def _transfer() -> dict | None:
             for c in sorted(report["configs"], key=lambda c: c["rank_real"])
         ],
         "leakage": report["leakage"],
+        "generated_at": report["generated_at"][:10],
+    }
+
+
+def _signal_channel() -> dict | None:
+    """Cifras del barrido de rho (data/signal_channel): el break-even del IC, su grupo de
+    control y la certificacion de que el canal entrega lo que declara. Se lee del informe
+    publicado: son 640 unidades de 15 ventanas de backtest cada una."""
+    report = load_signal_report(ROOT / signal_report_path(SIGNAL_LIBRARY))
+    if not report:
+        logger.warning("Sin informe del canal sintetico: la seccion 4.12 saldra degradada")
+        return None
+
+    plan = report["plan"]
+    certification = {c["cell_id"]: c for c in report["channel_certification"]}
+    return {
+        "library": plan["library_id"],
+        "symbols": plan["symbols"],
+        "n_configs": plan["grid"]["n_configs"],
+        "channel": plan["sweep"]["channel_fixed"],
+        "gate_param": plan["grid"]["injected_param"],
+        "gate_value": plan["grid"]["injected_value"],
+        "split": plan["synthetic"]["split"],
+        "n_samples": plan["synthetic"]["n_samples"],
+        "validation": plan["validation"],
+        "criterion": report["criterion"],
+        "break_even": report["break_even"],
+        "gate_cost": report["gate_cost"],
+        "reproduction": report["reproduction"],
+        "determinism": report.get("determinism"),
+        "rows": [
+            {
+                "cell_id": c["cell_id"],
+                "arm": c["arm"],
+                "rho": c["rho"],
+                "lead_days": c["lead_days"],
+                "expected_ic": c["expected_ic"],
+                "measured_ic": certification.get(c["cell_id"], {}).get("ic_median"),
+                "past_leak": certification.get(c["cell_id"], {}).get("past_leak_median"),
+                "selected": c["selected"],
+                "reward": c["selected_reward_validation"],
+                "baseline": c["baseline_reward_validation"],
+                "margin": c["margin"],
+                "beats": c["beats"],
+                "n_beating": c["n_beating_baseline"],
+            }
+            for c in report["cells"]
+        ],
         "generated_at": report["generated_at"][:10],
     }
 
@@ -618,6 +671,7 @@ def collect() -> dict:
     facts["validation"] = _validation()
     facts["sessions"] = _sessions()
     facts["activity"] = _activity()
+    facts["signal_channel"] = _signal_channel()
     facts["signals"] = _signals()
 
     facts["mom_params"] = _params(CryptoMomentumStrategy().config)

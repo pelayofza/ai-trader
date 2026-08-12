@@ -43,6 +43,11 @@ from ai_trader.scoring.activity_study import (
     load_activity_report,
 )
 from ai_trader.scoring.sample_eval import evaluate_baselines, evaluate_sample_detailed
+from ai_trader.scoring.signal_study import (
+    DEFAULT_LIBRARY_ID as SIGNAL_LIBRARY,
+    load_signal_report,
+    report_path as signal_report_path,
+)
 from ai_trader.scoring.transfer_study import (
     DEFAULT_LIBRARY_ID as TRANSFER_LIBRARY,
     load_transfer_report,
@@ -1124,6 +1129,65 @@ def collect_activity() -> dict | None:
     }
 
 
+def collect_signal_channel() -> dict | None:
+    """El break-even del IC: ¿desde que capacidad predictiva paga una senal? (data/signal_channel).
+
+    Se LEE del informe publicado; no se recalcula. Son 640 unidades de 15 ventanas de
+    backtest cada una —tres horas de CPU— y el dashboard tiene que seguir siendo
+    regenerable en minutos. Aqui no se decide nada: el criterio de lectura viene declarado
+    en el propio informe (`criterion`), escrito en el codigo ANTES de correrlo."""
+    report = load_signal_report(ROOT / signal_report_path(SIGNAL_LIBRARY))
+    if not report:
+        logger.warning("Sin informe del canal sintetico: el panel de break-even saldra vacio")
+        return None
+
+    plan = report["plan"]
+    certification = {c["cell_id"]: c for c in report["channel_certification"]}
+    return {
+        "library": plan["library_id"],
+        "symbols": plan["symbols"],
+        "grid": plan["grid"],
+        "sweep": plan["sweep"],
+        "synthetic": plan["synthetic"],
+        "validation": plan["validation"],
+        "criterion": report["criterion"],
+        "break_even": report["break_even"],
+        "value_of_information": report["value_of_information"],
+        "gate_cost": report["gate_cost"],
+        "reproduction": report["reproduction"],
+        "baseline_invariance": report.get("baseline_invariance"),
+        "determinism": report.get("determinism"),
+        "n_failed_units": report["n_failed_units"],
+        # Una fila por celda: lo declarado, lo medido y lo que decidio.
+        "rows": [
+            {
+                "cell_id": c["cell_id"],
+                "arm": c["arm"],
+                "rho": c["rho"],
+                "lead_days": c["lead_days"],
+                "expected_ic": c["expected_ic"],
+                "measured_ic": certification.get(c["cell_id"], {}).get("ic_median"),
+                "measured_ac1": certification.get(c["cell_id"], {}).get("ac1_median"),
+                "past_leak": certification.get(c["cell_id"], {}).get("past_leak_median"),
+                "selected": c["selected"],
+                "reward_train": c["selected_reward_train"],
+                "reward": c["selected_reward_validation"],
+                "baseline": c["baseline_reward_validation"],
+                "margin": c["margin"],
+                "beats": c["beats"],
+                "n_beating": c["n_beating_baseline"],
+                "n_rankable": c["n_rankable"],
+                "fell_back": c.get("selection_fell_back", False),
+                "n_configs": c["n_configs"],
+                "activity": c["selected_activity_validation"],
+                "trades_per_window": c["trades_per_window"],
+            }
+            for c in report["cells"]
+        ],
+        "generated_at": report["generated_at"][:10],
+    }
+
+
 def _etf_dispersion(store) -> dict:
     """La distribucion de `etf_issuer_dispersion`, que es lo que justifica bajar al emisor.
 
@@ -1460,6 +1524,7 @@ def build() -> None:
     transfer = collect_transfer()
     logger.info("Descomposicion por sesion horaria (informe publicado)...")
     logger.info("Suelo de actividad del ranking (informe publicado)...")
+    logger.info("Break-even del IC: barrido de rho (informe publicado)...")
     logger.info("Catalogo de senales externas y auditoria de cobertura...")
     signals_platform = collect_signals()
     logger.info("Catalogo de estrategias...")
@@ -1488,6 +1553,7 @@ def build() -> None:
         "validation": collect_validation(),
         "sessions": collect_sessions(),
         "activity": collect_activity(),
+        "signal_channel": collect_signal_channel(),
         "signals_platform": signals_platform,
         "paper": collect_paper(),
         "roadmap": collect_roadmap(),
@@ -1555,6 +1621,35 @@ def build() -> None:
 # sigue como entrada propia del roadmap. Lo que esta evolucion NO cierra sube al puesto 2: sin
 # el break-even de rho no hay test de falsacion, asi que una feature de muestra corta puede
 # estar sobreajustada y el sistema no tiene forma de saberlo.
+#
+# ACTUALIZACION 2026-08-13: EL BREAK-EVEN DEL IC YA ESTA MEDIDO, y con el se cierra el unico
+# hueco que el radar de senales dejo declarado por escrito: hoy el sistema SI puede falsar
+# que una feature este aportando algo. `scoring/signal_study.py` barre la capacidad
+# predictiva de un canal de observacion sintetico -no la senal, el CANAL: cinco numeros
+# interpretables- sobre las MISMAS barras, con las 16 configuraciones publicadas y CPCV de
+# 15 ventanas. 640 unidades, 3,1 horas, cero fallidas, evidencia en data/signal_channel/.
+#
+# EL RESULTADO: el break-even esta POR ENCIMA de rho = 0,20 (margen -0,018 en el extremo de
+# la rejilla). Un IC diario SOSTENIDO de 0,20 no lo tiene ninguna senal alternativa publica
+# conocida -lo tipico esta entre 0,01 y 0,05-, asi que la lectura no es "hacen falta senales
+# mejores" sino que el cuello de botella es el USO: una PUERTA BINARIA sobre el tono tira
+# toda la informacion salvo un bit, y ademas cuesta -1,02 puntos de recompensa por si sola
+# (celda sin canal contra rho=0). Eso reordena lo que viene despues: antes que acoplar la
+# senal al estado latente conviene preguntarse si el consumo correcto es una puerta o un
+# input continuo del sizing.
+#
+# LOS TRES CONTROLES SALIERON COMO TENIAN QUE SALIR, que es lo que hace legible el numero:
+# (i) rho=0 -el grupo de control- NO bate al baseline, asi que lo medido no es el AR(1) del
+# ruido ni el efecto de operar menos; (ii) el canal ENTREGA lo declarado (IC medido 0,004 /
+# 0,054 / 0,106 / 0,207) y no correlaciona con retornos ya realizados (0,057); (iii) la
+# celda sin canal reproduce 128 unidades de units_ai_v3.json SCORE A SCORE, de modo que la
+# costura del canal no movio nada del motor. El valor de la informacion es monotono en rho
+# (+0,11 / +0,89 / +1,15 sobre el control), que es la comprobacion de que el instrumento
+# mide lo que dice medir.
+#
+# Lo que este estudio NO contesta, y por eso no se declara cerrado el problema: cuanto rho
+# tiene de verdad cada una de las diecisiete fuentes. Eso se mide en el sustrato REAL, con
+# la profundidad que la captura vaya comprando dia a dia.
 #
 # ACTUALIZACION 2026-08-12: las dos evoluciones que ocupaban los puestos 1 y 2 -las senales
 # mecanicas como elegibilidad, y el radar de features con su cableado- se FUSIONAN en una
@@ -1631,11 +1726,11 @@ ROADMAP_GROUPS = [
     {
         "key": "ahora",
         "title": "Ahora",
-        "subtitle": "Dos frentes que no compiten entre si. Mantener corriendo el PAPER TRADING -que "
-                    "ya deja diario auditable por ciclo- porque compra lo único que no se puede "
-                    "comprimir después: tiempo de calendario. Y el barrido de rho, que es el TEST "
-                    "DE FALSACIÓN que dejó abierto el radar de señales -hoy limitar los grados de "
-                    "libertad reduce el riesgo de sobreajuste, pero no lo mide.",
+        "subtitle": "Mantener corriendo el PAPER TRADING -que ya deja diario auditable por "
+                    "ciclo- porque compra lo único que no se puede comprimir después: tiempo de "
+                    "calendario. El test de falsación que faltaba ya está hecho (break-even del "
+                    "IC: hace falta rho > 0,20 para batir al baseline con una puerta binaria), y "
+                    "lo que abre no es «mejores señales» sino usarlas de otra forma.",
     },
     {
         "key": "despues",
@@ -1720,7 +1815,7 @@ ROADMAP = [
     },
     {
         "id": "signals-expensive-batch",
-        "rank": 4,
+        "rank": 3,
         "group": "despues",
         "priority": "media",
         "title": "Lote caro de señales: apalancamiento observable, opciones, atención geográfica y legal",
@@ -1776,135 +1871,26 @@ ROADMAP = [
         ),
     },
     {
-        "id": "signal-channel-rho-sweep",
-        "rank": 2,
-        "group": "ahora",
-        "priority": "alta",
-        "title": "Canal de observación sintético: barrido de rho y break-even del IC",
-        "line": "B/D", "status": "pendiente", "impact": "alto", "effort": "medio",
-        "evidence": "El radar unificado YA ESTÁ CONSTRUIDO (2026-08-12) y mete features al motor "
-                    "sin ningún test de falsación: su única defensa es que nada entra en "
-                    "search_space, que limita los grados de libertad pero NO mide si una feature de "
-                    "muestra corta está sobreajustada. Esa es literalmente la frase que la evolución "
-                    "del radar dejó escrita como hueco declarado. Y el generador ya produce el "
-                    "estado latente completo -factores, retornos, régimen-, así que una señal "
-                    "exógena no es una serie más que haya que inventar: es una observación ruidosa y "
-                    "ADELANTADA de algo que ya se está generando.",
-        "why": "Cambia la pregunta, y por eso rompe la circularidad que este roadmap teme desde el "
-               "principio. No se simula la señal -su nivel, su estacionalidad, su distribución-, se "
-               "simula el CANAL DE OBSERVACIÓN, y el canal cuesta cuatro números por familia de "
-               "señal en vez de los millones de parámetros de un generador aprendido. Ese es el "
-               "argumento cuantitativo: la circularidad es un problema de PRESUPUESTO DE GRADOS DE "
-               "LIBERTAD, no una propiedad binaria. Un rho estimado del histórico real con un error "
-               "del +-50% no produce una estrategia sobreajustada: produce un orden de magnitud. Y "
-               "el producto del barrido no son 'los mejores parámetros' sino el IC DE BREAK-EVEN "
-               "-a partir de qué capacidad predictiva esta estrategia bate al baseline después de "
-               "costes-, que es una propiedad del DISENO y no de los datos: no se puede sobreajustar "
-               "a un histórico porque el histórico nunca entró. Al real le queda una sola pregunta, "
-               "binaria: el rho que mide mi señal está por encima del break-even, con margen?",
-        "prompt": (
-            "Proyecto ai-trader (Python). El radar unificado ya esta construido y cableado en los "
-            "dos sitios (observation/signal_radar.py, signals/events.py, [signals] en el config), "
-            "asi que ya hay features que barrer y esta evolucion queda desbloqueada. Construye el "
-            "canal de observacion sintetico y el barrido que produce el IC de break-even. Las "
-            "estrategias reciben las senales por `attach_signal_provider` y consultan la puerta con "
-            "`signal_gate_reason`: el canal sintetico tiene que entrar por ESE contrato, no por uno "
-            "paralelo, o el barrido mediria otra cosa que la que corre.\n"
-            "\n"
-            "RELACION CON 'Que el generador emita las senales' (la evolucion siguiente), para que "
-            "no se solapen: esta es la BARATA y va primero. Aqui la senal se deriva del retorno "
-            "futuro YA GENERADO, sin acoplarse a los FactorShock, sin effective_shocks y sin los "
-            "cerrojos de anticircularidad; su producto es el break-even. La otra es la CARA: senal "
-            "acoplada al estado latente, banda de aceptacion de dos colas, experimento pareado de "
-            "cuatro brazos; su producto es la medida de transferencia del ranking. Y hay un motivo "
-            "de orden ademas del coste: si el break-even sale absurdamente alto, la pregunta de la "
-            "otra queda contestada antes de construirla.\n"
-            "\n"
-            "(a) EL MODELO, cuatro parametros interpretables y uno mas para la breadth:\n"
-            "    senal_t = rho * z(retorno_futuro_t->t+h) + sqrt(1-rho^2) * ruido_t\n"
-            "  rho = capacidad predictiva real (el IC de la senal); h = dias de adelanto; phi = "
-            "autocorrelacion del componente de ruido (AR(1), para que parezca una serie y no "
-            "confeti); lambda = tasa de falsos positivos, picos que no anticipan nada; y un GRUPO DE "
-            "CORRELACION explicito entre senales. Ese ultimo no es decorativo: por la ley "
-            "fundamental, cinco senales con rho=0,03 poco correlacionadas valen mas que una con "
-            "rho=0,08, y sin el parametro no se distingue multiplicar apuestas de repetir la misma.\n"
-            "\n"
-            "(b) PARAMETRIZA EN POSITIVO. Regla dura: 0 = MENOS edge, nunca mas. informative_share y "
-            "coverage antes que false_positive_rate, para que un default olvidado degrade a 'sin "
-            "senal' y no a 'senal perfecta'.\n"
-            "\n"
-            "(c) CAUSALIDAD Y ORDEN DE GENERACION. La senal se genera DESPUES de los retornos, con "
-            "shift(-h) sobre el futuro ya calculado: la causalidad va del mundo a la senal, y solo "
-            "la estrategia sufre el adelanto. Y en un PASE APARTE, no dentro de PathEngine.generate: "
-            "asi la no interferencia con la secuencia RNG no es una promesa que haya que auditar "
-            "leyendo el codigo, es una imposibilidad estructural. "
-            "tests/test_synthetic.py::TestEngineByteIdentity congela dos SHA de librerias "
-            "publicadas.\n"
-            "\n"
-            "(d) EN EL CODIGO: ScenarioSpec gana una lista de SignalChannel(name, rho, lead_days, "
-            "noise_ar, false_positive_rate, corr_group), serializable a JSON como el resto y via "
-            "MICROSTRUCTURE_FIELDS (solo se serializa lo NO neutro, asi que los spec.json "
-            "existentes no cambian ni un byte). El pase de emision devuelve, junto a las barras, un "
-            "DataFrame de senales por simbolo. Las estrategias las reciben por el MISMO contrato que "
-            "en vivo -el radar de rank 1- con el mismo recorte anti-look-ahead que aplica "
-            "HistoricalDataSource. El barrido es una dimension mas del plan de estudio, hermana de "
-            "la de escenarios.\n"
-            "\n"
-            "(e) BARRER, NO CALIBRAR -- y esto es el metodo, no un detalle. NO fijes rho. Genera "
-            "librerias con rho en {0; 0,02; 0,05; 0,10; 0,20} y h en {1; 3; 10}, optimiza en cada "
-            "regimen, y publica la respuesta a UNA pregunta: cual es el rho minimo a partir del cual "
-            "la estrategia bate al baseline DESPUES DE COSTES. Inyecta los params de puerta con "
-            "dataclasses.replace sobre las 16 configuraciones publicadas, sin tocar search_space, "
-            "para que los config_id sean literalmente los publicados.\n"
-            "\n"
-            "(f) rho = 0 ES EL GRUPO DE CONTROL, y es el test de falsacion que hoy no existe en "
-            "ninguna parte del repo: si una estrategia que consume la senal puntua bien con rho=0, "
-            "ha aprendido a explotar el ruido persistente o a hacer market timing con el AR(1) del "
-            "canal. Declara el criterio de lectura ANTES de correr.\n"
-            "\n"
-            "(g) SEPARACION POR FUNCION, NO POR VENTANA. No mezcles sintetico y real dentro del "
-            "mismo backtest: rompe la coherencia temporal y el anti-look-ahead. Sintetico = sustrato "
-            "de SELECCION (barrido de rho, ranking, gate); real = sustrato de VERIFICACION (medir "
-            "rho, y el estudio de transferencia). Nunca el mismo dato haciendo las dos cosas.\n"
-            "\n"
-            "(h) EL LOOP DE CALIBRACION, version legitima. Toxica: cerrar el loop sobre el "
-            "RENDIMIENTO de la estrategia ('ajusto el generador hasta que mis estrategias funcionen "
-            "mejor') -- eso es sobreajuste con pasos extra. Legitima: cerrarlo sobre PROPIEDADES DEL "
-            "MUNDO medidas con estadisticos que ninguna estrategia optimiza. Esa ya esta construida: "
-            "es synthetic/fidelity_study.py, con sus umbrales y su cobertura. Extiendelo con las "
-            "metricas de senal -IC empirico, autocorrelacion, lead-lag- y el loop sigue midiendo "
-            "hechos y no resultados.\n"
-            "\n"
-            "(i) TRES TRAMPAS, y la primera es probablemente el mayor riesgo de toda esta linea:\n"
-            "  1. VINTAGE. Google Trends se renormaliza al descargarlo, los scores de sentimiento se "
-            "recalculan con modelos nuevos, las noticias se reescriben. Descargar hoy la serie de "
-            "2023 devuelve una serie que NO EXISTIA en 2023: look-ahead invisible. La mitigacion es "
-            "grabar nosotros con timestamp de captura, que es exactamente lo que ya hace "
-            "signals/capture.py y una razon mas para que el paper trading corra ya.\n"
-            "  2. CONTAMINACION DEL LLM. Un modelo que puntua sentimiento sobre noticias de 2022 "
-            "sabe como termino 2022. Cualquier scoring retroactivo con un LLM esta envenenado por "
-            "construccion: solo vale en tiempo real, hacia delante.\n"
-            "  3. BREADTH, NO POTENCIA. Ver el grupo de correlacion de (a).\n"
-            "\n"
-            "COSTE: cada valor de rho es una libreria nueva. Cinco rho x tres h son quince "
-            "librerias. Empieza con UNA senal y TRES valores de rho, y comprueba que el break-even "
-            "sale un numero creible antes de industrializarlo.\n"
-            "\n"
-            "Tests + determinismo + .venv\\Scripts\\python.exe (poetry run esta roto) + ruff. "
-            "Regenera dashboard y docs."
-        ),
-    },
-    {
         "id": "synthetic-signal-emission",
-        "rank": 3,
+        "rank": 2,
         "group": "despues",
         "priority": "critica",
         "title": "Que el generador emita las señales, y re-medir la transferencia de forma pareada",
         "line": "B/D", "status": "pendiente", "impact": "alto", "effort": "alto",
         "evidence": "Los FactorShock del generador YA son eventos con día, factor y magnitud "
-                    "(synthetic/scenarios.py:105-134), descritos como 'un anuncio de la Fed, un "
+                    "(synthetic/scenarios.py), descritos como 'un anuncio de la Fed, un "
                     "default, un ataque'. El generador ya sabe QUE pasa y CUANDO: las señales "
-                    "sintéticas serían la emisión observable de un estado latente que ya existe.",
+                    "sintéticas serían la emisión observable de un estado latente que ya existe. "
+                    "Y la mitad barata del problema ya está construida y medida (2026-08-13): el "
+                    "canal de observación existe (synthetic/signal_channel.py), se emite en un "
+                    "pase aparte y entra por el contrato de producción, así que esta evolución "
+                    "hereda toda esa fontanería y sólo tiene que ACOPLAR la emisión al estado "
+                    "latente. Lo que el break-even ya contestó: con una PUERTA BINARIA hace falta "
+                    "rho > 0,20 para batir al baseline, y la puerta por sí sola cuesta 1,02 "
+                    "puntos de recompensa. Antes de acoplar señales conviene decidir si el "
+                    "consumo correcto es una puerta o un input continuo del sizing: acoplar mejor "
+                    "una señal que se consume tirando toda su información salvo un bit sube el "
+                    "coste sin mover el listón.",
         "why": "Es la ficha que VALIDA O REFUTA la tesis entera: si ampliar el espacio de inputs "
                "hace que el ranking transfiera, el sintético se queda en el núcleo; si no, la "
                "contingencia ('mover el sustrato primario del ranking al histórico REAL') se "
@@ -1966,7 +1952,7 @@ ROADMAP = [
     },
     {
         "id": "dat-mnav-index",
-        "rank": 5,
+        "rank": 4,
         "group": "despues",
         "priority": "media",
         "title": "Índice de estrés de vendedores forzados (mNAV de tesorerías cotizadas)",
@@ -2018,7 +2004,7 @@ ROADMAP = [
     },
     {
         "id": "line-d-cpcv-two-stage-cem",
-        "rank": 6,
+        "rank": 5,
         "group": "despues",
         "priority": "alta",
         "title": "CPCV en dos etapas dentro del optimizador (que el CEM deje de puntuar con el corte único)",
@@ -2080,7 +2066,7 @@ ROADMAP = [
     },
     {
         "id": "validation-study-full-ensemble",
-        "rank": 7,
+        "rank": 6,
         "group": "despues",
         "priority": "media",
         "title": "Re-correr el estudio de validación con el ensemble completo",
@@ -2114,7 +2100,7 @@ ROADMAP = [
     },
     {
         "id": "pbo-blocks-scenario-aligned",
-        "rank": 8,
+        "rank": 7,
         "group": "despues",
         "priority": "media",
         "title": "Alinear los bloques del PBO con las fronteras de escenario",
@@ -2153,7 +2139,7 @@ ROADMAP = [
     },
     {
         "id": "report-n-failed-with-reward",
-        "rank": 9,
+        "rank": 8,
         "group": "despues",
         "priority": "media",
         "title": "Reportar n_failed junto al reward (la penalización domina la cola)",
@@ -2187,7 +2173,7 @@ ROADMAP = [
     },
     {
         "id": "dsr-independent-trials-caveat",
-        "rank": 10,
+        "rank": 9,
         "group": "despues",
         "priority": "baja",
         "title": "Declarar que el DSR asume intentos independientes y el CEM no los produce",
@@ -2222,7 +2208,7 @@ ROADMAP = [
     },
     {
         "id": "fidelity-rank-corr-ordering",
-        "rank": 11,
+        "rank": 10,
         "group": "despues",
         "priority": "media",
         "title": "Ordenación de colas y clustering entre activos: el eje que ai_v3 no arregló",
@@ -2287,7 +2273,7 @@ ROADMAP = [
     },
     {
         "id": "real-substrate-primary-ranking",
-        "rank": 12,
+        "rank": 11,
         "group": "despues",
         "priority": "critica",
         "title": "CONTINGENCIA: mover el sustrato primario del ranking al histórico REAL",
@@ -2352,7 +2338,7 @@ ROADMAP = [
     },
     {
         "id": "rl-full-run",
-        "rank": 13,
+        "rank": 12,
         "group": "despues",
         "priority": "alta",
         "title": "Optimización CEM completa, ya con el juez validado",
@@ -2388,7 +2374,7 @@ ROADMAP = [
     },
     {
         "id": "execution-latency-budget",
-        "rank": 14,
+        "rank": 13,
         "group": "despues",
         "priority": "media",
         "title": "Presupuesto de latencia: el backtest supone que se llena a las 00:00 UTC en punto",
@@ -2433,7 +2419,7 @@ ROADMAP = [
     },
     {
         "id": "new-crypto-strategies",
-        "rank": 15,
+        "rank": 14,
         "group": "no-prioritario",
         "priority": "baja",
         "title": "Nuevas estrategias cripto (deliberadamente NO priorizada)",
@@ -2481,7 +2467,7 @@ ROADMAP = [
     },
     {
         "id": "weights-recalibrate-power",
-        "rank": 16,
+        "rank": 15,
         "group": "no-prioritario",
         "priority": "baja",
         "title": "Re-medir lambda y kappa con los costes nuevos y más potencia estadística",
@@ -2526,7 +2512,7 @@ ROADMAP = [
     },
     {
         "id": "designer-model-in-manifest",
-        "rank": 17,
+        "rank": 16,
         "group": "no-prioritario",
         "priority": "baja",
         "title": "Anotar el modelo de IA en el manifiesto de cada librería",
@@ -2558,7 +2544,7 @@ ROADMAP = [
     },
     {
         "id": "operational-symbol-guard",
-        "rank": 18,
+        "rank": 17,
         "group": "no-prioritario",
         "priority": "baja",
         "title": "Guarda operativa por símbolo (sanciones, deslistado, halt): lo que deja abierto no tener veto",
@@ -2617,7 +2603,7 @@ ROADMAP = [
     },
     {
         "id": "equities-parked",
-        "rank": 19,
+        "rank": 18,
         "group": "segundo-plano",
         "priority": "aparcada",
         "title": "Renta variable: aparcada a propósito (no se activa la clase de activo)",
@@ -2664,7 +2650,7 @@ ROADMAP = [
     },
     {
         "id": "polymarket-parked",
-        "rank": 20,
+        "rank": 19,
         "group": "segundo-plano",
         "priority": "aparcada",
         "title": "Polymarket en el backtest: aparcado hasta tener histórico propio",

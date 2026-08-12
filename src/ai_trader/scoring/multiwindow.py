@@ -39,7 +39,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 import statistics
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -249,7 +249,7 @@ def validate_multiwindow(
     compare_single_split: bool = True,
     block_cache: dict | None = None,
     baseline_cache: dict | None = None,
-    signal_provider_factory=None,
+    signal_provider_factory: Callable[..., object] | None = None,
 ) -> MultiWindowValidation:
     """
     Corre UNA muestra por el plan de validacion pedido y agrega sus ventanas.
@@ -386,7 +386,7 @@ def _single_split_score(
     *,
     starting_equity: float,
     headline_weights: HeadlineWeights,
-    signal_provider_factory=None,
+    signal_provider_factory: Callable[..., object] | None = None,
 ) -> float | None:
     """El headline del corte unico 70/30, para poder medir cuanto optimismo aportaba.
     Si falla no se propaga: la comparacion es informativa, no el resultado."""

@@ -2113,6 +2113,136 @@ function paperEmpty(P){
         <b>«Operación continua»</b> del README.</p></div>`;
 }
 
+function renderSignalChannel(){
+  const host=$('#signalchannel'),S=D.signal_channel;
+  if(!S){
+    host.innerHTML=`<p class="crumb">Capítulo 4 · Estrategias</p>
+      <h1>Break-even del IC</h1>
+      <div class="card"><p class="tag">No hay informe publicado. Genéralo con
+      <span class="mono">python -m ai_trader.scoring.signal_study</span>.</p></div>`;
+    return;
+  }
+  const BE=S.break_even, LEAD=BE.by_lead[0]||{}, CH=S.sweep.channel_fixed, REP=S.reproduction;
+  const on=S.rows.filter(r=>r.arm!=='off'), off=S.rows.find(r=>r.arm==='off');
+  const zero=on.find(r=>r.rho===0);
+  const top=on[on.length-1];
+  const beTxt = LEAD.break_even_rho!=null ? 'ρ = '+fmt(LEAD.break_even_rho,2)
+                                          : '> '+fmt(LEAD.break_even_above,2);
+  const tiles=[
+    ['Break-even del IC',beTxt,
+      LEAD.break_even_rho!=null
+        ? 'menor ρ de la rejilla que bate al baseline fuera de muestra'
+        : 'no se alcanza en la rejilla: ni con un IC diario de '+fmt(LEAD.break_even_above,2)+' paga'],
+    ['Control ρ = 0',BE.control_clean?'limpio':'ENSUCIADO',
+      BE.control_clean?'no bate al baseline: lo que se mide no es ruido persistente'
+                      :'bate sin información: el barrido queda anulado'],
+    ['IC declarado vs medido',fmt(top?top.expected_ic:null,3)+' → '+fmt(top?top.measured_ic:null,3),
+      'celda más informativa · el canal entrega lo que declara'],
+    ['Fuga hacia el pasado',fmt(top?top.past_leak:null,3),
+      'correlación con retornos YA realizados · debería ser ruido'],
+    ['Celda «off»',REP.available?(REP.identical?'reproduce':'NO reproduce'):'no comparable',
+      REP.available?REP.compared+' unidades contra units_ai_v3.json':esc(REP.reason||'')],
+  ];
+  const critKeys=[['seleccion','Selección'],['lectura','Lectura'],['batir','Batir'],
+                  ['break_even','Break-even'],['control','Control'],['delta','Delta']];
+  host.innerHTML=`
+    <p class="crumb">Capítulo 4 · Estrategias</p>
+    <h1>Break-even del IC: ¿desde qué capacidad predictiva paga una señal?</h1>
+    <p class="lead">El radar mete diecisiete fuentes en la decisión y su única defensa contra el
+      sobreajuste era <b>negativa</b>: nada entra en <span class="mono">search_space</span>, así que el
+      optimizador no puede sortear umbrales. Eso limita los grados de libertad pero <b>no mide nada</b>.
+      Aquí se mide: se simula el <b>canal de observación</b> —no la señal— sobre un mundo cuyo futuro ya
+      está escrito, se barre su capacidad predictiva ρ y se publica la respuesta a una sola pregunta:
+      <b>¿a partir de qué ρ la estrategia bate al baseline después de costes?</b></p>
+    <div class="grid tiles">${tiles.map(t=>`<div class="card tile"><div class="k">${t[0]}</div>
+      <div class="v">${t[1]}</div><div class="s">${t[2]}</div></div>`).join('')}</div>
+
+    <div class="note"><b>Esta cifra no está ajustada a ningún histórico, porque ningún histórico
+      entró.</b> El break-even es una propiedad del <b>diseño</b> —de esta estrategia, con estos costes,
+      con esta puerta—, no de los datos: por eso no se puede sobreajustar. Al mercado real le queda
+      después una sola pregunta, y es binaria: <i>el ρ que mide mi señal, ¿está por encima de esto y con
+      margen?</i> Medir ese ρ es trabajo del sustrato <b>real</b>; elegir con él, del <b>sintético</b>.
+      Nunca el mismo dato haciendo las dos cosas.</div>
+
+    <h2>Las ${S.rows.length} celdas del barrido</h2>
+    <p class="lead">Cada celda es un mundo de observación distinto sobre <b>las mismas barras</b>: la
+      señal se deriva del retorno futuro ya generado, así que cambiar ρ no cambia ni una vela. Las 16
+      configuraciones son las <b>publicadas</b> (mismos <span class="mono">config_id</span>); lo único
+      que se les inyecta es el umbral de la puerta, con
+      <span class="mono">dataclasses.replace</span>.</p>
+    <div class="card"><div class="tblwrap"><table>
+      <thead><tr><th>celda</th><th class="num">IC declarado</th><th class="num">IC medido</th>
+        <th class="num">ac1</th><th class="num">fuga pasado</th><th>elegida en train</th>
+        <th class="num">recompensa OOS</th><th class="num">baseline</th><th class="num">margen</th>
+        <th class="num">ops/ventana</th><th>¿bate?</th></tr></thead><tbody>
+      ${S.rows.map(r=>`<tr>
+        <td><b>${esc(r.cell_id)}</b>${r.arm==='off'?' <span class="tag">control</span>':''}</td>
+        <td class="num">${r.expected_ic==null?'—':fmt(r.expected_ic,3)}</td>
+        <td class="num">${r.measured_ic==null?'—':fmt(r.measured_ic,3)}</td>
+        <td class="num">${r.measured_ac1==null?'—':fmt(r.measured_ac1,2)}</td>
+        <td class="num">${r.past_leak==null?'—':fmt(r.past_leak,3)}</td>
+        <td class="mono">${esc(r.selected||'—')}${r.fell_back?' <span class="tag">ninguna rankeable</span>':''}</td>
+        <td class="num">${fmt(r.reward,3)}</td>
+        <td class="num">${fmt(r.baseline,3)}</td>
+        <td class="num" style="color:${r.margin>=0?'var(--good)':'var(--crit)'}">${fmt(r.margin,3)}</td>
+        <td class="num">${r.activity?fmt(r.activity.trades_per_window,1):'—'}</td>
+        <td>${r.beats?'<b style="color:var(--good)">sí</b>':'no'}</td></tr>`).join('')}
+      </tbody></table></div>
+      <p class="tag">La recompensa es el CVaR@25% de las ventanas OOS de los escenarios de
+        <b>validación</b> (${S.synthetic.split.validation.join(', ')}), que no participaron en la
+        elección; la elección se hizo en los de train. Elegir y puntuar sobre la misma muestra
+        convertiría el break-even en el máximo de un ruido.</p></div>
+
+    <h2>El criterio de lectura, declarado antes de correr</h2>
+    <p class="lead">Está escrito en el código (<span class="mono">signal_study.CRITERION</span>) y viaja
+      dentro del informe. Un criterio elegido a la vista del resultado no es un criterio.</p>
+    <div class="card"><div class="tblwrap"><table><tbody>
+      ${critKeys.map(([k,lab])=>`<tr><td style="width:120px"><b>${lab}</b></td>
+        <td>${esc(S.criterion[k]||'')}</td></tr>`).join('')}
+    </tbody></table></div></div>
+
+    <div class="note"><b>Por qué ρ = 0 es el control y no un caso más.</b> Es el test de falsación que
+      no existía en ninguna parte del repositorio. Una puerta que consulta una señal <i>sin
+      información</i> sigue haciendo una cosa: <b>operar menos</b>. Y como la recompensa es el CVaR y un
+      cero le gana a cualquier cosa que arriesgue y pierda, operar menos puede parecer talento. Si la
+      celda ρ = 0 batiera al baseline, lo medido no sería capacidad predictiva sino el AR(1) del propio
+      ruido (<span class="mono">noise_ar = ${fmt(CH.noise_ar,2)}</span>) o el simple hecho de abrir menos
+      posiciones${off&&zero?` —de ${fmt(Object.values(off.trades_per_window).reduce((a,b)=>a+b,0)/Math.max(1,Object.keys(off.trades_per_window).length),1)} a ${fmt(Object.values(zero.trades_per_window).reduce((a,b)=>a+b,0)/Math.max(1,Object.keys(zero.trades_per_window).length),1)} operaciones por ventana de media—`:''}.
+      Por eso el valor de la información se lee <b>siempre contra ρ = 0</b>, nunca contra «off».</div>
+
+    <h2>El modelo: cinco mandos, y todos en positivo</h2>
+    <div class="grid cols3">
+      <div class="card"><h3>Qué se simula</h3>
+        <p class="lead" style="margin:8px 0">
+          <span class="mono">señal_t = ρ·z(retorno_t→t+h) + √(1−ρ²)·ruido_t</span>. No se simula la
+          señal —su nivel, su distribución, su reacción a un hack—, que pediría un generador aprendido y
+          traería la circularidad de vuelta. Se simula el <b>canal</b>: cuesta cinco números y el
+          producto es un umbral, no unos parámetros.</p></div>
+      <div class="card"><h3>0 = menos edge, nunca más</h3>
+        <p class="lead" style="margin:8px 0">Los mandos van en positivo
+          (<span class="mono">informative_share</span>, <span class="mono">coverage</span>) y no en
+          negativo (<span class="mono">false_positive_rate</span>): un default olvidado degrada a
+          <b>«sin señal»</b> y no a «señal perfecta». Un canal recién construido no emite nada.
+          <span class="mono">corr_group</span> sigue la misma regla: por defecto todos los canales son
+          <b>la misma apuesta</b>, y la independencia hay que declararla.</p></div>
+      <div class="card"><h3>La causalidad, por construcción</h3>
+        <p class="lead" style="margin:8px 0">La señal se emite <b>después</b> de las velas, en un pase
+          aparte y con su propio generador aleatorio: que no interfiera con el motor no es una promesa
+          que auditar, es imposible. Y las estrategias la reciben por el
+          <b>mismo contrato que en vivo</b> —<span class="mono">attach_signal_provider</span> y
+          <span class="mono">signal_gate_reason</span>, mismo recorte anti look-ahead—, así que lo que
+          se barre es lo que opera.</p></div>
+    </div>
+    <p class="tag">Canal del barrido: <span class="mono">noise_ar=${fmt(CH.noise_ar,2)}</span>,
+      <span class="mono">informative_share=${fmt(CH.informative_share,2)}</span>,
+      <span class="mono">coverage=${fmt(CH.coverage,2)}</span> · con los dos últimos al máximo, ρ
+      <i>es</i> el IC entregado y el eje del barrido queda limpio; bajarlos sólo puede empeorar el
+      break-even, así que lo publicado es la cota <b>optimista</b>.
+      ${S.grid.n_configs} configuraciones × ${S.rows.length} celdas ×
+      ${S.synthetic.n_samples} muestras × ${S.validation.n_folds} ventanas OOS · libreria
+      <span class="mono">${esc(S.library)}</span> · ${esc(S.generated_at)}</p>`;
+}
+
 function renderPaper(){
   const P=D.paper;
   if(!P){$('#paper').innerHTML='<h1>Resultados del paper trading</h1><div class="card"><p class="tag">Sin datos.</p></div>';return;}
@@ -2622,7 +2752,7 @@ function main(){
   initTheme();initNav();
   renderOverview();renderMarket();renderSignals();renderSynthetic();renderFidelity();
   renderTrade();renderSessions();renderStrategies();renderRanking();renderActivity();
-  renderValidation();renderTransfer();renderPaper();renderRoadmap();
+  renderValidation();renderTransfer();renderSignalChannel();renderPaper();renderRoadmap();
   addEventListener('resize',()=>{clearTimeout(window._rt);window._rt=setTimeout(rerenderCharts,150);});
 }
 main();
@@ -2649,6 +2779,7 @@ SHELL = """
       <li><button data-sec="activity">Suelo de actividad</button></li>
       <li><button data-sec="validation">Validación temporal</button></li>
       <li><button data-sec="transfer">Ordenación real vs sintético</button></li>
+      <li><button data-sec="signalchannel">Break-even del IC</button></li>
       <li class="chap"><b>5 · Resultados</b></li>
       <li><button data-sec="paper">Paper trading</button></li>
       <li class="chap"><b>6 · Limitaciones</b></li>
@@ -2669,6 +2800,7 @@ SHELL = """
     <section id="activity" class="section"></section>
     <section id="validation" class="section"></section>
     <section id="transfer" class="section"></section>
+    <section id="signalchannel" class="section"></section>
     <section id="paper" class="section"></section>
     <section id="roadmap" class="section"></section>
   </main>

@@ -39,6 +39,9 @@ backtest/engine.py      Conduce el runner real sobre histórico; corre planes de
 backtest/validation.py  Geometría temporal: walk-forward, CPCV, purga, embargo, auditoría.
 scoring/multiwindow.py  Agrega las ventanas de una muestra en una distribución robusta.
 scoring/transfer_study.py  ¿Ordena el mundo sintético las estrategias como el real?
+scoring/signal_study.py    ¿Desde qué capacidad predictiva paga una señal? (ρ=0 = control)
+synthetic/signal_channel.py  Canal de observación sintético: emite la señal DESPUÉS de las
+                        velas, sobre el retorno futuro ya generado.
 signals/                Ingesta de señales externas: catálogo, puerto, 17 adaptadores,
                         archivo, captura, sonda de profundidad, normalización y
                         codificación de eventos.
@@ -324,6 +327,88 @@ como criterio.
 .venv\Scripts\python.exe -m ai_trader.scoring.activity_study    # evidencia -> data/activity/
 ```
 
+### El break-even del IC: desde qué capacidad predictiva paga una señal
+
+El radar de señales (más abajo) mete diecisiete fuentes en la decisión, y hasta aquí su única
+defensa contra el sobreajuste era **negativa**: ninguna feature entra en `search_space`, así que el
+optimizador no puede ajustar umbrales contra el resultado. Eso limita los grados de libertad pero
+**no mide nada**, y era el hueco que la propia evolución del radar dejó escrito. Esto es la
+medición, y contesta una sola pregunta: **¿a partir de qué ρ una señal externa hace que la
+estrategia bata al baseline después de costes?**
+
+Sobre el mundo sintético —cuyo futuro ya está escrito— no se simula la señal sino el **canal de
+observación**:
+
+```
+señal_t = ρ · z(retorno_t→t+h) + √(1−ρ²) · ruido_t
+```
+
+Simular «el sentimiento de Twitter» —su nivel, su estacionalidad, su reacción a un hack— pediría un
+generador aprendido de datos, y con él vuelve la circularidad: el mundo contra el que se mide lo
+habríamos ajustado nosotros. El canal cuesta **cinco números interpretables**, y lo que se publica
+no son «los mejores parámetros» sino un umbral: una propiedad del **diseño** —de esta estrategia,
+con estos costes, con esta puerta— y no de ningún histórico. No se puede sobreajustar a datos que
+nunca entraron.
+
+Cinco celdas sobre **las mismas barras** (cambiar ρ no mueve ni una vela), las 16 configuraciones
+publicadas, CPCV de 15 ventanas, 8 muestras: 640 unidades de backtest. La configuración se elige en
+los escenarios de *train* y se puntúa en los de *validación*, que no participaron en la elección.
+
+| celda | IC declarado | IC medido | elegida | recompensa OOS | baseline | margen |
+|---|---|---|---|---|---|---|
+| sin canal ni puerta | — | — | `mean_reversion#06` | +0,447 | +0,586 | −0,140 |
+| ρ = 0 **(control)** | 0,000 | +0,004 | `crypto_momentum#07` | −0,578 | +0,586 | −1,164 |
+| ρ = 0,05 | 0,050 | +0,054 | `crypto_momentum#07` | −0,464 | +0,586 | −1,050 |
+| ρ = 0,10 | 0,100 | +0,106 | `mean_reversion#06` | +0,314 | +0,586 | −0,273 |
+| ρ = 0,20 | 0,200 | +0,207 | `mean_reversion#06` | +0,568 | +0,586 | **−0,018** |
+
+**El break-even está por encima de ρ = 0,20**: no se alcanza en la rejilla, aunque en el extremo se
+queda a 0,018 puntos. Y eso ya contesta una pregunta que valía una evolución entera: un IC diario
+**sostenido** de 0,20 no lo tiene ninguna señal alternativa pública conocida —lo típico está entre
+0,01 y 0,05—, así que con esta forma de consumir la señal (una **puerta binaria** sobre el tono) el
+listón está fuera de alcance. La lectura útil no es «hacen falta señales mejores» sino que el cuello
+de botella es el **uso**: una puerta que cierra o abre tira toda la información salvo un bit.
+
+Tres controles hacen legible ese número, y los tres salieron como tenían que salir:
+
+- **ρ = 0 es el grupo de control**, y salió **limpio**: sin información la estrategia no bate al
+  baseline (−1,164). Si lo hubiera batido, el barrido se publicaría *anulado y sin break-even*,
+  porque lo medido no habría sido capacidad predictiva sino el AR(1) del ruido o el simple hecho de
+  operar menos. Es el test de falsación que no existía en ninguna parte del repositorio.
+- **La puerta, por sí sola, cuesta dinero.** Entre la celda sin canal y ρ = 0 hay −1,02 puntos de
+  recompensa (−0,38 para una misma configuración), y ese coste es exactamente lo que la información
+  tiene que pagar antes de aportar nada. Por eso el valor de la señal se lee **siempre contra
+  ρ = 0** y nunca contra la celda sin puerta.
+- **El canal entrega lo que declara**: IC medido 0,004 / 0,054 / 0,106 / 0,207 frente a 0 / 0,05 /
+  0,10 / 0,20 declarados, y correlación con retornos **ya realizados** de 0,057 — ruido, como debe
+  ser en una señal que mira hacia delante. Son umbrales de aceptación que pueden fallar, dentro del
+  mismo veredicto binario del estudio de fidelidad.
+
+Y el valor de la información es **monótono** en ρ, que es la comprobación de que todo el
+instrumento mide lo que dice: +0,11 · +0,89 · +1,15 sobre el control, para ρ = 0,05 · 0,10 · 0,20.
+
+La celda «sin canal» reproduce **128 unidades de `data/transfer/units_ai_v3.json` score a score**:
+es la prueba de que la costura del canal —la factoría de proveedores del motor, la tabla de
+polaridad inyectable, el catálogo de fuentes simuladas— no movió nada del sistema. Y las señales
+llegan a la estrategia por el **mismo contrato que en vivo** (`attach_signal_provider` +
+`signal_gate_reason`, mismo recorte anti-*look-ahead*): si entraran por un camino paralelo, el
+barrido mediría una estrategia que no es la que opera.
+
+```powershell
+.venv\Scripts\python.exe -m ai_trader.scoring.signal_study --workers 7 --verify-determinism
+.venv\Scripts\python.exe -m ai_trader.scoring.signal_study --analyze-only   # re-analiza sin backtestear
+```
+
+Límites declarados, todos en el propio informe: **ninguna de las 16 configuraciones bate al baseline
+en validación en ninguna celda** —las dos ventanas de validación tocaron un tramo alcista donde la
+cartera equiponderada es muy difícil de batir—, así que lo medido es *cuánto acerca la señal*, no
+*cuánto gana*; aquí **no entra un solo dato real** (el sintético es el sustrato de selección y el
+real el de verificación, nunca el mismo dato haciendo las dos cosas); con `informative_share` y
+`coverage` al máximo lo publicado es la cota **optimista**, porque bajarlos sólo puede empeorarlo;
+es **un** canal, así que la *breadth* del grupo de correlación queda declarada y sin medir; y se
+barre una sola geometría de adelanto (h = 1), que es la más favorable a la señal. Evidencia completa
+en `data/signal_channel/` y documentación en §4.12.
+
 ### Dentro de la barra diaria: sesiones y la ventana ciega
 
 La convención de arriba —decidir con la barra cerrada, llenar al open del día siguiente,
@@ -442,9 +527,10 @@ que cualquier configuración elegida con filtros de régimen activos se comporta
 que en el backtest que la seleccionó; un `Mapping` perezoso sobre `MarketDataService` lo arregla sin
 tocar una línea de `observation/regime.py`.
 
-Lo que **no** cierra, y se escribe en vez de callarse: sin el *break-even* de ρ (evolución «canal de
-observación sintético») no hay test de falsación. Limitar los grados de libertad reduce el riesgo de
-sobreajuste; no lo mide.
+Lo que ese cableado **no** cerraba —limitar los grados de libertad *reduce* el riesgo de sobreajuste,
+pero no lo *mide*— lo cierra el apartado siguiente: el **break-even de ρ**, con ρ = 0 como grupo de
+control. Lo que sigue abierto es el otro lado de la pregunta: cuánto ρ tiene cada una de estas
+diecisiete fuentes, que se mide en el sustrato real y no aquí.
 
 **Toda feature se publica normalizada, con dos varas** (`signals/normalize.py`): `<feature>_z` es la
 z contra la propia historia de la entidad (expansiva y **causal**, mínimo 20 observaciones) y
