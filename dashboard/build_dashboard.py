@@ -1630,13 +1630,14 @@ def build() -> None:
 # 15 ventanas. 640 unidades, 3,1 horas, cero fallidas, evidencia en data/signal_channel/.
 #
 # EL RESULTADO: el break-even esta POR ENCIMA de rho = 0,20 (margen -0,018 en el extremo de
-# la rejilla). Un IC diario SOSTENIDO de 0,20 no lo tiene ninguna senal alternativa publica
-# conocida -lo tipico esta entre 0,01 y 0,05-, asi que la lectura no es "hacen falta senales
-# mejores" sino que el cuello de botella es el USO: una PUERTA BINARIA sobre el tono tira
-# toda la informacion salvo un bit, y ademas cuesta -1,02 puntos de recompensa por si sola
-# (celda sin canal contra rho=0). Eso reordena lo que viene despues: antes que acoplar la
-# senal al estado latente conviene preguntarse si el consumo correcto es una puerta o un
-# input continuo del sizing.
+# la rejilla). Un IC diario SOSTENIDO de 0,20 es enorme -la referencia habitual en datos
+# alternativos esta un orden de magnitud por debajo, aunque eso es LITERATURA y no una
+# medicion de este repositorio: el rho de nuestras diecisiete fuentes sigue sin medir-. Asi
+# que la lectura no es "hacen falta senales mejores" sino que el cuello de botella es el
+# USO: una PUERTA BINARIA sobre el tono tira toda la informacion salvo un bit, y ademas
+# cuesta -1,02 puntos de recompensa por si sola (celda sin canal contra rho=0). Eso reordena
+# lo que viene despues: antes que acoplar la senal al estado latente conviene preguntarse si
+# el consumo correcto es una puerta o un input continuo del sizing.
 #
 # LOS TRES CONTROLES SALIERON COMO TENIAN QUE SALIR, que es lo que hace legible el numero:
 # (i) rho=0 -el grupo de control- NO bate al baseline, asi que lo medido no es el AR(1) del

@@ -363,11 +363,13 @@ los escenarios de *train* y se puntúa en los de *validación*, que no participa
 | ρ = 0,20 | 0,200 | +0,207 | `mean_reversion#06` | +0,568 | +0,586 | **−0,018** |
 
 **El break-even está por encima de ρ = 0,20**: no se alcanza en la rejilla, aunque en el extremo se
-queda a 0,018 puntos. Y eso ya contesta una pregunta que valía una evolución entera: un IC diario
-**sostenido** de 0,20 no lo tiene ninguna señal alternativa pública conocida —lo típico está entre
-0,01 y 0,05—, así que con esta forma de consumir la señal (una **puerta binaria** sobre el tono) el
-listón está fuera de alcance. La lectura útil no es «hacen falta señales mejores» sino que el cuello
-de botella es el **uso**: una puerta que cierra o abre tira toda la información salvo un bit.
+queda a 0,018 puntos. Y eso ya contesta una pregunta que valía una evolución entera, porque un IC
+diario **sostenido** de 0,20 es enorme: la referencia habitual para datos alternativos está un orden
+de magnitud por debajo. Esa referencia es **literatura, no una medición de este repositorio** —el ρ
+de nuestras diecisiete fuentes está sin medir, y medirlo es trabajo del sustrato real—, así que la
+comparación se ofrece como escala, no como conclusión. Lo que sí es medición es lo demás, y la
+lectura útil no es «hacen falta señales mejores» sino que el cuello de botella es el **uso**: una
+puerta que cierra o abre tira toda la información salvo un bit.
 
 Tres controles hacen legible ese número, y los tres salieron como tenían que salir:
 
