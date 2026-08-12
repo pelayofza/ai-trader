@@ -1,0 +1,96 @@
+=== ai_v1 | 900 samples | ClaudeScenarioDesigner | 2026-08-01 ===
+  hawkish_fed_shock            Hawkish Fed Shock
+  dovish_pivot_meltup          Dovish Pivot Melt-Up
+  oil_embargo_war              Oil Embargo & War Shock
+  liquidity_crisis             Global Liquidity Crisis
+  stagflation_grind            Stagflation Grind
+  crypto_bull_supercycle       Crypto Bull Supercycle
+  crypto_winter                Crypto Winter
+  black_swan_crash             Black Swan Crash
+  sovereign_debt_stress        Sovereign Debt Stress
+  em_currency_crisis           EM Currency Crisis
+  calm_lowvol_drift            Calm Low-Vol Drift
+  tech_bubble_burst            Tech Bubble Burst
+  value_rotation               Value Rotation
+  banking_panic                Banking Panic
+  commodity_supercycle         Commodity Supercycle
+  geopolitical_escalation      Geopolitical Escalation
+  disinflation_softlanding     Disinflation Soft Landing
+  inflation_resurgence         Inflation Resurgence
+  risk_on_reflation            Risk-On Reflation
+  deflation_bust               Deflationary Bust
+  dollar_devaluation           Dollar Devaluation
+  vol_spike_mean_revert        Vol Spike & Mean Revert
+  trade_war                    Trade War Escalation
+  quiet_bull_grind             Quiet Bull Grind
+  crypto_regulation_shock      Crypto Regulation Shock
+  energy_crisis                Energy Crisis
+  pandemic_shock               Pandemic Shock
+  yield_curve_control          Yield Curve Control
+  rolling_sector_rotation      Rolling Sector Rotation
+  melt_up_then_crash           Euphoric Melt-Up Then Crash
+
+=== ai_v2 | 900 samples | ClaudeScenarioDesigner+enrich_spec | 2026-08-01 ===
+  hawkish_fed_shock            Hawkish Fed Shock
+  dovish_pivot_meltup          Dovish Pivot Melt-Up
+  oil_embargo_war              Oil Embargo & War Shock
+  liquidity_crisis             Global Liquidity Crisis
+  stagflation_grind            Stagflation Grind
+  crypto_bull_supercycle       Crypto Bull Supercycle
+  crypto_winter                Crypto Winter
+  black_swan_crash             Black Swan Crash
+  sovereign_debt_stress        Sovereign Debt Stress
+  em_currency_crisis           EM Currency Crisis
+  calm_lowvol_drift            Calm Low-Vol Drift
+  tech_bubble_burst            Tech Bubble Burst
+  value_rotation               Value Rotation
+  banking_panic                Banking Panic
+  commodity_supercycle         Commodity Supercycle
+  geopolitical_escalation      Geopolitical Escalation
+  disinflation_softlanding     Disinflation Soft Landing
+  inflation_resurgence         Inflation Resurgence
+  risk_on_reflation            Risk-On Reflation
+  deflation_bust               Deflationary Bust
+  dollar_devaluation           Dollar Devaluation
+  vol_spike_mean_revert        Vol Spike & Mean Revert
+  trade_war                    Trade War Escalation
+  quiet_bull_grind             Quiet Bull Grind
+  crypto_regulation_shock      Crypto Regulation Shock
+  energy_crisis                Energy Crisis
+  pandemic_shock               Pandemic Shock
+  yield_curve_control          Yield Curve Control
+  rolling_sector_rotation      Rolling Sector Rotation
+  melt_up_then_crash           Euphoric Melt-Up Then Crash
+
+=== ai_v3 | 900 samples | ClaudeScenarioDesigner+enrich_spec | 2026-08-01 ===
+  hawkish_fed_shock            Hawkish Fed Shock
+  dovish_pivot_meltup          Dovish Pivot Melt-Up
+  oil_embargo_war              Oil Embargo & War Shock
+  liquidity_crisis             Global Liquidity Crisis
+  stagflation_grind            Stagflation Grind
+  crypto_bull_supercycle       Crypto Bull Supercycle
+  crypto_winter                Crypto Winter
+  black_swan_crash             Black Swan Crash
+  sovereign_debt_stress        Sovereign Debt Stress
+  em_currency_crisis           EM Currency Crisis
+  calm_lowvol_drift            Calm Low-Vol Drift
+  tech_bubble_burst            Tech Bubble Burst
+  value_rotation               Value Rotation
+  banking_panic                Banking Panic
+  commodity_supercycle         Commodity Supercycle
+  geopolitical_escalation      Geopolitical Escalation
+  disinflation_softlanding     Disinflation Soft Landing
+  inflation_resurgence         Inflation Resurgence
+  risk_on_reflation            Risk-On Reflation
+  deflation_bust               Deflationary Bust
+  dollar_devaluation           Dollar Devaluation
+  vol_spike_mean_revert        Vol Spike & Mean Revert
+  trade_war                    Trade War Escalation
+  quiet_bull_grind             Quiet Bull Grind
+  crypto_regulation_shock      Crypto Regulation Shock
+  energy_crisis                Energy Crisis
+  pandemic_shock               Pandemic Shock
+  yield_curve_control          Yield Curve Control
+  rolling_sector_rotation      Rolling Sector Rotation
+  melt_up_then_crash           Euphoric Melt-Up Then Crash
+

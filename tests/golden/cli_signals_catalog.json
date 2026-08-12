@@ -1,0 +1,571 @@
+[
+  {
+    "key": "guavy_sentiment",
+    "title": "Sentimiento social por token (Guavy)",
+    "tier": "B",
+    "scope": "asset",
+    "cadence": "daily",
+    "entity_kind": "token",
+    "features": [
+      {
+        "name": "sentiment_positive",
+        "agg": "sum",
+        "unit": "mensajes",
+        "description": "Menciones positivas."
+      },
+      {
+        "name": "sentiment_negative",
+        "agg": "sum",
+        "unit": "mensajes",
+        "description": "Menciones negativas."
+      },
+      {
+        "name": "sentiment_neutral",
+        "agg": "sum",
+        "unit": "mensajes",
+        "description": "Menciones neutras."
+      },
+      {
+        "name": "sentiment_total",
+        "agg": "sum",
+        "unit": "mensajes",
+        "description": "Volumen total de mencion."
+      }
+    ],
+    "pit": "archive_revisable",
+    "license": "Comercial, plan gratuito. Bearer token.",
+    "history_from": null,
+    "backtestable": false,
+    "endpoint": "https://guavy.com/api/v1/sentiment/get-sentiment-history/<symbol>",
+    "auth_env": "GUAVY_API_KEY",
+    "fixed_entities": [],
+    "notes": "Se consumen SOLO los conteos crudos. Los endpoints trend/signal son el output de SU modelo: pueden estar recalculados con informacion posterior y no son auditables (el adaptador los rechaza por codigo). El host esta MEDIDO: guavy.com responde 401 sin token y api.guavy.com da 404. Sin credencial en el entorno la sonda no pudo medir profundidad, y por eso history_from sigue a None."
+  },
+  {
+    "key": "etf_flows",
+    "title": "Flujos diarios de los ETF spot (BTC/ETH), por emisor",
+    "tier": "B",
+    "scope": "asset",
+    "cadence": "daily",
+    "entity_kind": "token",
+    "features": [
+      {
+        "name": "etf_netflow_usd",
+        "agg": "sum",
+        "unit": "USD",
+        "description": "Flujo neto del dia."
+      },
+      {
+        "name": "etf_issuer_dispersion",
+        "agg": "last",
+        "unit": "ratio",
+        "description": "Bruto/|neto| entre emisores: 1 = flujo neto puro, alto = rotacion."
+      },
+      {
+        "name": "etf_issuers_reporting",
+        "agg": "last",
+        "unit": "n",
+        "description": "Emisores que reportaron ese dia (cobertura, no senal)."
+      }
+    ],
+    "pit": "archive_revisable",
+    "license": "TFTC: CC BY 4.0. Farside/SoSoValue como contraste.",
+    "history_from": "2024-01-11",
+    "backtestable": true,
+    "endpoint": "https://www.tftc.io/bitcoin-etf-flows/data.json",
+    "auth_env": null,
+    "fixed_entities": [],
+    "notes": "MEDIDO: solo BITCOIN. TFTC no publica dataset equivalente de ETH (las rutas evidentes dan 404), asi que ETH no tiene cobertura por esta puerta y NO se rellena con un agregado de otro sitio: sin desglose por emisor, etf_issuer_dispersion significaria otra cosa para ese activo. Los flujos se revisan al alza el dia siguiente, de ahi archive_revisable."
+  },
+  {
+    "key": "fred_macro",
+    "title": "Series macro de FRED (DXY, tipos reales, 2y/10y, oro, indices)",
+    "tier": "B",
+    "scope": "macro",
+    "cadence": "daily",
+    "entity_kind": "macro",
+    "features": [
+      {
+        "name": "macro_value",
+        "agg": "last",
+        "unit": "nativa",
+        "description": "Valor de la serie ese dia."
+      },
+      {
+        "name": "macro_change_1d",
+        "agg": "last",
+        "unit": "nativa",
+        "description": "Variacion diaria."
+      }
+    ],
+    "pit": "archive_revisable",
+    "license": "FRED: uso publico, key gratuita.",
+    "history_from": null,
+    "backtestable": false,
+    "endpoint": "https://api.stlouisfed.org/fred/series/observations",
+    "auth_env": "FRED_API_KEY",
+    "fixed_entities": [
+      "DTWEXBGS",
+      "DFII10",
+      "DGS2",
+      "DGS10",
+      "T10Y2Y",
+      "SP500",
+      "NASDAQ100",
+      "VIXCLS",
+      "DCOILWTICO"
+    ],
+    "notes": "La entidad es la SERIE, no un activo, y cada una mapea sobre un factor del generador sintetico (adapters/fred.py::FACTOR_OF; universe.py: EQUITY, RATES, USD, COMMODITY). Las nueve existen: COMPROBADO. El ORO no esta y es una medicion, no un olvido: FRED discontinuo las series de la LBMA (GOLDAMGBD228NLBM da 404 hoy) y el factor COMMODITY se cubre con WTI. FRED revisa series hacia atras: sin el archivo crudo con fetched_at no hay forma de saber que se veia aquel dia. Sin FRED_API_KEY en el entorno la sonda no pudo medir profundidad."
+  },
+  {
+    "key": "defillama_stablecoins",
+    "title": "Oferta de stablecoins por cadena (DefiLlama)",
+    "tier": "B",
+    "scope": "chain",
+    "cadence": "daily",
+    "entity_kind": "chain",
+    "features": [
+      {
+        "name": "stablecoin_supply_usd",
+        "agg": "last",
+        "unit": "USD",
+        "description": "Oferta circulante."
+      },
+      {
+        "name": "stablecoin_issuance_usd",
+        "agg": "sum",
+        "unit": "USD",
+        "description": "Emision neta del dia."
+      }
+    ],
+    "pit": "archive_revisable",
+    "license": "DefiLlama: abierta, sin auth.",
+    "history_from": "2017-11-29",
+    "backtestable": true,
+    "endpoint": "https://stablecoins.llama.fi/stablecoincharts/<chain>",
+    "auth_env": null,
+    "fixed_entities": [
+      "ethereum",
+      "solana",
+      "arbitrum",
+      "base",
+      "tron",
+      "bsc"
+    ],
+    "notes": "La emision neta es polvora seca entrando; el desglose POR CADENA es rotacion de capital entre ecosistemas, que es la parte que no se publica agregada. La emision se deriva como VARIACION de la oferta: tras un hueco, el primer dia acumula lo emitido durante todo el hueco, y `observed` esta al lado para saber cuando fiarse."
+  },
+  {
+    "key": "defillama_fees",
+    "title": "Comisiones, ingresos y TVL por protocolo (DefiLlama)",
+    "tier": "B",
+    "scope": "asset",
+    "cadence": "daily",
+    "entity_kind": "token",
+    "features": [
+      {
+        "name": "fees_usd",
+        "agg": "sum",
+        "unit": "USD",
+        "description": "Comisiones del dia."
+      },
+      {
+        "name": "revenue_usd",
+        "agg": "sum",
+        "unit": "USD",
+        "description": "Ingresos del protocolo."
+      },
+      {
+        "name": "tvl_usd",
+        "agg": "last",
+        "unit": "USD",
+        "description": "Valor bloqueado al cierre."
+      }
+    ],
+    "pit": "archive_revisable",
+    "license": "DefiLlama: abierta, sin auth.",
+    "history_from": "2011-01-31",
+    "backtestable": true,
+    "endpoint": "https://api.llama.fi/summary/fees/<protocol>",
+    "auth_env": null,
+    "fixed_entities": [],
+    "notes": "Con el precio ya en el sistema salen P/F y P/S. El universo con ingresos reales es pequeno e ignorado, que es lo que lo hace interesante. Los 24 slugs estan COMPROBADOS: XRP y ATOM entran por su cadena (xrpl, cosmos-hub) porque el slug obvio da 400. La serie llega en tres llamadas (dailyFees, dailyRevenue, y el TVL del protocolo) marcadas en request.series."
+  },
+  {
+    "key": "defillama_volumes",
+    "title": "Cuota DEX/CEX por activo (DefiLlama)",
+    "tier": "B",
+    "scope": "asset",
+    "cadence": "daily",
+    "entity_kind": "token",
+    "features": [
+      {
+        "name": "dex_volume_usd",
+        "agg": "sum",
+        "unit": "USD",
+        "description": "Volumen en DEX (cadena del activo)."
+      },
+      {
+        "name": "cex_volume_usd",
+        "agg": "sum",
+        "unit": "USD",
+        "description": "Volumen en CEX (par de referencia)."
+      },
+      {
+        "name": "dex_share",
+        "agg": "last",
+        "unit": "fraccion",
+        "description": "DEX / (DEX + CEX)."
+      }
+    ],
+    "pit": "archive_revisable",
+    "license": "DefiLlama: abierta, sin auth. Pata CEX via CCXT (endpoints publicos).",
+    "history_from": "2017-08-17",
+    "backtestable": true,
+    "endpoint": "https://api.llama.fi/overview/dexs/<chain>",
+    "auth_env": null,
+    "fixed_entities": [],
+    "notes": "Donde se forma el precio. La cuota necesita las DOS patas y DefiLlama no publica volumen de CEX: la de CEX sale de CCXT y se archiva como un crudo mas, marcado en request.series. Solo estan las cadenas MEDIDAS: polkadot, celestia y cosmos devuelven 500, asi que DOT, TIA y ATOM no tienen pata DEX. Un activo cuyo volumen migra a DEX cambia de microestructura y el modelo de costes lo trata igual (limite conocido)."
+  },
+  {
+    "key": "wikipedia_pageviews",
+    "title": "Atencion por idioma (Wikipedia Pageviews)",
+    "tier": "B",
+    "scope": "asset",
+    "cadence": "hourly",
+    "entity_kind": "token",
+    "features": [
+      {
+        "name": "pageviews",
+        "agg": "sum",
+        "unit": "visitas",
+        "description": "Visitas del dia, todos los idiomas."
+      },
+      {
+        "name": "pageviews_lang_concentration",
+        "agg": "last",
+        "unit": "HHI",
+        "description": "Concentracion por idioma: descomposicion GEOGRAFICA de la atencion."
+      }
+    ],
+    "pit": "archive_revisable",
+    "license": "Wikimedia REST: CC BY-SA, sin auth.",
+    "history_from": "2015-07-01",
+    "backtestable": true,
+    "endpoint": "https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article",
+    "auth_env": null,
+    "fixed_entities": [],
+    "notes": "Desglosado por idioma, que es lo que Google Trends no da limpio: seis proyectos (en/es/de/ja/ru/zh) dan una descomposicion geografica de la atencion. Dos limites MEDIDOS: el User-Agent generico se come un 403 y el limite de peticiones salta a 429 incluso en serie a 0,7 s, asi que el adaptador va secuencial con pausa de 2 s. Los titulos son una TABLA (el articulo de SOL es 'Solana (blockchain platform)'), comprobada uno a uno: lo que daba 404 no esta."
+  },
+  {
+    "key": "p2p_premium",
+    "title": "Prima P2P en monedas en crisis (Binance P2P)",
+    "tier": "B",
+    "scope": "venue",
+    "cadence": "hourly",
+    "entity_kind": "token",
+    "features": [
+      {
+        "name": "p2p_premium_pct",
+        "agg": "mean",
+        "unit": "%",
+        "description": "Prima media del dia sobre el precio oficial."
+      },
+      {
+        "name": "p2p_currencies",
+        "agg": "last",
+        "unit": "n",
+        "description": "Divisas con cotizacion ese dia."
+      }
+    ],
+    "pit": "forward_capture",
+    "license": "Endpoint publico de Binance. Tipo oficial: open.er-api.com (abierto).",
+    "history_from": null,
+    "backtestable": false,
+    "endpoint": "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search",
+    "auth_env": null,
+    "fixed_entities": [
+      "USDT"
+    ],
+    "notes": "TRY/ARS/NGN contra USDT (MEDIDO: TRY y ARS tienen libro lleno, NGN devuelve cero anuncios y por eso p2p_currencies vale 2). Demanda por crisis monetaria: un driver distinto y no correlacionado con el ciclo especulativo. Cada registro crudo guarda el libro Y el tipo oficial del mismo momento, porque la prima es un cociente y ninguna de las dos patas se puede re-descargar con fecha pasada. NADIE publica el historico de un libro P2P: lo que no se capture hoy no existe manana, y por eso la profundidad crece un dia por dia real."
+  },
+  {
+    "key": "funding_dispersion",
+    "title": "Dispersion de funding entre venues (CCXT)",
+    "tier": "B",
+    "scope": "venue",
+    "cadence": "hourly",
+    "entity_kind": "token",
+    "features": [
+      {
+        "name": "funding_dispersion",
+        "agg": "mean",
+        "unit": "bps",
+        "description": "Desviacion tipica del funding entre venues."
+      },
+      {
+        "name": "funding_median",
+        "agg": "mean",
+        "unit": "bps",
+        "description": "Nivel mediano (contexto)."
+      },
+      {
+        "name": "funding_venues",
+        "agg": "last",
+        "unit": "n",
+        "description": "Venues con dato (cobertura)."
+      }
+    ],
+    "pit": "forward_capture",
+    "license": "Endpoints publicos de cada venue via CCXT.",
+    "history_from": null,
+    "backtestable": false,
+    "endpoint": "ccxt.fetch_funding_rate (binance, bybit, okx)",
+    "auth_env": null,
+    "fixed_entities": [],
+    "notes": "La DISPERSION, no el nivel: el nivel esta muy arbitrado. Los tres venues estan MEDIDOS (los tres devolvieron funding de BTC/USDT:USDT). La dispersion se calcula ENTRE VENUES en cada ventana de funding y solo despues se promedia el dia: al reves mediria la variacion horaria, que es otra cosa. Se exigen 3 venues como minimo. fetch_funding_rate da la foto de AHORA, asi que la profundidad crece con la captura."
+  },
+  {
+    "key": "github_activity",
+    "title": "Velocidad de desarrollo (GitHub API)",
+    "tier": "B",
+    "scope": "asset",
+    "cadence": "daily",
+    "entity_kind": "token",
+    "features": [
+      {
+        "name": "commits",
+        "agg": "sum",
+        "unit": "commits",
+        "description": "Commits del dia en el repo principal."
+      },
+      {
+        "name": "contributors",
+        "agg": "last",
+        "unit": "n",
+        "description": "Contribuidores unicos activos."
+      }
+    ],
+    "pit": "archive_revisable",
+    "license": "GitHub API, token gratuito (rate limit 5000/h).",
+    "history_from": "2009-08-23",
+    "backtestable": true,
+    "endpoint": "https://api.github.com/repos/<owner>/<repo>/stats/commit_activity",
+    "auth_env": "GITHUB_TOKEN",
+    "fixed_entities": [],
+    "notes": "Santiment cobra por esto y el dato crudo es publico. LAS DOS FEATURES NO TIENEN LA MISMA PROFUNDIDAD, y por eso hay que decirlo aqui: history_from (2009, la creacion del repo mas viejo) la alcanza contributors, que llega con cubos semanales desde el principio; commits solo tiene 52 semanas por captura, asi que hacia atras es NaN \u2014no cero\u2014 y la historia larga se acumula captura a captura en el archivo. commit_activity reparte la semana en curso en siete dias incluidos los que AUN NO HAN PASADO: la capa 2 los corta con el fetched_at del registro, porque un cero en un dia que no ha ocurrido no es 'no hubo commits'. contributors es SEMANAL y se ancla al inicio de su semana; repetirlo siete veces convertiria una observacion en siete. Sin GITHUB_TOKEN son 60 peticiones/hora y el universo necesita 48: la sonda se quedo sin cuota en el primer intento (medido). contributors es SEMANAL y se ancla al inicio de su semana; repetirlo siete veces convertiria una observacion en siete. El 202 con cuerpo vacio (GitHub calculando) se trata como 'hoy no hay dato'. Revisable: un force-push reescribe el historico de commits."
+  },
+  {
+    "key": "cftc_cot",
+    "title": "Posicionamiento en futuros CME (CFTC COT / TFF)",
+    "tier": "B",
+    "scope": "asset",
+    "cadence": "weekly",
+    "entity_kind": "token",
+    "features": [
+      {
+        "name": "cot_leveraged_net",
+        "agg": "last",
+        "unit": "contratos",
+        "description": "Neto de fondos apalancados."
+      },
+      {
+        "name": "cot_dealer_net",
+        "agg": "last",
+        "unit": "contratos",
+        "description": "Neto de dealers."
+      },
+      {
+        "name": "cot_open_interest",
+        "agg": "last",
+        "unit": "contratos",
+        "description": "Interes abierto."
+      }
+    ],
+    "pit": "archive_revisable",
+    "license": "CFTC: dominio publico (Socrata).",
+    "history_from": "2018-04-13",
+    "backtestable": true,
+    "endpoint": "https://publicreporting.cftc.gov/resource/gpe5-46if.json",
+    "auth_env": null,
+    "fixed_entities": [],
+    "notes": "Semanal: foto del MARTES, publicada el VIERNES. El dia con el que se archiva es el de PUBLICACION, no el de referencia \u2014el martes queda en el payload\u2014, porque el recorte por dia de observacion no ve un desfase de tres dias y fechar el martes meteria tres dias de futuro en cualquier cruce. Solo los dos contratos de CME con serie larga (BTC 435 semanas, ETH 279, medidas); los micro y los de otros exchanges quedan fuera para no sumar contratos de tamano distinto."
+  },
+  {
+    "key": "token_unlocks",
+    "title": "Desbloqueos y vesting (DefiLlama emissions)",
+    "tier": "A",
+    "scope": "asset",
+    "cadence": "event",
+    "entity_kind": "token",
+    "features": [
+      {
+        "name": "unlock_pct_float",
+        "agg": "sum",
+        "unit": "%",
+        "description": "Desbloqueo como % del float."
+      },
+      {
+        "name": "unlock_pct_adv",
+        "agg": "sum",
+        "unit": "%",
+        "description": "Desbloqueo como % del volumen diario."
+      }
+    ],
+    "pit": "archive_revisable",
+    "license": "DefiLlama: el endpoint de emisiones dejo de ser abierto (402 medido).",
+    "history_from": null,
+    "backtestable": false,
+    "endpoint": "https://api.llama.fi/emissions",
+    "auth_env": null,
+    "fixed_entities": [],
+    "notes": "Lo valioso NO es 'hay unlock' (explotado) sino el desbloqueo NORMALIZADO: un 3% sobre un token con 40 dias de volumen en circulacion es un evento; el mismo 3% sobre uno liquido no lo es. Esa normalizacion es ademas lo que permite agrupar: la unidad de observacion es el evento comparable entre activos, no el token. MEDIDO 2026-08-12: la API responde 402 Payment Required, asi que hoy no hay muestra que contar y history_from sigue a None. El adaptador existe para que eso sea una MEDICION y no un hueco. El calendario futuro se reescribe cuando el equipo cambia el vesting: revisable por naturaleza."
+  },
+  {
+    "key": "staking_queue",
+    "title": "Cola de entrada/salida del staking (Ethereum)",
+    "tier": "A",
+    "scope": "chain",
+    "cadence": "daily",
+    "entity_kind": "chain",
+    "features": [
+      {
+        "name": "staking_exit_queue",
+        "agg": "last",
+        "unit": "validadores",
+        "description": "Oferta futura en cola."
+      },
+      {
+        "name": "staking_entry_queue",
+        "agg": "last",
+        "unit": "validadores",
+        "description": "Demanda futura en cola."
+      }
+    ],
+    "pit": "forward_capture",
+    "license": "beaconcha.in: ahora exige credencial (401 medido).",
+    "history_from": null,
+    "backtestable": false,
+    "endpoint": "https://beaconcha.in/api/v1/validators/queue",
+    "auth_env": "BEACONCHAIN_API_KEY",
+    "fixed_entities": [
+      "ethereum"
+    ],
+    "notes": "Oferta futura con FECHA CONOCIDA dias antes. Tres correcciones MEDIDAS el 2026-08-12: (1) el endpoint devuelve 401 sin credencial, asi que la fuente declara auth_env y sin la variable en el entorno no hay medicion; (2) solo cubre Ethereum \u2014Solana y Cosmos no tienen este endpoint\u2014 y por eso fixed_entities baja a una; (3) la espera en DIAS no se publica y no se estima: convertir la cola en dias exige el limite de churn vigente, que cambia con cada fork. Forward_capture puro: devuelve la foto de AHORA y no guarda la de ayer, el caso que mas penaliza retrasar la captura."
+  },
+  {
+    "key": "btc_difficulty",
+    "title": "Ajuste de dificultad de Bitcoin (mempool.space)",
+    "tier": "A",
+    "scope": "chain",
+    "cadence": "event",
+    "entity_kind": "chain",
+    "features": [
+      {
+        "name": "difficulty_change_pct",
+        "agg": "last",
+        "unit": "%",
+        "description": "Ajuste aplicado."
+      }
+    ],
+    "pit": "chain_immutable",
+    "license": "mempool.space: abierta, sin auth.",
+    "history_from": "2014-08-19",
+    "backtestable": true,
+    "endpoint": "https://mempool.space/api/v1/mining/difficulty-adjustments/all",
+    "auth_env": null,
+    "fixed_entities": [
+      "bitcoin"
+    ],
+    "notes": "LA HIPOTESIS DE 'DECENAS' ERA FALSA AQUI POR UN FACTOR DE DIEZ: 321 ajustes MEDIDOS en la ventana de la sonda (doce anos, 2014-08-19 en adelante), uno cada 2016 bloques. El limite lo pone PROBE_YEARS y no el proveedor: el endpoint devuelve los 463 retargets desde el bloque 0 (2009-01-03, COMPROBADO), y el catalogo declara lo medido, no lo disponible. Las cabeceras de bloque no se reescriben, de ahi el pit. El endpoint que se sondea no es el que estaba declarado: /difficulty-adjustment da la foto de AHORA y /mining/difficulty-adjustments/all da la serie entera en 21 KB. LIMITE DECLARADO: los dias-al-evento del pasado se cuentan contra la fecha en que el retarget OCURRIO, que aquel dia era una estimacion (bloques restantes x 10 min) con error de horas. El HASHPRICE queda fuera: exige una pata en USD que esta capa no tiene, y publicarlo a medias seria peor que no publicarlo."
+  },
+  {
+    "key": "defillama_hacks",
+    "title": "Hacks y exploits fechados (DefiLlama)",
+    "tier": "A",
+    "scope": "market",
+    "cadence": "event",
+    "entity_kind": "market",
+    "features": [
+      {
+        "name": "hack_amount_usd",
+        "agg": "sum",
+        "unit": "USD",
+        "description": "Importe comprometido ese dia."
+      },
+      {
+        "name": "hack_count",
+        "agg": "sum",
+        "unit": "n",
+        "description": "Numero de incidentes."
+      }
+    ],
+    "pit": "archive_revisable",
+    "license": "DefiLlama: abierta, sin auth.",
+    "history_from": "2016-06-17",
+    "backtestable": true,
+    "endpoint": "https://api.llama.fi/hacks",
+    "auth_env": null,
+    "fixed_entities": [],
+    "notes": "Era 'el caso mas duro del catalogo' y la sonda dice otra cosa: 621 incidentes MEDIDOS desde 2016-06-17, la segunda muestra mas grande de las seis de evento. El importe llega en MILLONES de dolares y el adaptador lo pasa a dolares, para que no se compare un 1,5 de aqui con un 1,5 de otra serie. El evento no se anuncia, asi que aqui los dias-al-evento no miran adelante: lo que codifica es la ventana POSTERIOR. Revisable: DefiLlama corrige importes y clasificaciones despues del incidente."
+  },
+  {
+    "key": "ofac_sdn",
+    "title": "Lista OFAC SDN (direcciones sancionadas)",
+    "tier": "A",
+    "scope": "market",
+    "cadence": "event",
+    "entity_kind": "market",
+    "features": [
+      {
+        "name": "sdn_crypto_addresses",
+        "agg": "last",
+        "unit": "n",
+        "description": "Direcciones en la lista."
+      },
+      {
+        "name": "sdn_new_entries",
+        "agg": "sum",
+        "unit": "n",
+        "description": "Altas desde la captura anterior."
+      }
+    ],
+    "pit": "forward_capture",
+    "license": "US Treasury: dominio publico.",
+    "history_from": null,
+    "backtestable": false,
+    "endpoint": "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN.XML",
+    "auth_env": null,
+    "fixed_entities": [],
+    "notes": "Se publica la lista de HOY, no la de una fecha pasada. Reconstruir el pasado exige haber guardado cada version: forward_capture, y por eso el archivo es append-only con fetched_at. MEDIDO: 28 MB de XML, 19.199 registros y 977 direcciones de cripto (529 XBT, 198 TRX, 100 ETH...). Se archiva SOLO el subconjunto cripto \u2014la unica excepcion del catalogo a 'el payload intacto', razonada en adapters/events.py\u2014 y el certificado del host no lo valida el almacen de Windows, asi que esta fuente usa el bundle de certifi."
+  },
+  {
+    "key": "macro_calendar",
+    "title": "Calendario macro (FOMC y publicaciones del IPC)",
+    "tier": "A",
+    "scope": "macro",
+    "cadence": "event",
+    "entity_kind": "market",
+    "features": [
+      {
+        "name": "fomc_meeting",
+        "agg": "last",
+        "unit": "0/1",
+        "description": "Dia de reunion del FOMC."
+      },
+      {
+        "name": "cpi_release",
+        "agg": "last",
+        "unit": "0/1",
+        "description": "Dia de publicacion del IPC."
+      }
+    ],
+    "pit": "forward_capture",
+    "license": "Fuentes oficiales (Fed, BLS): dominio publico.",
+    "history_from": "2017-02-01",
+    "backtestable": true,
+    "endpoint": "https://www.federalreserve.gov/json/calendar.json",
+    "auth_env": null,
+    "fixed_entities": [],
+    "notes": "Determinista y conocido con meses de antelacion: las fechas son exactas y no revisables, que es la mejor propiedad que puede tener una feature de evento. De una reunion de dos dias se toma el SEGUNDO, que es cuando sale el comunicado. DOS PROFUNDIDADES DISTINTAS, como en GitHub: el calendario de la Fed llega a 2017 (MEDIDO), pero el del BLS es una ventana RODANTE de ~13 meses, asi que la historia larga del IPC solo se acumula captura a captura y un cpi_release vacio en 2019 no significa que no hubiera IPC. El BLS no publica esto en JSON: se archiva el HTML crudo para poder re-derivar."
+  }
+]

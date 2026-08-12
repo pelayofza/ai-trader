@@ -1,0 +1,17 @@
+=== VALIDACION WALK_FORWARD | 4 ventanas | purga 10d | embargo 5d ===
+  Fuga temporal auditada: sin fuga
+  Calendario cubierto: 415 dias (reuso x1.0)
+
+  ventana      desde       hasta       tramos  trades   sharpe   headline
+  wf1          2015-11-11  2016-02-22       1      26     0.16    +0.1506
+  wf2          2016-02-23  2016-06-05       1      39     2.55    +2.5282
+  wf3          2016-06-06  2016-09-17       1      24    -3.78    -3.7838
+  wf4          2016-09-18  2016-12-29       1      27    -0.48    -0.4878
+
+========================================================================
+  RECOMPENSA (CVaR@25% de las ventanas): -3.7838
+  mediana -0.1686 | media -0.3982 | std 2.6035 | peor -3.7838 | mejor +2.5282
+  ACTIVIDAD: 29.0 operaciones por ventana (mediana 26) | 0/4 ventanas vacias (0%)
+  Rankeable: SI (suelo: >= 3 ops en la ventana mediana, <= 25% vacias)
+  Corte unico 70/30 de referencia: -2.8125 -> optimismo -2.6439
+  Gate: RECHAZADO (mejor baseline equal_weight -1.7321, margen -2.0517)

@@ -1,0 +1,58 @@
+{
+  "starting_equity": 10000.0,
+  "headline_score_test": -2.8125,
+  "headline_weights": {
+    "lambda_turnover": 0.25,
+    "kappa_maxdd": 0.0
+  },
+  "train": {
+    "label": "train",
+    "start": "2015-07-30",
+    "end": "2016-07-27",
+    "metrics": {
+      "starting_equity": 10000.0,
+      "ending_equity": 9618.01,
+      "total_return_pct": -3.82,
+      "cagr_pct": -3.84,
+      "max_drawdown_pct": 14.75,
+      "sharpe": -0.108,
+      "sortino": -0.149,
+      "calmar": -0.26,
+      "volatility_pct": 19.23,
+      "turnover": 0.0433,
+      "num_trades": 102,
+      "win_rate_pct": 42.16,
+      "profit_factor": 0.928,
+      "avg_win_usd": 113.89,
+      "avg_loss_usd": -89.48,
+      "avg_holding_days": 6.88,
+      "total_fees_usd": 157.36,
+      "periods_per_year": 365
+    }
+  },
+  "test": {
+    "label": "test",
+    "start": "2016-07-27",
+    "end": "2016-12-30",
+    "metrics": {
+      "starting_equity": 10000.0,
+      "ending_equity": 8425.47,
+      "total_return_pct": -15.75,
+      "cagr_pct": -33.03,
+      "max_drawdown_pct": 17.93,
+      "sharpe": -2.804,
+      "sortino": -3.333,
+      "calmar": -1.842,
+      "volatility_pct": 13.94,
+      "turnover": 0.0356,
+      "num_trades": 41,
+      "win_rate_pct": 29.27,
+      "profit_factor": 0.408,
+      "avg_win_usd": 90.38,
+      "avg_loss_usd": -91.69,
+      "avg_holding_days": 6.46,
+      "total_fees_usd": 55.6,
+      "periods_per_year": 365
+    }
+  }
+}

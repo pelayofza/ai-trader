@@ -1,0 +1,104 @@
+[
+  {
+    "source_key": "guavy_sentiment",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  },
+  {
+    "source_key": "etf_flows",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  },
+  {
+    "source_key": "fred_macro",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  },
+  {
+    "source_key": "defillama_stablecoins",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  },
+  {
+    "source_key": "defillama_fees",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  },
+  {
+    "source_key": "defillama_volumes",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  },
+  {
+    "source_key": "wikipedia_pageviews",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  },
+  {
+    "source_key": "p2p_premium",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  },
+  {
+    "source_key": "funding_dispersion",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  },
+  {
+    "source_key": "github_activity",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  },
+  {
+    "source_key": "cftc_cot",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  },
+  {
+    "source_key": "token_unlocks",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  },
+  {
+    "source_key": "staking_queue",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  },
+  {
+    "source_key": "btc_difficulty",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  },
+  {
+    "source_key": "defillama_hacks",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  },
+  {
+    "source_key": "ofac_sdn",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  },
+  {
+    "source_key": "macro_calendar",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  }
+]

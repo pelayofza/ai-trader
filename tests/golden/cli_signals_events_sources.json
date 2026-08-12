@@ -1,0 +1,37 @@
+[
+  {
+    "source_key": "btc_difficulty",
+    "tier": "A",
+    "cadence": "event",
+    "announced": true,
+    "magnitude": "difficulty_change_pct"
+  },
+  {
+    "source_key": "defillama_hacks",
+    "tier": "A",
+    "cadence": "event",
+    "announced": false,
+    "magnitude": "hack_amount_usd"
+  },
+  {
+    "source_key": "macro_calendar",
+    "tier": "A",
+    "cadence": "event",
+    "announced": true,
+    "magnitude": null
+  },
+  {
+    "source_key": "ofac_sdn",
+    "tier": "A",
+    "cadence": "event",
+    "announced": false,
+    "magnitude": "sdn_new_entries"
+  },
+  {
+    "source_key": "token_unlocks",
+    "tier": "A",
+    "cadence": "event",
+    "announced": true,
+    "magnitude": "unlock_pct_float"
+  }
+]

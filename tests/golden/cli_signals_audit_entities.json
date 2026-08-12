@@ -1,0 +1,161 @@
+{
+  "n_symbols": 24,
+  "n_resolved": 24,
+  "coverage_pct": 100.0,
+  "by_source": {
+    "rule": 24,
+    "override": 0,
+    "unmapped": 0
+  },
+  "by_kind": {
+    "token": 24
+  },
+  "unmapped": [],
+  "collisions": {},
+  "rows": [
+    {
+      "key": "BTC",
+      "kind": "token",
+      "symbol": "BTC/USDT",
+      "source": "rule"
+    },
+    {
+      "key": "ETH",
+      "kind": "token",
+      "symbol": "ETH/USDT",
+      "source": "rule"
+    },
+    {
+      "key": "SOL",
+      "kind": "token",
+      "symbol": "SOL/USDT",
+      "source": "rule"
+    },
+    {
+      "key": "BNB",
+      "kind": "token",
+      "symbol": "BNB/USDT",
+      "source": "rule"
+    },
+    {
+      "key": "XRP",
+      "kind": "token",
+      "symbol": "XRP/USDT",
+      "source": "rule"
+    },
+    {
+      "key": "ADA",
+      "kind": "token",
+      "symbol": "ADA/USDT",
+      "source": "rule"
+    },
+    {
+      "key": "DOGE",
+      "kind": "token",
+      "symbol": "DOGE/USDT",
+      "source": "rule"
+    },
+    {
+      "key": "AVAX",
+      "kind": "token",
+      "symbol": "AVAX/USDT",
+      "source": "rule"
+    },
+    {
+      "key": "DOT",
+      "kind": "token",
+      "symbol": "DOT/USDT",
+      "source": "rule"
+    },
+    {
+      "key": "LINK",
+      "kind": "token",
+      "symbol": "LINK/USDT",
+      "source": "rule"
+    },
+    {
+      "key": "LTC",
+      "kind": "token",
+      "symbol": "LTC/USDT",
+      "source": "rule"
+    },
+    {
+      "key": "UNI",
+      "kind": "token",
+      "symbol": "UNI/USDT",
+      "source": "rule"
+    },
+    {
+      "key": "ATOM",
+      "kind": "token",
+      "symbol": "ATOM/USDT",
+      "source": "rule"
+    },
+    {
+      "key": "NEAR",
+      "kind": "token",
+      "symbol": "NEAR/USDT",
+      "source": "rule"
+    },
+    {
+      "key": "APT",
+      "kind": "token",
+      "symbol": "APT/USDT",
+      "source": "rule"
+    },
+    {
+      "key": "ARB",
+      "kind": "token",
+      "symbol": "ARB/USDT",
+      "source": "rule"
+    },
+    {
+      "key": "OP",
+      "kind": "token",
+      "symbol": "OP/USDT",
+      "source": "rule"
+    },
+    {
+      "key": "INJ",
+      "kind": "token",
+      "symbol": "INJ/USDT",
+      "source": "rule"
+    },
+    {
+      "key": "FIL",
+      "kind": "token",
+      "symbol": "FIL/USDT",
+      "source": "rule"
+    },
+    {
+      "key": "ETC",
+      "kind": "token",
+      "symbol": "ETC/USDT",
+      "source": "rule"
+    },
+    {
+      "key": "AAVE",
+      "kind": "token",
+      "symbol": "AAVE/USDT",
+      "source": "rule"
+    },
+    {
+      "key": "SUI",
+      "kind": "token",
+      "symbol": "SUI/USDT",
+      "source": "rule"
+    },
+    {
+      "key": "SEI",
+      "kind": "token",
+      "symbol": "SEI/USDT",
+      "source": "rule"
+    },
+    {
+      "key": "TIA",
+      "kind": "token",
+      "symbol": "TIA/USDT",
+      "source": "rule"
+    }
+  ]
+}

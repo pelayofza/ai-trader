@@ -1,0 +1,5 @@
+# Las referencias de caracterizacion se guardan con LF en cualquier plataforma. El
+# comparador ya normaliza los finales de linea al leer, pero fijarlo aqui evita que un
+# checkout en otro sistema reescriba los ficheros y ensucie el diff sin que nada haya
+# cambiado.
+tests/golden/** text eol=lf

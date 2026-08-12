@@ -27,7 +27,13 @@ ai-trader-bot = "ai_trader.main:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+# El "." hace importables `dashboard/` y `docs/`, que viven fuera del paquete y hasta
+# ahora no tenian ni un test.
+pythonpath = ["src", "."]
+markers = [
+    "slow: caracterizacion que corre un pipeline entero (segundos, no milisegundos)",
+    "veryslow: caracterizacion de minutos; fuera de la vuelta rapida",
+]
 
 [tool.ruff]
 line-length = 100

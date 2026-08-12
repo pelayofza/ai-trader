@@ -1,0 +1,45 @@
+{
+  "cadence": "event",
+  "days_ahead_cap": 30.0,
+  "days_active_cap": 10.0,
+  "magnitude_clip": 4.0,
+  "suffixes": {
+    "ahead": "_ahead",
+    "active": "_active",
+    "magnitude": "_mag",
+    "seen": "_seen"
+  },
+  "missing": "0.0 con `_seen` = 0 (la ausencia de dato se declara aparte)",
+  "sources": {
+    "btc_difficulty": {
+      "magnitude": "difficulty_change_pct",
+      "scale": 5.0,
+      "announced": true,
+      "reason": "Un ajuste del 5% es grande: la mediana historica esta en torno al 1-2%. La fecha se estima con los bloques que faltan, no la anuncia nadie."
+    },
+    "defillama_hacks": {
+      "magnitude": "hack_amount_usd",
+      "scale": 100000000.0,
+      "announced": false,
+      "reason": "100 M$ comprometidos es una unidad. Un hack NO se anuncia: mirar hacia adelante aqui seria futuro puro, asi que solo queda la estela."
+    },
+    "macro_calendar": {
+      "magnitude": null,
+      "scale": 1.0,
+      "announced": true,
+      "reason": "No tiene magnitud: lo que aporta es CUANDO, y el cuando se sabe con meses de antelacion. La magnitud queda en 0 y solo cuenta la proximidad."
+    },
+    "ofac_sdn": {
+      "magnitude": "sdn_new_entries",
+      "scale": 10.0,
+      "announced": false,
+      "reason": "Diez direcciones nuevas en una publicacion es un dia grande. La lista sale sin preaviso."
+    },
+    "token_unlocks": {
+      "magnitude": "unlock_pct_float",
+      "scale": 1.0,
+      "announced": true,
+      "reason": "Un 1% del float en un dia es una unidad. El calendario de vesting se publica con meses de antelacion (y se reescribe: por eso es revisable)."
+    }
+  }
+}

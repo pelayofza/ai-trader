@@ -1,0 +1,12 @@
+{
+  "center": "mediana",
+  "scale": "IQR/1.349",
+  "self_window": "expansiva, causal (hasta t incluido)",
+  "cross_section": "por dia, todas las entidades de la fuente",
+  "clip": 4.0,
+  "min_history": 20,
+  "min_cross_section": 5,
+  "missing": "NaN (no se rellena con 0)",
+  "suffix_self": "_z",
+  "suffix_cross": "_x"
+}

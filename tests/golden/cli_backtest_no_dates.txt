@@ -1,0 +1,1 @@
+--start and --end are required unless --synthetic is given.

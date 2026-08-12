@@ -1,0 +1,22 @@
+=== CATALOGO DE SENALES | 17 fuentes | 40 features ===
+  clave                    tier  scope   cadencia  pit                historia    feats
+  guavy_sentiment          B     asset   daily     archive_revisable  solo adelante 4
+  etf_flows                B     asset   daily     archive_revisable  2024-01-11  3
+  fred_macro               B     macro   daily     archive_revisable  solo adelante 2
+  defillama_stablecoins    B     chain   daily     archive_revisable  2017-11-29  2
+  defillama_fees           B     asset   daily     archive_revisable  2011-01-31  3
+  defillama_volumes        B     asset   daily     archive_revisable  2017-08-17  3
+  wikipedia_pageviews      B     asset   hourly    archive_revisable  2015-07-01  2
+  p2p_premium              B     venue   hourly    forward_capture    solo adelante 2
+  funding_dispersion       B     venue   hourly    forward_capture    solo adelante 3
+  github_activity          B     asset   daily     archive_revisable  2009-08-23  2
+  cftc_cot                 B     asset   weekly    archive_revisable  2018-04-13  3
+  token_unlocks            A     asset   event     archive_revisable  solo adelante 2
+  staking_queue            A     chain   daily     forward_capture    solo adelante 2
+  btc_difficulty           A     chain   event     chain_immutable    2014-08-19  1
+  defillama_hacks          A     market  event     archive_revisable  2016-06-17  2
+  ofac_sdn                 A     market  event     forward_capture    solo adelante 2
+  macro_calendar           A     macro   event     forward_capture    2017-02-01  2
+
+  Backtesteables HOY: 10/17 (el resto no tiene history_from MEDIDO: solo existen hacia adelante)
+  Sin credencial: 13/17

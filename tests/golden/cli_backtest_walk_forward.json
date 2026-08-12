@@ -1,0 +1,212 @@
+{
+  "scheme": "walk_forward",
+  "n_folds": 4,
+  "purge_days": 10,
+  "embargo_days": 5,
+  "leakage_ok": true,
+  "coverage": {
+    "n_folds": 4,
+    "calendar_days_covered": 415,
+    "evaluated_days": 415,
+    "reuse_factor": 1.0
+  },
+  "headline_weights": {
+    "lambda_turnover": 0.25,
+    "kappa_maxdd": 0.0
+  },
+  "stats": {
+    "reward": -3.7838,
+    "mean": -0.3982,
+    "std": 2.6035,
+    "p25": -1.3118,
+    "cvar25": -3.7838,
+    "best": 2.5282,
+    "worst": -3.7838,
+    "n": 4,
+    "alpha": 0.25,
+    "activity": {
+      "n_windows": 4,
+      "trades": 116,
+      "trades_per_window": 29.0,
+      "median_trades_per_window": 26.5,
+      "zero_windows": 0,
+      "zero_window_pct": 0.0
+    }
+  },
+  "activity": {
+    "n_windows": 4,
+    "trades": 116,
+    "trades_per_window": 29.0,
+    "median_trades_per_window": 26.5,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0
+  },
+  "rankable": true,
+  "activity_floor": {
+    "min_median_trades_per_window": 3.0,
+    "max_zero_window_pct": 25.0
+  },
+  "median": -0.1686,
+  "single_split_score": -2.8125,
+  "optimism": -2.6439,
+  "approved": false,
+  "gate": {
+    "approved": false,
+    "beats_baselines": false,
+    "eligible": true,
+    "activity_checked": true,
+    "ineligible_reasons": [],
+    "activity": {
+      "n_windows": 4,
+      "trades": 116,
+      "trades_per_window": 29.0,
+      "median_trades_per_window": 26.5,
+      "zero_windows": 0,
+      "zero_window_pct": 0.0
+    },
+    "activity_floor": {
+      "min_median_trades_per_window": 3.0,
+      "max_zero_window_pct": 25.0
+    },
+    "strategy_reward": -3.7838,
+    "best_baseline": "equal_weight",
+    "best_baseline_reward": -1.7321,
+    "margin": -2.0517,
+    "win_rate_pct": 25.0,
+    "missing": [],
+    "baselines": {
+      "btc_hold": {
+        "reward": -2.6275,
+        "mean": -0.345,
+        "std": 1.735,
+        "p25": -1.1069,
+        "cvar25": -2.6275,
+        "best": 1.4418,
+        "worst": -2.6275,
+        "n": 4,
+        "alpha": 0.25,
+        "activity": null
+      },
+      "equal_weight": {
+        "reward": -1.7321,
+        "mean": 0.2229,
+        "std": 2.0577,
+        "p25": -1.1518,
+        "cvar25": -1.7321,
+        "best": 2.9239,
+        "worst": -1.7321,
+        "n": 4,
+        "alpha": 0.25,
+        "activity": null
+      },
+      "spy_hold": {
+        "reward": -5.6926,
+        "mean": -0.4093,
+        "std": 3.6424,
+        "p25": -1.3825,
+        "cvar25": -5.6926,
+        "best": 2.1717,
+        "worst": -5.6926,
+        "n": 4,
+        "alpha": 0.25,
+        "activity": null
+      }
+    }
+  },
+  "baselines": {
+    "btc_hold": {
+      "reward": -2.6275,
+      "mean": -0.345,
+      "std": 1.735,
+      "p25": -1.1069,
+      "cvar25": -2.6275,
+      "best": 1.4418,
+      "worst": -2.6275,
+      "n": 4,
+      "alpha": 0.25,
+      "activity": null
+    },
+    "equal_weight": {
+      "reward": -1.7321,
+      "mean": 0.2229,
+      "std": 2.0577,
+      "p25": -1.1518,
+      "cvar25": -1.7321,
+      "best": 2.9239,
+      "worst": -1.7321,
+      "n": 4,
+      "alpha": 0.25,
+      "activity": null
+    },
+    "spy_hold": {
+      "reward": -5.6926,
+      "mean": -0.4093,
+      "std": 3.6424,
+      "p25": -1.3825,
+      "cvar25": -5.6926,
+      "best": 2.1717,
+      "worst": -5.6926,
+      "n": 4,
+      "alpha": 0.25,
+      "activity": null
+    }
+  },
+  "folds": [
+    {
+      "label": "wf1",
+      "test_start": "2015-11-11",
+      "test_end": "2016-02-22",
+      "test_days": 104,
+      "n_test_blocks": 1,
+      "score": 0.1506,
+      "sharpe": 0.161,
+      "turnover": 0.0405,
+      "max_drawdown_pct": 6.88,
+      "num_trades": 26,
+      "oos_observations": 103,
+      "train_score": null
+    },
+    {
+      "label": "wf2",
+      "test_start": "2016-02-23",
+      "test_end": "2016-06-05",
+      "test_days": 104,
+      "n_test_blocks": 1,
+      "score": 2.5282,
+      "sharpe": 2.545,
+      "turnover": 0.068,
+      "max_drawdown_pct": 9.23,
+      "num_trades": 39,
+      "oos_observations": 103,
+      "train_score": null
+    },
+    {
+      "label": "wf3",
+      "test_start": "2016-06-06",
+      "test_end": "2016-09-17",
+      "test_days": 104,
+      "n_test_blocks": 1,
+      "score": -3.7838,
+      "sharpe": -3.775,
+      "turnover": 0.0344,
+      "max_drawdown_pct": 19.63,
+      "num_trades": 24,
+      "oos_observations": 103,
+      "train_score": null
+    },
+    {
+      "label": "wf4",
+      "test_start": "2016-09-18",
+      "test_end": "2016-12-29",
+      "test_days": 103,
+      "n_test_blocks": 1,
+      "score": -0.4878,
+      "sharpe": -0.478,
+      "turnover": 0.0406,
+      "max_drawdown_pct": 6.4,
+      "num_trades": 27,
+      "oos_observations": 102,
+      "train_score": null
+    }
+  ]
+}

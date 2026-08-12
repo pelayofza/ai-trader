@@ -1,0 +1,138 @@
+[
+  {
+    "source_key": "guavy_sentiment",
+    "tier": "B",
+    "cadence": "daily",
+    "pit": "archive_revisable",
+    "history_from": null,
+    "backtestable": false
+  },
+  {
+    "source_key": "etf_flows",
+    "tier": "B",
+    "cadence": "daily",
+    "pit": "archive_revisable",
+    "history_from": "2024-01-11",
+    "backtestable": true
+  },
+  {
+    "source_key": "fred_macro",
+    "tier": "B",
+    "cadence": "daily",
+    "pit": "archive_revisable",
+    "history_from": null,
+    "backtestable": false
+  },
+  {
+    "source_key": "defillama_stablecoins",
+    "tier": "B",
+    "cadence": "daily",
+    "pit": "archive_revisable",
+    "history_from": "2017-11-29",
+    "backtestable": true
+  },
+  {
+    "source_key": "defillama_fees",
+    "tier": "B",
+    "cadence": "daily",
+    "pit": "archive_revisable",
+    "history_from": "2011-01-31",
+    "backtestable": true
+  },
+  {
+    "source_key": "defillama_volumes",
+    "tier": "B",
+    "cadence": "daily",
+    "pit": "archive_revisable",
+    "history_from": "2017-08-17",
+    "backtestable": true
+  },
+  {
+    "source_key": "wikipedia_pageviews",
+    "tier": "B",
+    "cadence": "hourly",
+    "pit": "archive_revisable",
+    "history_from": "2015-07-01",
+    "backtestable": true
+  },
+  {
+    "source_key": "p2p_premium",
+    "tier": "B",
+    "cadence": "hourly",
+    "pit": "forward_capture",
+    "history_from": null,
+    "backtestable": false
+  },
+  {
+    "source_key": "funding_dispersion",
+    "tier": "B",
+    "cadence": "hourly",
+    "pit": "forward_capture",
+    "history_from": null,
+    "backtestable": false
+  },
+  {
+    "source_key": "github_activity",
+    "tier": "B",
+    "cadence": "daily",
+    "pit": "archive_revisable",
+    "history_from": "2009-08-23",
+    "backtestable": true
+  },
+  {
+    "source_key": "cftc_cot",
+    "tier": "B",
+    "cadence": "weekly",
+    "pit": "archive_revisable",
+    "history_from": "2018-04-13",
+    "backtestable": true
+  },
+  {
+    "source_key": "token_unlocks",
+    "tier": "A",
+    "cadence": "event",
+    "pit": "archive_revisable",
+    "history_from": null,
+    "backtestable": false
+  },
+  {
+    "source_key": "staking_queue",
+    "tier": "A",
+    "cadence": "daily",
+    "pit": "forward_capture",
+    "history_from": null,
+    "backtestable": false
+  },
+  {
+    "source_key": "btc_difficulty",
+    "tier": "A",
+    "cadence": "event",
+    "pit": "chain_immutable",
+    "history_from": "2014-08-19",
+    "backtestable": true
+  },
+  {
+    "source_key": "defillama_hacks",
+    "tier": "A",
+    "cadence": "event",
+    "pit": "archive_revisable",
+    "history_from": "2016-06-17",
+    "backtestable": true
+  },
+  {
+    "source_key": "ofac_sdn",
+    "tier": "A",
+    "cadence": "event",
+    "pit": "forward_capture",
+    "history_from": null,
+    "backtestable": false
+  },
+  {
+    "source_key": "macro_calendar",
+    "tier": "A",
+    "cadence": "event",
+    "pit": "forward_capture",
+    "history_from": "2017-02-01",
+    "backtestable": true
+  }
+]
