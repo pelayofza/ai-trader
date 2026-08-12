@@ -249,6 +249,7 @@ def validate_multiwindow(
     compare_single_split: bool = True,
     block_cache: dict | None = None,
     baseline_cache: dict | None = None,
+    signal_provider_factory=None,
 ) -> MultiWindowValidation:
     """
     Corre UNA muestra por el plan de validacion pedido y agrega sus ventanas.
@@ -263,6 +264,12 @@ def validate_multiwindow(
     `block_cache` y `baseline_cache` sirven para evaluar VARIOS esquemas sobre la misma
     muestra sin repetir tramos (walk-forward y CPCV comparten particion si n_folds+1 ==
     n_groups). Pasalos solo entre llamadas con la MISMA muestra, config y spec.
+
+    `signal_provider_factory` se pasa tal cual al motor: es la costura por la que el canal
+    de observacion sintetico entrega sus senales a las estrategias (ver `BacktestEngine`).
+    None —el caso normal— deja el radar de siempre. Los BASELINES no la reciben y no es un
+    olvido: son carteras pasivas que no consultan ninguna senal, y darles una las
+    convertiria en otra cosa que el liston.
     """
     config = base_config if spec is None else dataclasses.replace(base_config, strategies=[spec])
     purge = resolve_purge_days(base_config) if purge_days is None else purge_days
@@ -273,7 +280,10 @@ def validate_multiwindow(
         purge_days=purge, embargo_days=embargo_days, anchored=anchored,
     )
     engine = BacktestEngine.from_bars(
-        config, bars, starting_equity=starting_equity, headline_weights=headline_weights
+        config, bars,
+        starting_equity=starting_equity,
+        headline_weights=headline_weights,
+        signal_provider_factory=signal_provider_factory,
     )
     results = engine.run_folds(folds, run_train=run_train, block_cache=block_cache)
 
@@ -311,6 +321,7 @@ def validate_multiwindow(
         single = _single_split_score(
             config, bars, start, end,
             starting_equity=starting_equity, headline_weights=headline_weights,
+            signal_provider_factory=signal_provider_factory,
         )
 
     validation = MultiWindowValidation(
@@ -375,12 +386,16 @@ def _single_split_score(
     *,
     starting_equity: float,
     headline_weights: HeadlineWeights,
+    signal_provider_factory=None,
 ) -> float | None:
     """El headline del corte unico 70/30, para poder medir cuanto optimismo aportaba.
     Si falla no se propaga: la comparacion es informativa, no el resultado."""
     try:
         result = BacktestEngine.from_bars(
-            config, bars, starting_equity=starting_equity, headline_weights=headline_weights
+            config, bars,
+            starting_equity=starting_equity,
+            headline_weights=headline_weights,
+            signal_provider_factory=signal_provider_factory,
         ).run(start, end)
     except Exception as exc:  # noqa: BLE001
         logger.warning("Corte unico de referencia no evaluable (%s)", exc)

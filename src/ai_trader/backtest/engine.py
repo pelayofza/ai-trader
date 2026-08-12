@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -161,6 +161,7 @@ class BacktestEngine:
         bars: dict | None = None,
         headline_weights: HeadlineWeights = DEFAULT_HEADLINE_WEIGHTS,
         signals: dict | None = None,
+        signal_provider_factory: Callable[[HistoricalClock], object] | None = None,
     ) -> None:
         if data_provider is None and bars is None:
             raise ValueError("BacktestEngine requires either a data_provider or preloaded bars")
@@ -175,6 +176,17 @@ class BacktestEngine:
         # backtest sin senales construye el radar vacio y las puertas se saltan solas, de
         # modo que las cifras publicadas siguen siendo reproducibles sin tener el archivo.
         self._signal_frames = signals
+        # Quien CONSTRUYE el radar de cada ventana, si no vale el de siempre. Recibe el
+        # reloj de la ventana y devuelve un proveedor con `features(symbol)`.
+        #
+        # Existe por una sola razon y conviene que se lea: el canal de observacion
+        # SINTETICO (`synthetic/signal_channel.py`) no trae fuentes del catalogo real, sino
+        # las suyas, y con ellas su denominador de cobertura y su tabla de polaridad. Sin
+        # esta costura habria que elegir entre dos males: declarar las fuentes simuladas en
+        # el CATALOGO real, o construirle a la estrategia un camino paralelo al que corre
+        # en vivo —y entonces el barrido de rho mediria otra cosa que la que opera—. Lo que
+        # devuelve la factoria sigue siendo un `SignalRadarProvider`, la misma clase.
+        self._signal_provider_factory = signal_provider_factory
         # 365 si el universo incluye algun activo 24/7 (cripto o prediccion), 252 si es
         # solo renta variable. Ver metrics.periods_per_year_for.
         self.periods_per_year = periods_per_year_for_symbols(config.runner.symbols)
@@ -188,6 +200,7 @@ class BacktestEngine:
         *,
         headline_weights: HeadlineWeights = DEFAULT_HEADLINE_WEIGHTS,
         signals: dict | None = None,
+        signal_provider_factory: Callable[[HistoricalClock], object] | None = None,
     ) -> BacktestEngine:
         """Construye un motor sobre series ya generadas (datos simulados o cualquier
         OHLCV en memoria), sin pasar por un proveedor."""
@@ -197,6 +210,7 @@ class BacktestEngine:
             starting_equity=starting_equity,
             headline_weights=headline_weights,
             signals=signals,
+            signal_provider_factory=signal_provider_factory,
         )
 
     def run(
@@ -431,9 +445,10 @@ class BacktestEngine:
         #
         # El bucle es UNO para los dos, duck-typed por el nombre del metodo. Anadir un
         # tercer ensamblador es anadir una linea a este diccionario, no un caso especial.
+        build_signals = self._signal_provider_factory or self._default_signal_provider
         providers = {
             "attach_regime_provider": MarketRegimeProvider(source.raw_bars, clock),
-            "attach_signal_provider": SignalRadarProvider(self._signal_frames, clock),
+            "attach_signal_provider": build_signals(clock),
         }
         for strategy in strategies:
             for method, provider in providers.items():
@@ -464,6 +479,10 @@ class BacktestEngine:
             market_model=IntrabarMarketModel(source, clock),
             starting_equity=self.starting_equity,
         )
+
+    def _default_signal_provider(self, clock: HistoricalClock) -> SignalRadarProvider:
+        """El radar de siempre: catalogo real y frames del archivo (None = radar vacio)."""
+        return SignalRadarProvider(self._signal_frames, clock)
 
 
 def parse_date(value: str) -> datetime:

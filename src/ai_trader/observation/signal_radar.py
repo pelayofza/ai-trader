@@ -135,6 +135,13 @@ INERT_MAX_INTENSITY = Z_CLIP
 # cripto? probablemente; ¿cuanto, y con que retardo? no lo sabemos), y meterla con signo
 # seria colar esa hipotesis dentro de un numero. Esas siguen contando como INTENSIDAD, que
 # es lo que si se puede afirmar de ellas: que estan pasando.
+#
+# ES EL DEFAULT DEL PROVEEDOR, NO UN GLOBAL. `SignalRadarProvider` acepta otra tabla junto
+# con otro catalogo de fuentes, y hay exactamente un caso que la usa: el canal de
+# observacion SINTETICO (`synthetic/signal_channel.py`), cuya polaridad es +1 por
+# construccion —el canal se emite correlacionado con el retorno futuro, asi que su signo lo
+# fija el generador y no una hipotesis sobre el mundo—. Se inyecta en vez de escribirse
+# aqui para que ninguna fuente simulada pueda aparecer en la tabla de las reales.
 POLARITY: dict[str, float] = {
     # --- flujo y posicionamiento ---
     "etf_netflow_usd": +1.0,          # dinero entrando en el vehiculo regulado
@@ -203,9 +210,11 @@ class SignalRadarProvider:
         *,
         sources: Sequence[SignalSource] = CATALOG,
         max_stale_days: int = MAX_STALE_DAYS,
+        polarity: Mapping[str, float] = POLARITY,
     ) -> None:
         self._clock = clock
         self._max_stale_days = max_stale_days
+        self._polarity = polarity
         self._catalog = {s.key: s for s in sources}
         self._asset_keys: list[str] = []
         self._market_keys: list[str] = []
@@ -231,7 +240,7 @@ class SignalRadarProvider:
             if is_event_source(source):
                 self._events[source.key] = _index_events(frame, source)
             else:
-                self._series[source.key] = _index_series(frame, source)
+                self._series[source.key] = _index_series(frame, source, polarity)
 
         # Memo por el 'ahora' del reloj, igual que el regimen: el bloque de mercado se
         # calcula UNA vez por dia y lo reutilizan los 24 simbolos.
@@ -306,7 +315,7 @@ class SignalRadarProvider:
             spec = EVENT_SPECS.get(key) or EventSpec(None, 1.0, False)
             targets = calendars if entity is None else {entity: calendars.get(entity)}
             return [
-                _event_reading(key, calendar, cutoff, spec)
+                _event_reading(key, calendar, cutoff, spec, self._polarity)
                 for calendar in targets.values()
                 if calendar is not None
             ]
@@ -360,12 +369,16 @@ def _aggregate(readings: Sequence[_Reading], n_declared: int) -> tuple[float, fl
 
 
 def _event_reading(
-    key: str, calendar: _Calendar, cutoff: pd.Timestamp, spec: EventSpec
+    key: str,
+    calendar: _Calendar,
+    cutoff: pd.Timestamp,
+    spec: EventSpec,
+    polarity_table: Mapping[str, float] = POLARITY,
 ) -> _Reading:
     encoded = encode_arrays(calendar.days, calendar.values, cutoff, key, spec)
     weight = max(encoded[f"{key}{SUFFIX_AHEAD}"], encoded[f"{key}{SUFFIX_ACTIVE}"])
     magnitude = encoded[f"{key}{SUFFIX_MAG}"]
-    polarity = POLARITY.get(f"{key}{SUFFIX_MAG}", 0.0)
+    polarity = polarity_table.get(f"{key}{SUFFIX_MAG}", 0.0)
     # La proximidad PONDERA la magnitud: un desbloqueo del 3% dentro de un mes no es el
     # mismo hecho que el mismo desbloqueo manana, y sin el peso serian el mismo numero.
     # Una fuente sin magnitud (el calendario macro) aporta intensidad = proximidad: algo va
@@ -419,7 +432,9 @@ class _Calendar:
     values: np.ndarray
 
 
-def _index_series(frame: pd.DataFrame, source: SignalSource) -> dict[str, _Series]:
+def _index_series(
+    frame: pd.DataFrame, source: SignalSource, polarity: Mapping[str, float] = POLARITY
+) -> dict[str, _Series]:
     """Normaliza la fuente y precalcula tono e intensidad fila a fila."""
     names = [name for name in source.feature_names if name in frame.columns]
     if not names:
@@ -437,9 +452,9 @@ def _index_series(frame: pd.DataFrame, source: SignalSource) -> dict[str, _Serie
             continue
         normalized[name] = column
         value_columns.append(name)
-        polarity = POLARITY.get(name)
-        if polarity:
-            tone_columns.append((name, polarity))
+        sign = polarity.get(name)
+        if sign:
+            tone_columns.append((name, sign))
 
     if not value_columns:
         return {}

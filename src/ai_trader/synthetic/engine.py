@@ -97,7 +97,7 @@ class PathEngine:
             # Componente idiosincratico con AR(1) por fase: >0 tiende, <0 revierte. Es lo
             # que rompe el mundo iid y da edge real a momentum vs mean-reversion segun el
             # regimen. Variance-matched: con idio_ar=0 se reduce al ruido de siempre.
-            idio = _ar1_idio(eps, asset.idio_vol, idio_ar_t)
+            idio = ar1_series(eps, asset.idio_vol, idio_ar_t)
 
             # Cargas EFECTIVAS del dia (B6): en las fases de estres las betas suben, que es
             # el unico mecanismo por el que la correlacion entre activos puede acercarse a
@@ -339,21 +339,27 @@ def _apply_garch(
     return out
 
 
-def _ar1_idio(eps: np.ndarray, idio_vol: float, phi_t: np.ndarray) -> np.ndarray:
+def ar1_series(eps: np.ndarray, scale: float, phi_t: np.ndarray) -> np.ndarray:
     """
-    Componente idiosincratico como AR(1) con coeficiente phi por dia:
-        g_t = phi_t * g_{t-1} + idio_vol * sqrt(1 - phi_t^2) * eps_t
+    AR(1) con coeficiente phi POR DIA sobre innovaciones ya dibujadas:
+        g_t = phi_t * g_{t-1} + scale * sqrt(1 - phi_t^2) * eps_t
 
     El factor sqrt(1 - phi^2) es VARIANCE-MATCHING: la varianza estacionaria de g es
-    idio_vol^2 para cualquier phi, asi que anadir autocorrelacion NO cambia la vol total
-    del activo, solo su estructura serial. phi=0 -> g_t = idio_vol * eps_t (iid de siempre).
+    scale^2 para cualquier phi, asi que anadir autocorrelacion NO cambia el nivel, solo la
+    estructura serial. phi=0 -> g_t = scale * eps_t (iid de siempre).
+
+    Nacio como el componente idiosincratico de un activo (`scale` = su vol idiosincratica)
+    y es publica porque el canal de observacion sintetico necesita EXACTAMENTE esta
+    recurrencia para su ruido (`signal_channel.py`, con scale=1). Tener dos copias de una
+    recurrencia con variance-matching seria tener dos definiciones de "ruido persistente"
+    que pueden derivar por separado.
     """
     horizon = len(eps)
     g = np.empty(horizon)
     prev = 0.0
     for t in range(horizon):
         phi = min(_MAX_AR, max(-_MAX_AR, float(phi_t[t])))
-        sigma = idio_vol * np.sqrt(1.0 - phi * phi)
+        sigma = scale * np.sqrt(1.0 - phi * phi)
         prev = phi * prev + sigma * eps[t]
         g[t] = prev
     return g
