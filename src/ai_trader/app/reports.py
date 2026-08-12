@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 
+from ai_trader.app.accounting import PriceLookup, realized_pnl_usd, unrealized_pnl_usd
 from ai_trader.risk.engine import RiskLimits
 from ai_trader.shared.schemas import Position, PositionStatus
-
-# Devuelve el precio de marca de una posicion, o None si no se puede resolver.
-PriceLookup = Callable[[Position], float | None]
 
 UNAVAILABLE = "unavailable"
 
@@ -195,13 +193,8 @@ class ReportBuilder:
         closed = self.closed_positions
         open_positions = self.open_positions
 
-        realized_pnl = sum(p.realized_pnl or 0.0 for p in closed)
-
-        unrealized_pnl = 0.0
-        for position in open_positions:
-            last_price = self.price_lookup(position)
-            if last_price is not None:
-                unrealized_pnl += position.net_pnl_at(last_price)
+        realized_pnl = realized_pnl_usd(self.positions)
+        unrealized_pnl = unrealized_pnl_usd(self.positions, self.price_lookup)
 
         winners = [p for p in closed if (p.realized_pnl or 0.0) > 0]
         losers = [p for p in closed if (p.realized_pnl or 0.0) < 0]

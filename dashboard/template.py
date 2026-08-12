@@ -498,7 +498,7 @@ function renderOverview(){
     ['10','Validación','Arquetipos macro enteros como hold-out y varias ventanas temporales con purga y embargo.','validation','Estrategias'],
     ['11','Veredicto','Aprueba quien bate al mejor pasivo y además opera de verdad.','activity','Estrategias'],
     ['12','Búsqueda','CEM sobre los parámetros, con el resultado descontado por el número de intentos.','ranking','Estrategias'],
-    ['13','En vivo','El mismo camino, con reloj real y dinero de papel. La etapa que aún no ha producido resultados.','paper','Resultados'],
+    ['13','En vivo','El mismo camino, con reloj real y dinero de papel. Cada ciclo deja una línea auditable en el diario.','paper','Resultados'],
   ];
   const findings=[
     ['¿Se parece el mundo sintético al mercado?',
@@ -554,10 +554,12 @@ function renderOverview(){
         <td class="tag">${esc(f[3])}</td>
         <td><button class="btn ghost" data-goto="${f[4]}" style="padding:4px 9px">ver</button></td></tr>`).join('')}
       </tbody></table></div></div>
-    <p class="tag" style="margin-top:14px">El capítulo <b>5 · Resultados</b> está vacío a propósito: un
-      backtest es una medición sobre historia, no un resultado. Se llenará cuando el paper trading acumule
-      calendario. Las <b>evoluciones</b> pendientes están ordenadas por criticidad, con su evidencia medida
-      y su prompt copiable.</p>`;
+    <p class="tag" style="margin-top:14px">El capítulo <b>5 · Resultados</b> ya no es una promesa: lee el
+      <b>diario de ciclos</b> que el runner escribe en vivo${D.paper&&D.paper.summary&&D.paper.summary.n_cycles
+        ?(' ('+D.paper.summary.n_cycles.toLocaleString('es')+' ciclos registrados)')
+        :' —hoy todavía sin ciclos, porque acaba de cablearse—'}. Lo que sigue necesitando calendario es la
+      divergencia live-vs-backtest. Las <b>evoluciones</b> pendientes están ordenadas por criticidad, con su
+      evidencia medida y su prompt copiable.</p>`;
   $$('#overview [data-goto]').forEach(b=>b.onclick=()=>goTo(b.dataset.goto));
 }
 
@@ -2014,32 +2016,190 @@ function _sessionRationale(sessions){
     <p class="lead" style="margin:6px 0">${esc(s.rationale)}</p></div>`).join('')}</div>`;
 }
 
+// PnL con signo explícito y céntimos: en paper las cifras son de dos o tres dígitos y el
+// formato abreviado de `usd()` (pensado para capacidad de mercado) los aplastaría a "$0".
+function pnlUsd(v){
+  if(v===null||v===undefined||Number.isNaN(v))return '-';
+  return (v>=0?'+':'−')+'$'+fmt(Math.abs(v),2);
+}
+function pnlColor(v){return v>=0?'var(--good)':'var(--crit)';}
+
+function paperFunnel(s){
+  const rows=Object.entries(s.rejections||{});
+  return `
+    <h2>Qué decidió el sistema</h2>
+    <div class="split">
+      <div class="card">
+        <h3>El embudo</h3>
+        <table><tbody>
+          <tr><td>Señales generadas</td><td class="num"><b>${s.n_signals.toLocaleString('es')}</b></td></tr>
+          <tr><td>Aprobadas por riesgo</td><td class="num">${s.n_approved.toLocaleString('es')}</td></tr>
+          <tr><td>Rechazadas</td><td class="num">${s.n_rejected.toLocaleString('es')}</td></tr>
+          <tr><td>Órdenes de entrada</td><td class="num">${s.n_fills.toLocaleString('es')}</td></tr>
+          <tr><td>Órdenes de salida</td><td class="num">${(s.n_exit_fills||0).toLocaleString('es')}</td></tr>
+        </tbody></table>
+        <p class="tag" style="margin-top:10px">Una señal aprobada no siempre acaba en posición: puede no
+          haber precio de entrada, o el techo de capacidad puede dejarla en un llenado parcial. Las
+          <b>salidas</b> también pasan por el motor de ejecución y también pagan.</p>
+      </div>
+      <div class="card">
+        <h3>Por qué se rechazó</h3>
+        ${rows.length?`<div class="tblwrap"><table>
+          <thead><tr><th>Motivo</th><th class="num">veces</th></tr></thead>
+          <tbody>${rows.map(([k,v])=>`<tr><td>${esc(k)}</td><td class="num">${v.toLocaleString('es')}</td></tr>`).join('')}</tbody>
+        </table></div>
+        <p class="tag" style="margin-top:10px">Agrupado por familia. La <b>cifra concreta</b> de cada
+          rechazo —qué confianza traía, qué exposición había— está en la línea archivada del diario.</p>`
+        :'<p class="tag">Ningún rechazo todavía.</p>'}
+      </div>
+    </div>`;
+}
+
+function paperPositions(P){
+  const open=P.open_positions||[], closed=P.closed_positions||[];
+  const wins=closed.filter(c=>c.realized_pnl_usd>0).length;
+  return `
+    <h2>Posiciones abiertas <span class="tag">· ${open.length} de ${P.limits.max_open_positions}</span></h2>
+    ${open.length?`<div class="card"><div class="tblwrap"><table>
+      <thead><tr><th>Símbolo</th><th>lado</th><th>estrategia</th><th class="num">tamaño</th>
+        <th class="num">entrada</th><th class="num">marca</th><th class="num">stop</th>
+        <th class="num">objetivo</th><th class="num">comisión</th><th class="num">PnL no realizado</th></tr></thead>
+      <tbody>${open.map(p=>`<tr>
+        <td class="mono"><b>${esc(p.symbol)}</b></td>
+        <td>${esc((p.side||'').toUpperCase())}</td>
+        <td class="tag">${esc(p.strategy_id)}</td>
+        <td class="num">${fmt(p.size,6)}</td>
+        <td class="num">${fmt(p.entry_price,4)}</td>
+        <td class="num">${p.mark_price===null?'<span class="tag">sin precio</span>':fmt(p.mark_price,4)}</td>
+        <td class="num tag">${fmt(p.stop_loss,4)}</td>
+        <td class="num tag">${fmt(p.take_profit,4)}</td>
+        <td class="num tag">${fmt(p.fees_usd,4)}</td>
+        <td class="num"><b style="color:${pnlColor(p.unrealized_pnl_usd)}">${pnlUsd(p.unrealized_pnl_usd)}</b></td></tr>`).join('')}
+      </tbody></table></div>
+      <p class="tag">Marcadas al último ciclo registrado. El PnL es <b>neto de las comisiones de
+        entrada</b>; las de salida se descuentan al cerrar.</p></div>`
+    :'<div class="card"><p class="tag">Ninguna posición abierta ahora mismo.</p></div>'}
+
+    <h2>Posiciones cerradas <span class="tag">· ${closed.length}</span></h2>
+    ${closed.length?`<div class="card"><div class="tblwrap"><table>
+      <thead><tr><th>Símbolo</th><th>lado</th><th class="num">entrada</th><th class="num">salida</th>
+        <th class="num">comisiones</th><th class="num">PnL neto</th><th>motivo</th><th>abierta</th><th>cerrada</th></tr></thead>
+      <tbody>${closed.map(c=>`<tr>
+        <td class="mono"><b>${esc(c.symbol)}</b></td>
+        <td>${esc((c.side||'').toUpperCase())}</td>
+        <td class="num">${fmt(c.entry_price,4)}</td>
+        <td class="num">${fmt(c.exit_price,4)}</td>
+        <td class="num tag">${fmt(c.fees_usd,4)}</td>
+        <td class="num"><b style="color:${pnlColor(c.realized_pnl_usd)}">${pnlUsd(c.realized_pnl_usd)}</b></td>
+        <td class="tag">${esc(c.close_reason||'')}</td>
+        <td class="tag">${esc(c.opened_at||'')}</td>
+        <td class="tag">${esc(c.closed_at||'')}</td></tr>`).join('')}
+      </tbody></table></div>
+      <p class="tag">${wins} ganadoras de ${closed.length}. Todo el PnL de esta tabla es <b>neto de
+        comisiones y de deslizamiento</b>: la salida pasa por el mismo motor de ejecución que la
+        entrada, así que también paga.</p></div>`
+    :'<div class="card"><p class="tag">Todavía no se ha cerrado ninguna posición.</p></div>'}`;
+}
+
+function paperEmpty(P){
+  return `
+    <div class="card"><h3>Sin ciclos registrados <span class="chip pendiente">esperando</span></h3>
+      <p class="lead" style="margin:8px 0">El diario existe y está cableado, pero
+        <span class="mono">${esc(P.journal_path)}</span> aún no tiene ninguna línea. En cuanto el proceso
+        corra un ciclo —cada ${P.cycle_interval_seconds?Math.round(P.cycle_interval_seconds/60):15} minutos
+        con el ciclo automático encendido— esta vista se llena sola: curva marcada a mercado, posiciones
+        abiertas y cerradas con PnL neto, y el embudo de decisiones con el motivo de cada rechazo.</p>
+      <p class="tag">Arranque, tarea programada de Windows, pausa y comprobación de vida: sección
+        <b>«Operación continua»</b> del README.</p></div>`;
+}
+
 function renderPaper(){
+  const P=D.paper;
+  if(!P){$('#paper').innerHTML='<h1>Resultados del paper trading</h1><div class="card"><p class="tag">Sin datos.</p></div>';return;}
+  const s=P.summary||{}, hasCycles=(s.n_cycles||0)>0, curve=P.curve||[];
+
+  const tiles=hasCycles?[
+    ['Ciclos registrados',(s.n_cycles||0).toLocaleString('es'),
+     (s.n_paused_cycles||0)+' en pausa · '+P.n_shards+' fichero'+(P.n_shards===1?'':'s')],
+    ['PnL neto',pnlUsd(s.net_pnl_usd),'realizado '+pnlUsd(s.realized_pnl_usd)+' + no realizado'],
+    ['Caída máxima','$'+fmt(s.max_drawdown_usd,2),
+     s.max_drawdown_pct===null?'sobre la curva de PnL':fmt(s.max_drawdown_pct,2)+'% de la cuenta'],
+    ['Posiciones abiertas',(s.open_positions||0)+' / '+P.limits.max_open_positions,'límite del motor de riesgo'],
+    ['Exposición','$'+fmt(s.exposure_usd,0),'de '+usd(P.limits.max_total_exposure_usd)+' permitidos'],
+    ['Comisiones pagadas','$'+fmt(s.fees_usd,2),
+     ((s.n_fills||0)+(s.n_exit_fills||0))+' órdenes, las dos patas'],
+    ['Deslizamiento medio',s.slippage_bps_mean===null?'-':fmt(s.slippage_bps_mean,1)+' pb',
+     s.slippage_bps_max===null?'cobrado de verdad':'máximo '+fmt(s.slippage_bps_max,1)+' pb'],
+    ['Desde',(s.first_cycle||'').slice(0,10),'último: '+(s.last_cycle||'').slice(0,16).replace('T',' ')],
+  ]:[];
+
   $('#paper').innerHTML=`
     <p class="crumb">Capítulo 5 · Resultados</p>
     <h1>Resultados del paper trading</h1>
-    <p class="lead">Este capítulo está <b>vacío a propósito</b>, y decirlo es más honesto que llenarlo con
-      cifras de backtest presentadas como resultados. Un backtest es una medición sobre historia; un
-      resultado es lo que hace el sistema cuando corre. El runner ya opera en paper con estado persistido,
-      pero hasta que acumule meses de calendario no hay nada que publicar aquí.</p>
-    <div class="grid cards">
-      <div class="card"><h3>Diario de ciclos <span class="chip placeholder">pendiente</span></h3>
-        <p class="tag">Qué se decidió cada ciclo, con qué precio de referencia, qué aprobó el riesgo y
-          cuánto deslizamiento se cobró. Hoy el estado guarda la foto, no la película.</p></div>
-      <div class="card"><h3>Curva de equity <span class="chip placeholder">pendiente</span></h3>
-        <p class="tag">Equity marcado a mercado y posiciones abiertas y cerradas con PnL neto de
-          comisiones, con la misma contabilidad que describe el capítulo del trade.</p></div>
-      <div class="card"><h3>Riesgo desplegado <span class="chip placeholder">pendiente</span></h3>
-        <p class="tag">Exposición real frente a los límites configurados, número de posiciones y drawdown
-          de cuenta.</p></div>
-      <div class="card"><h3>Divergencia live-vs-backtest <span class="chip placeholder">pendiente</span></h3>
-        <p class="tag">La cifra que justifica el capítulo 3 entero: cuánto se aparta lo ejecutado de lo que
-          el motor predecía, separando precio de llenado, coste y latencia.</p></div>
-    </div>
+    <p class="lead">Lo que hace el sistema <b>cuando corre</b>, que no es lo mismo que un backtest. Todo
+      lo de esta página sale de dos ficheros que escribe el propio runner y de ninguna otra parte: el
+      <b>diario de ciclos</b> (<span class="mono">${esc(P.journal_path)}</span>, append-only, una línea por
+      ciclo) y el <b>estado persistido</b> (<span class="mono">${esc(P.state_path)}</span>).
+      ${P.is_paused?'<b>El runner está pausado ahora mismo.</b>':''}</p>
+
+    ${hasCycles?`
+    <div class="grid tiles">${tiles.map(t=>`<div class="card tile"><div class="k">${t[0]}</div>
+      <div class="v">${t[1]}</div><div class="s">${esc(t[2])}</div></div>`).join('')}</div>
+
+    <h2>Curva marcada a mercado</h2>
+    <div class="card"><div id="paperchart"></div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--s1)"></span>PnL neto (realizado + no realizado)</span>
+        <span><span class="swatch" style="background:var(--s5)"></span>sólo realizado</span>
+      </div>
+      <p class="tag" style="margin-top:8px">Un punto por ciclo${curve.length<(s.n_marked_cycles||0)
+        ?' (recortado a '+curve.length+' puntos para el gráfico; las cifras salen de los '+
+          (s.n_marked_cycles||0).toLocaleString('es')+' ciclos enteros)':''}. Los ciclos <b>pausados</b> no
+        entran en la curva: no se marcan a mercado, así que meterlos con un cero aplanaría el tramo en el
+        que el sistema estuvo parado.</p></div>
+
+    <div class="note"><b>Por qué esto es PnL y no equity de cuenta.</b> En vivo el sistema opera
+      <b>sin capital declarado</b>: el motor de riesgo dimensiona en absoluto (tamaño máximo por posición,
+      exposición máxima) y no como fracción de un patrimonio. Declarar un capital sólo para poder dibujar
+      una curva de equity <i>cambiaría el dimensionado</i> de todas las órdenes, así que no se hace. La
+      curva de PnL neto es la de equity salvo una constante aditiva, y la caída máxima se publica en
+      dólares por el mismo motivo: un porcentaje necesitaría una base que aquí no existe.</div>
+
+    ${paperPositions(P)}
+    ${paperFunnel(s)}
+
+    ${P.watchlist&&P.watchlist.length?`
+    <h2>Mercados de predicción observados <span class="tag">· ${P.n_watched_markets} en la lista</span></h2>
+    <div class="card"><div class="tblwrap"><table>
+      <thead><tr><th>Mercado</th><th>resultado</th><th class="num">midpoint</th><th class="num">precio Gamma</th></tr></thead>
+      <tbody>${P.watchlist.map(w=>w.error
+        ? `<tr><td>${esc(w.slug)}</td><td colspan="3" class="tag">no se pudo leer: ${esc(w.error)}</td></tr>`
+        : `<tr><td>${esc(w.question||w.slug)}</td><td>${esc(w.outcome||'')}</td>
+        <td class="num"><b>${fmt(w.midpoint,3)}</b></td>
+        <td class="num tag">${fmt(w.gamma_price,3)}</td></tr>`).join('')}
+      </tbody></table></div>
+      <p class="tag">Sólo lectura: se anotan pero <b>no se operan</b>. Es la única forma de construir el
+        histórico de Polymarket, que no se puede descargar ni comprar y que hoy hace imposible
+        <i>backtestear</i> mercados de predicción.</p></div>`:''}
+    `:paperEmpty(P)}
+
+    <h2>Lo que todavía no está aquí</h2>
+    <div class="card"><h3>Divergencia live-vs-backtest <span class="chip pendiente">necesita meses</span></h3>
+      <p class="tag">Cuánto se aparta lo ejecutado de lo que el motor predecía, separando precio de
+        llenado, coste y latencia. El material ya se está guardando —cada línea del diario lleva el precio
+        de referencia con el que se decidió, el de llenado y el <span class="mono">slippage_bps</span>
+        realmente cobrado—, pero la cifra necesita meses de operaciones para ser medible.</p></div>
+
     <div class="note"><b>Por qué esto no se puede acelerar.</b> Es la única parte del proyecto que consume
-      <b>tiempo de calendario</b> y no cómputo: la divergencia entre lo ejecutado y lo simulado necesita
-      meses de operaciones para ser medible. Por eso arrancar el paper trading es la evolución número 1
-      aunque no requiera desarrollo nuevo — cada semana sin correr es una semana perdida al final.</div>`;
+      <b>tiempo de calendario</b> y no cómputo. Por eso el paper trading corre en paralelo a todo lo demás:
+      cada semana sin correr es una semana perdida al final.</div>`;
+
+  if(hasCycles&&curve.length){
+    lineChart($('#paperchart'),[
+      {name:'PnL neto',values:curve.map(p=>p.net),color:cssv('--s1')},
+      {name:'realizado',values:curve.map(p=>p.realized),color:cssv('--s5')},
+    ],{h:260,xlab:'ciclo'});
+  }
 }
 
 const PRIORITY_LABEL={critica:'crítica',alta:'alta',media:'media',baja:'baja',aparcada:'aparcada'};

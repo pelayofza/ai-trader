@@ -105,6 +105,10 @@ RANK_CONFIGS = [
 CHART_SYMBOLS = ["BTC/USDT", "SPY", "GLD"]
 CHART_POINTS = 160  # downsample de las series de precio para el JSON
 
+# Puntos de la curva de paper trading que se embeben en el HTML. El diario crece sin
+# limite (un ciclo cada 15 minutos) y el dashboard es un fichero autocontenido.
+CURVE_POINTS = 400
+
 # --- panel de costes de ejecucion ---------------------------------------------------
 # Muestra transversal del universo: dos cripto de primer nivel, tres altcoins, dos
 # indices y dos macro. Los tamanos van de "orden de andar por casa" a institucional,
@@ -128,12 +132,19 @@ def _git(*args: str) -> str:
         return ""
 
 
+def _pick_indices(total: int, n: int) -> np.ndarray:
+    """Hasta `n` indices repartidos por igual, incluyendo SIEMPRE el primero y el ultimo.
+
+    Estaba dentro de `_downsample`, que solo sabe recortar series de numeros. La curva de
+    paper trading necesita el mismo recorte pero sobre FILAS (marca de tiempo, PnL,
+    exposicion), asi que lo que se comparte es la eleccion de indices, no el formateo."""
+    if total <= n:
+        return np.arange(total)
+    return np.linspace(0, total - 1, n).astype(int)
+
+
 def _downsample(values: np.ndarray, n: int) -> list[float]:
-    if len(values) <= n:
-        idx = np.arange(len(values))
-    else:
-        idx = np.linspace(0, len(values) - 1, n).astype(int)
-    return [round(float(v), 2) for v in values[idx]]
+    return [round(float(v), 2) for v in values[_pick_indices(len(values), n)]]
 
 
 def _phase_market_vol(phase) -> float:
@@ -1318,6 +1329,102 @@ detecta un test, porque cada una tiene los suyos: corregir una y no las otras de
 sistema puntuando con dos definiciones distintas de la misma metrica."""
 
 
+def collect_paper() -> dict:
+    """
+    La vista del paper trading en vivo. DOS fuentes reales y ninguna llamada de red.
+
+    - `data/live/cycles.jsonl` (el diario): la pelicula. De ahi salen la curva marcada a
+      mercado, los rechazos del riesgo por familia y el deslizamiento REALMENTE cobrado.
+    - `data/runtime_state.json` (el estado): la foto. De ahi salen las posiciones
+      cerradas con su PnL neto, que es el registro autoritativo aunque el diario no
+      exista todavia (o se haya perdido).
+
+    Las posiciones ABIERTAS se leen del ultimo ciclo del diario y no del estado, porque
+    el estado no guarda precio de marca: marcarlas aqui obligaria a que generar el
+    dashboard tocara la red, y entonces el dashboard dejaria de ser reproducible.
+
+    Nunca devuelve None: con el sistema recien arrancado devuelve `n_cycles = 0` y la
+    vista dice "sin ciclos registrados" en vez de romperse.
+    """
+    from ai_trader.app.journal import DEFAULT_JOURNAL_PATH, CycleJournal, journal_summary
+    from ai_trader.app.state_store import DEFAULT_STATE_PATH, JsonStateStore
+
+    config = load_config(ROOT / "config" / "default.toml")
+    journal = CycleJournal(ROOT / DEFAULT_JOURNAL_PATH)
+    records = journal.read()
+    summary = journal_summary(records)
+
+    state = JsonStateStore(ROOT / DEFAULT_STATE_PATH).load()
+    positions = state.get("positions", [])
+    closed = [p for p in positions if not p.is_open]
+
+    last = records[-1] if records else {}
+    limits = config.risk
+
+    # La curva tiene un punto por ciclo: 96 al dia con el intervalo de 900 s, unos 35.000
+    # al ano. Se recorta a 400 puntos para el grafico -mas no se distinguen en pantalla-;
+    # las cifras (caida maxima, PnL, comisiones) salen de la curva ENTERA.
+    curve = summary["curve"]
+    thinned = [curve[i] for i in _pick_indices(len(curve), CURVE_POINTS)]
+
+    return {
+        "journal_path": str(DEFAULT_JOURNAL_PATH).replace("\\", "/"),
+        "state_path": str(DEFAULT_STATE_PATH).replace("\\", "/"),
+        "cycle_interval_seconds": _cycle_interval_seconds(),
+        "n_shards": len(journal.shards()),
+        "summary": {k: v for k, v in summary.items() if k != "curve"},
+        "curve": [
+            {
+                "t": (p["timestamp"] or "")[:16].replace("T", " "),
+                "net": round(p["net_pnl_usd"], 2),
+                "realized": round(p["realized_pnl_usd"], 2),
+                "exposure": round(p["exposure_usd"], 2),
+                "open": p["open_positions"],
+            }
+            for p in thinned
+        ],
+        "open_positions": last.get("opened", []),
+        "closed_positions": [
+            {
+                "symbol": p.symbol,
+                "side": p.side.value,
+                "strategy_id": p.strategy_id,
+                "size": p.size,
+                "entry_price": p.entry_price,
+                "exit_price": p.exit_price,
+                "fees_usd": round(p.total_fees_usd, 4),
+                "realized_pnl_usd": round(p.realized_pnl or 0.0, 2),
+                "close_reason": p.close_reason,
+                "opened_at": p.opened_at.isoformat()[:10],
+                "closed_at": p.closed_at.isoformat()[:10] if p.closed_at else None,
+            }
+            # Las mas recientes primero, y sin tope: son decenas al ano, no miles.
+            for p in sorted(closed, key=lambda p: p.closed_at or p.opened_at, reverse=True)
+        ],
+        "limits": {
+            "max_open_positions": limits.max_open_positions,
+            "max_total_exposure_usd": limits.max_total_exposure_usd,
+            "max_position_size_usd": limits.max_position_size_usd,
+            "max_daily_loss_usd": limits.max_daily_loss_usd,
+        },
+        "is_paused": bool(state.get("is_paused", False)),
+        "n_watched_markets": len(config.runner.prediction_watchlist),
+        "watchlist": last.get("watchlist", []),
+    }
+
+
+def _cycle_interval_seconds() -> int | None:
+    """El intervalo del ciclo automatico, leido de donde vive. Si el paquete de Telegram
+    no esta instalado el dashboard se genera igual: es una cifra de contexto, no un dato
+    del que dependa ninguna vista."""
+    try:
+        from ai_trader.bots.telegram_bot import AUTO_CYCLE_INTERVAL_SECONDS
+
+        return AUTO_CYCLE_INTERVAL_SECONDS
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def collect_roadmap() -> list[dict]:
     """Evoluciones pendientes, ordenadas por criticidad, con prompt para Claude Code.
 
@@ -1382,6 +1489,7 @@ def build() -> None:
         "sessions": collect_sessions(),
         "activity": collect_activity(),
         "signals_platform": signals_platform,
+        "paper": collect_paper(),
         "roadmap": collect_roadmap(),
         "roadmap_groups": ROADMAP_GROUPS,
     }
@@ -1523,11 +1631,11 @@ ROADMAP_GROUPS = [
     {
         "key": "ahora",
         "title": "Ahora",
-        "subtitle": "Dos frentes que no compiten entre si. Arrancar el PAPER TRADING, porque compra "
-                    "lo único que no se puede comprimir después: tiempo de calendario. Y el barrido "
-                    "de rho, que es el TEST DE FALSACIÓN que dejó abierto el radar de señales -hoy "
-                    "limitar los grados de libertad reduce el riesgo de sobreajuste, pero no lo "
-                    "mide.",
+        "subtitle": "Dos frentes que no compiten entre si. Mantener corriendo el PAPER TRADING -que "
+                    "ya deja diario auditable por ciclo- porque compra lo único que no se puede "
+                    "comprimir después: tiempo de calendario. Y el barrido de rho, que es el TEST "
+                    "DE FALSACIÓN que dejó abierto el radar de señales -hoy limitar los grados de "
+                    "libertad reduce el riesgo de sobreajuste, pero no lo mide.",
     },
     {
         "key": "despues",
@@ -1556,65 +1664,58 @@ ROADMAP = [
         "rank": 1,
         "group": "ahora",
         "priority": "alta",
-        "title": "Poner el paper trading a correr en vivo (y la vista del dashboard que lo lea)",
-        "line": "Live", "status": "pendiente", "impact": "alto", "effort": "bajo",
-        "evidence": "Cero desarrollo pendiente para arrancar: runner, motor de riesgo, ejecución "
-                    "en papel con microestructura y bot de Telegram existen y funcionan (ciclo "
-                    "automático cada 900 s, estado persistido en data/runtime_state.json).",
-        "why": "No compite con lo demás: se lanza YA, en paralelo, porque compra la única cosa "
-               "que no se puede comprimir después -tiempo de calendario. La divergencia "
-               "live-vs-backtest necesita meses para ser medible, así que cada semana que el bot "
-               "no corre es una semana perdida al final del proyecto. Además, corriendo en vivo "
-               "es cuando Polymarket empieza a generar el histórico de midpoints que hoy no "
-               "existe, que es la única vía barata hacia un backtest de mercados de predicción. "
-               "Con el universo actual y sin tocar tickers.",
+        "title": "Medir la divergencia live-vs-backtest sobre el diario de ciclos",
+        "line": "Live", "status": "pendiente", "impact": "alto", "effort": "medio",
+        "evidence": "La INFRAESTRUCTURA ya está hecha y probada: diario append-only con fsync y "
+                    "rotación por mes o tamaño (app/journal.py, data/live/cycles.jsonl), copia "
+                    "rotatoria del estado con arranque desde backup y aviso por Telegram "
+                    "(app/state_store.py), vista de paper trading conectada a las dos fuentes, y "
+                    "procedimiento de arranque continuo en Windows documentado. Cada línea del "
+                    "diario ya lleva el precio de referencia con el que se decidió, el de llenado "
+                    "y el slippage_bps realmente cobrado. Lo que falta es CALENDARIO y la "
+                    "medición que se hace encima.",
+        "why": "Sigue siendo el número 1 porque es lo único que no se puede comprimir después: la "
+               "divergencia necesita meses de operaciones reales para ser medible, y cada semana "
+               "que el proceso no corre es una semana perdida al final. La diferencia con antes "
+               "es que ahora el material SE ESTÁ GUARDANDO: cuando haya unos meses de diario, "
+               "esta entrada deja de ser 'arrancar' y pasa a ser 're-simular el mismo periodo con "
+               "el motor de backtest y separar la diferencia en sus tres componentes'. Mientras "
+               "tanto, mantenerlo vivo es todo el trabajo.",
         "prompt": (
-            "Proyecto ai-trader (Python). El sistema ya opera en paper y no le falta desarrollo "
-            "para arrancar: TradingRunner (src/ai_trader/app/runner.py), RiskEngine, "
-            "PaperExecutionEngine con el modelo de microestructura "
-            "(src/ai_trader/execution/microstructure.py), ExecutionRouter, estado persistido en "
-            "JsonStateStore (data/runtime_state.json) y bot de Telegram con ciclo automatico cada "
-            "AUTO_CYCLE_INTERVAL_SECONDS = 900 (src/ai_trader/bots/telegram_bot.py). El arranque "
-            "es src/ai_trader/main.py con TELEGRAM_BOT_TOKEN y TELEGRAM_ALLOWED_CHAT_IDS.\n"
+            "Proyecto ai-trader (Python). El paper trading en vivo YA deja huella auditable: "
+            "src/ai_trader/app/journal.py escribe una linea JSONL por ciclo en "
+            "data/live/cycles.jsonl con los simbolos evaluados, las senales con su confianza, la "
+            "decision del riesgo con su motivo, la orden enviada con el PRECIO DE REFERENCIA con "
+            "el que se decidio, el fill con precio, comision y slippage_bps REALMENTE cobrado, y "
+            "el PnL marcado a mercado con la exposicion desplegada. La vista 'Paper trading' del "
+            "dashboard ya lo lee.\n"
             "\n"
-            "OBJETIVO: dejarlo corriendo de forma continua y que cada ciclo deje HUELLA "
-            "auditable, porque hoy el estado guarda la foto (posiciones, PnL) pero no la pelicula "
-            "(que se decidio, con que precio, cuanto deslizamiento se cobro), y la pelicula es "
-            "exactamente el material con el que dentro de unos meses se medira la divergencia "
-            "live-vs-backtest.\n"
+            "OBJETIVO: convertir ese archivo en la MEDICION que justifica el capitulo 3 entero: "
+            "cuanto se aparta lo ejecutado de lo que el motor de backtest predecia.\n"
             "\n"
-            "(1) DIARIO DE CICLOS. Anade un registro append-only en JSONL (p.ej. "
-            "data/live/cycles.jsonl) que escriba, por ciclo: marca de tiempo, simbolos "
-            "evaluados, senales generadas con su confianza, decisiones del motor de riesgo "
-            "(aprobada/rechazada y motivo), ordenes enviadas, fills con precio, comision y "
-            "slippage_bps REALMENTE cobrado (viene en ExecutionResult), equity marcada a mercado "
-            "y exposicion desplegada. Rotacion por tamano o por mes, y escritura resistente a "
-            "reinicio (append + fsync, nunca reescribir el fichero entero). Este fichero es un "
-            "activo del proyecto: no lo metas en data/ sin decidir si va a git (recomendado: "
-            "ignorado en git, pero con su ruta documentada).\n"
-            "(2) DURABILIDAD DEL ESTADO. Copia de seguridad rotatoria de runtime_state.json antes "
-            "de cada escritura y arranque tolerante a fichero corrupto (si no parsea, avisa por "
-            "Telegram y arranca del backup, no de cero silenciosamente).\n"
-            "(3) PROCEDIMIENTO DE ARRANQUE documentado en el README: variables de entorno, "
-            "AI_TRADER_CONFIG=config/default.toml (universo de 24 pares cripto), como se lanza "
-            "para que sobreviva a un reinicio de la maquina (servicio/tarea programada en "
-            "Windows), como se pausa desde Telegram y como se comprueba que sigue vivo.\n"
-            "(4) VISTA DE PAPER TRADING EN EL DASHBOARD. La seccion 'Paper trading' hoy es un "
-            "placeholder. Conectala a las dos fuentes reales (JsonStateStore + el JSONL de "
-            "ciclos): curva de equity marcada a mercado, tabla de posiciones abiertas y cerradas "
-            "con PnL neto de comisiones, y metricas de riesgo (exposicion desplegada, nº de "
-            "posiciones frente al maximo, drawdown de cuenta). Reusa los helpers SVG del template "
-            "(dashboard/template.py) y manten el HTML autocontenido. Si no hay datos todavia, la "
-            "vista debe decir 'sin ciclos registrados' en vez de romperse.\n"
-            "(5) OPCIONAL, y explicitamente de segunda prioridad: registrar en el mismo diario el "
-            "midpoint de una watchlist de mercados de Polymarket aunque no se opere ninguno. Es "
-            "solo lectura y coste casi nulo, y es lo unico que puede construir el historico que "
-            "hoy hace imposible backtestear mercados de prediccion.\n"
+            "(1) RE-SIMULACION PAREADA. Coge la ventana de calendario que cubre el diario y "
+            "corre el MISMO periodo con backtest/engine.py sobre las barras reales de esos "
+            "mismos dias y la misma configuracion. La comparacion tiene que ser pareada por "
+            "ciclo, no agregada: un Sharpe contra otro Sharpe no dice donde esta la diferencia.\n"
+            "(2) DESCOMPONER LA DIFERENCIA EN TRES, que es lo que hace accionable la cifra: "
+            "(a) PRECIO DE LLENADO -- filled_price contra el precio que el modelo de "
+            "microestructura predecia para ese tamano y esa barra; (b) COSTE -- slippage_bps y "
+            "comision realmente cobrados contra los modelados; (c) LATENCIA -- el hueco entre el "
+            "instante de la decision y el del fill, que el estudio de sesiones "
+            "(backtest/session_study.py) ya midio que cuesta 3,9x el coste modelado.\n"
+            "(3) DECISIONES QUE NO SE TOMARON. El diario guarda tambien los rechazos del riesgo y "
+            "las senales que no llegaron a orden. Comparar el CONTEO de decisiones (cuantas "
+            "senales, cuantas aprobadas, cuantas ejecutadas) entre vivo y re-simulacion detecta "
+            "divergencias que el PnL esconde: si en vivo se generan la mitad de senales, el "
+            "problema no es el coste sino los datos.\n"
+            "(4) PUBLICAR el informe en data/live/divergence.json con la misma disciplina que el "
+            "resto de estudios (load_*/write_* y un umbral que el estudio PUEDA fallar), y "
+            "conectarlo a la vista 'Paper trading' y a la seccion 5 de la documentacion.\n"
             "\n"
-            "NO amplies el universo ni anadas tickers: el valor de esta tarea es empezar a contar "
-            "el tiempo, no cambiar el sistema. Tests de lo que anadas (serializacion del diario, "
-            "rotacion, arranque con estado corrupto) + .venv\\Scripts\\python.exe (poetry run esta "
-            "roto) + ruff. Regenera dashboard y docs."
+            "NO SE PUEDE CORRER TODAVIA: hacen falta meses de diario. Si al arrancar hay menos de "
+            "un mes de ciclos, el estudio tiene que DECIRLO y no publicar una cifra sin "
+            "potencia. Tests + .venv\\Scripts\\python.exe (poetry run esta roto) + ruff. "
+            "Regenera dashboard y docs."
         ),
     },
     {

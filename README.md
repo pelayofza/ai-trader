@@ -25,7 +25,10 @@ main.py                 Entrada con bot de Telegram.
 
 app/runner.py           Orquestador. Solo orquesta.
 app/reports.py          Formateo de informes para humanos.
-app/state_store.py      Persistencia atómica del estado.
+app/accounting.py       PnL realizado y no realizado. Una sola definición.
+app/state_store.py      La FOTO: estado atómico, con copia rotatoria y arranque
+                        tolerante a corrupción.
+app/journal.py          La PELÍCULA: diario append-only de ciclos en data/live/.
 
 strategies/registry.py  Registro tipo -> constructor. Una estrategia es {tipo, params}.
 risk/engine.py          Puerta única: aprueba, dimensiona y asigna stop-loss/take-profit.
@@ -526,6 +529,136 @@ Variables de entorno (ver `.env.example`):
 `/status` `/positions` `/risk` `/history` `/performance` `/symbols` `/price SYMBOL`
 `/pause` `/resume` `/run_cycle` `/autoon` `/autooff`
 
+## Operación continua (paper trading en vivo)
+
+Arrancar el bot no es el objetivo: el objetivo es que **el tiempo empiece a contar**. La
+divergencia entre lo ejecutado y lo que el backtest predecía es la única medición del
+proyecto que no se puede acelerar con cómputo, y necesita meses de calendario. Cada
+semana que el proceso no corre es una semana perdida al final.
+
+### 1. Qué hace falta antes de arrancar
+
+```powershell
+Copy-Item .env.example .env    # y rellena TELEGRAM_BOT_TOKEN y TELEGRAM_ALLOWED_CHAT_IDS
+$env:AI_TRADER_CONFIG = "config/default.toml"   # universo de 24 pares cripto
+```
+
+| Variable | Obligatoria | Para qué |
+|---|---|---|
+| `TELEGRAM_BOT_TOKEN` | sí | Token del bot (BotFather) |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | sí | Lista blanca. Sin ella, cualquiera que encuentre el bot puede pausarlo o disparar un ciclo |
+| `AI_TRADER_CONFIG` | no (por defecto `config/default.toml`) | Universo, límites de riesgo, comisiones y estrategias |
+| `ALPACA_API_KEY` / `ALPACA_SECRET_KEY` | solo si operas stocks | Datos de renta variable |
+
+**Cómo descubrir tu chat id la primera vez.** No sirve mandarle `/start` al bot: sin
+`TELEGRAM_ALLOWED_CHAT_IDS` el arranque falla *antes* de construir la aplicación, así que
+no hay bot al que escribir. Se le pregunta a la API, que no necesita el bot corriendo:
+
+```powershell
+# 1. Manda cualquier mensaje a tu bot desde Telegram.
+# 2. Pregunta quién le ha escrito:
+$t = (Select-String -Path .env -Pattern '^TELEGRAM_BOT_TOKEN=').Line.Split('=',2)[1].Trim()
+(Invoke-RestMethod "https://api.telegram.org/bot$t/getUpdates").result.message.chat |
+  Select-Object -Property id, type, username -Unique
+```
+
+Pega el `id` en `TELEGRAM_ALLOWED_CHAT_IDS` (separados por comas si son varios). Telegram
+solo guarda los mensajes 24 h: si sale vacío, vuelve a escribirle y repite.
+
+Con la lista ya rellena, `/start` desde **otro** chat sí devuelve su id en el mensaje de
+rechazo, que es para lo que sirve esa vía.
+
+### 2. Arrancar
+
+```powershell
+.venv\Scripts\python.exe -m ai_trader.main    # equivalente a `poetry run ai-trader-bot`
+```
+
+El ciclo automático **no arranca solo**: hay que encenderlo con `/autoon` desde Telegram.
+A partir de ahí corre cada `AUTO_CYCLE_INTERVAL_SECONDS` (900 s, en
+`src/ai_trader/bots/telegram_bot.py`), con cerrojo de reentrada: un `/run_cycle` manual y
+el programado nunca se solapan.
+
+### 3. Que sobreviva a un reinicio de la máquina
+
+Tarea programada de Windows, con arranque al inicio y reintento si el proceso muere.
+`RU` = el usuario con el que corre; `-WindowStyle Hidden` evita la consola:
+
+```powershell
+$exe    = "$PWD\.venv\Scripts\pythonw.exe"
+$action = New-ScheduledTaskAction -Execute $exe -Argument "-m ai_trader.main" -WorkingDirectory $PWD
+$daily  = New-ScheduledTaskTrigger -AtStartup
+$policy = New-ScheduledTaskSettingsSet -RestartInterval (New-TimeSpan -Minutes 5) `
+            -RestartCount 999 -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
+Register-ScheduledTask -TaskName "ai-trader" -Action $action -Trigger $daily `
+  -Settings $policy -RunLevel Limited
+Start-ScheduledTask -TaskName "ai-trader"
+```
+
+`-ExecutionTimeLimit 0` es imprescindible: por defecto Windows mata la tarea a los tres
+días. `-MultipleInstances IgnoreNew` evita dos procesos escribiendo el mismo estado.
+
+Comprobación y parada:
+
+```powershell
+Get-ScheduledTaskInfo -TaskName "ai-trader"   # LastRunTime / LastTaskResult
+Stop-ScheduledTask   -TaskName "ai-trader"
+```
+
+La alternativa es [NSSM](https://nssm.cc/) si prefieres un servicio de Windows de verdad;
+la tarea programada basta y no necesita permisos de administrador.
+
+### 4. Pausar, reanudar y comprobar que sigue vivo
+
+| Quiero | Cómo |
+|---|---|
+| Parar de abrir posiciones (sin matar el proceso) | `/pause` — se persiste en el estado, así que **sobrevive al reinicio** |
+| Reanudar | `/resume` |
+| Apagar solo el ciclo automático | `/autooff` (el bot sigue respondiendo) |
+| Saber si está vivo | `/ping` → `pong`, o `/status` |
+| Saber si el **ciclo** está vivo | La última línea de `data/live/cycles.jsonl`: si su marca de tiempo tiene más de ~20 minutos, el ciclo no está corriendo aunque el bot conteste |
+
+Un runner pausado **también** escribe su línea en el diario. Es lo que distingue «vivo y
+parado» de «caído», que desde fuera son idénticos.
+
+```powershell
+Get-Content data\live\cycles.jsonl -Tail 1 | ConvertFrom-Json | Select-Object timestamp,status,open_positions,net_pnl_usd
+```
+
+### 5. Qué escribe en disco, y qué hay que copiar
+
+| Ruta | Qué es | ¿Git? | ¿Se puede perder? |
+|---|---|---|---|
+| `data/live/cycles.jsonl` | **Diario de ciclos.** El fichero en curso; siempre este nombre | no | **No.** No se regenera: es la evidencia de lo que se decidió y a qué precio |
+| `data/live/cycles-YYYY-MM.NNN.jsonl` | Shards ya cerrados (rotación por mes o al superar 8 MB) | no | No |
+| `data/runtime_state.json` | Estado de ejecución: posiciones, PnL del día, pausa | no | Sí, con coste: se pierden las posiciones abiertas |
+| `data/runtime_state.json.1` … `.3` | Copias rotatorias, la `.1` es la más reciente | no | Sí |
+
+El diario está **fuera de git a propósito** —crece cada 15 minutos en la máquina que
+opera y sería un conflicto de *merge* permanente— pero es un activo del proyecto: hay que
+copiarlo a otro disco periódicamente, porque es lo único que no se puede volver a
+generar. Un `robocopy data\live <destino>\live /MIR` en una tarea semanal basta.
+
+Escritura resistente a corte de luz, en las dos rutas: el diario es **append-only** con
+`fsync` por línea (nunca se reescribe el fichero entero), y el estado se escribe a un
+temporal, se sincroniza y se renombra. Si el estado aparece corrupto al arrancar, el
+sistema **arranca desde la copia más reciente que parsee y avisa por Telegram**; antes se
+arrancaba de cero en silencio, que es el peor final posible: el runner olvidaba las
+posiciones abiertas y no las cerraba nunca.
+
+### 6. Observar mercados de predicción sin operarlos (opcional)
+
+```toml
+[runner]
+prediction_watchlist = ["quien-gana-x", "otro-slug"]
+```
+
+Vacía por defecto. Con la lista puesta, cada ciclo anota en el diario el *midpoint* vivo
+del CLOB de cada resultado, **sin generar señal, sin pasar por riesgo y sin abrir
+posición**. No es universo: no añade tickers ni cambia lo que se opera. Es la única forma
+de construir el histórico de Polymarket, que hoy no se puede descargar ni comprar y que
+es lo que impide *backtestear* mercados de predicción.
+
 ## Desarrollo
 
 ```powershell
@@ -536,6 +669,9 @@ poetry run ruff check .  # linter
 ## Notas
 
 - `data/runtime_state.json` es **estado de ejecución mutable**, no fuente. No se versiona.
+  Sus copias rotatorias (`.1` … `.3`) tampoco. Ver «Operación continua».
+- `data/live/` es el **diario de ciclos** del paper trading en vivo: append-only, no se
+  versiona y **no se regenera**. Ver «Operación continua» para la copia de seguridad.
 - `.cache/bars/` es caché de barras en parquet; se puede borrar sin consecuencias, se regenera.
   El timeframe va en el nombre del fichero (`CRYPTO__BTC_USDT_1D.parquet` /
   `..._1H.parquet`), así que las barras horarias del estudio de sesiones **no pisan** el

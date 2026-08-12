@@ -8,7 +8,9 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from ai_trader.app.journal import CycleJournal
 from ai_trader.app.runner import TradingRunner
+from ai_trader.app.state_store import JsonStateStore
 from ai_trader.bots.telegram_bot import build_application
 from ai_trader.config import DEFAULT_CONFIG_PATH, AppConfig, load_config
 from ai_trader.data.market_data import MarketDataService
@@ -52,9 +54,18 @@ def parse_chat_ids(raw: str) -> frozenset[int]:
             ) from exc
 
     if not ids:
+        # El mensaje anterior mandaba usar /start para descubrir el chat id, y eso es
+        # imposible en el PRIMER arranque: esta excepcion salta antes de construir la
+        # aplicacion, asi que no hay bot al que escribir. Solo funciona cuando ya hay
+        # algun id valido en la lista y el que pregunta es otro chat.
         raise RuntimeError(
             "TELEGRAM_ALLOWED_CHAT_IDS is empty. Without it anyone who finds the bot "
-            "could pause it or trigger trades. Send /start to the bot to learn your chat id."
+            "could pause it or trigger trades.\n"
+            "To learn your chat id on a first run: send any message to your bot from "
+            "Telegram, then ask the API for it (the bot does not need to be running):\n"
+            "  (Invoke-RestMethod \"https://api.telegram.org/bot$env:TELEGRAM_BOT_TOKEN/"
+            "getUpdates\").result.message.chat.id\n"
+            "Put the number in TELEGRAM_ALLOWED_CHAT_IDS (comma-separated for several)."
         )
 
     return frozenset(ids)
@@ -184,6 +195,12 @@ def build_runner(
             prediction_engine=PolymarketPaperExecutionEngine(paper_engine=paper_engine),
         ),
         notifier=notifier,
+        # Este es el UNICO sitio donde se construye el runner en vivo (el CLI headless
+        # tambien pasa por aqui), asi que es donde se enchufan las dos piezas que solo
+        # tienen sentido corriendo de verdad: el diario de ciclos y el aviso de que el
+        # estado se recupero de una copia. En backtest ninguna de las dos se activa.
+        state_store=JsonStateStore(notifier=notifier),
+        journal=CycleJournal(),
     )
 
 

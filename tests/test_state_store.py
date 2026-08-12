@@ -83,6 +83,92 @@ def test_corrupt_file_does_not_crash_the_runner(store):
     assert store.load() == {}
 
 
+class TestDurability:
+    """
+    Perder el estado no es perder un fichero: es que el runner olvide las posiciones
+    abiertas, no las cierre nunca y siga abriendo otras contra los mismos limites. Antes
+    bastaba con un fichero corrupto para que arrancara de cero EN SILENCIO
+    (`load` devolvia {} y solo lo contaba un log).
+    """
+
+    def test_cada_escritura_deja_copia_de_la_anterior(self, store, make_position):
+        store.save({"positions": [make_position(symbol="BTC/USDT")]})
+        store.save({"positions": [make_position(symbol="ETH/USDT")]})
+
+        backup = json.loads(store.backup_path(1).read_text(encoding="utf-8"))
+        assert backup["positions"][0]["symbol"] == "BTC/USDT"
+
+    def test_las_copias_rotan_y_no_pasan_de_la_profundidad(self, store, make_position):
+        for i in range(6):
+            store.save({"positions": [make_position(size=float(i + 1))]})
+
+        assert len(store.backups()) == store.backup_depth
+        # .1 es la mas reciente (el penultimo guardado), .3 la mas antigua.
+        first = json.loads(store.backup_path(1).read_text(encoding="utf-8"))
+        last = json.loads(store.backup_path(store.backup_depth).read_text(encoding="utf-8"))
+        assert first["positions"][0]["size"] == pytest.approx(5.0)
+        assert last["positions"][0]["size"] == pytest.approx(3.0)
+
+    def test_un_estado_corrupto_arranca_del_backup_y_no_de_cero(self, store, make_position):
+        store.save({"positions": [make_position(symbol="BTC/USDT")]})
+        store.save({"positions": [make_position(symbol="ETH/USDT")]})
+        store.path.write_text("{ truncado a mitad", encoding="utf-8")
+
+        loaded = store.load()
+
+        assert [p.symbol for p in loaded["positions"]] == ["BTC/USDT"]
+
+    def test_avisa_por_el_notificador_al_recuperar(self, tmp_path, make_position):
+        notifier = RecordingNotifier()
+        store = JsonStateStore(tmp_path / "state.json", notifier=notifier)
+        store.save({"positions": [make_position()]})
+        store.save({"positions": [make_position()]})
+        store.path.write_text("roto", encoding="utf-8")
+
+        store.load()
+
+        assert notifier.errors, "recuperar en silencio es lo que habia que arreglar"
+        assert "copia" in notifier.errors[0]
+
+    def test_si_falta_el_fichero_pero_hay_copia_tambien_recupera(self, store, make_position):
+        store.save({"positions": [make_position(symbol="BTC/USDT")]})
+        store.save({"positions": [make_position(symbol="ETH/USDT")]})
+        store.path.unlink()
+
+        assert [p.symbol for p in store.load()["positions"]] == ["BTC/USDT"]
+
+    def test_sin_copias_utilizables_arranca_de_cero_pero_gritando(self, tmp_path):
+        notifier = RecordingNotifier()
+        store = JsonStateStore(tmp_path / "state.json", notifier=notifier)
+        store.path.write_text("roto", encoding="utf-8")
+
+        assert store.load() == {}
+        assert any("DE CERO" in message for message in notifier.errors)
+
+    def test_un_arranque_limpio_no_avisa_de_nada(self, tmp_path):
+        notifier = RecordingNotifier()
+        store = JsonStateStore(tmp_path / "state.json", notifier=notifier)
+
+        assert store.load() == {}
+        assert notifier.errors == []
+
+
+class RecordingNotifier:
+    """Notificador de prueba: guarda lo que se le manda en vez de enviarlo."""
+
+    def __init__(self) -> None:
+        self.errors: list[str] = []
+
+    def info(self, message: str) -> None:
+        pass
+
+    def warning(self, message: str) -> None:
+        pass
+
+    def error(self, message: str) -> None:
+        self.errors.append(message)
+
+
 def test_save_is_atomic_and_leaves_no_temp_file(store, make_position):
     store.save({"positions": [make_position()], "execution_results": []})
 

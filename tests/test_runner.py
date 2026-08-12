@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import pandas as pd
 import pytest
 
+from ai_trader.app.journal import CycleJournal
 from ai_trader.app.runner import RunnerConfig, SymbolCycleDiagnostics, TradingRunner
 from ai_trader.app.state_store import JsonStateStore
 from ai_trader.execution.paper import PaperExecutionConfig, PaperExecutionEngine
@@ -60,7 +61,7 @@ class SpyRiskEngine(RiskEngine):
         return super().evaluate(signal, portfolio_state)
 
 
-def build_runner(tmp_path, limits, market_data, strategies, **config_overrides):
+def build_runner(tmp_path, limits, market_data, strategies, journal=None, **config_overrides):
     paper_engine = PaperExecutionEngine(PaperExecutionConfig(fee_rate=0.001, slippage_bps=5.0))
     risk_engine = SpyRiskEngine(limits)
 
@@ -76,6 +77,7 @@ def build_runner(tmp_path, limits, market_data, strategies, **config_overrides):
             prediction_engine=PolymarketPaperExecutionEngine(paper_engine=paper_engine),
         ),
         state_store=JsonStateStore(tmp_path / "state.json"),
+        journal=journal,
     )
     return runner, risk_engine
 
@@ -348,6 +350,215 @@ class TestStatePersistence:
 
         assert results == []
         assert runner.get_positions() == []
+
+
+class TestCycleJournal:
+    """
+    QUE EL CICLO DEJE HUELLA.
+
+    El estado guarda la foto (que posiciones hay); el diario guarda la pelicula (que se
+    decidio, con que precio y cuanto deslizamiento se cobro). Aqui se comprueba que la
+    pelicula la rueda el ciclo REAL y no un formateador aparte: si el runner dejara de
+    registrar un rechazo del riesgo o el slippage de un fill, estos tests caen.
+    """
+
+    def _momentum(self):
+        from ai_trader.strategies.momentum_crypto import CryptoMomentumStrategy
+
+        return CryptoMomentumStrategy()
+
+    def test_un_ciclo_deja_exactamente_una_linea(self, tmp_path, limits):
+        journal = CycleJournal(tmp_path / "live" / "cycles.jsonl")
+        closes = [float(100 + i * 2) for i in range(60)]
+        market_data = FakeMarketData(bars={"BTC/USDT": build_bars(closes)})
+        runner, _ = build_runner(
+            tmp_path, limits, market_data, [self._momentum()], journal=journal
+        )
+
+        runner.run_cycle()
+        runner.run_cycle()
+
+        records = journal.read()
+        assert len(records) == 2
+        assert records[0]["status"] == "ran"
+
+    def test_la_linea_lleva_la_senal_la_decision_y_el_slippage_cobrado(self, tmp_path, limits):
+        journal = CycleJournal(tmp_path / "live" / "cycles.jsonl")
+        closes = [float(100 + i * 2) for i in range(60)]
+        market_data = FakeMarketData(bars={"BTC/USDT": build_bars(closes)})
+        runner, _ = build_runner(
+            tmp_path, limits, market_data, [self._momentum()], journal=journal
+        )
+
+        runner.run_cycle()
+        symbol = journal.read()[0]["symbols"][0]
+
+        assert symbol["symbol"] == "BTC/USDT"
+        assert 0.0 < symbol["signals"][0]["confidence"] <= 1.0
+        assert symbol["risk"][0]["approved"] is True
+        # El precio con el que se DECIDIO, para poder compararlo con el de llenado.
+        assert symbol["orders"][0]["reference_price"] > 0
+        fill = symbol["fills"][0]
+        assert fill["filled_price"] > 0
+        assert fill["fees_usd"] > 0
+        # El deslizamiento REAL del modelo de microestructura, no el plano del config.
+        assert fill["slippage_bps"] > 0
+
+    def test_un_rechazo_del_riesgo_queda_registrado_con_su_motivo(self, tmp_path, limits):
+        limits.min_confidence_per_trade = 0.99
+        journal = CycleJournal(tmp_path / "live" / "cycles.jsonl")
+        closes = [float(100 + i * 2) for i in range(60)]
+        market_data = FakeMarketData(bars={"BTC/USDT": build_bars(closes)})
+        runner, _ = build_runner(
+            tmp_path, limits, market_data, [self._momentum()], journal=journal
+        )
+
+        runner.run_cycle()
+        decision = journal.read()[0]["symbols"][0]["risk"][0]
+
+        assert decision["approved"] is False
+        assert "confidence" in decision["reason"].lower()
+
+    def test_el_cierre_tambien_registra_su_deslizamiento(self, tmp_path, limits):
+        """Salir paga deslizamiento igual que entrar. Sin este bloque, la mitad del coste
+        de cada operación quedaría fuera de la medición."""
+        journal = CycleJournal(tmp_path / "live" / "cycles.jsonl")
+        closes = [float(100 + i * 2) for i in range(60)]
+        market_data = FakeMarketData(bars={"BTC/USDT": build_bars(closes)})
+        runner, _ = build_runner(
+            tmp_path, limits, market_data, [self._momentum()], journal=journal
+        )
+        runner.run_cycle()
+        assert len(runner.get_positions()) == 1
+
+        # Un desplome por debajo del stop fuerza la salida en el ciclo siguiente.
+        market_data.bars["BTC/USDT"] = build_bars(closes + [1.0])
+        runner.run_cycle()
+
+        record = journal.read()[-1]
+        assert record["closed"], "la posicion tenia que haberse cerrado"
+        assert record["closed"][0]["exit_fees_usd"] > 0
+        exit_fill = record["exits"][0]
+        assert exit_fill["symbol"] == "BTC/USDT"
+        assert exit_fill["slippage_bps"] > 0
+        assert exit_fill["filled_price"] > 0
+
+    def test_sin_diario_no_se_acumulan_salidas_en_memoria(self, tmp_path, limits):
+        """El buffer de salidas solo se llena si hay diario: el backtest cierra miles de
+        posiciones por ventana y no puede ir dejando dicts por el camino."""
+        closes = [float(100 + i * 2) for i in range(60)]
+        market_data = FakeMarketData(bars={"BTC/USDT": build_bars(closes)})
+        runner, _ = build_runner(tmp_path, limits, market_data, [self._momentum()])
+
+        runner.run_cycle()
+        market_data.bars["BTC/USDT"] = build_bars(closes + [1.0])
+        runner.run_cycle()
+
+        assert runner._exit_fills == []
+
+    def test_un_ciclo_pausado_deja_linea_pero_no_toca_la_red(self, tmp_path, limits):
+        journal = CycleJournal(tmp_path / "live" / "cycles.jsonl")
+        market_data = FakeMarketData(bars={"BTC/USDT": build_bars([100.0] * 60)})
+        runner, _ = build_runner(
+            tmp_path, limits, market_data, [self._momentum()], journal=journal
+        )
+        runner.pause()
+
+        runner.run_cycle()
+        record = journal.read()[0]
+
+        assert record["status"] == "paused"
+        assert record["marked_to_market"] is False
+        assert record["net_pnl_usd"] is None
+
+    def test_sin_diario_el_ciclo_no_escribe_nada(self, tmp_path, limits, monkeypatch):
+        """El defecto es NullJournal: el backtest conduce este mismo runner miles de
+        veces por ventana y no puede dejar rastro en disco."""
+        monkeypatch.chdir(tmp_path)
+        market_data = FakeMarketData(bars={"BTC/USDT": build_bars([100.0] * 60)})
+        runner, _ = build_runner(tmp_path, limits, market_data, [self._momentum()])
+
+        runner.run_cycle()
+
+        assert not (tmp_path / "data" / "live").exists()
+
+    def test_un_diario_que_falla_no_tumba_el_ciclo(self, tmp_path, limits):
+        """El diario es auditoria, no operativa: un disco lleno no puede impedir que se
+        abra o se cierre una posicion."""
+
+        class BrokenJournal:
+            def append(self, record):
+                raise OSError("no space left on device")
+
+        closes = [float(100 + i * 2) for i in range(60)]
+        market_data = FakeMarketData(bars={"BTC/USDT": build_bars(closes)})
+        runner, _ = build_runner(
+            tmp_path, limits, market_data, [self._momentum()], journal=BrokenJournal()
+        )
+
+        runner.run_cycle()
+
+        assert len(runner.get_positions()) == 1
+
+    def test_la_watchlist_vacia_no_consulta_ningun_mercado(self, tmp_path, limits):
+        """La watchlist es de segunda prioridad y por defecto no existe: con la lista
+        vacia el ciclo tiene que ser identico al de antes, sin una sola llamada."""
+        journal = CycleJournal(tmp_path / "live" / "cycles.jsonl")
+        market_data = FakeMarketData(bars={"BTC/USDT": build_bars([100.0] * 60)})
+        runner, _ = build_runner(
+            tmp_path, limits, market_data, [_NoopStrategy()], journal=journal
+        )
+
+        runner.run_cycle()
+
+        assert journal.read()[0]["watchlist"] == []
+
+    def test_la_watchlist_anota_el_midpoint_sin_operar_el_mercado(self, tmp_path, limits):
+        journal = CycleJournal(tmp_path / "live" / "cycles.jsonl")
+        market_data = FakeMarketData(
+            bars={"BTC/USDT": build_bars([100.0] * 60)},
+            markets={"test-market": prediction_market(0.30)},
+            midpoints={"tok-yes": 0.31, "tok-no": 0.69},
+        )
+        runner, _ = build_runner(
+            tmp_path,
+            limits,
+            market_data,
+            [_NoopStrategy()],
+            journal=journal,
+            prediction_watchlist=["test-market"],
+        )
+
+        runner.run_cycle()
+        watched = journal.read()[0]["watchlist"]
+
+        assert {w["outcome"] for w in watched} == {"Yes", "No"}
+        assert watched[0]["midpoint"] == pytest.approx(0.31)
+        # Observar no es operar: ni posicion, ni orden, ni simbolo nuevo en el universo.
+        assert runner.get_positions() == []
+        assert runner.config.symbols == ["BTC/USDT"]
+
+    def test_un_mercado_de_la_watchlist_que_falla_no_corta_el_ciclo(self, tmp_path, limits):
+        class ExplodingMarketData(FakeMarketData):
+            def get_prediction_market(self, slug):
+                raise RuntimeError("gamma caido")
+
+        journal = CycleJournal(tmp_path / "live" / "cycles.jsonl")
+        market_data = ExplodingMarketData(bars={"BTC/USDT": build_bars([100.0] * 60)})
+        runner, _ = build_runner(
+            tmp_path,
+            limits,
+            market_data,
+            [_NoopStrategy()],
+            journal=journal,
+            prediction_watchlist=["test-market"],
+        )
+
+        runner.run_cycle()
+        watched = journal.read()[0]["watchlist"]
+
+        assert watched[0]["slug"] == "test-market"
+        assert "gamma caido" in watched[0]["error"]
 
 
 class TestReportsDoNotCrash:

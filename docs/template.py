@@ -1302,11 +1302,14 @@ comisiones cobradas cuadran con el <span class="mono">fee_rate</span> configurad
 contara el PnL realizado, la curva sería una escalera plana entre cierres y el drawdown mediría cuándo se
 decidió cerrar, no cuánto se sufrió. Marcar a diario es lo que hace que el máximo drawdown y la
 volatilidad describan la experiencia real de tener la posición abierta.</div>
-<div class="note"><b>Lo que la contabilidad guarda hoy, y lo que no.</b> El estado persistido tiene la
-<i>foto</i> —posiciones abiertas y cerradas, PnL realizado, equity— pero no la <i>película</i>: qué se
-decidió cada ciclo, con qué precio de referencia y cuánto deslizamiento se cobró. Ese diario de ciclos es
-justamente el material con el que se medirá la divergencia entre lo ejecutado en vivo y lo que predice el
-<i>backtest</i>, y por eso es parte de la evolución de paper trading (§5, §6).</div>"""
+<div class="note"><b>La foto y la película se guardan por separado, y a propósito.</b> El estado persistido
+(<span class="mono">data/runtime_state.json</span>) tiene la <i>foto</i> —posiciones abiertas y cerradas,
+PnL realizado— y es todo lo que hace falta para seguir operando tras un reinicio. La <i>película</i> —qué
+se decidió cada ciclo, con qué precio de referencia, qué rechazó el riesgo y cuánto deslizamiento se cobró
+de verdad— va a un diario append-only aparte (<span class="mono">data/live/cycles.jsonl</span>, §5.1),
+porque son dos cosas con vidas distintas: la foto se sobrescribe cada ciclo y la película no se sobrescribe
+nunca. Ese diario es el material con el que se medirá la divergencia entre lo ejecutado en vivo y lo que
+predice el <i>backtest</i> (§5, §6).</div>"""
 
 
 def _factor_table(factors):
@@ -2028,28 +2031,57 @@ ninguna feature de observación o de señal puede convertirse en parámetro sort
 </ul>
 
 <h2 id="s5">5 · Resultados</h2>
-<p class="lead">Este capítulo está <b>vacío a propósito</b>, y decirlo es más honesto que llenarlo con
-cifras de backtest presentadas como resultados. Un backtest es una medición sobre historia; un resultado
-es lo que hace el sistema cuando corre. Hasta que el paper trading acumule meses de calendario no hay
-nada que publicar aquí.</p>
-<p>Cuando lo haya, éste es el contenido comprometido, y el orden no es casual: primero lo que se ejecutó,
-después lo que rindió, y sólo al final la comparación con lo que el <i>backtest</i> prometía.</p>
-<table><thead><tr><th>Bloque</th><th>Qué se publicará</th><th>De dónde sale</th></tr></thead><tbody>
-<tr><td><b>Diario de ciclos</b></td><td>Qué se decidió cada ciclo, con qué precio de referencia, qué
-aprobó el riesgo y cuánto deslizamiento se cobró.</td><td>Registro append-only del runner (§3.9), hoy
-pendiente.</td></tr>
-<tr><td><b>Curva de equity y posiciones</b></td><td>Equity marcado a mercado, posiciones abiertas y
-cerradas con PnL neto de comisiones.</td><td>Estado persistido del runner (§3.9).</td></tr>
-<tr><td><b>Riesgo desplegado</b></td><td>Exposición real frente a los límites, número de posiciones y
-drawdown de cuenta.</td><td>Motor de riesgo (§3.3).</td></tr>
+<p class="lead">Un <i>backtest</i> es una medición sobre historia; un resultado es lo que hace el sistema
+cuando corre. Este capítulo se llena solo, desde dos ficheros que escribe el propio <i>runner</i> y desde
+ningún otro sitio, y lo que aún no tiene son <b>meses de calendario</b>, que es lo único del proyecto que
+no se puede comprimir con cómputo.</p>
+<h3>5.1 · El diario de ciclos</h3>
+<p>Hasta ahora el sistema guardaba la <b>foto</b> —qué posiciones hay y cuánto PnL llevan— y no la
+<b>película</b>. La foto es todo lo que hace falta para seguir operando tras un reinicio, y es exactamente
+lo que no sirve para auditar: no dice qué se decidió, con qué precio de referencia, por qué el riesgo
+rechazó una señal ni cuánto deslizamiento se cobró de verdad. Desde ahora cada ciclo escribe una línea en
+<span class="mono">data/live/cycles.jsonl</span> con todo eso.</p>
+<p>Tres propiedades, y ninguna es cosmética. <b>Append-only</b>: nunca se reescribe el fichero, se añade
+una línea; un fallo a mitad de ciclo deja una cola ilegible que el lector cuenta y salta, no un archivo de
+meses truncado. <b>Con <span class="mono">fsync</span> por línea</b>: el proceso corre durante meses en una
+máquina doméstica, donde el corte de luz no es un caso hipotético sino <i>el</i> caso. Y <b>rotación</b>
+por mes o al superar los 8&nbsp;MB, con la secuencia en el nombre del fichero para que el orden alfabético
+de los <i>shards</i> sea el cronológico. Es el mismo principio que gobierna el archivo crudo de señales
+(§2.2): lo que no se capture hoy no existirá, porque nadie publica el pasado de un libro de órdenes.</p>
+<table><thead><tr><th>Bloque</th><th>Qué se publica</th><th>De dónde sale</th></tr></thead><tbody>
+<tr><td><b>Diario de ciclos</b></td><td>Símbolos evaluados, señales con su confianza, decisión del riesgo
+con su motivo, orden enviada con el precio de referencia, y el llenado con comisión y
+<span class="mono">slippage_bps</span> realmente cobrado.</td><td>Registro append-only del <i>runner</i>
+(§3.9). <b>Hecho.</b></td></tr>
+<tr><td><b>Curva y posiciones</b></td><td>PnL neto marcado a mercado por ciclo; posiciones abiertas con su
+precio de marca y cerradas con PnL neto de comisiones.</td><td>Diario + estado persistido (§3.9).
+<b>Hecho.</b></td></tr>
+<tr><td><b>Riesgo desplegado</b></td><td>Exposición frente al límite, número de posiciones frente al
+máximo y caída máxima desde el pico.</td><td>Motor de riesgo (§3.3), anotado en cada línea.
+<b>Hecho.</b></td></tr>
 <tr><td><b>Divergencia live-vs-backtest</b></td><td>La cifra que justifica todo el capítulo 3: cuánto se
 aparta lo ejecutado de lo que el motor predecía, separando precio de llenado, coste y latencia.</td>
-<td>Diario de ciclos contra el mismo periodo re-simulado.</td></tr>
+<td>Diario de ciclos contra el mismo periodo re-simulado. <b>Necesita meses de operación.</b></td></tr>
 </tbody></table>
+<h3>5.2 · Por qué es PnL y no <i>equity</i> de cuenta</h3>
+<p>En vivo el sistema opera <b>sin capital declarado</b>: el motor de riesgo dimensiona en absoluto
+—tamaño máximo por posición, exposición máxima— y no como fracción de un patrimonio (§3.3). Declarar un
+capital sólo para poder dibujar una curva de <i>equity</i> <b>cambiaría el dimensionado de todas las
+órdenes</b>, así que no se hace: se publica la curva de PnL neto, que es la misma salvo una constante
+aditiva, y la caída máxima en dólares, porque un porcentaje necesitaría una base que aquí no existe. Los
+ciclos <b>pausados</b> dejan línea pero no entran en la curva: no se marcan a mercado, y meterlos con un
+cero aplanaría justo el tramo en que el sistema estuvo parado.</p>
+<h3>5.3 · Durabilidad</h3>
+<p>Perder el estado no es perder un fichero: es que el <i>runner</i> olvide las posiciones abiertas, no las
+cierre nunca y siga abriendo otras contra los mismos límites. Antes bastaba un fichero corrupto para que
+arrancara de cero <b>en silencio</b>. Ahora cada escritura deja copia rotatoria (tres niveles), el estado se
+escribe a un temporal que se sincroniza antes de renombrarse, y si al arrancar no parsea se recupera de la
+copia más reciente que sí lo haga <b>avisando por Telegram</b>. Si no hay ninguna utilizable, arranca de
+cero pero diciéndolo.</p>
 <div class="why"><b>Por qué esto no se puede acelerar.</b> Es la única parte del proyecto que consume
 <b>tiempo de calendario</b> y no cómputo: la divergencia entre lo ejecutado y lo simulado necesita meses
-de operaciones para ser medible. Por eso arrancar el paper trading es la evolución número 1 (§6) aunque
-no requiera desarrollo nuevo: cada semana sin correr es una semana perdida al final.</div>
+de operaciones para ser medible. Por eso el paper trading corre en paralelo a todo lo demás (§6): cada
+semana sin correr es una semana perdida al final.</div>
 
 <h2 id="s6">6 · Limitaciones y evoluciones</h2>
 <p class="lead">Declarar los huecos es parte de la honestidad de la herramienta. Este capítulo tiene tres
@@ -2092,8 +2124,9 @@ juez mejore; un juez malo contamina todo lo que puntúe mientras siga malo. Por 
 van delante de la cosecha, y el paper trading se lanza en paralelo porque es lo único que compra tiempo de
 calendario.</p>
 <table><thead><tr><th class="n">#</th><th>Trabajo pendiente</th><th>Por qué está donde está</th></tr></thead><tbody>
-<tr><td class="n">1</td><td><b>Paper trading en vivo</b>, con diario de ciclos</td><td>Cero desarrollo
-pendiente y en paralelo a todo lo demás. Es lo único que no se puede comprimir después (§5).</td></tr>
+<tr><td class="n">1</td><td><b>Divergencia live-vs-backtest</b> sobre el diario de ciclos</td><td>El diario
+ya se escribe y la vista ya lo lee (§5): lo que falta es calendario. Sigue el primero porque es lo único
+que no se puede comprimir después.</td></tr>
 <tr><td class="n">2</td><td><b>Canal de observación sintético: barrido de ρ y break-even del IC</b></td>
 <td>Es el <b>test de falsación</b> que el radar de señales dejó abierto. Hoy limitar los grados de
 libertad <i>reduce</i> el riesgo de sobreajuste pero no lo <i>mide</i>: hasta que exista una cifra de

@@ -60,15 +60,25 @@ _KEYED = (
     # `_count_tests()` cuenta los tests del repo: anadir un test cambiaria el artefacto
     # sin que el comportamiento cambie.
     (re.compile(r"<b>\d+ tests</b>"), "<b><NTESTS> tests</b>"),
+    # El bloque `paper` del dashboard es ESTADO LOCAL DE LA MAQUINA, no evidencia
+    # publicada: sale de `data/live/cycles.jsonl` y de `data/runtime_state.json`, que
+    # estan fuera de git a proposito (crecen cada 15 minutos en la maquina que opera).
+    # A diferencia del resto de vistas —que leen informes commiteados y por eso son
+    # reproducibles en cualquier clon— este bloque cambia solo con que el bot haya
+    # corrido un ciclo mas. Enmascararlo es lo que mantiene la caracterizacion util para
+    # las otras ~2.000 lineas del generador; lo que el bloque contenga se prueba en
+    # tests/test_journal.py, contra el diario y no contra el HTML.
+    (re.compile(r'"paper": \{.*?\}, "roadmap":', re.S), '"paper": <LIVE>, "roadmap":'),
 )
 
 
 def scrub(text: str) -> str:
     """Neutraliza lo que varia sin que el comportamiento cambie.
 
-    Solo cuatro cosas: la marca de tiempo, la metadata del commit, el recuento de tests
-    y la ruta absoluta del repo (distinta en cada maquina). Cualquier otra diferencia se
-    considera un cambio de comportamiento y debe romper el test."""
+    Solo cinco cosas: la marca de tiempo, la metadata del commit, el recuento de tests,
+    la ruta absoluta del repo (distinta en cada maquina) y el bloque de paper trading en
+    vivo del dashboard (estado local, no evidencia commiteada). Cualquier otra diferencia
+    se considera un cambio de comportamiento y debe romper el test."""
     text = text.replace("\r\n", "\n")
 
     root = str(REPO_ROOT)

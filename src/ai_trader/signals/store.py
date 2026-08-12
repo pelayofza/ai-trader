@@ -45,7 +45,6 @@ linea. Nadie debe reconstruirla a partir de la ruta.
 from __future__ import annotations
 
 import gzip
-import json
 import logging
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
@@ -53,6 +52,7 @@ from pathlib import Path
 import pandas as pd
 
 from ai_trader.shared.entities import MARKET_ENTITY
+from ai_trader.shared.jsonl import read_records, to_line
 from ai_trader.shared.signals import normalize_signals
 from ai_trader.signals.source import RAW_DAY, RAW_ENTITY, RAW_FETCHED_AT
 
@@ -140,7 +140,7 @@ class SignalStore:
             # reescribir el fichero del mes en cada captura.
             with gzip.open(path, "at", compresslevel=GZIP_LEVEL, encoding="utf-8") as handle:
                 for record in batch:
-                    handle.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+                    handle.write(to_line(record))
                     written += 1
 
         return written
@@ -205,21 +205,13 @@ class SignalStore:
 
     @staticmethod
     def _read_shard(path: Path) -> list[dict]:
+        """Un shard, con la politica comun ante lineas rotas: contarlas y seguir. El
+        bucle vive en `shared/jsonl.py` porque el diario de ciclos lo necesita igual;
+        aqui solo queda lo que de verdad es propio del crudo, que es el gzip."""
         if not path.exists():
             return []
-        out: list[dict] = []
-        broken = 0
         with gzip.open(path, "rt", encoding="utf-8") as handle:
-            for line in handle:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    out.append(json.loads(line))
-                except json.JSONDecodeError:
-                    # Una escritura interrumpida deja una cola ilegible. Se cuenta y se
-                    # sigue: perder una linea no puede invalidar el mes entero.
-                    broken += 1
+            out, broken = read_records(handle)
         if broken:
             logger.warning("%s lineas ilegibles en %s (se ignoran)", broken, path)
         return out

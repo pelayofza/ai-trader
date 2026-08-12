@@ -26,9 +26,16 @@ data/*.db
 data/*.sqlite
 data/*.sqlite3
 data/*.json
+# copias de seguridad rotatorias de runtime_state.json
+data/*.json.[0-9]
 data/archive/
 data/synthetic/
 data/signals_raw/
+# Diario de ciclos del paper trading en vivo (data/live/cycles*.jsonl). NO se versiona:
+# es un archivo append-only que crece cada 15 minutos en la máquina que opera, y sería
+# un conflicto de merge permanente. Pero SÍ es un activo del proyecto y no se puede
+# regenerar -- ver "Operación continua" en el README para la copia de seguridad.
+data/live/
 
 # VS Code
 .vscode/

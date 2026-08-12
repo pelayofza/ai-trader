@@ -7,6 +7,21 @@ from typing import Protocol
 
 import pandas as pd
 
+from ai_trader.app.accounting import realized_pnl_usd, unrealized_pnl_usd
+from ai_trader.app.journal import (
+    STATUS_DISABLED,
+    STATUS_PAUSED,
+    STATUS_RAN,
+    Journal,
+    NullJournal,
+    closed_record,
+    cycle_record,
+    fill_record,
+    open_record,
+    order_record,
+    risk_record,
+    signal_record,
+)
 from ai_trader.app.reports import ReportBuilder
 from ai_trader.app.state_store import JsonStateStore
 from ai_trader.execution.market_model import CloseMarketModel, MarketModel
@@ -84,6 +99,13 @@ class RunnerConfig:
     max_holding_days: int = 10
     symbol_cooldown_hours: int = 12
     max_trades_per_cycle: int = 5
+    # Mercados de prediccion que se OBSERVAN sin operarlos: por cada ciclo se anota su
+    # midpoint en el diario. VACIA por defecto, y eso importa: con la lista vacia no se
+    # hace ni una llamada de red y el ciclo es identico al de antes. No es universo -no
+    # genera senales, no pasa por riesgo, no abre posicion-; es la unica forma de que
+    # dentro de unos meses exista un historico de Polymarket, que hoy no se puede
+    # comprar ni descargar.
+    prediction_watchlist: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if not self.symbols:
@@ -115,6 +137,17 @@ class RunnerState:
 
 @dataclass(slots=True)
 class SymbolCycleDiagnostics:
+    """
+    Lo que le paso a un simbolo en un ciclo: los contadores (el resumen) y los eventos
+    (el detalle que va al diario).
+
+    Los contadores ya existian y son lo que se registra en el log. Los tres eventos son
+    lo que hace auditable el ciclo: una senal sin su confianza, un rechazo sin su motivo
+    o un fill sin su `slippage_bps` no sirven para medir la divergencia live-vs-backtest.
+    Van aqui y no en una estructura nueva porque `diag` ya viaja a los dos sitios donde
+    se generan (`_process_symbol` y `_open_position`), asi que no hay que enhebrar nada.
+    """
+
     symbol: str
     bars_loaded: int = 0
     strategies_run: int = 0
@@ -124,6 +157,24 @@ class SymbolCycleDiagnostics:
     executions_attempted: int = 0
     executions_successful: int = 0
     notes: list[str] = field(default_factory=list)
+    # Eventos, ya serializados por `app/journal.py` (el esquema del diario vive alli).
+    signals: list[dict] = field(default_factory=list)
+    risk: list[dict] = field(default_factory=list)
+    orders: list[dict] = field(default_factory=list)
+    fills: list[dict] = field(default_factory=list)
+
+    def as_record(self) -> dict:
+        """La forma del simbolo dentro de la linea del diario."""
+        return {
+            "symbol": self.symbol,
+            "bars_loaded": self.bars_loaded,
+            "strategies_run": self.strategies_run,
+            "notes": list(self.notes),
+            "signals": list(self.signals),
+            "risk": list(self.risk),
+            "orders": list(self.orders),
+            "fills": list(self.fills),
+        }
 
 
 class TradingRunner:
@@ -147,6 +198,7 @@ class TradingRunner:
         clock: Clock | None = None,
         market_model: MarketModel | None = None,
         starting_equity: float | None = None,
+        journal: Journal | None = None,
     ) -> None:
         if not strategies:
             raise ValueError("strategies cannot be empty")
@@ -164,6 +216,14 @@ class TradingRunner:
         self.market_model = market_model or CloseMarketModel(market_data_reader, self.clock)
         # Capital inicial de la cuenta. Si es None, el riesgo dimensiona en absoluto.
         self.starting_equity = starting_equity
+        # Diario de ciclos. Por defecto NO escribe: el backtest conduce este mismo runner
+        # miles de veces por ventana y ahi el diario seria ruido. Quien opera en vivo
+        # (`main.build_runner`) inyecta un `CycleJournal`.
+        self.journal: Journal = journal or NullJournal()
+        # Fills de SALIDA del ciclo en curso. Se acumulan aqui porque el cierre ocurre en
+        # `_close_position`, que no devuelve el resultado de la ejecucion a nadie, y se
+        # vacian al escribir la linea. Solo se llenan si hay diario detras.
+        self._exit_fills: list[dict] = []
 
         payload = self.state_store.load()
         self.state = RunnerState(
@@ -178,10 +238,14 @@ class TradingRunner:
     def run_cycle(self) -> list[ExecutionResult]:
         if not self.config.cycle_enabled:
             self.notifier.warning("Runner cycle is disabled in config.")
+            self._write_journal(STATUS_DISABLED, [], [])
             return []
 
         if self.state.is_paused:
             self.notifier.warning("Runner is paused. Skipping cycle.")
+            # Un ciclo pausado TAMBIEN deja linea. Es lo que distingue "el proceso sigue
+            # vivo y no opera" de "el proceso se cayo", que desde fuera son iguales.
+            self._write_journal(STATUS_PAUSED, [], [])
             return []
 
         closed_positions = self._process_open_positions()
@@ -211,6 +275,10 @@ class TradingRunner:
 
         self.state.execution_results.extend(cycle_results)
         self._persist_state()
+
+        # El diario, DESPUES de persistir el estado y antes de notificar: si el proceso
+        # muere aqui, la foto y la pelicula cuentan lo mismo.
+        self._write_journal(STATUS_RAN, diagnostics, closed_positions)
 
         summary = self._build_cycle_summary(cycle_results, diagnostics, closed_positions)
         logger.info(summary)
@@ -255,6 +323,7 @@ class TradingRunner:
                 continue
 
             diag.signals_generated += 1
+            diag.signals.append(signal_record(signal))
             self.notifier.info(self._format_signal(signal))
 
             # Puerta unica de riesgo. Antes las ordenes de prediccion la esquivaban
@@ -263,6 +332,7 @@ class TradingRunner:
                 signal=signal,
                 portfolio_state=self._build_portfolio_state(),
             )
+            diag.risk.append(risk_record(signal, decision))
 
             logger.info(
                 "Risk decision | symbol=%s | strategy=%s | approved=%s | reason=%s | size_usd=%s",
@@ -341,11 +411,20 @@ class TradingRunner:
             return None
 
         order_request = self._build_order_request(signal, decision.size_usd, reference_price)
+        diag.orders.append(
+            order_record(
+                signal.strategy_id,
+                order_request.side.value,
+                order_request.size,
+                reference_price,
+            )
+        )
 
         result = self.execution_router.execute(
             order_request,
             reference_price=reference_price,
         )
+        diag.fills.append(fill_record(result))
 
         logger.info(
             "Execution result | symbol=%s | success=%s | status=%s | price=%s | fees=%s",
@@ -455,6 +534,10 @@ class TradingRunner:
             fill_price = result.filled_price or exit_price
             exit_fees = result.fees
             self.state.execution_results.append(result)
+            if self._journal_active():
+                self._exit_fills.append(
+                    {**fill_record(result), "symbol": position.symbol, "close_reason": reason}
+                )
         except Exception as exc:
             logger.exception("Closing order failed | symbol=%s", position.symbol)
             self.notifier.error(f"Closing order failed for {position.symbol}: {exc}")
@@ -512,16 +595,11 @@ class TradingRunner:
             return base
 
         open_positions = self.state.open_positions()
-        realized_cum = sum(
-            p.realized_pnl or 0.0 for p in self.state.positions if not p.is_open
-        )
+        # Las dos sumas viven en `app/accounting.py`: `reports.py` las tenia repetidas
+        # con el cuerpo identico y el diario habria sido la tercera copia.
+        realized_cum = realized_pnl_usd(self.state.positions)
         deployed_cost = sum(p.size * p.entry_price + p.entry_fees_usd for p in open_positions)
-
-        unrealized = 0.0
-        for position in open_positions:
-            mark = self.market_model.mark_price(position)
-            if mark is not None:
-                unrealized += position.net_pnl_at(mark)
+        unrealized = unrealized_pnl_usd(self.state.positions, self.market_model.mark_price)
 
         base.equity_usd = self.starting_equity + realized_cum + unrealized
         base.available_cash_usd = max(self.starting_equity + realized_cum - deployed_cost, 0.0)
@@ -605,6 +683,105 @@ class TradingRunner:
                 "is_paused": self.state.is_paused,
             }
         )
+
+    # --- diario de ciclos ---
+
+    def _journal_active(self) -> bool:
+        """Si no hay diario detras no se recoge nada ni se construye la linea. El motor
+        de backtest conduce ESTE mismo runner miles de veces por ventana: pagar el marcado
+        a mercado de cada posicion abierta para tirar el resultado seria un coste real en
+        el camino caliente."""
+        return not getattr(self.journal, "is_null", False)
+
+    def _write_journal(
+        self,
+        status: str,
+        diagnostics: list[SymbolCycleDiagnostics],
+        closed: list[Position],
+    ) -> None:
+        """
+        Deja la huella del ciclo. NUNCA tumba el ciclo: el diario es auditoria, no
+        operativa, y un disco lleno no puede impedir que se cierre una posicion.
+
+        Un ciclo que NO se ejecuto (pausado o deshabilitado) deja una linea mas ligera:
+        se registra que el proceso esta vivo, pero no se marca a mercado ni se consulta
+        la watchlist. Pausar tiene que seguir significando que el sistema no toca la red.
+        """
+        exits, self._exit_fills = self._exit_fills, []
+        if not self._journal_active():
+            return
+
+        try:
+            marked = status == STATUS_RAN
+            open_positions = self.state.open_positions()
+            portfolio = (
+                self._build_portfolio_state()
+                if marked
+                else self.state.build_portfolio_state()
+            )
+            record = cycle_record(
+                timestamp=self.clock.now(),
+                status=status,
+                symbols=[d.as_record() for d in diagnostics],
+                opened=(
+                    [open_record(p, self.market_model.mark_price(p)) for p in open_positions]
+                    if marked
+                    else []
+                ),
+                closed=[closed_record(p) for p in closed],
+                exits=exits,
+                equity_usd=portfolio.equity_usd,
+                realized_pnl_usd=realized_pnl_usd(self.state.positions),
+                unrealized_pnl_usd=(
+                    unrealized_pnl_usd(self.state.positions, self.market_model.mark_price)
+                    if marked
+                    else None
+                ),
+                # La exposicion que el motor de riesgo compara contra
+                # `max_total_exposure_usd`, no una tercera definicion de exposicion.
+                exposure_usd=portfolio.total_exposure_usd,
+                open_positions=len(open_positions),
+                max_open_positions=self.risk_engine.limits.max_open_positions,
+                daily_realized_pnl_usd=self.state.daily_realized_pnl_usd,
+                watchlist=self._observe_watchlist() if marked else [],
+            )
+            self.journal.append(record)
+        except Exception:
+            logger.exception("No se pudo escribir el diario de ciclos")
+
+    def _observe_watchlist(self) -> list[dict]:
+        """
+        Midpoints de los mercados de prediccion OBSERVADOS, sin operar ninguno.
+
+        Con la lista vacia (el defecto) devuelve `[]` sin tocar la red. Un fallo por
+        mercado se anota y no corta el resto: es lectura opcional, no operativa.
+        """
+        out: list[dict] = []
+        for slug in self.config.prediction_watchlist:
+            try:
+                market = self.market_data_reader.get_prediction_market(slug)
+                if market is None:
+                    out.append({"slug": slug, "error": "market_not_found"})
+                    continue
+                for token in market.outcomes:
+                    midpoint = self.market_data_reader.get_prediction_midpoint(token.token_id)
+                    out.append(
+                        {
+                            "slug": slug,
+                            "question": market.question,
+                            "outcome": token.outcome,
+                            "token_id": token.token_id,
+                            # El midpoint VIVO del CLOB; `token.price` viene de Gamma y
+                            # puede estar rancio (mismo motivo que en `_build_context`).
+                            "midpoint": midpoint,
+                            "gamma_price": token.price,
+                            "closed": market.closed,
+                        }
+                    )
+            except Exception as exc:  # noqa: BLE001 - la watchlist nunca corta el ciclo
+                logger.warning("Watchlist: fallo al leer %s (%s)", slug, exc)
+                out.append({"slug": slug, "error": str(exc)})
+        return out
 
     # --- informes (delegados a ReportBuilder) ---
 
