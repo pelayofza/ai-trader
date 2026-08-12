@@ -39,7 +39,12 @@ def build_strategy(
     strategy_type: str,
     params: dict[str, Any] | None = None,
     strategy_id: str | None = None,
-):
+) -> Any:
+    """Instancia una estrategia del registro por su clave.
+
+    Devuelve `Any` y no un tipo comun a proposito: el registro es el punto de entrada del
+    generador con IA, que emite `{"type": ..., "params": {...}}` sin escribir codigo, y las
+    estrategias solo comparten forma por duck typing (ver `StrategyFactory`)."""
     factory = STRATEGY_REGISTRY.get(strategy_type)
 
     if factory is None:

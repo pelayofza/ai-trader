@@ -97,7 +97,7 @@ from ai_trader.scoring.activity import (
     measure_activity,
 )
 from ai_trader.scoring.aggregate import DEFAULT_CVAR_ALPHA, aggregate_reward
-from ai_trader.scoring.baselines import BASELINE_LABELS, gate
+from ai_trader.scoring.baselines import BASELINE_LABELS, BaselineGate, gate
 from ai_trader.scoring.multiwindow import resolve_purge_days, validate_multiwindow
 from ai_trader.scoring.weight_calibration import candidate_specs, spearman
 from ai_trader.scoring.weight_study import FAMILIES, STUDY_SEED
@@ -815,7 +815,7 @@ def collect_side(
     )
 
 
-def pooled_gate(side: SideScores, config_id: str, alpha: float):
+def pooled_gate(side: SideScores, config_id: str, alpha: float) -> BaselineGate:
     """Gate de baselines sobre la distribucion PUESTA EN COMUN, no un gate por unidad
     promediado: la recompensa que rankea es la agregada, y el rival tiene que serlo
     tambien."""

@@ -67,11 +67,16 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 
 from ai_trader.config import AppConfig, load_config
+
+if TYPE_CHECKING:  # solo para anotar: en ejecucion el proveedor se importa tarde a
+    # proposito, porque construirlo llama a load_markets() y eso es red.
+    from ai_trader.data.providers.ccxt_crypto import CCXTCrypto
 from ai_trader.data.intraday import get_hourly_bars, slice_window, to_utc
 from ai_trader.shared import bars as bar_schema
 from ai_trader.shared.instruments import AssetClass, detect_asset_class
@@ -764,7 +769,7 @@ def crypto_universe(config: AppConfig) -> list[str]:
     )
 
 
-def build_provider(exchange: str, *, offline: bool):
+def build_provider(exchange: str, *, offline: bool) -> CCXTCrypto | None:
     """None en modo offline: `get_hourly_bars` entiende eso como 'solo cache'."""
     if offline:
         return None

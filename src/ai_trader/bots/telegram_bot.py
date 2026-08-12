@@ -49,7 +49,7 @@ def _deps(context: ContextTypes.DEFAULT_TYPE) -> TelegramBotDependencies:
     return context.application.bot_data["deps"]
 
 
-def authorized(handler: Callable):
+def authorized(handler: Callable) -> Callable:
     """Rechaza cualquier chat que no este en la lista blanca."""
 
     @wraps(handler)
@@ -72,7 +72,9 @@ def authorized(handler: Callable):
     return wrapper
 
 
-def requires_runner(handler: Callable):
+def requires_runner(handler: Callable) -> Callable:
+    """Corta el comando si el runner no esta configurado, en vez de reventar dentro."""
+
     @wraps(handler)
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if _deps(context).runner is None:

@@ -47,11 +47,16 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 
 from ai_trader.data.cache import load_bars as load_cached_bars
+
+if TYPE_CHECKING:  # solo para anotar: en ejecucion se importa tarde a proposito, porque
+    # arrastra los proveedores de stocks y de mercados de prediccion que esto no usa.
+    from ai_trader.data.market_data import MarketDataService
 from ai_trader.shared import bars as bar_schema
 from ai_trader.shared.instruments import AssetClass
 from ai_trader.synthetic.fidelity import (
@@ -119,7 +124,9 @@ class CachedBarsProvider:
         return cached.loc[first : max(first, last)]
 
 
-def build_service(exchange: str, *, offline: bool):
+def build_service(exchange: str, *, offline: bool) -> MarketDataService | CachedBarsProvider:
+    """El origen de barras reales del estudio: la cache a secas si `offline`, y si no el
+    servicio completo contra el exchange."""
     if offline:
         return CachedBarsProvider()
     # Import tardio: construir el servicio arrastra los proveedores de stocks y de
