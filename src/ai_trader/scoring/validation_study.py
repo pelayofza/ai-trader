@@ -66,7 +66,7 @@ from ai_trader.scoring.multiwindow import (
 )
 from ai_trader.scoring.optimize import DEFAULT_LIBRARY_ID, DEFAULT_SYNTHETIC_CONFIG
 from ai_trader.scoring.weight_calibration import spearman
-from ai_trader.synthetic.service import sample_window
+from ai_trader.synthetic.service import study_window
 from ai_trader.synthetic.store import SyntheticStore
 
 logger = logging.getLogger("validation_study")
@@ -434,7 +434,7 @@ def main(argv: list[str] | None = None) -> int:
     store = SyntheticStore()
     manifest = store.load_manifest(args.library)
     scenario_ids = tuple(s["id"] for s in manifest.scenarios)[: args.scenarios]
-    start, end = sample_window(manifest, base_config.runner.lookback_days + 5)
+    start, end = study_window(manifest, base_config.runner.lookback_days)
 
     plan = StudyPlan(
         library_id=args.library,

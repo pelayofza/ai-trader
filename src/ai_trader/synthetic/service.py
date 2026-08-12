@@ -214,6 +214,22 @@ class SyntheticDataService:
             return DEFAULT_UNIVERSE
 
 
+# Margen de calentamiento EXTRA, sobre `lookback_days`, con el que los ESTUDIOS abren su
+# ventana sintetica. Vive aqui porque tiene que ser el MISMO en todos: dos estudios que
+# empiecen en dias distintos evaluan las mismas configuraciones sobre ventanas distintas y
+# sus cifras dejan de ser comparables sin que nada avise. Lo estreno el estudio de
+# transferencia; el del canal de observacion lo necesita identico para que su celda de
+# control reproduzca `data/transfer/units_ai_v3.json` score a score.
+STUDY_WARMUP_MARGIN_DAYS = 5
+
+
+def study_window(
+    manifest: LibraryManifest, lookback_days: int
+) -> tuple[datetime, datetime]:
+    """La ventana con la que los estudios puntuan una muestra de esta libreria."""
+    return sample_window(manifest, lookback_days + STUDY_WARMUP_MARGIN_DAYS)
+
+
 def sample_window(
     manifest: LibraryManifest, warmup_days: int
 ) -> tuple[datetime, datetime]:

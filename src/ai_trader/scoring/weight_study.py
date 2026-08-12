@@ -46,7 +46,7 @@ from ai_trader.scoring.weight_calibration import (
     sweep_weights,
     turnover_cost_audit,
 )
-from ai_trader.synthetic.service import sample_window
+from ai_trader.synthetic.service import study_window
 from ai_trader.synthetic.store import SyntheticStore
 
 logger = logging.getLogger("weight_study")
@@ -393,7 +393,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.scenarios:
         scenario_ids = scenario_ids[: args.scenarios]
 
-    start, end = sample_window(manifest, base_config.runner.lookback_days + 5)
+    start, end = study_window(manifest, base_config.runner.lookback_days)
     plan = StudyPlan(
         library_id=args.library,
         config_path=args.config,

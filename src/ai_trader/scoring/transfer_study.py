@@ -109,7 +109,7 @@ from ai_trader.synthetic.fidelity_study import (
     build_service,
     fetch_real_bars,
 )
-from ai_trader.synthetic.service import sample_window
+from ai_trader.synthetic.service import study_window
 from ai_trader.synthetic.store import SyntheticStore
 
 logger = logging.getLogger("transfer_study")
@@ -1627,7 +1627,7 @@ def build_plan(args: argparse.Namespace) -> tuple[StudyPlan, list[StrategySpec],
     manifest = store.load_manifest(library_id)
     base_config = load_config(args.config)
 
-    synth_start, synth_end = sample_window(manifest, base_config.runner.lookback_days + 5)
+    synth_start, synth_end = study_window(manifest, base_config.runner.lookback_days)
     window_days = (synth_end - synth_start).days
     min_history = base_config.runner.lookback_days + window_days // N_GROUPS
 
