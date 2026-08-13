@@ -377,10 +377,13 @@ Tres controles hacen legible ese número, y los tres salieron como tenían que s
   baseline (−1,164). Si lo hubiera batido, el barrido se publicaría *anulado y sin break-even*,
   porque lo medido no habría sido capacidad predictiva sino el AR(1) del ruido o el simple hecho de
   operar menos. Es el test de falsación que no existía en ninguna parte del repositorio.
-- **La puerta, por sí sola, cuesta dinero.** Entre la celda sin canal y ρ = 0 hay −1,02 puntos de
-  recompensa (−0,38 para una misma configuración), y ese coste es exactamente lo que la información
-  tiene que pagar antes de aportar nada. Por eso el valor de la señal se lee **siempre contra
-  ρ = 0** y nunca contra la celda sin puerta.
+- **La celda «sin canal» es el cero del eje, no una rival.** La puerta sólo puede *quitar* entradas,
+  así que la curva de ρ arranca por debajo de ella y sube. Cuánto cuesta ese filtro **depende del
+  régimen** y por eso el informe lo publica en los dos lados del hold-out: −1,02 puntos en
+  validación (mercado subiendo) y **+0,09 en train** (mercado cayendo, donde filtrar al azar reduce
+  exposición y por tanto ayuda). Lo que no depende del régimen —y es lo que sostiene el
+  break-even— es la monotonía en ρ. Por eso el valor de la señal se lee **siempre contra ρ = 0** y
+  nunca contra la celda sin puerta.
 - **El canal entrega lo que declara**: IC medido 0,004 / 0,054 / 0,106 / 0,207 frente a 0 / 0,05 /
   0,10 / 0,20 declarados, y correlación con retornos **ya realizados** de 0,057 — ruido, como debe
   ser en una señal que mira hacia delante. Son umbrales de aceptación que pueden fallar, dentro del
@@ -388,6 +391,21 @@ Tres controles hacen legible ese número, y los tres salieron como tenían que s
 
 Y el valor de la información es **monótono** en ρ, que es la comprobación de que todo el
 instrumento mide lo que dice: +0,11 · +0,89 · +1,15 sobre el control, para ρ = 0,05 · 0,10 · 0,20.
+
+La lectura más limpia es la de **una misma configuración** a través de las celdas, porque quita el
+ruido de que la elegida cambie — y es la que descarta la explicación alternativa («puntúa mejor
+porque opera menos»):
+
+| `mean_reversion#06` | sin canal | ρ = 0 | ρ = 0,05 | ρ = 0,10 | ρ = 0,20 |
+|---|---|---|---|---|---|
+| recompensa OOS | +0,447 | +0,071 | +0,090 | +0,314 | +0,568 |
+| operaciones/ventana | 16,9 | 11,8 | 11,9 | 12,1 | 11,6 |
+
+La puerta corta **las mismas ~30 % de entradas en las cuatro celdas**. Lo único que cambia entre
+ρ = 0 y ρ = 0,20 es *cuáles* corta, y eso vale medio punto de recompensa. Ahí también se ve el otro
+umbral, el que sí cae dentro de la rejilla: entre ρ = 0,10 y ρ = 0,20 la señal deja de salir peor
+que ignorarla, es decir, **paga el filtro**; batir además al baseline pide más, porque la
+configuración sin puerta ya estaba −0,140 por debajo.
 
 La celda «sin canal» reproduce **128 unidades de `data/transfer/units_ai_v3.json` score a score**:
 es la prueba de que la costura del canal —la factoría de proveedores del motor, la tabla de

@@ -205,6 +205,13 @@ CRITERION: dict[str, str] = {
         "informacion), nunca contra 'off': entre 'off' y rho=0 hay una puerta que opera "
         "menos, y operar menos no es saber algo"
     ),
+    "coste_de_la_puerta": (
+        "'off' es el CERO del eje, no una celda rival: la puerta solo puede quitar "
+        "entradas, asi que la curva de rho arranca por debajo y sube. Su coste se publica "
+        "en los dos lados del hold-out porque el SIGNO depende del regimen (filtrar reduce "
+        "exposicion: ayuda donde el mercado cae, estorba donde sube); lo que no depende del "
+        "regimen es la monotonia en rho"
+    ),
 }
 
 
@@ -848,26 +855,60 @@ def value_of_information(verdicts: Sequence[dict]) -> list[dict]:
     return out
 
 
-def gate_cost(verdicts: Sequence[dict]) -> dict:
-    """Cuanto cuesta la PUERTA por si misma: 'off' contra rho=0. Es la cifra que impide
-    leer como informacion lo que solo es operar menos."""
+def gate_cost(verdicts: Sequence[dict], config_ids: Sequence[str] = ()) -> dict:
+    """
+    Cuanto cuesta la PUERTA por si misma: 'off' contra rho=0.
+
+    Es la cifra que impide leer como informacion lo que solo es operar menos, y se publica
+    EN LOS DOS LADOS del hold-out porque su signo DEPENDE DEL REGIMEN: filtrar entradas al
+    azar reduce exposicion, asi que ayuda en los escenarios que caen y estorba en los que
+    suben. Publicar solo el lado de validacion invitaria a leer "la puerta cuesta X" como
+    una constante del sistema cuando es una propiedad del tramo.
+
+    Lo que SI es independiente del regimen —y es lo que sostiene el break-even— es la
+    monotonia en rho, que se lee en `value_of_information` y, sin el ruido de que la
+    configuracion elegida cambie entre celdas, en `by_config`: la misma configuracion en
+    las cinco celdas, con sus operaciones por ventana al lado. Si esas operaciones apenas
+    se mueven entre celdas, la diferencia de recompensa no puede ser "opera menos".
+    """
     off = next((v for v in verdicts if v["arm"] == ARM_OFF), None)
     zero = next((v for v in verdicts if v["arm"] != ARM_OFF and v["rho"] == 0.0), None)
     if off is None or zero is None:
         return {}
+
+    def _delta(side: str) -> float | None:
+        a, b = off[f"selected_reward_{side}"], zero[f"selected_reward_{side}"]
+        return None if a is None or b is None else _round(b - a)
+
     return {
         "off_selected": off["selected"],
         "off_reward_validation": off["selected_reward_validation"],
+        "off_reward_train": off["selected_reward_train"],
         "rho0_selected": zero["selected"],
         "rho0_reward_validation": zero["selected_reward_validation"],
-        "delta": _round(
-            None
-            if off["selected_reward_validation"] is None
-            or zero["selected_reward_validation"] is None
-            else zero["selected_reward_validation"] - off["selected_reward_validation"]
+        "rho0_reward_train": zero["selected_reward_train"],
+        "delta": _delta("validation"),
+        "delta_validation": _delta("validation"),
+        "delta_train": _delta("train"),
+        "regime_dependent": (
+            "el signo depende del tramo: filtrar entradas reduce exposicion, asi que la "
+            "puerta ciega ayuda donde el mercado cae y estorba donde sube"
         ),
         "off_trades_per_window": off["trades_per_window"],
         "rho0_trades_per_window": zero["trades_per_window"],
+        # La MISMA configuracion a traves de las celdas: la lectura sin el ruido de que la
+        # elegida cambie. Es la que separa "opera menos" de "opera mejor".
+        "by_config": {
+            config_id: {
+                "rewards": {
+                    v["cell_id"]: v["rewards_validation"].get(config_id) for v in verdicts
+                },
+                "trades_per_window": {
+                    v["cell_id"]: v["trades_per_window"].get(config_id) for v in verdicts
+                },
+            }
+            for config_id in config_ids
+        },
     }
 
 
@@ -1068,7 +1109,7 @@ def build_report(
         "cells": verdicts,
         "break_even": break_even(verdicts),
         "value_of_information": value_of_information(verdicts),
-        "gate_cost": gate_cost(verdicts),
+        "gate_cost": gate_cost(verdicts, config_ids),
         "channel_certification": certify_channels(plan),
         "reproduction": reproduction_check(plan, rows),
         "baseline_invariance": baseline_invariance(cells),

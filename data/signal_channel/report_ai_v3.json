@@ -190,7 +190,8 @@
   "break_even": "el menor rho de la rejilla que bate. Si ninguno bate, la respuesta es '> max(rejilla)' y eso YA contesta la pregunta de la evolucion siguiente",
   "control": "rho=0 NO puede batir. Si bate, el barrido queda ANULADO y no se publica break-even: la estrategia estaria explotando el ruido persistente del canal o el hecho de operar menos, no informacion",
   "control_off": "la celda 'off' (sin canal ni puerta) tiene que reproducir units_ai_v3.json score a score; es la prueba de que la costura del canal no cambia el motor",
-  "delta": "el valor de la informacion se lee SIEMPRE contra rho=0 (misma puerta, sin informacion), nunca contra 'off': entre 'off' y rho=0 hay una puerta que opera menos, y operar menos no es saber algo"
+  "delta": "el valor de la informacion se lee SIEMPRE contra rho=0 (misma puerta, sin informacion), nunca contra 'off': entre 'off' y rho=0 hay una puerta que opera menos, y operar menos no es saber algo",
+  "coste_de_la_puerta": "'off' es el CERO del eje, no una celda rival: la puerta solo puede quitar entradas, asi que la curva de rho arranca por debajo y sube. Su coste se publica en los dos lados del hold-out porque el SIGNO depende del regimen (filtrar reduce exposicion: ayuda donde el mercado cae, estorba donde sube); lo que no depende del regimen es la monotonia en rho"
  },
  "configs": [
   "crypto_momentum#00",
@@ -737,9 +738,14 @@
  "gate_cost": {
   "off_selected": "mean_reversion#06",
   "off_reward_validation": 0.4467,
+  "off_reward_train": -1.4127,
   "rho0_selected": "crypto_momentum#07",
   "rho0_reward_validation": -0.578,
+  "rho0_reward_train": -1.3204,
   "delta": -1.0247,
+  "delta_validation": -1.0247,
+  "delta_train": 0.0923,
+  "regime_dependent": "el signo depende del tramo: filtrar entradas reduce exposicion, asi que la puerta ciega ayuda donde el mercado cae y estorba donde sube",
   "off_trades_per_window": {
    "crypto_momentum#00": 48.47,
    "crypto_momentum#01": 12.3,
@@ -775,6 +781,264 @@
    "mean_reversion#05": 6.63,
    "mean_reversion#06": 11.77,
    "mean_reversion#07": 0.17
+  },
+  "by_config": {
+   "crypto_momentum#00": {
+    "rewards": {
+     "off": -1.1077,
+     "rho0_h1": -0.8821,
+     "rho0.05_h1": -0.8287,
+     "rho0.1_h1": -0.8252,
+     "rho0.2_h1": -0.8629
+    },
+    "trades_per_window": {
+     "off": 48.47,
+     "rho0_h1": 34.83,
+     "rho0.05_h1": 34.83,
+     "rho0.1_h1": 34.5,
+     "rho0.2_h1": 35.0
+    }
+   },
+   "crypto_momentum#01": {
+    "rewards": {
+     "off": -1.9804,
+     "rho0_h1": -1.9217,
+     "rho0.05_h1": -1.9217,
+     "rho0.1_h1": -1.9514,
+     "rho0.2_h1": -1.9579
+    },
+    "trades_per_window": {
+     "off": 12.3,
+     "rho0_h1": 9.33,
+     "rho0.05_h1": 9.33,
+     "rho0.1_h1": 9.33,
+     "rho0.2_h1": 9.33
+    }
+   },
+   "crypto_momentum#02": {
+    "rewards": {
+     "off": -0.76,
+     "rho0_h1": -1.0695,
+     "rho0.05_h1": -1.0076,
+     "rho0.1_h1": -0.9859,
+     "rho0.2_h1": -0.9445
+    },
+    "trades_per_window": {
+     "off": 56.57,
+     "rho0_h1": 43.1,
+     "rho0.05_h1": 42.77,
+     "rho0.1_h1": 42.93,
+     "rho0.2_h1": 43.1
+    }
+   },
+   "crypto_momentum#03": {
+    "rewards": {
+     "off": -0.4879,
+     "rho0_h1": -0.3834,
+     "rho0.05_h1": -0.2682,
+     "rho0.1_h1": -0.2388,
+     "rho0.2_h1": -0.0451
+    },
+    "trades_per_window": {
+     "off": 54.83,
+     "rho0_h1": 42.93,
+     "rho0.05_h1": 42.77,
+     "rho0.1_h1": 42.1,
+     "rho0.2_h1": 41.77
+    }
+   },
+   "crypto_momentum#04": {
+    "rewards": {
+     "off": -0.947,
+     "rho0_h1": -1.0993,
+     "rho0.05_h1": -0.9456,
+     "rho0.1_h1": -0.8109,
+     "rho0.2_h1": -0.7661
+    },
+    "trades_per_window": {
+     "off": 51.63,
+     "rho0_h1": 38.53,
+     "rho0.05_h1": 38.37,
+     "rho0.1_h1": 37.83,
+     "rho0.2_h1": 38.67
+    }
+   },
+   "crypto_momentum#05": {
+    "rewards": {
+     "off": -1.0171,
+     "rho0_h1": -0.7436,
+     "rho0.05_h1": -0.6462,
+     "rho0.1_h1": -0.5748,
+     "rho0.2_h1": -0.5817
+    },
+    "trades_per_window": {
+     "off": 47.1,
+     "rho0_h1": 34.93,
+     "rho0.05_h1": 34.6,
+     "rho0.1_h1": 33.93,
+     "rho0.2_h1": 34.6
+    }
+   },
+   "crypto_momentum#06": {
+    "rewards": {
+     "off": -1.7558,
+     "rho0_h1": -2.338,
+     "rho0.05_h1": -2.338,
+     "rho0.1_h1": -2.338,
+     "rho0.2_h1": -1.7558
+    },
+    "trades_per_window": {
+     "off": 2.33,
+     "rho0_h1": 2.17,
+     "rho0.05_h1": 2.17,
+     "rho0.1_h1": 2.17,
+     "rho0.2_h1": 2.17
+    }
+   },
+   "crypto_momentum#07": {
+    "rewards": {
+     "off": -0.2844,
+     "rho0_h1": -0.578,
+     "rho0.05_h1": -0.464,
+     "rho0.1_h1": -0.4789,
+     "rho0.2_h1": 0.2924
+    },
+    "trades_per_window": {
+     "off": 48.1,
+     "rho0_h1": 30.33,
+     "rho0.05_h1": 30.33,
+     "rho0.1_h1": 29.83,
+     "rho0.2_h1": 30.67
+    }
+   },
+   "mean_reversion#00": {
+    "rewards": {
+     "off": -0.5388,
+     "rho0_h1": -0.6809,
+     "rho0.05_h1": -0.6809,
+     "rho0.1_h1": -1.2183,
+     "rho0.2_h1": -1.1448
+    },
+    "trades_per_window": {
+     "off": 2.67,
+     "rho0_h1": 1.33,
+     "rho0.05_h1": 1.5,
+     "rho0.1_h1": 1.33,
+     "rho0.2_h1": 1.33
+    }
+   },
+   "mean_reversion#01": {
+    "rewards": {
+     "off": -1.5685,
+     "rho0_h1": -1.4709,
+     "rho0.05_h1": -1.4709,
+     "rho0.1_h1": -1.4024,
+     "rho0.2_h1": -1.3863
+    },
+    "trades_per_window": {
+     "off": 6.97,
+     "rho0_h1": 4.17,
+     "rho0.05_h1": 4.17,
+     "rho0.1_h1": 4.3,
+     "rho0.2_h1": 4.13
+    }
+   },
+   "mean_reversion#02": {
+    "rewards": {
+     "off": -0.7529,
+     "rho0_h1": -0.7131,
+     "rho0.05_h1": -0.7131,
+     "rho0.1_h1": -0.7131,
+     "rho0.2_h1": -0.7131
+    },
+    "trades_per_window": {
+     "off": 1.83,
+     "rho0_h1": 0.33,
+     "rho0.05_h1": 0.33,
+     "rho0.1_h1": 0.17,
+     "rho0.2_h1": 0.17
+    }
+   },
+   "mean_reversion#03": {
+    "rewards": {
+     "off": -0.4821,
+     "rho0_h1": -0.7597,
+     "rho0.05_h1": -0.376,
+     "rho0.1_h1": -1.2013,
+     "rho0.2_h1": -0.9449
+    },
+    "trades_per_window": {
+     "off": 12.5,
+     "rho0_h1": 6.0,
+     "rho0.05_h1": 5.83,
+     "rho0.1_h1": 5.67,
+     "rho0.2_h1": 5.5
+    }
+   },
+   "mean_reversion#04": {
+    "rewards": {
+     "off": -0.842,
+     "rho0_h1": -0.842,
+     "rho0.05_h1": -0.842,
+     "rho0.1_h1": -0.842,
+     "rho0.2_h1": -0.842
+    },
+    "trades_per_window": {
+     "off": 0.5,
+     "rho0_h1": 0.5,
+     "rho0.05_h1": 0.5,
+     "rho0.1_h1": 0.33,
+     "rho0.2_h1": 0.33
+    }
+   },
+   "mean_reversion#05": {
+    "rewards": {
+     "off": -1.132,
+     "rho0_h1": -1.0205,
+     "rho0.05_h1": -1.0806,
+     "rho0.1_h1": -1.0806,
+     "rho0.2_h1": -0.929
+    },
+    "trades_per_window": {
+     "off": 9.93,
+     "rho0_h1": 6.63,
+     "rho0.05_h1": 6.8,
+     "rho0.1_h1": 6.8,
+     "rho0.2_h1": 6.47
+    }
+   },
+   "mean_reversion#06": {
+    "rewards": {
+     "off": 0.4467,
+     "rho0_h1": 0.0712,
+     "rho0.05_h1": 0.0896,
+     "rho0.1_h1": 0.3137,
+     "rho0.2_h1": 0.5683
+    },
+    "trades_per_window": {
+     "off": 16.93,
+     "rho0_h1": 11.77,
+     "rho0.05_h1": 11.93,
+     "rho0.1_h1": 12.1,
+     "rho0.2_h1": 11.6
+    }
+   },
+   "mean_reversion#07": {
+    "rewards": {
+     "off": -0.129,
+     "rho0_h1": -0.1613,
+     "rho0.05_h1": -0.1613,
+     "rho0.1_h1": -0.1613,
+     "rho0.2_h1": -0.1613
+    },
+    "trades_per_window": {
+     "off": 0.33,
+     "rho0_h1": 0.17,
+     "rho0.05_h1": 0.17,
+     "rho0.1_h1": 0.17,
+     "rho0.2_h1": 0.17
+    }
+   }
   }
  },
  "channel_certification": [
@@ -889,5 +1153,5 @@
   "differing": []
  },
  "n_failed_units": 0,
- "generated_at": "2026-08-12T22:55:13.405248+00:00"
+ "generated_at": "2026-08-13T09:25:07.831952+00:00"
 }

@@ -1080,6 +1080,32 @@ def _signal_channel_block(s):
         for r in s["rows"]
     )
 
+    # La curva de UNA configuracion fija a traves de las celdas: quita el ruido de que la
+    # elegida cambie de celda, y es lo que separa "opera menos" de "opera mejor".
+    gc = s.get("gate_cost") or {}
+    curve_id = gc.get("off_selected")
+    curve = (gc.get("by_config") or {}).get(curve_id) or {}
+    curve_html = ""
+    if curve:
+        cells = [r["cell_id"] for r in s["rows"]]
+        curve_html = (
+            "<table><thead><tr><th>" + curve_id + "</th>"
+            + "".join(f"<th class=n>{c}</th>" for c in cells)
+            + "</tr></thead><tbody>"
+            + "<tr><td><b>recompensa OOS</b></td>"
+            + "".join(f"<td class='n mono'>{_n(curve['rewards'].get(c), 3)}</td>" for c in cells)
+            + "</tr><tr><td>operaciones/ventana</td>"
+            + "".join(
+                f"<td class='n mono'>{_n(curve['trades_per_window'].get(c), 1)}</td>"
+                for c in cells
+            )
+            + "</tr></tbody></table>"
+            "<p>La puerta corta prácticamente las <b>mismas</b> entradas en todas las celdas con "
+            "canal: lo único que cambia entre ρ = 0 y el extremo de la rejilla es <i>cuáles</i>, y "
+            "eso vale medio punto de recompensa. Es lo que descarta la explicación alternativa —que "
+            "puntúe mejor por operar menos—.</p>"
+        )
+
     control = (
         "El grupo de control salió <b>limpio</b>: con ρ = 0 la estrategia <b>no</b> bate al "
         "baseline, así que lo que se mide en las demás celdas es información y no el ruido "
@@ -1126,6 +1152,14 @@ resultado no sería un criterio.
 y un cero le gana a cualquier cosa que arriesgue y pierda (§4.10), operar menos puede parecer talento.
 Por eso el valor de la información se lee siempre contra ρ = 0 —misma puerta, sin información— y nunca
 contra la celda sin puerta.</div>
+<div class="why"><b>«Sin canal» es el cero del eje, no una celda rival.</b> La puerta sólo puede
+<i>quitar</i> entradas, así que la curva de ρ arranca por debajo de ella y sube. Cuánto cuesta ese
+filtro <b>depende del régimen</b>, y por eso el informe lo publica en los dos lados del hold-out:
+{_n(gc.get("delta_validation"), 2)} puntos en validación —mercado subiendo— y
+{_n(gc.get("delta_train"), 2)} en train —mercado cayendo, donde filtrar al azar reduce exposición y por
+tanto ayuda—. Leer sólo un lado convertiría una propiedad del tramo en una constante del sistema. Lo
+que <b>no</b> depende del régimen es la monotonía en ρ, y es lo que sostiene el break-even.{curve_html}
+</div>
 <div class="why"><b>0 = menos edge, nunca más.</b> Los mandos del canal van en positivo
 (<span class="mono">informative_share</span>, <span class="mono">coverage</span>) y no en negativo
 (<span class="mono">false_positive_rate</span>), para que un default olvidado degrade a «sin señal» y no
