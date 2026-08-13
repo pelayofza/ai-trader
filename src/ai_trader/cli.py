@@ -12,6 +12,12 @@ from ai_trader.config import DEFAULT_CONFIG_PATH, load_config
 from ai_trader.data.market_data import MarketDataService
 from ai_trader.main import build_runner
 from ai_trader.notifications.base import NullNotifier
+# Las claves de los enriquecedores se importan arriba, y no de forma perezosa como el resto
+# de `synth`, porque son las `choices` de un argumento: el parser las necesita al
+# construirse. `observation_worlds` solo importa de `synthetic/`, asi que no arrastra nada.
+from ai_trader.synthetic.observation_worlds import ENRICHERS as _ENRICHERS
+
+ENRICHER_KEYS: tuple[str, ...] = tuple(_ENRICHERS)
 
 logger = logging.getLogger(__name__)
 
@@ -227,6 +233,37 @@ def cmd_synth_add_paths(args: argparse.Namespace) -> int:
         f"{manifest.num_scenarios} scenarios x {manifest.n_paths} paths = "
         f"{manifest.num_samples} samples."
     )
+    return 0
+
+
+def cmd_synth_derive(args: argparse.Namespace) -> int:
+    """
+    Deriva una libreria de otra aplicando un enriquecedor DECLARADO. No llama a la IA.
+
+    Es el camino por el que se produjeron ai_v2 y ai_v3, y hasta hoy la unica de las tres
+    operaciones del servicio sin puerta de entrada: se corrieron desde una consola que nadie
+    puede repetir. `--enricher` toma sus opciones del registro, asi que `--help` lista los
+    mundos derivables y esa lista no se puede desincronizar del codigo.
+    """
+    from ai_trader.synthetic.designer import TemplateScenarioDesigner
+    from ai_trader.synthetic.observation_worlds import ENRICHERS
+    from ai_trader.synthetic.service import SyntheticDataService
+    from ai_trader.synthetic.store import SyntheticStore
+
+    store = SyntheticStore(args.synthetic_root) if args.synthetic_root else SyntheticStore()
+    # El disenador no se usa al derivar (los escenarios ya estan en disco); se pasa uno
+    # cualquiera valido solo para construir el servicio, igual que en add-paths.
+    service = SyntheticDataService(TemplateScenarioDesigner(), store=store)
+
+    manifest = service.derive_library(
+        args.source, args.target, enricher=ENRICHERS[args.enricher], n_paths=args.paths
+    )
+    print(
+        f"Derived '{manifest.library_id}' from '{args.source}' via '{args.enricher}' "
+        f"(NO API call): {manifest.num_scenarios} scenarios x {manifest.n_paths} paths = "
+        f"{manifest.num_samples} samples."
+    )
+    print(f"Designer chain: {manifest.designer}")
     return 0
 
 
@@ -773,6 +810,26 @@ def main(argv: list[str] | None = None) -> int:
     )
     addp.add_argument("--synthetic-root", default=None, help="Root dir (default data/synthetic).")
 
+    der = synth_sub.add_parser(
+        "derive",
+        help="Derive a library from another with a declared enricher (NO API call).",
+    )
+    # `--from` es palabra reservada de Python: el destino tiene que llamarse de otra forma.
+    der.add_argument("--from", dest="source", required=True, help="Source library id.")
+    der.add_argument("--to", dest="target", required=True, help="Library id to create/overwrite.")
+    der.add_argument(
+        "--enricher", required=True, choices=sorted(ENRICHER_KEYS),
+        help=(
+            "Declared enricher: 'v2' = microstructure (made ai_v2/ai_v3); "
+            "'v4' = microstructure + the five thematic observation channels."
+        ),
+    )
+    der.add_argument(
+        "--paths", type=int, default=None,
+        help="Paths per scenario. Defaults to the source library's.",
+    )
+    der.add_argument("--synthetic-root", default=None, help="Root dir (default data/synthetic).")
+
     lst = synth_sub.add_parser("list", help="List stored synthetic libraries.")
     lst.add_argument("--synthetic-root", default=None, help="Root dir (default data/synthetic).")
 
@@ -856,6 +913,7 @@ def main(argv: list[str] | None = None) -> int:
         synth_handlers = {
             "generate": cmd_synth_generate,
             "add-paths": cmd_synth_add_paths,
+            "derive": cmd_synth_derive,
             "list": cmd_synth_list,
         }
         return synth_handlers[args.synth_command](args)

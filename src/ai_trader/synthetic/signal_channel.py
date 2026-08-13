@@ -171,24 +171,36 @@ class SignalPanel:
 
     def theme_table(self) -> dict[str, ThemeSpec]:
         """
-        La tabla de temas de un panel SIMULADO: todos los temas apuntan a todos los canales.
+        La tabla de temas de un panel SIMULADO. Empareja POR NOMBRE, y cae a "todos" si no.
 
         Las fuentes simuladas no estan en ningun tema real, y no pueden estarlo: la tabla de
-        `observation/signal_themes.py` habla del catalogo de verdad, y mezclar en ella una
+        `observation/signal_themes.py` habla del catalogo de verdad, y meter en ella una
         clave `synthetic_*` es exactamente lo que `POLARITY` evita inyectandose en vez de
-        escribirse. Aqui se construye una tabla al vuelo, por el mismo motivo y de la misma
-        forma.
+        escribirse. Aqui se construye una tabla al vuelo, por el mismo motivo.
 
-        Que TODOS los temas vean TODOS los canales no es pereza: el barrido mide el
-        break-even de un DISENO, y las seis primitivas tematicas tienen que enfrentarse al
-        mismo canal o sus numeros no son comparables entre si.
+        LA REGLA, Y POR QUE SON DOS CASOS Y NO UNO:
 
-        `min_sources=1` porque aqui no hay conjunto que falsear —hay un canal, y se sabe—.
-        Con ese minimo el denominador efectivo es 2, asi que un canal unico publica cobertura
-        0,5: por encima del umbral, legible, y sin fingir cobertura total.
+        - Si un canal se llama como un tema, ese tema ve ESE canal y solo ese. Es el caso de
+          `ai_v4`, que declara cinco canales con los nombres de los cinco temas, y es lo que
+          hace que el experimento de BREADTH exista: cada primitiva tematica se enfrenta a su
+          propio canal (IC 0,010 a 0,048) y la compuesta al agregado de los cinco (0,074).
+          Con todos los temas viendo todos los canales, la compuesta veria exactamente lo
+          mismo que las otras cinco y la comparacion no mediria nada.
+        - Un tema que no encuentra canal con su nombre los ve TODOS. Es el caso del barrido
+          de rho, que declara UN canal llamado `sweep`: ahi lo que se mide es el break-even
+          de un diseno, y las seis primitivas tienen que enfrentarse al mismo canal o sus
+          numeros no son comparables entre si.
+
+        `min_sources=1` porque aqui no hay conjunto que falsear —se sabe cuantos canales
+        hay—. Con ese minimo el denominador efectivo es 2, asi que un canal unico publica
+        cobertura 0,5: por encima del umbral, legible, y sin fingir cobertura total.
         """
-        keys = tuple(source.key for source in self.sources)
-        return {name: ThemeSpec(name, keys, min_sources=1) for name in THEME_NAMES}
+        by_name = {channel.name: source_key(channel) for channel in self.channels}
+        every = tuple(source.key for source in self.sources)
+        return {
+            name: ThemeSpec(name, (by_name[name],) if name in by_name else every, min_sources=1)
+            for name in THEME_NAMES
+        }
 
     def provider(self, clock: Clock) -> ThemedSignalRadarProvider:
         """El radar de produccion, con el catalogo y la polaridad de los canales."""

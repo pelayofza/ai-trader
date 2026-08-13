@@ -59,7 +59,15 @@ from ai_trader.signals.catalog import CATALOG
 from ai_trader.signals.normalize import Z_CLIP
 from ai_trader.strategies.momentum_crypto import CryptoMomentumConfig, CryptoMomentumStrategy
 from ai_trader.synthetic.engine import PathEngine, ar1_series
+from ai_trader.strategies.signal_layer import composite_reading
 from ai_trader.synthetic.fidelity import channel_checks, channel_facts, correlation
+from ai_trader.synthetic.observation_worlds import (
+    ENRICHERS,
+    MIN_DECLARED_COVERAGE,
+    V4_CHANNELS,
+    aggregate_expected_ic,
+    enrich_spec_v4,
+)
 from ai_trader.synthetic.scenarios import (
     SIGNAL_CHANNEL_FIELDS,
     FactorPhase,
@@ -164,6 +172,68 @@ class TestDefaultsAreInert:
         assert signal_gate_reason(features, min_tone=4.0) is None
         for theme in THEME_NAMES:
             assert themed_gate_reason(features, theme, min_tone=4.0) is None
+
+
+class TestObservationWorlds:
+    """Los cinco canales de ai_v4: lo que declaran y por que no puede moverse sin releerlo."""
+
+    def test_los_canales_se_llaman_como_los_temas(self):
+        """Es lo que hace que cada primitiva tematica vea SU canal (ver `theme_table`), y de
+        paso que el informe del barrido no tenga que traducir entre dos vocabularios."""
+        assert {c.name for c in V4_CHANNELS} == set(THEME_NAMES)
+
+    def test_cinco_grupos_de_correlacion_distintos(self):
+        """Con grupo compartido no habria cinco canales: compartirian ruido y mascaras, y
+        serian la misma apuesta escalada. La breadth solo existe si son cinco apuestas."""
+        assert len({c.corr_group for c in V4_CHANNELS}) == len(V4_CHANNELS)
+
+    def test_ninguna_cobertura_baja_del_suelo_del_estimador(self):
+        """
+        Fragil A PROPOSITO. Por debajo de ~0,40 el canal no es certificable —`channel_facts`
+        exige 200 observaciones— o suspende `channel_leak` por RUIDO DE MUESTREO sin fugar
+        nada: `past_leak` sigue ~1,5/sqrt(n). Bajar este suelo hace que la libreria no pase
+        su propio estudio de fidelidad, y el motivo no se ve en el error.
+        """
+        assert MIN_DECLARED_COVERAGE >= 0.45
+        for channel in V4_CHANNELS:
+            assert channel.coverage >= MIN_DECLARED_COVERAGE, channel.name
+
+    def test_el_ic_agregado_es_la_raiz_de_la_suma_de_cuadrados(self):
+        assert aggregate_expected_ic() == pytest.approx(0.0744, abs=5e-4)
+        assert aggregate_expected_ic() > max(c.expected_ic for c in V4_CHANNELS)
+
+    def test_el_enriquecedor_es_idempotente(self):
+        """Es lo que hace que derivar desde ai_v1 y desde ai_v3 sean la MISMA libreria, y no
+        dos mundos con el mismo nombre segun de donde se corriera."""
+        spec = ScenarioSpec(
+            id="s", name="S", narrative="",
+            phases=(FactorPhase(length_days=10),),
+        )
+        once = enrich_spec_v4(spec)
+        assert enrich_spec_v4(once).to_dict() == once.to_dict()
+        assert once.signals == V4_CHANNELS
+
+    def test_el_enriquecedor_no_toca_las_velas(self):
+        """El motor no lee `spec.signals`, y por eso declarar canales no puede mover un
+        precio. Es la premisa de la que cuelga que ai_v4 sea ai_v3 mas observacion."""
+        phase = FactorPhase(length_days=60, drift={"beta": 0.001}, vol={"beta": 0.02})
+        spec = ScenarioSpec(id="s", name="S", narrative="", phases=(phase,))
+        engine = PathEngine(DEFAULT_UNIVERSE)
+        plain = engine.generate(spec, seed=99)
+        with_channels = engine.generate(enrich_spec_v4(spec), seed=99)
+        # `enrich_spec_v4` SI toca la microestructura (aplica enrich_spec), asi que se compara
+        # contra el mismo spec enriquecido y lo unico que se anade son los canales.
+        only_channels = engine.generate(
+            dataclasses.replace(enrich_spec_v4(spec), signals=()), seed=99
+        )
+        for symbol in plain:
+            pd.testing.assert_frame_equal(with_channels[symbol], only_channels[symbol])
+
+    def test_el_registro_de_enriquecedores_nombra_los_mundos_derivables(self):
+        """Es lo que la CLI ofrece en `--enricher`: documentacion que no se puede
+        desincronizar del codigo porque es el codigo."""
+        assert set(ENRICHERS) == {"v2", "v4"}
+        assert ENRICHERS["v4"] is enrich_spec_v4
 
 
 class TestValidation:
@@ -440,6 +510,86 @@ class TestProductionContract:
             reading = theme_reading(features, theme)
             assert reading.coverage == 0.5
             assert reading.readable
+
+    def test_each_theme_sees_its_own_channel_when_the_names_match(self):
+        """
+        La regla que hace POSIBLE el experimento de breadth. Con todos los temas viendo
+        todos los canales, la primitiva compuesta veria exactamente lo mismo que las otras
+        cinco y la comparacion no mediria nada.
+        """
+        bars = _bars(n=300, seed=15)
+        panel = emit_signals(bars, V4_CHANNELS, seed=6)
+        radar = panel.provider(HistoricalClock(bars["BTC/USDT"].index[250].to_pydatetime()))
+        features = radar.features("BTC/USDT")
+        tones = [theme_reading(features, name).tone for name in THEME_NAMES]
+        # Cinco canales independientes: cinco tonos distintos. Con la tabla "todos ven
+        # todos" habria un solo valor repetido cinco veces.
+        assert len(set(tones)) == len(THEME_NAMES)
+
+    @pytest.mark.slow
+    def test_the_composite_beats_the_best_single_theme(self):
+        """
+        LA PUERTA DE LA PRIMITIVA COMPUESTA, medida sin un solo backtest.
+
+        Por la ley fundamental del gestor activo, K observadores independientes de IC pequeno
+        valen raiz de K veces uno solo. Si el radar no agregara —si el tono compuesto no
+        superase al del mejor tema— la sexta primitiva no aportaria nada sobre las otras
+        cinco y no habria motivo para pagar su coste en el n_trials del DSR.
+
+        De paso deja medida una cosa que nadie habia escrito: el radar CONSUME IC. Entre la
+        tolerancia a datos rancios (`MAX_STALE_DAYS`) y la re-normalizacion causal, lo que
+        llega a la puerta es una fraccion de lo declarado, asi que `expected_ic` es una COTA
+        SUPERIOR y no una prediccion.
+
+        LA MUESTRA NO ES NEGOCIABLE, y esto costo un falso rojo antes de escribirse: con
+        tres simbolos y 500 dias la desviacion de un IC estimado ronda 0,045, o sea el DOBLE
+        del efecto que se quiere ver, y el maximo de cinco estimaciones ruidosas gana
+        siempre. Diez simbolos y 900 dias dan ~9.000 observaciones AGRUPADAS —no una mediana
+        de correlaciones por serie, que vuelve a tirar la muestra— y con eso la desviacion
+        baja a ~0,011.
+        """
+        symbols = tuple(
+            f"{ticker}/USDT"
+            for ticker in ("BTC", "ETH", "SOL", "ADA", "XRP", "DOGE", "LINK", "LTC", "DOT", "AVAX")
+        )
+        bars = _bars(n=900, seed=21, symbols=symbols)
+        panel = emit_signals(bars, V4_CHANNELS, seed=9)
+        days = bars["BTC/USDT"].index
+        clock = HistoricalClock(days[0].to_pydatetime())
+        radar = panel.provider(clock)
+
+        horizon = 5
+        tones: dict[str, list[float]] = {name: [] for name in THEME_NAMES}
+        aggregate: list[float] = []
+        forward_returns: list[float] = []
+        for symbol in sorted(bars):
+            closes = bars[symbol]["close"].to_numpy(dtype=float)
+            forward = np.full(len(closes), np.nan)
+            forward[:-horizon] = np.log(closes[horizon:]) - np.log(closes[:-horizon])
+            for i, day in enumerate(days):
+                if not np.isfinite(forward[i]):
+                    continue
+                clock.set(day.to_pydatetime())
+                features = radar.features(symbol)
+                for name in THEME_NAMES:
+                    tones[name].append(theme_reading(features, name).tone)
+                aggregate.append(composite_reading(features).tone)
+                forward_returns.append(float(forward[i]))
+
+        future = np.array(forward_returns)
+        assert len(future) > 8_000
+        per_theme = {
+            name: correlation(np.array(values), future) for name, values in tones.items()
+        }
+        best_single = max(per_theme.values())
+        aggregated = correlation(np.array(aggregate), future)
+
+        assert aggregated > best_single, (
+            f"el radar NO agrega: compuesto {aggregated:.4f} <= mejor tema {best_single:.4f}"
+        )
+        # La cota superior: lo declarado no llega entero a la puerta, y por eso el barrido de
+        # rho se lee sobre el IC MEDIDO y no sobre el declarado.
+        assert aggregated < aggregate_expected_ic()
 
     def test_the_gate_can_block_and_uses_the_asset_block(self):
         _, radar, clock, days, _ = self._radar_and_days(_full_channel())
