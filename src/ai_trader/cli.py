@@ -433,7 +433,12 @@ def cmd_signals_events(args: argparse.Namespace) -> int:
     """
     import json
 
-    from ai_trader.observation.signal_radar import SignalRadarProvider
+    from ai_trader.observation.signal_radar import SIGNAL_FEATURES
+    from ai_trader.observation.signal_themes import (
+        THEME_NAMES,
+        ThemedSignalRadarProvider,
+        theme_reading,
+    )
     from ai_trader.shared.clock import LiveClock
     from ai_trader.signals.events import pool_report, write_pool_report
     from ai_trader.signals.feed import load_frames
@@ -476,14 +481,28 @@ def cmd_signals_events(args: argparse.Namespace) -> int:
     print(f"  Recuento publicado en {path}")
 
     if args.symbol:
-        radar = SignalRadarProvider(frames, LiveClock())
+        radar = ThemedSignalRadarProvider(frames, LiveClock())
         features = radar.features(args.symbol)
+        report = radar.coverage_report()
         print()
         print(f"=== RADAR | {args.symbol} ===")
-        for name, value in features.items():
-            print(f"  {name:<26} {value:+.3f}")
-        print(f"  Fuentes: {len(radar.coverage_report()['asset_sources'])} por activo, "
-              f"{len(radar.coverage_report()['market_sources'])} de mercado")
+        for name in SIGNAL_FEATURES:
+            print(f"  {name:<26} {features[name]:+.3f}")
+        print(f"  Fuentes: {len(report['asset_sources'])} por activo, "
+              f"{len(report['market_sources'])} de mercado")
+        print()
+        print(f"=== TEMAS | {args.symbol} ===")
+        # La columna que importa es la ultima: un tema por debajo del minimo no es un tema
+        # neutro, es un tema del que hoy no se sabe nada, y su puerta NO se evalua.
+        print(f"  {'tema':<14} {'tono':>7} {'intens.':>8} {'cobert.':>8}  {'fuentes':>9}  legible")
+        for theme in THEME_NAMES:
+            reading = theme_reading(features, theme)
+            block = report["themes"][theme]
+            sources = f"{len(block['loaded'])}/{block['denominator']}"
+            print(
+                f"  {theme:<14} {reading.tone:>+7.3f} {reading.intensity:>8.3f} "
+                f"{reading.coverage:>8.3f}  {sources:>9}  {'si' if reading.readable else 'NO'}"
+            )
     return 0
 
 

@@ -654,6 +654,37 @@ def is_market_scoped(source: SignalSource) -> bool:
 # --- la puerta ------------------------------------------------------------------------
 
 
+def gate_reason_for_blocks(
+    features: Mapping[str, float],
+    blocks: Sequence[tuple[str, Sequence[str]]],
+    *,
+    min_tone: float,
+    min_intensity: float | None = None,
+    max_intensity: float | None = None,
+) -> str | None:
+    """
+    El cuerpo de la puerta, para UNA lista cualquiera de bloques `(etiqueta, tres claves)`.
+
+    Existe para que el invariante —**sin cobertura suficiente no se evalua**— viva en UN
+    solo sitio y no en dos: `signal_gate_reason` lo aplica a los bloques activo/mercado y
+    `observation/signal_themes.py::themed_gate_reason` al bloque de un tema. Cuando alguien
+    afloje la regla, la afloja para las dos o para ninguna, que es la unica forma de que
+    "una puerta nunca bloquea por falta de datos" siga siendo cierto de todo el sistema.
+    """
+    for label, (tone_key, intensity_key, coverage_key) in blocks:
+        if float(features.get(coverage_key, 0.0)) < MIN_SIGNAL_COVERAGE:
+            continue  # falla ABIERTA: sin datos no se decide nada
+        tone = float(features.get(tone_key, 0.0))
+        intensity = float(features.get(intensity_key, 0.0))
+        if tone < min_tone:
+            return f"tono {label} {tone:+.2f} < {min_tone:+.2f}"
+        if min_intensity is not None and intensity < min_intensity:
+            return f"intensidad {label} {intensity:.2f} < {min_intensity:.2f}"
+        if max_intensity is not None and intensity > max_intensity:
+            return f"intensidad {label} {intensity:.2f} > {max_intensity:.2f}"
+    return None
+
+
 def signal_gate_reason(
     features: Mapping[str, float],
     *,
@@ -671,22 +702,13 @@ def signal_gate_reason(
     credenciales tiene cobertura 0 en los dos y opera exactamente igual que antes de que
     este modulo existiera.
     """
-    blocks = (
-        ("activo", ASSET_SIGNAL_FEATURES),
-        ("mercado", MARKET_SIGNAL_FEATURES),
+    return gate_reason_for_blocks(
+        features,
+        (("activo", ASSET_SIGNAL_FEATURES), ("mercado", MARKET_SIGNAL_FEATURES)),
+        min_tone=min_tone,
+        min_intensity=min_intensity,
+        max_intensity=max_intensity,
     )
-    for label, (tone_key, intensity_key, coverage_key) in blocks:
-        if float(features.get(coverage_key, 0.0)) < MIN_SIGNAL_COVERAGE:
-            continue  # falla ABIERTA: sin datos no se decide nada
-        tone = float(features.get(tone_key, 0.0))
-        intensity = float(features.get(intensity_key, 0.0))
-        if tone < min_tone:
-            return f"tono {label} {tone:+.2f} < {min_tone:+.2f}"
-        if min_intensity is not None and intensity < min_intensity:
-            return f"intensidad {label} {intensity:.2f} < {min_intensity:.2f}"
-        if max_intensity is not None and intensity > max_intensity:
-            return f"intensidad {label} {intensity:.2f} > {max_intensity:.2f}"
-    return None
 
 
 __all__ = [
@@ -700,6 +722,7 @@ __all__ = [
     "POLARITY",
     "SIGNAL_FEATURES",
     "SignalRadarProvider",
+    "gate_reason_for_blocks",
     "is_market_scoped",
     "signal_gate_reason",
 ]

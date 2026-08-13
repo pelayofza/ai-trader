@@ -20,7 +20,7 @@ from ai_trader.execution.polymarket_paper import PolymarketPaperExecutionEngine
 from ai_trader.execution.router import ExecutionRouter
 from ai_trader.notifications.base import Notifier
 from ai_trader.observation.regime import MarketRegimeProvider
-from ai_trader.observation.signal_radar import SignalRadarProvider
+from ai_trader.observation.signal_themes import ThemedSignalRadarProvider
 from ai_trader.risk.engine import RiskEngine
 from ai_trader.shared.clock import Clock, LiveClock
 from ai_trader.signals.feed import load_frames
@@ -117,7 +117,7 @@ class LiveUniverseBars(Mapping):
         return bars
 
 
-def build_signal_radar(config: AppConfig, clock: Clock) -> SignalRadarProvider:
+def build_signal_radar(config: AppConfig, clock: Clock) -> ThemedSignalRadarProvider:
     """
     El radar de senales para el proceso en vivo. Apagado -> vacio, y el sistema arranca.
 
@@ -125,10 +125,14 @@ def build_signal_radar(config: AppConfig, clock: Clock) -> SignalRadarProvider:
     la cobertura es 0 y las puertas se saltan. Encendido pero sin datos —sin credenciales,
     sin capturas todavia— pasa exactamente lo mismo, y se dice con un warning explicito en
     vez de dejar que parezca que hay senales detras de la decision.
+
+    Publica los seis numeros de siempre MAS las quince features tematicas, y las primeras
+    salen del metodo de la clase base sin tocar: las dos primitivas de precio no notan la
+    diferencia y las seis tematicas encuentran su tema.
     """
     if not config.signals.enabled:
         logger.info("Signal radar disabled ([signals] enabled = false): running without it")
-        return SignalRadarProvider(None, clock)
+        return ThemedSignalRadarProvider(None, clock)
 
     frames = load_frames(raw_root=config.signals.raw_root or None)
     if not frames:
@@ -139,7 +143,7 @@ def build_signal_radar(config: AppConfig, clock: Clock) -> SignalRadarProvider:
         )
     else:
         logger.info("Signal radar built from %s sources: %s", len(frames), sorted(frames))
-    return SignalRadarProvider(frames, clock)
+    return ThemedSignalRadarProvider(frames, clock)
 
 
 def build_runner(

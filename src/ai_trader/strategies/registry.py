@@ -2,11 +2,29 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from ai_trader.strategies.attention_ignition import (
+    AttentionIgnitionConfig,
+    AttentionIgnitionStrategy,
+)
+from ai_trader.strategies.event_calendar_drift import (
+    EventCalendarDriftConfig,
+    EventCalendarDriftStrategy,
+)
+from ai_trader.strategies.flow_persistence import FlowPersistenceConfig, FlowPersistenceStrategy
+from ai_trader.strategies.liquidation_cascade import (
+    LiquidationCascadeConfig,
+    LiquidationCascadeStrategy,
+)
 from ai_trader.strategies.mean_reversion import MeanReversionConfig, MeanReversionStrategy
 from ai_trader.strategies.momentum_crypto import CryptoMomentumConfig, CryptoMomentumStrategy
 from ai_trader.strategies.polymarket_threshold import (
     PolymarketThresholdConfig,
     PolymarketThresholdStrategy,
+)
+from ai_trader.strategies.signal_composite import SignalCompositeConfig, SignalCompositeStrategy
+from ai_trader.strategies.vol_term_structure import (
+    VolTermStructureConfig,
+    VolTermStructureStrategy,
 )
 
 # Registro de estrategias parametrizadas: nombre -> constructor(params) -> Strategy.
@@ -28,10 +46,48 @@ def _build_polymarket_threshold(params: dict[str, Any]):
     return PolymarketThresholdStrategy(PolymarketThresholdConfig(**params))
 
 
+# --- las seis primitivas TEMATICAS ---------------------------------------------------
+#
+# Cada una lee UN tema del radar (`observation/signal_themes.py`) salvo la ultima, que los
+# lee los cinco. Todas tienen la misma forma: nucleo de precio que corre solo + capa de senal
+# INERTE por defecto, de modo que sin cobertura degradan a su variante ciega en vez de dejar
+# de operar. Ninguna puede bloquear por falta de datos.
+
+
+def _build_liquidation_cascade(params: dict[str, Any]):
+    return LiquidationCascadeStrategy(LiquidationCascadeConfig(**params))
+
+
+def _build_vol_term_structure(params: dict[str, Any]):
+    return VolTermStructureStrategy(VolTermStructureConfig(**params))
+
+
+def _build_event_calendar_drift(params: dict[str, Any]):
+    return EventCalendarDriftStrategy(EventCalendarDriftConfig(**params))
+
+
+def _build_attention_ignition(params: dict[str, Any]):
+    return AttentionIgnitionStrategy(AttentionIgnitionConfig(**params))
+
+
+def _build_flow_persistence(params: dict[str, Any]):
+    return FlowPersistenceStrategy(FlowPersistenceConfig(**params))
+
+
+def _build_signal_composite(params: dict[str, Any]):
+    return SignalCompositeStrategy(SignalCompositeConfig(**params))
+
+
 STRATEGY_REGISTRY: dict[str, StrategyFactory] = {
     "crypto_momentum": _build_crypto_momentum,
     "mean_reversion": _build_mean_reversion,
     "polymarket_threshold": _build_polymarket_threshold,
+    "liquidation_cascade": _build_liquidation_cascade,
+    "vol_term_structure": _build_vol_term_structure,
+    "event_calendar_drift": _build_event_calendar_drift,
+    "attention_ignition": _build_attention_ignition,
+    "flow_persistence": _build_flow_persistence,
+    "signal_composite": _build_signal_composite,
 }
 
 

@@ -61,8 +61,14 @@ from ai_trader.scoring.transfer_study import (
 from ai_trader.scoring.search_space import SPACES, ParamDim, get_space
 from ai_trader.scoring.weight_calibration import candidate_specs, spearman
 from ai_trader.scoring.weight_study import FAMILIES, STUDY_SEED
+from ai_trader.strategies.attention_ignition import AttentionIgnitionConfig
+from ai_trader.strategies.event_calendar_drift import EventCalendarDriftConfig
+from ai_trader.strategies.flow_persistence import FlowPersistenceConfig
+from ai_trader.strategies.liquidation_cascade import LiquidationCascadeConfig
 from ai_trader.strategies.mean_reversion import MeanReversionConfig
 from ai_trader.strategies.momentum_crypto import CryptoMomentumConfig
+from ai_trader.strategies.signal_composite import SignalCompositeConfig
+from ai_trader.strategies.vol_term_structure import VolTermStructureConfig
 from test_backtest_engine import FakeService, make_config, trending_df
 
 # Clase de configuracion de cada familia con espacio de busqueda. Sirve para comprobar que
@@ -70,6 +76,12 @@ from test_backtest_engine import FakeService, make_config, trending_df
 STRATEGY_CONFIGS = {
     "crypto_momentum": CryptoMomentumConfig,
     "mean_reversion": MeanReversionConfig,
+    "liquidation_cascade": LiquidationCascadeConfig,
+    "vol_term_structure": VolTermStructureConfig,
+    "event_calendar_drift": EventCalendarDriftConfig,
+    "attention_ignition": AttentionIgnitionConfig,
+    "flow_persistence": FlowPersistenceConfig,
+    "signal_composite": SignalCompositeConfig,
 }
 
 UTC = timezone.utc
@@ -228,6 +240,11 @@ class TestPublishedFingerprint:
 
         assert [round(s, 6) for s in result.scores] == published["scores"]
         assert [f.num_trades for f in result.folds] == published["trades_by_fold"]
+
+    def test_toda_familia_con_espacio_declara_su_clase_de_config(self):
+        """Sin esto, anadir un espacio y olvidar el mapa se manifiesta como un KeyError
+        dentro del test siguiente, que es la forma mas confusa posible de enterarse."""
+        assert set(SPACES) == set(STRATEGY_CONFIGS)
 
     def test_el_espacio_de_busqueda_solo_contiene_parametros_de_estrategia(self):
         """El limite de grados de libertad es ESTRUCTURAL: el CEM solo reconstruye

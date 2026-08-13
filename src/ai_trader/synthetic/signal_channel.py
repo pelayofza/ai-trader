@@ -31,12 +31,13 @@ TRES PROPIEDADES QUE NO SON DE ADORNO
    `tests/test_synthetic.py::TestEngineByteIdentity` no pueden moverse desde aqui.
 
 3. LAS SENALES ENTRAN POR EL CONTRATO DE PRODUCCION. No hay un canal paralelo hacia la
-   estrategia: se construye un `SignalRadarProvider` —la MISMA clase que corre en vivo—
-   con sus mismas dos z, su misma cobertura, su mismo recorte anti look-ahead y su misma
-   puerta (`signal_gate_reason`). Lo unico distinto es el CATALOGO de fuentes que se le
-   inyecta: las simuladas nunca aparecen en `signals/catalog.py::CATALOG`, porque un
-   catalogo que mezcla fuentes reales y simuladas deja de poder auditarse. Si el canal
-   entrara por otra puerta, el barrido mediria una estrategia que no es la que opera.
+   estrategia: se construye un `ThemedSignalRadarProvider` —la MISMA clase que corre en
+   vivo— con sus mismas dos z, su misma cobertura, su mismo recorte anti look-ahead y sus
+   mismas puertas. Lo unico distinto es el CATALOGO de fuentes y la TABLA DE TEMAS que se le
+   inyectan: las simuladas nunca aparecen en `signals/catalog.py::CATALOG` ni en la tabla de
+   temas real, porque un catalogo que mezcla fuentes reales y simuladas deja de poder
+   auditarse. Si el canal entrara por otra puerta, el barrido mediria una estrategia que no
+   es la que opera.
 
 LO QUE ESTE MODULO NO SABE
 --------------------------
@@ -53,7 +54,11 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-from ai_trader.observation.signal_radar import SignalRadarProvider
+from ai_trader.observation.signal_themes import (
+    THEME_NAMES,
+    ThemedSignalRadarProvider,
+    ThemeSpec,
+)
 from ai_trader.shared import bars as bar_schema
 from ai_trader.shared.clock import Clock
 from ai_trader.shared.entities import EntityKind, resolve_entity
@@ -164,13 +169,38 @@ class SignalPanel:
     def is_empty(self) -> bool:
         return not self.frames
 
-    def provider(self, clock: Clock) -> SignalRadarProvider:
+    def theme_table(self) -> dict[str, ThemeSpec]:
+        """
+        La tabla de temas de un panel SIMULADO: todos los temas apuntan a todos los canales.
+
+        Las fuentes simuladas no estan en ningun tema real, y no pueden estarlo: la tabla de
+        `observation/signal_themes.py` habla del catalogo de verdad, y mezclar en ella una
+        clave `synthetic_*` es exactamente lo que `POLARITY` evita inyectandose en vez de
+        escribirse. Aqui se construye una tabla al vuelo, por el mismo motivo y de la misma
+        forma.
+
+        Que TODOS los temas vean TODOS los canales no es pereza: el barrido mide el
+        break-even de un DISENO, y las seis primitivas tematicas tienen que enfrentarse al
+        mismo canal o sus numeros no son comparables entre si.
+
+        `min_sources=1` porque aqui no hay conjunto que falsear —hay un canal, y se sabe—.
+        Con ese minimo el denominador efectivo es 2, asi que un canal unico publica cobertura
+        0,5: por encima del umbral, legible, y sin fingir cobertura total.
+        """
+        keys = tuple(source.key for source in self.sources)
+        return {name: ThemeSpec(name, keys, min_sources=1) for name in THEME_NAMES}
+
+    def provider(self, clock: Clock) -> ThemedSignalRadarProvider:
         """El radar de produccion, con el catalogo y la polaridad de los canales."""
-        return SignalRadarProvider(
-            self.frames, clock, sources=self.sources, polarity=self.polarity
+        return ThemedSignalRadarProvider(
+            self.frames,
+            clock,
+            sources=self.sources,
+            polarity=self.polarity,
+            themes=self.theme_table(),
         )
 
-    def provider_factory(self) -> Callable[[Clock], SignalRadarProvider]:
+    def provider_factory(self) -> Callable[[Clock], ThemedSignalRadarProvider]:
         """La costura que consume `BacktestEngine`: reloj -> proveedor."""
         return self.provider
 

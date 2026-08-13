@@ -76,8 +76,25 @@ def make_position():
     return _make
 
 
-def build_bars(closes: list[float], *, high_offset: float = 1.0) -> pd.DataFrame:
-    """Barras diarias sinteticas en la forma canonica (columnas en minuscula, indice UTC)."""
+def build_bars(
+    closes: list[float],
+    *,
+    high_offset: float = 1.0,
+    volumes: list[float] | None = None,
+    opens: list[float] | None = None,
+    highs: list[float] | None = None,
+    lows: list[float] | None = None,
+) -> pd.DataFrame:
+    """
+    Barras diarias sinteticas en la forma canonica (columnas en minuscula, indice UTC).
+
+    `volumes`, `opens`, `highs` y `lows` son opcionales y por omision se comportan como
+    siempre —volumen constante, apertura igual al cierre y mecha simetrica—, de modo que
+    ninguna llamada existente cambia. Se anadieron porque `attention_ignition` mide un
+    volumen contra su mediana movil y porque `close_location` con mecha simetrica vale 0,5
+    EXACTO siempre: con los defaults, ni la ignicion ni la capitulacion pueden dispararse
+    nunca, y un test que las declare "sin senal" no estaria probando nada.
+    """
     start = datetime(2026, 1, 1, tzinfo=timezone.utc)
     index = pd.DatetimeIndex(
         [start + timedelta(days=i) for i in range(len(closes))], name="timestamp"
@@ -86,11 +103,17 @@ def build_bars(closes: list[float], *, high_offset: float = 1.0) -> pd.DataFrame
 
     return pd.DataFrame(
         {
-            "open": closes_arr,
-            "high": closes_arr + high_offset,
-            "low": closes_arr - high_offset,
+            "open": closes_arr if opens is None else np.array(opens, dtype=float),
+            "high": (
+                closes_arr + high_offset if highs is None else np.array(highs, dtype=float)
+            ),
+            "low": closes_arr - high_offset if lows is None else np.array(lows, dtype=float),
             "close": closes_arr,
-            "volume": np.full(len(closes), 1_000.0),
+            "volume": (
+                np.full(len(closes), 1_000.0)
+                if volumes is None
+                else np.array(volumes, dtype=float)
+            ),
         },
         index=index,
     )

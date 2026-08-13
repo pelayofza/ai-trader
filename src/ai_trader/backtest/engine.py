@@ -38,7 +38,7 @@ from ai_trader.execution.polymarket_paper import PolymarketPaperExecutionEngine
 from ai_trader.execution.router import ExecutionRouter
 from ai_trader.notifications.base import NullNotifier
 from ai_trader.observation.regime import MarketRegimeProvider
-from ai_trader.observation.signal_radar import SignalRadarProvider
+from ai_trader.observation.signal_themes import ThemedSignalRadarProvider
 from ai_trader.risk.engine import RiskEngine
 from ai_trader.shared.clock import HistoricalClock
 from ai_trader.shared.schemas import Position
@@ -495,9 +495,16 @@ class BacktestEngine:
             journal=self._journal,
         )
 
-    def _default_signal_provider(self, clock: HistoricalClock) -> SignalRadarProvider:
-        """El radar de siempre: catalogo real y frames del archivo (None = radar vacio)."""
-        return SignalRadarProvider(self._signal_frames, clock)
+    def _default_signal_provider(self, clock: HistoricalClock) -> ThemedSignalRadarProvider:
+        """
+        El radar de siempre MAS las quince features tematicas (None = radar vacio).
+
+        Es la subclase y no la clase base porque las primitivas tematicas necesitan su tema y
+        las dos de precio no notan la diferencia: los seis numeros de siempre los sigue
+        produciendo el metodo del padre, byte a byte (lo congela
+        `tests/test_signal_themes.py::test_las_seis_features_de_siempre_no_cambian_ni_un_digito`).
+        """
+        return ThemedSignalRadarProvider(self._signal_frames, clock)
 
 
 def parse_date(value: str) -> datetime:

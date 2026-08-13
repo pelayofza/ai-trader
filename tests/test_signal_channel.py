@@ -36,6 +36,12 @@ from ai_trader.observation.signal_radar import (
     SIGNAL_FEATURES,
     signal_gate_reason,
 )
+from ai_trader.observation.signal_themes import (
+    THEME_FEATURES,
+    THEME_NAMES,
+    theme_reading,
+    themed_gate_reason,
+)
 from ai_trader.scoring.signal_study import (
     ARM_OFF,
     CONFIGS_PER_FAMILY,
@@ -151,9 +157,13 @@ class TestDefaultsAreInert:
         radar = panel.provider(HistoricalClock(ANCHOR + timedelta(days=100)))
         assert radar.is_empty
         features = radar.features("BTC/USDT")
-        assert features == dict.fromkeys(SIGNAL_FEATURES, 0.0)
+        # Los seis de siempre MAS los quince tematicos, todos a cero: un panel vacio es el
+        # estado por defecto del sistema y publica la misma forma que cualquier otro.
+        assert features == dict.fromkeys(list(SIGNAL_FEATURES) + list(THEME_FEATURES), 0.0)
         # Y sin cobertura, ninguna puerta puede bloquear.
         assert signal_gate_reason(features, min_tone=4.0) is None
+        for theme in THEME_NAMES:
+            assert themed_gate_reason(features, theme, min_tone=4.0) is None
 
 
 class TestValidation:
@@ -408,13 +418,28 @@ class TestProductionContract:
     def test_the_provider_is_the_radar_with_its_six_numbers(self):
         panel, radar, _, _, _ = self._radar_and_days(_full_channel())
         features = radar.features("BTC/USDT")
-        assert set(features) == set(SIGNAL_FEATURES)
+        assert set(features) == set(SIGNAL_FEATURES) | set(THEME_FEATURES)
         # Un canal por activo: cobertura llena en el bloque de activo y cero en el de
         # mercado, que no tiene ninguna fuente declarada.
         assert features["signal_coverage"] == 1.0
         assert features["signal_market_coverage"] == 0.0
         assert all(features[k] == 0.0 for k in MARKET_SIGNAL_FEATURES)
         assert features["signal_tone"] != 0.0
+
+    def test_the_synthetic_theme_table_shows_the_same_channel_to_every_theme(self):
+        """
+        Las seis primitivas tematicas tienen que enfrentarse al MISMO canal o sus numeros no
+        son comparables. Y con `min_sources=1` un canal unico publica 0,5 de cobertura: por
+        encima del umbral, legible, y sin fingir cobertura total.
+        """
+        _, radar, _, _, _ = self._radar_and_days(_full_channel())
+        features = radar.features("BTC/USDT")
+        tones = {theme_reading(features, theme).tone for theme in THEME_NAMES}
+        assert len(tones) == 1 and tones != {0.0}
+        for theme in THEME_NAMES:
+            reading = theme_reading(features, theme)
+            assert reading.coverage == 0.5
+            assert reading.readable
 
     def test_the_gate_can_block_and_uses_the_asset_block(self):
         _, radar, clock, days, _ = self._radar_and_days(_full_channel())
