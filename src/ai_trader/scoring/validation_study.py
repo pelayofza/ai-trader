@@ -66,6 +66,7 @@ from ai_trader.scoring.multiwindow import (
 )
 from ai_trader.scoring.optimize import DEFAULT_LIBRARY_ID, DEFAULT_SYNTHETIC_CONFIG
 from ai_trader.scoring.weight_calibration import spearman
+from ai_trader.shared.reports import load_report
 from ai_trader.synthetic.service import study_window
 from ai_trader.synthetic.store import SyntheticStore
 
@@ -132,10 +133,7 @@ class StudyPlan:
 def load_validation_report(path: Path | str = VALIDATION_REPORT) -> dict | None:
     """Lee el informe publicado. Devuelve None si no esta, para que los generadores de
     dashboard y documentacion degraden a prosa sin cifras en vez de romperse."""
-    report = Path(path)
-    if not report.exists():
-        return None
-    return json.loads(report.read_text(encoding="utf-8"))
+    return load_report(path)
 
 
 # ------------------------------------------------------------------- workers --------

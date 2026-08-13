@@ -19,6 +19,25 @@ from ai_trader.shared.schemas import (
 )
 
 
+def fill_price(reference_price: float, side: str, slippage_bps: float) -> float:
+    """
+    El precio al que se llena: la referencia, empeorada por el deslizamiento.
+
+    Vive fuera del motor porque hay una segunda pregunta legitima que necesita la misma
+    aritmetica y no puede construir un motor para hacerla: el estudio de divergencia
+    (`backtest/divergence_study.py`) re-tasa una orden YA ARCHIVADA para saber a que
+    precio la habria llenado el modelo con la liquidez que vio el backtest. Que las dos
+    respuestas salgan de la misma linea es lo que hace que la comparacion mida la
+    diferencia de CONTEXTO y no una diferencia de formula.
+    """
+    slippage_multiplier = slippage_bps / 10_000
+
+    if side == "buy":
+        return round(reference_price * (1 + slippage_multiplier), 8)
+
+    return round(reference_price * (1 - slippage_multiplier), 8)
+
+
 @dataclass(slots=True)
 class PaperExecutionConfig:
     fee_rate: float = 0.001
@@ -183,12 +202,7 @@ class PaperExecutionEngine:
 
     @staticmethod
     def _apply_slippage(reference_price: float, side: str, slippage_bps: float) -> float:
-        slippage_multiplier = slippage_bps / 10_000
-
-        if side == "buy":
-            return round(reference_price * (1 + slippage_multiplier), 8)
-
-        return round(reference_price * (1 - slippage_multiplier), 8)
+        return fill_price(reference_price, side, slippage_bps)
 
     def _resolve_fill_size(
         self,

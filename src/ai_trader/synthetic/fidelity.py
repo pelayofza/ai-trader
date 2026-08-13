@@ -42,7 +42,6 @@ reales (con cache en disco) y la escritura del informe viven en `fidelity_study.
 """
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -51,6 +50,7 @@ import numpy as np
 import pandas as pd
 
 from ai_trader.scoring.weight_calibration import spearman
+from ai_trader.shared.reports import load_report
 
 # Evidencia publicada del estudio. La genera `fidelity_study` y la consumen los
 # generadores de dashboard y documentacion, igual que el informe de calibracion: medir
@@ -826,7 +826,4 @@ def evaluate_acceptance(
 def load_fidelity_report(path: Path | str = FIDELITY_REPORT) -> dict | None:
     """Lee el informe publicado. None si no esta, para que los generadores de dashboard y
     documentacion degraden a prosa sin cifras en vez de romperse."""
-    report = Path(path)
-    if not report.exists():
-        return None
-    return json.loads(report.read_text(encoding="utf-8"))
+    return load_report(path)

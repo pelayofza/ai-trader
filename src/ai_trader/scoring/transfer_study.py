@@ -101,6 +101,7 @@ from ai_trader.scoring.baselines import BASELINE_LABELS, BaselineGate, gate
 from ai_trader.scoring.multiwindow import resolve_purge_days, validate_multiwindow
 from ai_trader.scoring.weight_calibration import candidate_specs, spearman
 from ai_trader.scoring.weight_study import FAMILIES, STUDY_SEED
+from ai_trader.shared.reports import load_report
 from ai_trader.shared.instruments import AssetClass, detect_asset_class
 from ai_trader.synthetic.fidelity_study import (
     DEFAULT_EXCHANGE,
@@ -169,10 +170,7 @@ def transfer_report_path(library_id: str, out_dir: Path | str = OUT_DIR) -> Path
 def load_transfer_report(path: Path | str) -> dict | None:
     """Lee el informe publicado. Devuelve None si no esta, para que los generadores de
     dashboard y documentacion degraden a prosa sin cifras en vez de romperse."""
-    report = Path(path)
-    if not report.exists():
-        return None
-    return json.loads(report.read_text(encoding="utf-8"))
+    return load_report(path)
 
 
 # ------------------------------------------------------------------ la rejilla -------

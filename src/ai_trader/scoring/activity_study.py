@@ -67,6 +67,7 @@ from ai_trader.scoring.transfer_study import (
     pooled_gate,
 )
 from ai_trader.scoring.weight_calibration import spearman
+from ai_trader.shared.reports import load_report
 
 logger = logging.getLogger("activity_study")
 
@@ -92,10 +93,7 @@ def activity_report_path(library_id: str, out_dir: Path | str = OUT_DIR) -> Path
 def load_activity_report(path: Path | str) -> dict | None:
     """Lee el informe publicado; None si no esta, para que dashboard y documentacion
     degraden a prosa sin cifras en vez de romperse."""
-    report = Path(path)
-    if not report.exists():
-        return None
-    return json.loads(report.read_text(encoding="utf-8"))
+    return load_report(path)
 
 
 # ------------------------------------------------------------------ mecanismo --------

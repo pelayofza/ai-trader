@@ -79,6 +79,7 @@ if TYPE_CHECKING:  # solo para anotar: en ejecucion el proveedor se importa tard
     from ai_trader.data.providers.ccxt_crypto import CCXTCrypto
 from ai_trader.data.intraday import get_hourly_bars, slice_window, to_utc
 from ai_trader.shared import bars as bar_schema
+from ai_trader.shared.reports import load_report
 from ai_trader.shared.instruments import AssetClass, detect_asset_class
 
 logger = logging.getLogger("session_study")
@@ -1183,10 +1184,7 @@ def build_plan(args: argparse.Namespace, symbols: Sequence[str], config: AppConf
 def load_sessions_report(path: Path | str = SESSIONS_REPORT) -> dict | None:
     """Lee el informe publicado. None si no esta, para que el dashboard y la documentacion
     degraden a prosa sin cifras en vez de romperse."""
-    report = Path(path)
-    if not report.exists():
-        return None
-    return json.loads(report.read_text(encoding="utf-8"))
+    return load_report(path)
 
 
 def run(args: argparse.Namespace) -> dict:

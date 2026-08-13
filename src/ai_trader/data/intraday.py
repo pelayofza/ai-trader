@@ -30,8 +30,9 @@ from datetime import datetime
 
 import pandas as pd
 
-from ai_trader.data.cache import load_bars, save_bars
+from ai_trader.data.cache import cache_symbol, load_bars, save_bars
 from ai_trader.shared.bars import normalize_bars
+from ai_trader.shared.instruments import AssetClass
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +45,9 @@ CCXT_TIMEFRAME = "1h"
 
 BAR = pd.Timedelta(hours=1)
 
-# El mismo prefijo que pone `MarketDataService._build_cache_symbol` para AssetClass.CRYPTO.
-CACHE_PREFIX = "crypto::"
+# El mismo prefijo que pone la cache para AssetClass.CRYPTO. Se conserva el nombre
+# porque es publico; la regla la define `data/cache.py::cache_symbol`, una sola vez.
+CACHE_PREFIX = cache_symbol("", AssetClass.CRYPTO)
 
 
 class HourlyProvider:
@@ -58,8 +60,8 @@ class HourlyProvider:
 
 
 def cache_key(symbol: str) -> str:
-    """La clave de cache de un par cripto. Replica la regla de `MarketDataService`."""
-    return f"{CACHE_PREFIX}{symbol.strip().upper()}"
+    """La clave de cache de un par cripto (la regla comun, fijada la clase de activo)."""
+    return cache_symbol(symbol.strip().upper(), AssetClass.CRYPTO)
 
 
 def to_utc(value) -> pd.Timestamp:

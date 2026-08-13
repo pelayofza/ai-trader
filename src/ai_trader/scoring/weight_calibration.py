@@ -27,7 +27,6 @@ regularizador modesto o una segunda factura del mismo tamano.
 from __future__ import annotations
 
 import dataclasses
-import json
 import logging
 import math
 from collections.abc import Sequence
@@ -50,6 +49,7 @@ from ai_trader.config import AppConfig, StrategySpec
 from ai_trader.scoring.aggregate import DEFAULT_CVAR_ALPHA, aggregate_reward
 from ai_trader.scoring.scenario_split import ScenarioSplit
 from ai_trader.scoring.search_space import get_space
+from ai_trader.shared.reports import load_report
 
 logger = logging.getLogger(__name__)
 
@@ -68,10 +68,7 @@ CALIBRATION_REPORT = Path("data") / "calibration" / "report_ai_v2.json"
 def load_calibration_report(path: Path | str = CALIBRATION_REPORT) -> dict | None:
     """Lee el informe del estudio. Devuelve None si no esta, para que los generadores de
     documentacion degraden a prosa sin cifras en vez de romperse."""
-    report = Path(path)
-    if not report.exists():
-        return None
-    return json.loads(report.read_text(encoding="utf-8"))
+    return load_report(path)
 
 
 def grid_point(report: dict, lambda_turnover: float, kappa_maxdd: float) -> dict | None:

@@ -5,9 +5,30 @@ from pathlib import Path
 import pandas as pd
 
 from ai_trader.shared.bars import normalize_bars
+from ai_trader.shared.instruments import AssetClass
 
 CACHE_DIR = Path(".cache") / "bars"
 PARQUET_ENGINE = "pyarrow"
+
+# El prefijo con el que se guardan las cripto. Existe porque "BTC/USDT" y un ticker de
+# renta variable comparten espacio de nombres y podrian colisionar.
+CRYPTO_CACHE_PREFIX = "crypto::"
+
+
+def cache_symbol(symbol: str, asset_class: AssetClass) -> str:
+    """
+    La clave con la que un simbolo entra en la cache. UNA sola definicion.
+
+    Quien la necesita son tres: el servicio de datos que escribe la cache, el modulo de
+    barras 1H que lee la misma cache con otro timeframe, y los estudios que cargan de
+    disco sin tocar la red. Con la regla escrita tres veces, que una se despiste crea un
+    SEGUNDO fichero para el mismo dato, y entonces el repo tiene dos caches divergentes
+    del mismo par sin que ningun test lo note: cada copia seguiria siendo consistente
+    consigo misma.
+    """
+    if asset_class == AssetClass.CRYPTO:
+        return f"{CRYPTO_CACHE_PREFIX}{symbol}"
+    return symbol
 
 
 def _safe_symbol(symbol: str) -> str:

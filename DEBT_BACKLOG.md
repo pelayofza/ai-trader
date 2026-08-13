@@ -26,7 +26,22 @@ Lo que sigue incorpora ya la cifra corregida.
 
 ---
 
-## 1. B1 — `load_*_report`: seis copias literales del mismo cargador
+## 1. B1 — `load_*_report`: seis copias literales del mismo cargador — **CERRADO (13/08/2026)**
+
+**Cerrado**, y no como una tarea de limpieza: lo disparó escribir el séptimo. El estudio de
+divergencia (`backtest/divergence_study.py`) necesitaba su propio `load_divergence_report`, y
+la regla del repo dice que un cuerpo idéntico a otro se extrae en vez de copiarse.
+
+El helper vive donde decía el candidato: **`shared/reports.py`**, con `load_report` y
+`write_report`. Los seis nombres públicos siguen existiendo y **delegan** — los importan
+`dashboard/` y `docs/` por su nombre—, así que ninguna llamada cambió. Verificado con la
+suite: 280 tests verdes en los módulos afectados, sin tocar un solo golden.
+
+Los **escritores** se dejaron como estaban a propósito: no eran cuerpos idénticos (difieren
+en `indent` y en `ensure_ascii`), y reformatear JSON publicado habría dado un diff enorme sin
+un solo cambio de contenido. `write_report` los parametriza para quien lo quiera usar.
+
+Lo que sigue es el registro original, por si hace falta reconstruir el razonamiento.
 
 **El mejor ratio del backlog.** Valor medio, riesgo muy bajo, y no toca cálculo.
 
@@ -50,6 +65,26 @@ y la documentación, que están bajo golden.
 hay un módulo compartido natural. Candidato: `shared/reports.py`. Nótese que los seis
 nombres son públicos y los importan `dashboard/` y `docs/`, así que habría que conservarlos
 como alias que delegan (igual que se hizo con `_atr`).
+
+### B1-bis — La clave de caché, que la auditoría no vio — **CERRADO (13/08/2026)**
+
+No estaba en el inventario porque **los cuerpos no eran idénticos**: la regla
+`crypto:: + símbolo` estaba escrita dos veces con firmas distintas
+(`MarketDataService._build_cache_symbol(symbol, asset_class)` y
+`data/intraday.py::cache_key(symbol)`, esta última con un comentario que decía
+explícitamente «replica esa regla»). El detector de cuerpos idénticos no puede encontrar
+eso, y era peor que un duplicado normal: si una copia se despista, el repo **crea un
+segundo fichero parquet para el mismo par** y acaba con dos cachés divergentes del mismo
+dato, cada una consistente consigo misma y por tanto invisible para cualquier test.
+
+Salió a la luz al escribir el tercer consumidor —el modo `--offline` del estudio de
+divergencia, que carga barras diarias de disco—. La regla vive ahora una sola vez en
+`data/cache.py::cache_symbol(symbol, asset_class)`; las dos anteriores delegan y conservan
+su nombre.
+
+**Lección de método:** comparar ASTs encuentra copias, no reglas repetidas con firmas
+distintas. Esas aparecen cuando llega el tercer consumidor, y solo si se busca antes de
+escribir.
 
 ## 2. B2 — *Stylized facts* triplicado (era H2)
 

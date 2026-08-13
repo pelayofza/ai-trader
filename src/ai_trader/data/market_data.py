@@ -5,7 +5,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from ai_trader.data.cache import load_bars, save_bars
+from ai_trader.data.cache import cache_symbol, load_bars, save_bars
 from ai_trader.data.providers.alpaca import AlpacaProvider
 from ai_trader.data.providers.ccxt_crypto import CCXTCrypto
 from ai_trader.data.providers.polymarket_clob import PolymarketClobProvider
@@ -148,9 +148,9 @@ class MarketDataService:
 
     @staticmethod
     def _build_cache_symbol(symbol: str, asset_class: AssetClass) -> str:
-        if asset_class == AssetClass.CRYPTO:
-            return f"crypto::{symbol}"
-        return symbol
+        # La regla vive en `data/cache.py` (una sola definicion); aqui se conserva el
+        # nombre porque es el que usa el resto de la clase.
+        return cache_symbol(symbol, asset_class)
 
     @staticmethod
     def _to_utc_timestamp(value: datetime) -> pd.Timestamp:
