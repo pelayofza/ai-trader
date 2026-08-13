@@ -11,17 +11,53 @@
   },
   "missing": "0.0 con `_seen` = 0 (la ausencia de dato se declara aparte)",
   "sources": {
+    "appstore_rank": {
+      "magnitude": "app_visibility_gap",
+      "scale": 0.5,
+      "announced": false,
+      "reason": "Medio punto de diferencia de visibilidad entre Corea y EE.UU. es una unidad. Que la fuente sea de evento y no continua es una consecuencia MEDIDA: la lista solo tiene cien puestos y las apps cripto estan fuera casi siempre, asi que la serie continua seria ceros y su z no existiria."
+    },
     "btc_difficulty": {
       "magnitude": "difficulty_change_pct",
       "scale": 5.0,
       "announced": true,
       "reason": "Un ajuste del 5% es grande: la mediana historica esta en torno al 1-2%. La fecha se estima con los bloques que faltan, no la anuncia nadie."
     },
+    "cex_listings": {
+      "magnitude": "listing_change",
+      "scale": 1.0,
+      "announced": false,
+      "reason": "Un alta o una baja es una unidad, con signo. NO se anuncia: entre que Upbit publica y el mercado reacciona hay minutos, y mirar hacia adelante aqui seria futuro puro. Lo que queda es la estela, que es donde vive el efecto."
+    },
+    "courtlistener_dockets": {
+      "magnitude": "court_dockets",
+      "scale": 5.0,
+      "announced": false,
+      "reason": "Cinco dockets nuevos en un dia es una acumulacion visible. Una demanda no se preanuncia."
+    },
+    "dat_mnav": {
+      "magnitude": "dat_below_nav_share",
+      "scale": 0.25,
+      "announced": false,
+      "reason": "Una cuarta parte de la cohorte cotizando por debajo de su tesoro es una unidad: deja de ser el caso raro de una companıa mal gestionada y pasa a ser un regimen en el que la via barata de financiacion del grupo es vender. EL EVENTO ES LA PUBLICACION, no el cruce: la tenencia solo cambia cuando alguien la declara, y la fila se fecha en el dia en que se declara. announced=False porque lo que tiene fecha conocida es el PLAZO del 10-Q, no su contenido: anticipar la temporada de resultados encenderia la feature cuatro veces al ano hubiera o no estres, que es ruido con calendario. LIMITE DECLARADO: de las dos features que publica el frame, esta codificacion lleva la MAGNITUD (la fraccion bajo 1) y no la DISTANCIA (`dat_mnav_gap`), que se queda en el frame como la pata auditable y como lo que hace comparable un activo con otro. Llevar las dos exigiria la codificacion de mapa de precios, cuya frontera absoluta —el 1,0x— y cuyo signo encajan; no se hace hoy porque la fuente entra como esta declarada."
+    },
     "defillama_hacks": {
       "magnitude": "hack_amount_usd",
       "scale": 100000000.0,
       "announced": false,
       "reason": "100 M$ comprometidos es una unidad. Un hack NO se anuncia: mirar hacia adelante aqui seria futuro puro, asi que solo queda la estela."
+    },
+    "deribit_expiries": {
+      "magnitude": "expiry_oi_share",
+      "scale": 0.25,
+      "announced": true,
+      "reason": "Un vencimiento que se lleva el 25% del interes abierto es una unidad. Es la fuente con la mejor propiedad de todo el catalogo: la fecha es el ultimo viernes del mes y no la revisa nadie, asi que los dias-al-evento del pasado son EXACTOS y no una estimacion, que es lo que si pasa en el retarget."
+    },
+    "federal_register": {
+      "magnitude": "fedreg_rules",
+      "scale": 3.0,
+      "announced": false,
+      "reason": "Tres normas o propuestas de norma en un dia es un dia de actividad regulatoria real. Se cuenta la pata normativa y no el total porque el total lo domina el aviso administrativo rutinario. Las fechas futuras que el propio documento trae no se anticipan todavia: por eso announced=False."
     },
     "macro_calendar": {
       "magnitude": null,
@@ -35,11 +71,44 @@
       "announced": false,
       "reason": "Diez direcciones nuevas en una publicacion es un dia grande. La lista sale sin preaviso."
     },
+    "sec_edgar_fts": {
+      "magnitude": "edgar_institutional",
+      "scale": 10.0,
+      "announced": false,
+      "reason": "Diez filings de tenencia institucional en un dia es un dia grande. La magnitud es la pata 13F/13G y no el total: un 8-K de una empresa que menciona bitcoin de pasada y una posicion declarada no son el mismo hecho."
+    },
     "token_unlocks": {
       "magnitude": "unlock_pct_float",
       "scale": 1.0,
       "announced": true,
       "reason": "Un 1% del float en un dia es una unidad. El calendario de vesting se publica con meses de antelacion (y se reescribe: por eso es revisable)."
+    }
+  },
+  "price_map": {
+    "routed_by": "campo `encoding` del catalogo (excepcion declarada a la cadencia)",
+    "distance_cap_pct": 25.0,
+    "stale_days": 2.0,
+    "magnitude_clip": 4.0,
+    "suffixes": {
+      "near": "_near",
+      "magnitude": "_mag",
+      "seen": "_seen"
+    },
+    "sign": "la magnitud es negativa si el cluster esta POR DEBAJO del precio",
+    "missing": "0.0 con `_seen` = 0; una foto de mas de `stale_days` no cuenta",
+    "sources": {
+      "hyperliquid_liqmap": {
+        "distance": "liq_cluster_distance_pct",
+        "notional": "liq_cluster_notional_usd",
+        "scale": 100000000.0,
+        "reason": "100 M$ de posiciones que revientan antes de llegar al cluster es una unidad. Es el mismo orden que la escala de los hacks, y a proposito: son dos formas de que salga capital de golpe y conviene que pesen igual."
+      },
+      "lending_health": {
+        "distance": "lending_liq_distance_pct",
+        "notional": "lending_liq_notional_usd",
+        "scale": 1000000000.0,
+        "reason": "1.000 M$ de colateral liquidable es una unidad: un orden de magnitud MAS que el perpetuo porque el colateral spot de Aave se mide en decenas de miles de millones. Igualar las dos escalas haria que el mapa on-chain saturase el recorte todos los dias y dejara de distinguir nada."
+      }
     }
   }
 }

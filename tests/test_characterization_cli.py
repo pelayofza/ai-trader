@@ -16,6 +16,8 @@ import pytest
 
 from golden_support import REPO_ROOT, assert_golden, run_cli
 
+from ai_trader.signals.catalog import CATALOG
+
 # Muestra sintetica fija: misma libreria, escenario y camino en cada ejecucion. Se ha
 # comprobado que dos pasadas dan un JSON identico byte a byte.
 SAMPLE = "ai_v1:hawkish_fed_shock:0"
@@ -153,7 +155,7 @@ def test_signals_audit_entity_mapping() -> None:
     )
 
     archive = report["archive"]
-    assert archive["n_sources"] == 17, "el catalogo declara 17 fuentes"
+    assert archive["n_sources"] == len(CATALOG), "el archivo recorre el catalogo entero"
     assert 0 <= archive["n_with_archive"] <= archive["n_sources"]
     assert archive["records"] >= 0
 
@@ -180,7 +182,7 @@ def test_signals_depth_from_archive(monkeypatch, tmp_path) -> None:
         _project(report["sources"], ("source_key", "method", "connected", "error")),
     )
 
-    assert report["n_sources"] == 17
+    assert report["n_sources"] == len(CATALOG)
     for row in report["sources"]:
         assert row["days"] >= 0
         # Un tramo medido tiene los dos extremos o ninguno; nunca medio.

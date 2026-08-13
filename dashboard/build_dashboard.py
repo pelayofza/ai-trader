@@ -1239,6 +1239,10 @@ def collect_signals() -> dict:
         POLARITY,
         is_market_scoped,
     )
+    from ai_trader.signals.adapters.treasuries import (
+        COHORT_REPORT,
+        load_cohort_report,
+    )
     from ai_trader.signals.audit import audit_archive, audit_entities
     from ai_trader.signals.capture import (
         CAPTURE_REPORT,
@@ -1248,7 +1252,13 @@ def collect_signals() -> dict:
     )
     from ai_trader.signals.catalog import CATALOG, catalog_summary
     from ai_trader.signals.depth import DEPTH_LEDGER, load_ledger
-    from ai_trader.signals.events import EVENT_POOL_REPORT, is_event_source, load_pool_report
+    from ai_trader.signals.events import (
+        EVENT_POOL_REPORT,
+        is_event_source,
+        is_price_map_source,
+        load_pool_report,
+    )
+    from ai_trader.signals.liquidity import ADV_LEDGER, liquidity_summary
     from ai_trader.signals.normalize import normalization_spec
     from ai_trader.signals.source import connected_keys
     from ai_trader.signals.store import SignalStore
@@ -1269,6 +1279,10 @@ def collect_signals() -> dict:
 
     pool = load_pool_report(ROOT / EVENT_POOL_REPORT) or {}
     pool_by_key = pool.get("sources") or {}
+    # La cohorte de tesorerias cotizadas. Es la unica fuente COMPUESTA del catalogo y la
+    # unica cuyo N no sale del recuento pooled de `events.py`: ahi la unidad es el evento de
+    # una entidad y aqui es la OBSERVACION DE COMPANIA agrupada sobre las doscientas.
+    dat = load_cohort_report(ROOT / COHORT_REPORT) or {}
 
     return {
         "summary": {
@@ -1279,7 +1293,7 @@ def collect_signals() -> dict:
         },
         "universe": universe,
         "normalization": normalization_spec(),
-        # El radar: como llegan las diecisiete fuentes a una decision, y con que reglas.
+        # El radar: como llegan las veintinueve fuentes a una decision, y con que reglas.
         "radar": {
             "asset_features": list(ASSET_SIGNAL_FEATURES),
             "market_features": list(MARKET_SIGNAL_FEATURES),
@@ -1287,11 +1301,40 @@ def collect_signals() -> dict:
             "n_market_sources": sum(1 for s in CATALOG if is_market_scoped(s)),
             "n_asset_sources": sum(1 for s in CATALOG if not is_market_scoped(s)),
             "n_event_sources": sum(1 for s in CATALOG if is_event_source(s)),
-            "n_continuous_sources": sum(1 for s in CATALOG if not is_event_source(s)),
+            "n_price_map_sources": sum(1 for s in CATALOG if is_price_map_source(s)),
+            "n_continuous_sources": sum(
+                1 for s in CATALOG if not (is_event_source(s) or is_price_map_source(s))
+            ),
             "n_with_polarity": len(POLARITY),
             "event_spec": pool.get("spec"),
         },
         "event_pool": pool_by_key,
+        "price_maps": (pool.get("price_maps") or {}).get("sources") or {},
+        # Tesorerias cotizadas: la distribucion de mNAV, su N y —lo que la hace auditable—
+        # por que se cayo cada companıa que no entro.
+        "dat": {
+            "generated_at": (dat.get("generated_at") or "")[:10] or None,
+            "companies": dat.get("companies"),
+            "companies_examined": dat.get("companies_examined"),
+            "pooled_observations": dat.get("pooled_observations"),
+            "rows": dat.get("rows"),
+            "median_lag_days": dat.get("median_disclosure_lag_days"),
+            "policy": dat.get("policy") or {},
+            "assets": {
+                asset: {
+                    "n_companies": block.get("n_companies"),
+                    "observations": block.get("observations"),
+                    "latest": block.get("latest"),
+                    # Las companias, para que la distribucion se pueda auditar una a una:
+                    # sin esto, "el 33% por debajo de 1" es un numero sin nadie detras.
+                    "companies": block.get("companies") or [],
+                }
+                for asset, block in (dat.get("assets") or {}).items()
+            },
+            "rejections": dat.get("rejections") or {},
+        },
+        # El ADV: la cifra que dice si una senal buena admite tamano. Ver signals/liquidity.py.
+        "liquidity": liquidity_summary(ROOT / ADV_LEDGER),
         "etf_dispersion": etf,
         "depth_measured_at": (ledger.get("generated_at") or "")[:10] or None,
         "sources": [
@@ -1311,10 +1354,22 @@ def collect_signals() -> dict:
                 "n_entities": len(entities_for(s, universe)),
                 "connected": s.key in connected,
                 "notes": s.notes,
-                # Como entra al espacio de observacion: la codificacion la decide la
-                # CADENCIA, y el bloque (mercado o activo) sale del alcance del catalogo.
-                "encoding": "evento" if is_event_source(s) else "continua",
+                # Como entra al espacio de observacion. La codificacion la decide la
+                # CADENCIA salvo excepcion declarada (el mapa de precios), y el bloque
+                # (mercado o activo) sale del alcance del catalogo.
+                "encoding": (
+                    "evento" if is_event_source(s)
+                    else "mapa de precios" if is_price_map_source(s)
+                    else "continua"
+                ),
                 "block": "mercado" if is_market_scoped(s) else "activo",
+                # El ADV tipico de las entidades donde esta senal existe, MEDIDO. None en
+                # las de alcance mercado, cuyo eje no es un activo: ahi `adv_note` lo dice.
+                "typical_adv_usd": s.typical_adv_usd,
+                "adv_note": s.adv_note,
+                "snapshots": (
+                    ((pool.get("price_maps") or {}).get("sources") or {}).get(s.key) or {}
+                ).get("snapshots"),
                 "pooled_events": (pool_by_key.get(s.key) or {}).get("pooled_events"),
                 "announced": (pool_by_key.get(s.key) or {}).get("announced"),
                 # Lo MEDIDO, al lado de lo declarado: sin las dos cosas juntas no se ve la
@@ -1863,63 +1918,6 @@ ROADMAP = [
         ),
     },
     {
-        "id": "signals-expensive-batch",
-        "rank": 3,
-        "group": "despues",
-        "priority": "media",
-        "title": "Lote caro de señales: apalancamiento observable, opciones, atención geográfica y legal",
-        "line": "Inputs", "status": "pendiente", "impact": "alto", "effort": "alto",
-        "evidence": "Hyperliquid publica ON-CHAIN el libro completo y las posiciones de todos los "
-                    "traders, con API gratuita y sin KYC (POST api.hyperliquid.xyz/info). Ningun "
-                    "CEX da eso: en Binance ves funding y OI agregado, aquí ves la DISTRIBUCIÓN.",
-        "why": "Son fuentes con señal genuina cuya barrera no es el precio sino la fricción de "
-               "ingeniería: parsear filings, reconstruir estado on-chain, normalizar APIs mal "
-               "documentadas. Nadie lo hace porque es trabajo sucio, no porque sea secreto -- que "
-               "es exactamente lo que las mantiene sin arbitrar. Hyperliquid es la más valiosa: "
-               "convierte las cascadas de liquidación de fenómeno impredecible en algo con "
-               "estructura conocida por adelantado.",
-        "prompt": (
-            "Proyecto ai-trader (Python). Sobre el puerto de src/ai_trader/signals/ ya "
-            "construido, conecta el lote de fuentes de alta friccion.\n"
-            "\n"
-            "1. HYPERLIQUID (POST api.hyperliquid.xyz/info, gratis, sin auth ni KYC). Tres cosas "
-            "que ningun CEX permite calcular: distribucion REAL del apalancamiento por activo (no "
-            "la media), MAPA DE PRECIOS DE LIQUIDACION (donde estan los clusters y cuanto "
-            "notional hay en cada nivel), y concentracion (que fraccion del OI esta en 5 "
-            "cuentas: un perp con OI concentrado es un perp con riesgo de gap). El mapa de "
-            "liquidacion se codifica como EVENTO (distancia al cluster mas cercano, notional "
-            "acumulado hasta el); la distribucion y la concentracion, como series continuas.\n"
-            "2. DERIBIT: skew de 25 delta, DVOL y term structure -- de lo mas informativo y "
-            "gratuito que existe. Y el calendario de vencimientos mensuales/trimestrales con OI "
-            "por strike, que son fechas fijas: dias-al-evento exactos y no revisables.\n"
-            "3. LIQUIDACIONES ON-CHAIN de prestamos (Aave/Compound via subgraphs): distribucion "
-            "de health factors -> mapa de liquidacion del colateral spot. Es el OTRO LADO del "
-            "apalancamiento y complementa a Hyperliquid.\n"
-            "4. ATENCION GEOGRAFICA: ranking en App Store de Upbit/Coinbase/Binance/Bitget, pero "
-            "la version buena no es el ranking de Coinbase en EE.UU. sino el DIFERENCIAL entre "
-            "Upbit en Corea y Coinbase en EE.UU., que dice que retail esta entrando. Mas Naver "
-            "DataLab (Corea) y Yandex Wordstat (Rusia), gratuitos y que practicamente nadie usa "
-            "fuera de esos paises -- y Corea es desproporcionadamente importante para altcoins.\n"
-            "5. LEGAL E INSTITUCIONAL, todo gratis y llega ANTES que la noticia: SEC EDGAR "
-            "full-text search (API EFTS) para 13F/13G/S-1/8-K, Federal Register API, "
-            "CourtListener/RECAP para dockets. Eventos fechados.\n"
-            "6. LISTADOS Y DESLISTADOS DE CEX: el 'efecto Upbit' es de los eventos mas limpios "
-            "que existen en cripto, y un deslistado es oferta forzada mas riesgo de liquidez. "
-            "Evento fechado, y el unico de esta lista que ademas pide la guarda OPERATIVA (ver la "
-            "evolucion 'Guarda operativa por simbolo').\n"
-            "\n"
-            "TODO ENTRA COMO FEATURE, por la via unica de la evolucion 'TODAS las senales al "
-            "motor': lo de evento con dias-al-evento acotado y magnitud normalizada, lo continuo "
-            "con las dos varas de normalize.py, y nada en search_space. Mide la profundidad con la "
-            "sonda antes de declarar cualquier history_from -- varias de estas fuentes prometen mas "
-            "pasado del que entregan. Registra "
-            "en el catalogo el ADV tipico de las entidades donde cada senal existe: varias son "
-            "genuinas pero viven en activos donde no cabe tamano, y eso hay que saberlo antes de "
-            "escalar. Tests + .venv\\Scripts\\python.exe (poetry run esta roto) + ruff. Regenera "
-            "dashboard y docs."
-        ),
-    },
-    {
         "id": "synthetic-signal-emission",
         "rank": 2,
         "group": "despues",
@@ -2000,60 +1998,8 @@ ROADMAP = [
         ),
     },
     {
-        "id": "dat-mnav-index",
-        "rank": 4,
-        "group": "despues",
-        "priority": "media",
-        "title": "Índice de estrés de vendedores forzados (mNAV de tesorerías cotizadas)",
-        "line": "Inputs", "status": "pendiente", "impact": "medio", "effort": "alto",
-        "evidence": "El canal se ha extendido a más de 200 compañías con más de 100.000 millones "
-                    "en cripto en 2026, y la máquina funciona en reversa de forma observable: "
-                    "Strategy vendió 3.588 BTC por unos 216 millones entre el 29 de junio y el 5 "
-                    "de julio de 2026, por debajo de su coste medio y sin ventas de equity vía "
-                    "ATM -- la prima se había comprimido lo bastante como para que vender saliera "
-                    "más barato que emitir acciones.",
-        "why": "Es la novedad estructural del ciclo y la construcción que casi nadie hace: no el "
-               "mNAV de una compañía, sino la DISTRIBUCIÓN de mNAV a través de los 200+ DATs, "
-               "desagregada por activo subyacente. Cuando la cola inferior engorda hay oferta "
-               "futura estructural sobre ese activo. Y como las tesorerías de SOL o ETH pueden "
-               "crecer orgánicamente vía staking, sus mNAV corren más altos que los puros de BTC: "
-               "la compresión RELATIVA entre ellos dice donde se cierra el grifo primero. Va al "
-               "final por coste de ingeniería, no por falta de valor -- y ese coste es "
-               "precisamente lo que lo deja sin arbitrar.",
-        "prompt": (
-            "Proyecto ai-trader (Python). Sobre el puerto de src/ai_trader/signals/, construye un "
-            "indice de estres de vendedores forzados a partir de las tesorerias cotizadas (DATs).\n"
-            "\n"
-            "No hay API libre: bitcointreasuries.net, mnav.io, bitcoinquant y Artemis son "
-            "dashboards. Hay que COMPONER la serie a mano, y esa friccion es exactamente lo que "
-            "mantiene la senal sin arbitrar:\n"
-            "(a) Holdings por compania y por activo subyacente (comunicados y trackers publicos).\n"
-            "(b) Share count desde SEC EDGAR (la API EFTS ya conectada en el lote caro).\n"
-            "(c) Precio de mercado de la accion.\n"
-            "-> mNAV = capitalizacion / valor del tesoro.\n"
-            "\n"
-            "LO QUE HAY QUE PUBLICAR no es el mNAV de cada compania sino la DISTRIBUCION: "
-            "percentiles por activo subyacente (BTC, ETH, SOL), fraccion de companias por debajo "
-            "de 1, y la compresion relativa entre grupos. La cola inferior engordando es oferta "
-            "futura estructural. Los descuentos extremos existen y no son teoricos: Hyperion DeFi "
-            "cotizaba a finales de julio de 2026 con un mNAV entre 0,24x y 0,31x, con un tesoro "
-            "de 120,6 millones contra una capitalizacion de unos 37.\n"
-            "\n"
-            "ENTRA COMO FEATURE con codificacion de EVENTO -no como veto, que ya no existe-: "
-            "fraccion de la distribucion por debajo de 1, y distancia del activo a esa frontera. "
-            "Umbral declarado y razonado, cobertura explicita y falla abierta. Ojo con la muestra: "
-            "el N no lo dan los eventos de una compania sino el POOLING sobre las 200+, y esa cifra "
-            "hay que publicarla. Cuidado con la latencia: los holdings se publican con retraso y de forma "
-            "irregular, asi que el descriptor tiene que declarar el lag real y el archivo guardar "
-            "fetched_at -- sin eso, el backtest usaria informacion que no existia ese dia.\n"
-            "\n"
-            "Tests + .venv\\Scripts\\python.exe (poetry run esta roto) + ruff. Regenera dashboard "
-            "y docs."
-        ),
-    },
-    {
         "id": "line-d-cpcv-two-stage-cem",
-        "rank": 5,
+        "rank": 3,
         "group": "despues",
         "priority": "alta",
         "title": "CPCV en dos etapas dentro del optimizador (que el CEM deje de puntuar con el corte único)",
@@ -2115,7 +2061,7 @@ ROADMAP = [
     },
     {
         "id": "validation-study-full-ensemble",
-        "rank": 6,
+        "rank": 4,
         "group": "despues",
         "priority": "media",
         "title": "Re-correr el estudio de validación con el ensemble completo",
@@ -2149,7 +2095,7 @@ ROADMAP = [
     },
     {
         "id": "pbo-blocks-scenario-aligned",
-        "rank": 7,
+        "rank": 5,
         "group": "despues",
         "priority": "media",
         "title": "Alinear los bloques del PBO con las fronteras de escenario",
@@ -2188,7 +2134,7 @@ ROADMAP = [
     },
     {
         "id": "report-n-failed-with-reward",
-        "rank": 8,
+        "rank": 6,
         "group": "despues",
         "priority": "media",
         "title": "Reportar n_failed junto al reward (la penalización domina la cola)",
@@ -2222,7 +2168,7 @@ ROADMAP = [
     },
     {
         "id": "dsr-independent-trials-caveat",
-        "rank": 9,
+        "rank": 7,
         "group": "despues",
         "priority": "baja",
         "title": "Declarar que el DSR asume intentos independientes y el CEM no los produce",
@@ -2257,7 +2203,7 @@ ROADMAP = [
     },
     {
         "id": "fidelity-rank-corr-ordering",
-        "rank": 10,
+        "rank": 8,
         "group": "despues",
         "priority": "media",
         "title": "Ordenación de colas y clustering entre activos: el eje que ai_v3 no arregló",
@@ -2322,7 +2268,7 @@ ROADMAP = [
     },
     {
         "id": "real-substrate-primary-ranking",
-        "rank": 11,
+        "rank": 9,
         "group": "despues",
         "priority": "critica",
         "title": "CONTINGENCIA: mover el sustrato primario del ranking al histórico REAL",
@@ -2387,7 +2333,7 @@ ROADMAP = [
     },
     {
         "id": "rl-full-run",
-        "rank": 12,
+        "rank": 10,
         "group": "despues",
         "priority": "alta",
         "title": "Optimización CEM completa, ya con el juez validado",
@@ -2423,7 +2369,7 @@ ROADMAP = [
     },
     {
         "id": "execution-latency-budget",
-        "rank": 13,
+        "rank": 11,
         "group": "despues",
         "priority": "media",
         "title": "Presupuesto de latencia: el backtest supone que se llena a las 00:00 UTC en punto",
@@ -2468,7 +2414,7 @@ ROADMAP = [
     },
     {
         "id": "new-crypto-strategies",
-        "rank": 14,
+        "rank": 12,
         "group": "no-prioritario",
         "priority": "baja",
         "title": "Nuevas estrategias cripto (deliberadamente NO priorizada)",
@@ -2516,7 +2462,7 @@ ROADMAP = [
     },
     {
         "id": "weights-recalibrate-power",
-        "rank": 15,
+        "rank": 13,
         "group": "no-prioritario",
         "priority": "baja",
         "title": "Re-medir lambda y kappa con los costes nuevos y más potencia estadística",
@@ -2561,7 +2507,7 @@ ROADMAP = [
     },
     {
         "id": "designer-model-in-manifest",
-        "rank": 16,
+        "rank": 14,
         "group": "no-prioritario",
         "priority": "baja",
         "title": "Anotar el modelo de IA en el manifiesto de cada librería",
@@ -2593,7 +2539,7 @@ ROADMAP = [
     },
     {
         "id": "operational-symbol-guard",
-        "rank": 17,
+        "rank": 15,
         "group": "no-prioritario",
         "priority": "baja",
         "title": "Guarda operativa por símbolo (sanciones, deslistado, halt): lo que deja abierto no tener veto",
@@ -2604,7 +2550,12 @@ ROADMAP = [
                     "(app/runner.py:229-235). El radar de señales ya está construido y cableado "
                     "(2026-08-12) y sigue sin vetar nada A PROPÓSITO: toda señal actúa como feature "
                     "y la única puerta que existe falla ABIERTA por diseño, así que este hueco "
-                    "queda abierto y escrito en vez de resuelto de tapadillo.",
+                    "queda abierto y escrito en vez de resuelto de tapadillo. NOVEDAD 2026-08-13: "
+                    "ya no falta el DATO. `cex_listings` publica altas, bajas y designaciones de "
+                    "vigilancia de Upbit fechadas desde 2018-08-02 (523 eventos sobre 343 tokens, "
+                    "MEDIDO) y `ofac_sdn` publica la lista de sanciones; las dos entran hoy como "
+                    "FEATURE, que es la vía correcta para lo predictivo y no para lo operativo. Lo "
+                    "que sigue faltando es exactamente lo que dice el alcance de abajo: la guarda.",
         "why": "No es alfa y por eso se separa: vetar un activo sancionado, deslistado o con el "
                "mercado detenido no es una estrategia, es una restricción operativa, y meterla en "
                "la misma caja que las features fue justamente el error de diseño que la "
@@ -2652,7 +2603,7 @@ ROADMAP = [
     },
     {
         "id": "equities-parked",
-        "rank": 18,
+        "rank": 16,
         "group": "segundo-plano",
         "priority": "aparcada",
         "title": "Renta variable: aparcada a propósito (no se activa la clase de activo)",
@@ -2699,7 +2650,7 @@ ROADMAP = [
     },
     {
         "id": "polymarket-parked",
-        "rank": 19,
+        "rank": 17,
         "group": "segundo-plano",
         "priority": "aparcada",
         "title": "Polymarket en el backtest: aparcado hasta tener histórico propio",

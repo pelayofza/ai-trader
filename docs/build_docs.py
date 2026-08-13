@@ -608,8 +608,11 @@ def _signals() -> dict:
         EVENT_POOL_REPORT,
         event_encoding_spec,
         is_event_source,
+        is_price_map_source,
         load_pool_report,
     )
+    from ai_trader.signals.adapters.treasuries import COHORT_REPORT, load_cohort_report
+    from ai_trader.signals.liquidity import ADV_LEDGER, liquidity_summary
     from ai_trader.signals.normalize import normalization_spec
     from ai_trader.signals.source import connected_keys
     from ai_trader.signals.store import SignalStore
@@ -622,6 +625,7 @@ def _signals() -> dict:
     ledger = load_ledger(ROOT / DEPTH_LEDGER) or {}
     depth = {row["source_key"]: row for row in ledger.get("sources") or []}
     pool = load_pool_report(ROOT / EVENT_POOL_REPORT) or {}
+    dat = load_cohort_report(ROOT / COHORT_REPORT) or {}
     pool_rows = pool.get("sources") or {}
 
     return {
@@ -631,7 +635,7 @@ def _signals() -> dict:
         "records": archive.records,
         "normalization": normalization_spec(),
         "depth_measured_at": (ledger.get("generated_at") or "")[:10] or "—",
-        # El radar: como llegan las diecisiete fuentes a una decision.
+        # El radar: como llegan las veintinueve fuentes a una decision.
         "radar": {
             "features": list(SIGNAL_FEATURES),
             "min_coverage_pct": round(MIN_SIGNAL_COVERAGE * 100),
@@ -639,7 +643,62 @@ def _signals() -> dict:
             "n_market": sum(1 for s in CATALOG if is_market_scoped(s)),
             "n_asset": sum(1 for s in CATALOG if not is_market_scoped(s)),
             "n_event": sum(1 for s in CATALOG if is_event_source(s)),
-            "n_continuous": sum(1 for s in CATALOG if not is_event_source(s)),
+            "n_price_map": sum(1 for s in CATALOG if is_price_map_source(s)),
+            "n_continuous": sum(
+                1 for s in CATALOG if not (is_event_source(s) or is_price_map_source(s))
+            ),
+        },
+        # El ADV tipico de las entidades donde cada senal existe. Ver signals/liquidity.py.
+        "liquidity": {
+            **liquidity_summary(ROOT / ADV_LEDGER),
+            "rows": [
+                (
+                    name,
+                    str(row.get("n_entities") or 0),
+                    str(row.get("n_traded") or 0),
+                    f"{round(row.get('median_usd') or 0):,}".replace(",", " "),
+                    f"{round(row.get('p10_usd') or 0):,}".replace(",", " "),
+                    f"{round(row.get('max_usd') or 0):,}".replace(",", " "),
+                )
+                for name, row in sorted(
+                    (liquidity_summary(ROOT / ADV_LEDGER).get("venues") or {}).items()
+                )
+            ],
+        },
+        # Tesorerias cotizadas. La tabla que se publica no es la distribucion —hoy no hay—
+        # sino POR QUE no la hay, compania a compania: es la unica forma de que una
+        # cobertura baja se distinga de un filtro mal escrito.
+        "dat": {
+            **{
+                key: dat.get(key)
+                for key in (
+                    "companies", "companies_examined", "pooled_observations", "rows",
+                )
+            },
+            "median_lag_days": dat.get("median_disclosure_lag_days"),
+            "policy": dat.get("policy") or {},
+            "assets": dat.get("assets") or {},
+            "rows": [
+                (reason, str(count))
+                for reason, count in sorted(
+                    (dat.get("rejections") or {}).items(), key=lambda kv: (-kv[1], kv[0])
+                )
+            ],
+        },
+        "price_maps": {
+            "spec": event_encoding_spec().get("price_map") or {},
+            "rows": [
+                (
+                    key,
+                    f"{row.get('snapshots', 0):,}".replace(",", " "),
+                    str(row.get("entities", 0)),
+                    row.get("first_day") or "—",
+                    row.get("last_day") or "—",
+                )
+                for key, row in sorted(
+                    ((pool.get("price_maps") or {}).get("sources") or {}).items()
+                )
+            ],
         },
         "events": {
             "spec": event_encoding_spec(),
@@ -666,13 +725,22 @@ def _signals() -> dict:
         "rows": [
             (
                 s.key,
-                "evento" if is_event_source(s) else "continua",
+                (
+                    "evento" if is_event_source(s)
+                    else "mapa precios" if is_price_map_source(s)
+                    else "continua"
+                ),
                 s.pit,
                 str(len(s.features)),
                 "si" if s.key in set(connected_keys()) else "no",
                 s.history_from.isoformat() if s.history_from else "—",
                 (depth.get(s.key) or {}).get("first_day") or "—",
                 f"{(depth.get(s.key) or {}).get('days', 0):,}".replace(",", " "),
+                (
+                    f"{round(s.typical_adv_usd):,}".replace(",", " ")
+                    if s.typical_adv_usd
+                    else "—"
+                ),
             )
             for s in CATALOG
         ],

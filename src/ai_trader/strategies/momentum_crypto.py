@@ -199,7 +199,7 @@ class CryptoMomentumStrategy:
                 return None
 
         # Puerta de senales externas, DESPUES de la de regimen: es la mas cara de las dos
-        # (toca diecisiete fuentes) y la que menos veces esta activa, asi que preguntarla
+        # (toca treinta fuentes) y la que menos veces esta activa, asi que preguntarla
         # la ultima es lo mismo que preguntarla nunca en la configuracion por defecto.
         # Nunca bloquea por falta de datos: `signal_gate_reason` se salta el bloque cuya
         # cobertura no llega al minimo declarado.

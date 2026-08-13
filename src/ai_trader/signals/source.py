@@ -227,7 +227,7 @@ def build_adapter(source: SignalSource) -> SignalAdapter | None:
 
 
 def connected_keys() -> tuple[str, ...]:
-    """Fuentes del catalogo que YA tienen adaptador. Hoy, las diecisiete."""
+    """Fuentes del catalogo que YA tienen adaptador. Hoy, las treinta."""
     return tuple(sorted(REGISTRY))
 
 

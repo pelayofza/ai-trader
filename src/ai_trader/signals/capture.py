@@ -3,7 +3,7 @@ CAPTURA: recorre el catalogo y archiva. Se arranca YA, antes de que nada este ca
 
 POR QUE ANTES QUE NADA
 ----------------------
-Cinco de las diecisiete fuentes del catalogo son `pit='forward_capture'`: su pasado no se
+Once de las treinta fuentes del catalogo son `pit='forward_capture'`: su pasado no se
 puede descargar porque nadie lo publica. Para esas, la profundidad historica del sistema
 no depende de escribir mejor codigo mas adelante, sino de UNA sola variable —desde cuando
 se esta capturando— y esa variable solo avanza con el calendario. Cada dia que la captura
@@ -27,7 +27,7 @@ FALLA ABIERTA, FUENTE A FUENTE
 ------------------------------
 Un proveedor caido, un token caducado o un JSON que cambio de forma afectan a SU fuente y
 a ninguna mas: el error se captura, se declara en el informe y la captura sigue. Una
-captura diaria que se aborta entera porque una de diecisiete fuentes devolvio un 500
+captura diaria que se aborta entera porque una de treinta fuentes devolvio un 500
 perderia las dieciseis restantes, que es precisamente el dato irrecuperable.
 """
 from __future__ import annotations

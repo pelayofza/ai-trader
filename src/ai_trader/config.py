@@ -24,7 +24,7 @@ class SignalsConfig:
     """
     El radar de senales externas. APAGADO por defecto, y eso es una decision.
 
-    Encenderlo lee el archivo crudo de `data/signals_raw/`, deriva las diecisiete fuentes
+    Encenderlo lee el archivo crudo de `data/signals_raw/`, deriva las treinta fuentes
     y construye el bloque de observacion (`observation/signal_radar.py`). Con `enabled =
     false` no se lee nada, el radar sale vacio, la cobertura es 0 y todas las puertas de
     senales se saltan: el sistema opera EXACTAMENTE igual que antes de que existieran.

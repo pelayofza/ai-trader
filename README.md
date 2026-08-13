@@ -42,10 +42,10 @@ scoring/transfer_study.py  ¿Ordena el mundo sintético las estrategias como el 
 scoring/signal_study.py    ¿Desde qué capacidad predictiva paga una señal? (ρ=0 = control)
 synthetic/signal_channel.py  Canal de observación sintético: emite la señal DESPUÉS de las
                         velas, sobre el retorno futuro ya generado.
-signals/                Ingesta de señales externas: catálogo, puerto, 17 adaptadores,
+signals/                Ingesta de señales externas: catálogo, puerto, 30 adaptadores,
                         archivo, captura, sonda de profundidad, normalización y
                         codificación de eventos.
-observation/signal_radar.py  Las 17 fuentes -> seis features: tono, intensidad y
+observation/signal_radar.py  Las 30 fuentes -> seis features: tono, intensidad y
                         cobertura, por activo y de mercado. Nunca bloquea sin datos.
 notifications/          Canal hacia el humano (Telegram) desacoplado del núcleo.
 data/                   Proveedores (Alpaca, CCXT, Polymarket) + caché parquet.
@@ -329,7 +329,7 @@ como criterio.
 
 ### El break-even del IC: desde qué capacidad predictiva paga una señal
 
-El radar de señales (más abajo) mete diecisiete fuentes en la decisión, y hasta aquí su única
+El radar de señales (más abajo) mete veintinueve fuentes en la decisión, y hasta aquí su única
 defensa contra el sobreajuste era **negativa**: ninguna feature entra en `search_space`, así que el
 optimizador no puede ajustar umbrales contra el resultado. Eso limita los grados de libertad pero
 **no mide nada**, y era el hueco que la propia evolución del radar dejó escrito. Esto es la
@@ -366,7 +366,7 @@ los escenarios de *train* y se puntúa en los de *validación*, que no participa
 queda a 0,018 puntos. Y eso ya contesta una pregunta que valía una evolución entera, porque un IC
 diario **sostenido** de 0,20 es enorme: la referencia habitual para datos alternativos está un orden
 de magnitud por debajo. Esa referencia es **literatura, no una medición de este repositorio** —el ρ
-de nuestras diecisiete fuentes está sin medir, y medirlo es trabajo del sustrato real—, así que la
+de nuestras veintinueve fuentes está sin medir, y medirlo es trabajo del sustrato real—, así que la
 comparación se ofrece como escala, no como conclusión. Lo que sí es medición es lo demás, y la
 lectura útil no es «hacen falta señales mejores» sino que el cuello de botella es el **uso**: una
 puerta que cierra o abre tira toda la información salvo un bit.
@@ -511,11 +511,11 @@ contexto re-simulado*, no modelo contra mercado. La de referencia/latencia no ti
 .venv\Scripts\python.exe -m ai_trader.backtest.divergence_study --verify-determinism
 ```
 
-### Señales externas: 17 declaradas, 17 conectadas, 10 backtesteables, y ya en la decisión
+### Señales externas: 30 declaradas, 30 conectadas, 14 backtesteables, y ya en la decisión
 
 Hasta hoy las estrategias solo veían **precio y volumen**. `signals/` es el sitio donde se enchufan
-las fuentes externas y está **entero conectado**: 17 fuentes que producen 40 features, **17 con
-adaptador**, **13 con profundidad medida** y **10 backtesteables**. Y desde el 12/08/2026 llegan al
+las fuentes externas y está **entero conectado**: 30 fuentes que producen 72 features, **30 con
+adaptador**, **21 con profundidad medida** y **14 backtesteables**. Y desde el 12/08/2026 llegan al
 espacio de observación y a la decisión, **en backtest y en vivo**.
 
 **Todas por la misma vía**, y **ninguna** al espacio de búsqueda del optimizador. El campo `tier`
@@ -551,8 +551,58 @@ la alcanza *contributors*; *commits* solo trae 52 semanas por captura) |
 | `btc_difficulty` | 2014-08-19 | 321 ajustes en la ventana de la sonda; cabeceras de bloque, no revisables |
 | `defillama_hacks` | 2016-06-17 | 621 incidentes fechados: la segunda muestra más grande de las de evento |
 | `macro_calendar` | 2017-02-01 | FOMC e IPC: fechas exactas, publicadas con meses de antelación |
+| `deribit_volatility` | 2021-03-24 | DVOL, *skew* de 25 delta y estructura temporal (el delta se calcula aquí) |
+| `cex_listings` | 2018-08-02 | altas, bajas y avisos de vigilancia de Upbit: 523 eventos sobre 343 tokens |
+| `federal_register` | 2015-11-02 | actividad regulatoria fechada, publicada antes que su noticia |
+| `sec_edgar_fts` | 2025-06-20 | menciones en *filings* de la SEC, con la pata 13F/13G aparte |
 
-**El radar convierte esas 40 columnas en seis números** (`observation/signal_radar.py`, con la forma
+**El lote de alta fricción (13/08/2026) añadió doce fuentes y una codificación.** Lo que las
+mantenía sin conectar no era el precio —nueve de las doce son gratis y sin credencial— sino el
+trabajo: reconstruir el estado de Hyperliquid cuenta a cuenta, calcular el delta porque el libro de
+Deribit no publica griegas, parsear títulos en coreano. Trajeron el **mapa de precios**, la tercera
+codificación: un mapa de liquidación no es un evento fechado (no hay fecha futura que anticipar) ni
+un nivel comparable con su historia (que un clúster esté al 4 % es un hecho absoluto), y las otras
+dos lo leerían mal **sin dar error**. Y trajeron el campo que faltaba, `typical_adv_usd`: el perp
+mediano de Hyperliquid mueve **307 000 $/día** y el mercado KRW mediano de Upbit, **248 000 $** —el
+«efecto Upbit» es real *y* vive donde no cabe tamaño, y las dos cosas hay que saberlas antes de
+escalar, no después—. Se mide con `signals/liquidity.py` y hay un test que exige que lo declarado
+esté respaldado por el registro, igual que con `history_from`.
+
+**La fuente número 30 no tiene proveedor: se compone, y lo que midió no es lo que se esperaba.**
+`dat_mnav` (13/08/2026) es el índice de estrés de vendedores forzados a partir de las tesorerías
+cotizadas. Una tesorería cotizada es una empresa cuyo balance **es** un tesoro de cripto; por encima
+de 1× de mNAV emitir acciones es acretivo y por **debajo** diluye, así que la vía barata para
+levantar caja pasa a ser **vender el tesoro** — aritmética, no sentimiento. Lo publicable no es el
+mNAV de nadie sino la **distribución** por activo subyacente: la fracción bajo 1× es oferta futura
+estructural. No hay API (bitcointreasuries, mnav.io, Artemis son cuadros de mando), así que la serie
+se compone de tres patas: tenencias y acciones del **XBRL de la SEC** (`CryptoAssetNumberOfUnits`,
+`CryptoAssetFairValue`, `Assets`, `EntityCommonStockSharesOutstanding`) y los cierres de la **acción
+y del activo de la misma sesión** —no de CCXT: mezclar un cierre cripto de medianoche UTC con uno de
+bolsa de las 21:00 mete nueve horas de desfase dentro de un cociente—.
+
+De **138 declarantes** de cripto en el registro XBRL quedan **3 compañías** publicables, en 3 activos
+distintos, así que **hoy no hay ninguna distribución que publicar** y la fuente produce 0 filas. Eso
+es la medición, no un pendiente, y el desglose está en `data/signals/dat_cohort.json` (`signals dat`):
+25 trusts y 3 brokers fuera por SIC, **61 que declaran el valor razonable en dólares y no el número de
+unidades**, 26 cuyo tesoro no llega al 50 % del balance (mineras), 6 multiclase, 12 que no nombran su
+activo y 4 cuyo activo no se opera. Los tres filtros de cohorte **no miran el mNAV** a propósito:
+definirla con él truncaría justo la cola que se publica.
+
+Lo que más costó fue **identificar qué activo tiene cada una**, y la primera versión estaba mal:
+identificar por *precio implícito* (valor razonable ÷ unidades) y quedarse con el único activo del
+universo que cuadrase daba **dos falsos positivos de ocho** —TON Strategy Co salía NEAR, Hyperion
+DeFi salía LTC—, porque «el único que cuadra» solo significa algo con el conjunto de candidatos
+completo y hay miles de tokens frente a veinticuatro. Hoy **identifica un nombre** (la etiqueta de
+unidad o la razón social) y el precio implícito solo **verifica**, que es lo que atrapa a CleanSpark
+declarando 1 719 000 unidades `Bitcoin` a 58,53 $ —son 1 719, con un error de escala de mil en el
+propio *filing*—. El **retraso** de publicación no se supone: cada hecho trae su fecha de referencia
+y su fecha de publicación, la fila se fecha en la de publicación y la mediana medida (**49 días**) se
+declara en el campo nuevo `disclosure_lag_days`, con un test que la compara contra el registro. El
+hueco mayor está declarado y no se parchea: las APIs XBRL solo exponen hechos **sin dimensiones**, así
+que una compañía con varias clases de acción no publica recuento de ordinarias y **la mayor tesorería
+que existe queda fuera**.
+
+**El radar convierte esas 72 columnas en seis números** (`observation/signal_radar.py`, con la forma
 exacta del proveedor de régimen): **tono**, **intensidad** y **cobertura**, por activo y de mercado.
 El tono suma solo las features con polaridad declarada y razonada una a una; la intensidad no tiene
 signo y es el único eje en el que *momentum* y reversión a la media quieren cosas opuestas —piso en
@@ -586,7 +636,7 @@ tocar una línea de `observation/regime.py`.
 Lo que ese cableado **no** cerraba —limitar los grados de libertad *reduce* el riesgo de sobreajuste,
 pero no lo *mide*— lo cierra el apartado siguiente: el **break-even de ρ**, con ρ = 0 como grupo de
 control. Lo que sigue abierto es el otro lado de la pregunta: cuánto ρ tiene cada una de estas
-diecisiete fuentes, que se mide en el sustrato real y no aquí.
+veintinueve fuentes, que se mide en el sustrato real y no aquí.
 
 **Toda feature se publica normalizada, con dos varas** (`signals/normalize.py`): `<feature>_z` es la
 z contra la propia historia de la entidad (expansiva y **causal**, mínimo 20 observaciones) y
@@ -596,7 +646,7 @@ recorte declarado a **±4** y huecos a **NaN**, nunca a 0: un 0 diría «normal,
 una afirmación que no se ha observado. La primera no existe para un listado nuevo; la segunda sí,
 desde el primer día, y por eso hacen falta las dos.
 
-**La captura arranca antes que los adaptadores.** 5 de las 17 fuentes son *forward capture*: nadie
+**La captura arranca antes que los adaptadores.** 11 de las 29 fuentes son *forward capture*: nadie
 publica el pasado de una cola de staking, de un libro P2P ni de la lista SDN de hace tres meses.
 Para ésas la profundidad histórica no depende de escribir mejor código después, sino del calendario.
 Cada día sin capturar es profundidad que no se recupera.
@@ -633,11 +683,12 @@ credenciales, sin archivo o con medio catálogo caído el sistema arranca igual:
 0, puertas saltadas y un aviso explícito. En esa sección no hay ningún umbral, a propósito.
 
 ```powershell
-.venv\Scripts\python.exe -m ai_trader.cli signals catalog   # las 17 fuentes declaradas
+.venv\Scripts\python.exe -m ai_trader.cli signals catalog   # las 29 fuentes declaradas
 .venv\Scripts\python.exe -m ai_trader.cli signals capture   # archiva lo que devuelvan hoy
 .venv\Scripts\python.exe -m ai_trader.cli signals depth     # MIDE la profundidad y compara con lo declarado
 .venv\Scripts\python.exe -m ai_trader.cli signals features  # panel normalizado desde el archivo (sin red)
 .venv\Scripts\python.exe -m ai_trader.cli signals events    # eventos pooled por fuente + radar de un símbolo
+.venv\Scripts\python.exe -m ai_trader.cli signals adv       # MIDE el ADV de las entidades donde vive cada señal
 .venv\Scripts\python.exe -m ai_trader.cli signals audit     # cobertura de entidades y archivo
 ```
 

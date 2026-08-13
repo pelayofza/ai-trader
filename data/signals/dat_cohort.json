@@ -1,0 +1,915 @@
+{
+  "generated_at": "2026-08-13T14:45:53.626431+00:00",
+  "policy": {
+    "excluded_sic": [
+      "6211",
+      "6221"
+    ],
+    "treasury_min_asset_share": 0.5,
+    "unit_price_tolerance": 1.25,
+    "fact_stale_days": 180,
+    "min_cohort": 3,
+    "frontier": 1.0,
+    "dated_at": "filed (el dia en que la tenencia se publica), nunca `end`",
+    "names": {
+      "aave": "AAVE",
+      "ada": "ADA",
+      "apt": "APT",
+      "aptos": "APT",
+      "arb": "ARB",
+      "arbitrum": "ARB",
+      "atom": "ATOM",
+      "avalanche": "AVAX",
+      "avax": "AVAX",
+      "bitcoin": "BTC",
+      "bitcoins": "BTC",
+      "bnb": "BNB",
+      "btc": "BTC",
+      "btcoin": "BTC",
+      "cardano": "ADA",
+      "celestia": "TIA",
+      "chainlink": "LINK",
+      "cosmos": "ATOM",
+      "doge": "DOGE",
+      "dogecoin": "DOGE",
+      "dot": "DOT",
+      "eth": "ETH",
+      "ethereum": "ETH",
+      "fil": "FIL",
+      "filecoin": "FIL",
+      "inj": "INJ",
+      "injective": "INJ",
+      "link": "LINK",
+      "litecoin": "LTC",
+      "ltc": "LTC",
+      "near": "NEAR",
+      "op": "OP",
+      "optimism": "OP",
+      "polkadot": "DOT",
+      "ripple": "XRP",
+      "sei": "SEI",
+      "sol": "SOL",
+      "solana": "SOL",
+      "sui": "SUI",
+      "tia": "TIA",
+      "uni": "UNI",
+      "uniswap": "UNI",
+      "xrp": "XRP"
+    },
+    "foreign_names": {
+      "bittensor": "TAO",
+      "canton": "CANTON",
+      "cronos": "CRO",
+      "ena": "ENA",
+      "ethena": "ENA",
+      "hbar": "HBAR",
+      "hedera": "HBAR",
+      "hype": "HYPE",
+      "hyperliquid": "HYPE",
+      "stablecoin": "USDC",
+      "tao": "TAO",
+      "tether": "USDT",
+      "ton": "TON",
+      "toncoin": "TON",
+      "tron": "TRX",
+      "trx": "TRX",
+      "usdc": "USDC",
+      "usdt": "USDT",
+      "wld": "WLD",
+      "worldcoin": "WLD"
+    }
+  },
+  "pooled_observations": 7,
+  "companies": 3,
+  "companies_examined": 108,
+  "rows": 0,
+  "median_disclosure_lag_days": 49.0,
+  "assets": {
+    "BTC": {
+      "companies": [
+        {
+          "ticker": "GDC",
+          "name": "GD Culture Group Ltd",
+          "treasury_share_of_assets": 0.988,
+          "implied_unit_price": 66738.85,
+          "identified_by": "la etiqueta de unidad, verificada por el precio implicito en las 3 fechas",
+          "observations": 3,
+          "last_mnav": 83.534
+        }
+      ],
+      "n_companies": 1,
+      "latest": null,
+      "observations": 3
+    },
+    "INJ": {
+      "companies": [
+        {
+          "ticker": "PAPL",
+          "name": "Pineapple Financial Inc.",
+          "treasury_share_of_assets": 0.651,
+          "implied_unit_price": 6.76,
+          "identified_by": "la etiqueta de unidad, verificada por el precio implicito",
+          "observations": 1,
+          "last_mnav": 0.568
+        }
+      ],
+      "n_companies": 1,
+      "latest": null,
+      "observations": 1
+    },
+    "SOL": {
+      "companies": [
+        {
+          "ticker": "HSDT",
+          "name": "Solana Co",
+          "treasury_share_of_assets": 0.858,
+          "implied_unit_price": 83.12,
+          "identified_by": "la razon social, verificada por el precio implicito en las 3 fechas",
+          "observations": 3,
+          "last_mnav": 0.727
+        }
+      ],
+      "n_companies": 1,
+      "latest": null,
+      "observations": 3
+    }
+  },
+  "rejections": {
+    "no declara unidades, solo valor razonable": 61,
+    "ni la etiqueta ni la razon social nombran ningun activo": 12,
+    "sin recuento de acciones sin dimension (multiclase)": 6,
+    "el tesoro es el 4% del activo, no es una tesoreria": 4,
+    "el tesoro es el 14% del activo, no es una tesoreria": 2,
+    "el tesoro es el 2% del activo, no es una tesoreria": 2,
+    "el tesoro es el 0% del activo, no es una tesoreria": 2,
+    "el tesoro es el 20% del activo, no es una tesoreria": 1,
+    "el tesoro es el 10% del activo, no es una tesoreria": 1,
+    "tesoro en HYPE, que no esta en el universo": 1,
+    "tesoro en CANTON, que no esta en el universo": 1,
+    "el tesoro es el 37% del activo, no es una tesoreria": 1,
+    "tesoro en TON, que no esta en el universo": 1,
+    "el tesoro es el 9% del activo, no es una tesoreria": 1,
+    "el tesoro es el 30% del activo, no es una tesoreria": 1,
+    "el tesoro es el 44% del activo, no es una tesoreria": 1,
+    "tesoro en USDC, que no esta en el universo": 1,
+    "el tesoro es el 23% del activo, no es una tesoreria": 1,
+    "el tesoro es el 22% del activo, no es una tesoreria": 1,
+    "el tesoro es el 39% del activo, no es una tesoreria": 1,
+    "el tesoro es el 7% del activo, no es una tesoreria": 1,
+    "el tesoro es el 3% del activo, no es una tesoreria": 1,
+    "el tesoro es el 17% del activo, no es una tesoreria": 1
+  },
+  "rejected": [
+    {
+      "cik": 1755953,
+      "ticker": "ABTC",
+      "name": "American Bitcoin Corp.",
+      "sic": "6199",
+      "reason": "el tesoro es el 37% del activo, no es una tesoreria"
+    },
+    {
+      "cik": 1460702,
+      "ticker": "AIXC",
+      "name": "AIxCrypto Holdings, Inc.",
+      "sic": "6199",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1591956,
+      "ticker": "ANY",
+      "name": "Sphere 3D Corp.",
+      "sic": "6199",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1894525,
+      "ticker": "APUS",
+      "name": "Apimeds Pharmaceuticals US, Inc.",
+      "sic": "2834",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1086600,
+      "ticker": "ARLP",
+      "name": "ALLIANCE RESOURCE PARTNERS LP",
+      "sic": "1221",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 2081043,
+      "ticker": "ATAI",
+      "name": "AtaiBeckley Inc.",
+      "sic": "2834",
+      "reason": "el tesoro es el 2% del activo, no es una tesoreria"
+    },
+    {
+      "cik": 1826397,
+      "ticker": "AVX",
+      "name": "AVAX ONE TECHNOLOGY LTD.",
+      "sic": "6199",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1945565,
+      "ticker": "BGIN",
+      "name": "BGIN BLOCKCHAIN Ltd",
+      "sic": "6199",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1784440,
+      "ticker": "BHIC",
+      "name": "BioScience Health Innovations, Inc.",
+      "sic": "7374",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1820302,
+      "ticker": "BKKT",
+      "name": "Bakkt, Inc.",
+      "sic": "6199",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1829311,
+      "ticker": "BMNR",
+      "name": "BITMINE IMMERSION TECHNOLOGIES, INC.",
+      "sic": "6199",
+      "reason": "ni la etiqueta ni la razon social nombran ningun activo",
+      "implied_unit_price": 1907.3404456698531
+    },
+    {
+      "cik": 1482541,
+      "ticker": "BNC",
+      "name": "CEA Industries Inc.",
+      "sic": "0700",
+      "reason": "ni la etiqueta ni la razon social nombran ningun activo",
+      "implied_unit_price": 386.97312441128685
+    },
+    {
+      "cik": 2076163,
+      "ticker": "BRR",
+      "name": "ProCap Financial, Inc.",
+      "sic": "6199",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1710350,
+      "ticker": "BTBT",
+      "name": "Bit Digital, Inc",
+      "sic": "6199",
+      "reason": "el tesoro es el 0% del activo, no es una tesoreria"
+    },
+    {
+      "cik": 1436229,
+      "ticker": "BTCS",
+      "name": "BTCS Inc.",
+      "sic": "6199",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1780652,
+      "ticker": "CAN",
+      "name": "Canaan Inc.",
+      "sic": "6199",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1527762,
+      "ticker": "CD",
+      "name": "Chaince Digital Holdings Inc.",
+      "sic": "6199",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1435064,
+      "ticker": "CETX",
+      "name": "CEMTREX INC",
+      "sic": "1700",
+      "reason": "el tesoro es el 2% del activo, no es una tesoreria"
+    },
+    {
+      "cik": 1819989,
+      "ticker": "CIFR",
+      "name": "Cipher Digital Inc.",
+      "sic": "6199",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1527613,
+      "ticker": "CIMG",
+      "name": "CIMG Inc.",
+      "sic": "5900",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 827876,
+      "ticker": "CLSK",
+      "name": "CLEANSPARK, INC.",
+      "sic": "6199",
+      "reason": "el tesoro es el 4% del activo, no es una tesoreria"
+    },
+    {
+      "cik": 1861657,
+      "ticker": "CNTN",
+      "name": "Canton Strategic Holdings, Inc.",
+      "sic": "6199",
+      "reason": "tesoro en CANTON, que no esta en el universo",
+      "implied_unit_price": 0.14727961541202478
+    },
+    {
+      "cik": 1679788,
+      "ticker": "COIN",
+      "name": "Coinbase Global, Inc.",
+      "sic": "6199",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1839341,
+      "ticker": "CORZ",
+      "name": "Core Scientific, Inc./tx",
+      "sic": "6199",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1474167,
+      "ticker": "COSM",
+      "name": "Cosmos Health Inc.",
+      "sic": "5122",
+      "reason": "el tesoro es el 3% del activo, no es una tesoreria"
+    },
+    {
+      "cik": 1876042,
+      "ticker": "CRCL",
+      "name": "Circle Internet Group, Inc.",
+      "sic": "6199",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1627282,
+      "ticker": "CWD",
+      "name": "CaliberCos Inc.",
+      "sic": "6500",
+      "reason": "sin recuento de acciones sin dimension (multiclase)"
+    },
+    {
+      "cik": 1509745,
+      "ticker": "CYPH",
+      "name": "CYPHERPUNK TECHNOLOGIES INC.",
+      "sic": "2834",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1957413,
+      "ticker": "DCX",
+      "name": "Digital Currency X Technology Inc.",
+      "sic": "3711",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1854480,
+      "ticker": "DEVSF",
+      "name": "DevvStream Corp.",
+      "sic": "6799",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1805526,
+      "ticker": "DFDV",
+      "name": "DeFi Development Corp.",
+      "sic": "6199",
+      "reason": "el tesoro es el 44% del activo, no es una tesoreria"
+    },
+    {
+      "cik": 1849635,
+      "ticker": "DJT",
+      "name": "Trump Media & Technology Group Corp.",
+      "sic": "7370",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1853825,
+      "ticker": "DTCX",
+      "name": "Datacentrex, Inc.",
+      "sic": "7374",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1682149,
+      "ticker": "DVLT",
+      "name": "Datavault AI Inc.",
+      "sic": "7389",
+      "reason": "el tesoro es el 23% del activo, no es una tesoreria"
+    },
+    {
+      "cik": 1652958,
+      "ticker": "EDGM",
+      "name": "Edgemode, Inc.",
+      "sic": "8082",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1829794,
+      "ticker": "EMPD",
+      "name": "Empery Digital Inc.",
+      "sic": "6199",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1821534,
+      "ticker": "EXOD",
+      "name": "Exodus Movement, Inc.",
+      "sic": "6199",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1086745,
+      "ticker": "FABC",
+      "name": "Fabric.AI, Inc.",
+      "sic": "4899",
+      "reason": "el tesoro es el 14% del activo, no es una tesoreria"
+    },
+    {
+      "cik": 1805521,
+      "ticker": "FFAI",
+      "name": "FARADAY FUTURE INTELLIGENT ELECTRIC INC.",
+      "sic": "3711",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1591890,
+      "ticker": "FGNX",
+      "name": "FG Nexus Inc.",
+      "sic": "6199",
+      "reason": "ni la etiqueta ni la razon social nombran ningun activo",
+      "implied_unit_price": 2.977676901204699
+    },
+    {
+      "cik": 2064124,
+      "ticker": "FIGR",
+      "name": "Figure Technology Solutions, Inc.",
+      "sic": "6163",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1889123,
+      "ticker": "FLD",
+      "name": "Fold Holdings, Inc.",
+      "sic": "6199",
+      "reason": "el tesoro es el 30% del activo, no es una tesoreria"
+    },
+    {
+      "cik": 1690080,
+      "ticker": "FRMM",
+      "name": "FORUM MARKETS Inc",
+      "sic": "6199",
+      "reason": "el tesoro es el 14% del activo, no es una tesoreria"
+    },
+    {
+      "cik": 1921158,
+      "ticker": "FUFU",
+      "name": "Bitfufu Inc.",
+      "sic": "6199",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 38264,
+      "ticker": "FWDI",
+      "name": "Forward Industries, Inc.",
+      "sic": "6199",
+      "reason": "ni la etiqueta ni la razon social nombran ningun activo",
+      "implied_unit_price": 208.70819959147943
+    },
+    {
+      "cik": 1714562,
+      "ticker": "GAME",
+      "name": "GameSquare Holdings, Inc.",
+      "sic": "7900",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 2055592,
+      "ticker": "GEMI",
+      "name": "Gemini Space Station, Inc.",
+      "sic": "6199",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1597846,
+      "ticker": "GRNQ",
+      "name": "Greenpro Capital Corp.",
+      "sic": "8742",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1720424,
+      "ticker": "HIVE",
+      "name": "HIVE Digital Technologies Ltd.",
+      "sic": "6199",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 88000,
+      "ticker": "HKHC",
+      "name": "Horizon Kinetics Holding Corp",
+      "sic": "6282",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1964789,
+      "ticker": "HUT",
+      "name": "Hut 8 Corp.",
+      "sic": "6199",
+      "reason": "el tesoro es el 10% del activo, no es una tesoreria"
+    },
+    {
+      "cik": 1682639,
+      "ticker": "HYPD",
+      "name": "HYPERION DEFI, INC.",
+      "sic": "2834",
+      "reason": "ni la etiqueta ni la razon social nombran ningun activo",
+      "implied_unit_price": 86.8859123050784
+    },
+    {
+      "cik": 862651,
+      "ticker": "INVU",
+      "name": "Investview, Inc.",
+      "sic": "7389",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1580490,
+      "ticker": "IONI",
+      "name": "I-ON Digital Corp.",
+      "sic": "6199",
+      "reason": "el tesoro es el 4% del activo, no es una tesoreria"
+    },
+    {
+      "cik": 1788230,
+      "ticker": "IPST",
+      "name": "IP STRATEGY HOLDINGS, INC.",
+      "sic": "2080",
+      "reason": "ni la etiqueta ni la razon social nombran ningun activo",
+      "implied_unit_price": 1.7147222267775102
+    },
+    {
+      "cik": 1830072,
+      "ticker": "IPW",
+      "name": "iPower Inc.",
+      "sic": "5200",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1812477,
+      "ticker": "KEEL",
+      "name": "Keel Infrastructure Corp.",
+      "sic": "6199",
+      "reason": "el tesoro es el 9% del activo, no es una tesoreria"
+    },
+    {
+      "cik": 2022308,
+      "ticker": "KIDZ",
+      "name": "KIDZ AI Inc.",
+      "sic": "8200",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1662684,
+      "ticker": "KULR",
+      "name": "KULR Technology Group, Inc.",
+      "sic": "3670",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1262104,
+      "ticker": "LITS",
+      "name": "Lite Strategy, Inc.",
+      "sic": "2834",
+      "reason": "ni la etiqueta ni la razon social nombran ningun activo",
+      "implied_unit_price": 1042.9643041903776
+    },
+    {
+      "cik": 1879403,
+      "ticker": "LRHC",
+      "name": "La Rosa Holdings Corp.",
+      "sic": "6531",
+      "reason": "el tesoro es el 39% del activo, no es una tesoreria"
+    },
+    {
+      "cik": 1507605,
+      "ticker": "MARA",
+      "name": "MARA Holdings, Inc.",
+      "sic": "6199",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1654595,
+      "ticker": "MDRR",
+      "name": "Medalist Diversified, Inc.",
+      "sic": "6798",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1050446,
+      "ticker": "MSTR",
+      "name": "Strategy Inc",
+      "sic": "6199",
+      "reason": "sin recuento de acciones sin dimension (multiclase)"
+    },
+    {
+      "cik": 1946573,
+      "ticker": "NAKA",
+      "name": "Nakamoto Inc.",
+      "sic": "6199",
+      "reason": "ni la etiqueta ni la razon social nombran ningun activo",
+      "implied_unit_price": 68781.60315374508
+    },
+    {
+      "cik": 1756180,
+      "ticker": "NCRA",
+      "name": "NOCERA, INC.",
+      "sic": "0200",
+      "reason": "el tesoro es el 17% del activo, no es una tesoreria"
+    },
+    {
+      "cik": 1296774,
+      "ticker": "NCTY",
+      "name": "The9 LTD",
+      "sic": "6199",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1681682,
+      "ticker": "NDRA",
+      "name": "ENDRA Life Sciences Inc.",
+      "sic": "3845",
+      "reason": "ni la etiqueta ni la razon social nombran ningun activo",
+      "implied_unit_price": 188.2210693406636
+    },
+    {
+      "cik": 1335105,
+      "ticker": "NMAD",
+      "name": "NOMAD POWER SOLUTIONS, INC.",
+      "sic": "2834",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 2026478,
+      "ticker": "NMAX",
+      "name": "Newsmax Inc.",
+      "sic": "4833",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1314196,
+      "ticker": "OLB",
+      "name": "OLB GROUP, INC.",
+      "sic": "7389",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1825452,
+      "ticker": "ONFO",
+      "name": "Onfolio Holdings, Inc",
+      "sic": "7374",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1849380,
+      "ticker": "ONMD",
+      "name": "OneMedNet Corp",
+      "sic": "8731",
+      "reason": "el tesoro es el 4% del activo, no es una tesoreria"
+    },
+    {
+      "cik": 1892492,
+      "ticker": "ORBS",
+      "name": "Eightco Holdings Inc.",
+      "sic": "6153",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1533743,
+      "ticker": "PCSA",
+      "name": "Processa Pharmaceuticals, Inc.",
+      "sic": "2834",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1859807,
+      "ticker": "PFSA",
+      "name": "Profusa, Inc.",
+      "sic": "3841",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 2078856,
+      "ticker": "PURR",
+      "name": "Hyperliquid Strategies Inc",
+      "sic": "6199",
+      "reason": "tesoro en HYPE, que no esta en el universo",
+      "implied_unit_price": 25.480004601193713
+    },
+    {
+      "cik": 2039060,
+      "ticker": "RBNE",
+      "name": "Robin Energy Ltd.",
+      "sic": "4412",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1167419,
+      "ticker": "RIOT",
+      "name": "Riot Platforms, Inc.",
+      "sic": "6199",
+      "reason": "el tesoro es el 20% del activo, no es una tesoreria"
+    },
+    {
+      "cik": 1820190,
+      "ticker": "SCLX",
+      "name": "Scilex Holding Co",
+      "sic": "2836",
+      "reason": "el tesoro es el 22% del activo, no es una tesoreria"
+    },
+    {
+      "cik": 1389545,
+      "ticker": "SDEV",
+      "name": "Stablecoin Development Corp",
+      "sic": "2834",
+      "reason": "tesoro en USDC, que no esta en el universo",
+      "implied_unit_price": 0.05215018886671849
+    },
+    {
+      "cik": 1737995,
+      "ticker": "SKYA",
+      "name": "SkyAI, Inc.",
+      "sic": "6199",
+      "reason": "ni la etiqueta ni la razon social nombran ningun activo",
+      "implied_unit_price": 72.00874442774182
+    },
+    {
+      "cik": 1517496,
+      "ticker": "SLAI",
+      "name": "SOLAI Ltd",
+      "sic": "6199",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 2033515,
+      "ticker": "SORA",
+      "name": "AsiaStrategy",
+      "sic": "5094",
+      "reason": "el tesoro es el 7% del activo, no es una tesoreria"
+    },
+    {
+      "cik": 1181412,
+      "ticker": "SPCX",
+      "name": "SPACE EXPLORATION TECHNOLOGIES CORP",
+      "sic": "7370",
+      "reason": "sin recuento de acciones sin dimension (multiclase)"
+    },
+    {
+      "cik": 1471727,
+      "ticker": "SRXH",
+      "name": "SRX Global Inc.",
+      "sic": "2080",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1386044,
+      "ticker": "TAAG",
+      "name": "Awareness Group, Inc.",
+      "sic": "6163",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1571934,
+      "ticker": "TAOX",
+      "name": "TAO Synergies Inc.",
+      "sic": "6199",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1731348,
+      "ticker": "TLRY",
+      "name": "Tilray Brands, Inc.",
+      "sic": "2833",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1566610,
+      "ticker": "TONX",
+      "name": "TON Strategy Co",
+      "sic": "6199",
+      "reason": "tesoro en TON, que no esta en el universo",
+      "implied_unit_price": 1.6030007392999066
+    },
+    {
+      "cik": 1956744,
+      "ticker": "TRON",
+      "name": "Tron Inc.",
+      "sic": "6199",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1318605,
+      "ticker": "TSLA",
+      "name": "Tesla, Inc.",
+      "sic": "3711",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1758730,
+      "ticker": "TW",
+      "name": "Tradeweb Markets Inc.",
+      "sic": "6200",
+      "reason": "sin recuento de acciones sin dimension (multiclase)"
+    },
+    {
+      "cik": 746210,
+      "ticker": "TWAV",
+      "name": "TaoWeave, Inc.",
+      "sic": "7370",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1775194,
+      "ticker": "UPXI",
+      "name": "UPEXI, INC.",
+      "sic": "6199",
+      "reason": "ni la etiqueta ni la razon social nombran ningun activo",
+      "implied_unit_price": 78.28462728166065
+    },
+    {
+      "cik": 1074828,
+      "ticker": "USBC",
+      "name": "USBC, Inc.",
+      "sic": "6199",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1973062,
+      "ticker": "VIDA",
+      "name": "VIDA Global Inc.",
+      "sic": "7372",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1844971,
+      "ticker": "VIP",
+      "name": "Vulcan Infrastructure & Power Inc.",
+      "sic": "6199",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1360565,
+      "ticker": "WFCF",
+      "name": "Where Food Comes From, Inc.",
+      "sic": "7372",
+      "reason": "el tesoro es el 4% del activo, no es una tesoreria"
+    },
+    {
+      "cik": 1083301,
+      "ticker": "WULF",
+      "name": "TERAWULF INC.",
+      "sic": "6199",
+      "reason": "el tesoro es el 0% del activo, no es una tesoreria"
+    },
+    {
+      "cik": 2070457,
+      "ticker": "XXI",
+      "name": "Twenty One Capital, Inc.",
+      "sic": "6199",
+      "reason": "sin recuento de acciones sin dimension (multiclase)"
+    },
+    {
+      "cik": 1512673,
+      "ticker": "XYZ",
+      "name": "Block, Inc.",
+      "sic": "7372",
+      "reason": "sin recuento de acciones sin dimension (multiclase)"
+    },
+    {
+      "cik": 1413745,
+      "ticker": "YDKG",
+      "name": "Yueda Digital Holding",
+      "sic": "7311",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1631761,
+      "ticker": "YRD",
+      "name": "Yiren Digital Ltd.",
+      "sic": "6199",
+      "reason": "no declara unidades, solo valor razonable"
+    },
+    {
+      "cik": 1790169,
+      "ticker": "ZSTK",
+      "name": "ZeroStack Corp.",
+      "sic": "5122",
+      "reason": "ni la etiqueta ni la razon social nombran ningun activo",
+      "implied_unit_price": 0.4937444614451271
+    }
+  ]
+}

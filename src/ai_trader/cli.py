@@ -261,16 +261,26 @@ def cmd_signals_catalog(args: argparse.Namespace) -> int:
     summary = catalog_summary()
     print(f"=== CATALOGO DE SENALES | {summary['n_sources']} fuentes | "
           f"{summary['n_features']} features ===")
-    print(f"  {'clave':<24} {'tier':<5} {'scope':<7} {'cadencia':<9} {'pit':<18} "
-          f"{'historia':<11} feats")
+    print(f"  {'clave':<24} {'tier':<5} {'scope':<7} {'codificacion':<12} {'pit':<18} "
+          f"{'historia':<14} {'ADV tipico':>13} feats")
     for source in CATALOG:
         history = source.history_from.isoformat() if source.history_from else "solo adelante"
-        print(f"  {source.key:<24} {source.tier:<5} {source.scope:<7} {source.cadence:<9} "
-              f"{source.pit:<18} {history:<11} {len(source.features)}")
+        adv = f"{source.typical_adv_usd:,.0f}" if source.typical_adv_usd else "-"
+        print(f"  {source.key:<24} {source.tier:<5} {source.scope:<7} "
+              f"{source.encoding_kind:<12} {source.pit:<18} {history:<14} {adv:>13} "
+              f"{len(source.features)}")
     print()
     print(f"  Backtesteables HOY: {summary['n_backtestable']}/{summary['n_sources']} "
           f"(el resto no tiene history_from MEDIDO: solo existen hacia adelante)")
     print(f"  Sin credencial: {summary['n_open']}/{summary['n_sources']}")
+    print("  Codificacion: " + " | ".join(
+        f"{kind} {count}" for kind, count in summary["by_encoding"].items()
+    ))
+    if summary["min_adv_usd"]:
+        # LA CIFRA QUE HAY QUE VER ANTES DE ESCALAR, y por eso sale sola y en negativo: no
+        # es "el ADV medio del catalogo" sino el de la fuente que menos admite.
+        print(f"  ADV declarado en {summary['n_with_adv']} fuentes; la mas estrecha vive "
+              f"en entidades de {summary['min_adv_usd']:,.0f} USD/dia")
     return 0
 
 
@@ -449,6 +459,20 @@ def cmd_signals_events(args: argparse.Namespace) -> int:
     print(f"  Tope dias-al-evento: {report['spec']['days_ahead_cap']:.0f} | "
           f"ventana posterior: {report['spec']['days_active_cap']:.0f} | "
           f"recorte de magnitud: +-{report['spec']['magnitude_clip']:.0f}")
+
+    maps = report.get("price_maps") or {}
+    if maps.get("sources"):
+        # Aparte del recuento pooled a proposito: la unidad de observacion de un mapa es la
+        # FOTO DIARIA y no el evento, y sumarlos diria que hay mas eventos de los que hay.
+        print()
+        print(f"  --- mapas de precios ({maps['n_sources']} fuentes, "
+              f"tope {report['spec']['price_map']['distance_cap_pct']:.0f}% de precio) ---")
+        for key, row in maps["sources"].items():
+            window = (
+                f"{row['first_day']} -> {row['last_day']}" if row["first_day"] else "sin dato"
+            )
+            print(f"  {key:<24} {row['snapshots']:>6} fotos    {row['entities']:>3} ent.  "
+                  f"{'':<10} {window}")
     print(f"  Recuento publicado en {path}")
 
     if args.symbol:
@@ -460,6 +484,132 @@ def cmd_signals_events(args: argparse.Namespace) -> int:
             print(f"  {name:<26} {value:+.3f}")
         print(f"  Fuentes: {len(radar.coverage_report()['asset_sources'])} por activo, "
               f"{len(radar.coverage_report()['market_sources'])} de mercado")
+    return 0
+
+
+def cmd_signals_adv(args: argparse.Namespace) -> int:
+    """El ADV de las entidades donde vive cada senal. Ver `signals/liquidity.py`.
+
+    Es la operacion gemela de `signals depth` y con el mismo contrato: MIDE, escribe el
+    registro y compara con lo que declara el catalogo. `--from-ledger` no toca red, que es
+    lo que hace falta para auditar sin volver a pedir tres venues."""
+    import json
+
+    from ai_trader.signals.liquidity import (
+        declared_vs_measured_adv,
+        liquidity_summary,
+        measure_liquidity,
+    )
+
+    if not args.from_ledger:
+        measure_liquidity()
+
+    summary = liquidity_summary()
+    comparison = declared_vs_measured_adv()
+
+    if args.json:
+        print(json.dumps({"summary": summary, "declared_vs_measured": comparison}, indent=2))
+        return 0
+
+    print(f"=== ADV DE LAS ENTIDADES | {summary['n_venues']} venues medidos | "
+          f"{summary['n_declared']} fuentes lo declaran ===")
+    print(f"  {'venue':<14} {'entidades':>10} {'con volumen':>12} {'mediana 24h':>16} "
+          f"{'decil inf.':>16} {'maximo':>18}")
+    for name, row in summary["venues"].items():
+        print(f"  {name:<14} {row['n_entities'] or 0:>10} {row['n_traded'] or 0:>12} "
+              f"{row['median_usd'] or 0:>16,.0f} {row['p10_usd'] or 0:>16,.0f} "
+              f"{row['max_usd'] or 0:>18,.0f}")
+    print()
+    for key, row in comparison.items():
+        state = (
+            "sin medir" if not row["measured_usd"]
+            else "no declarado" if not row["declared_usd"]
+            else "ok" if row["within_tolerance"]
+            else "FUERA DE TOLERANCIA"
+        )
+        print(f"  {key:<24} declarado {str(row['declared_usd'] or '-'):>16} "
+              f"medido {row['measured_usd'] or 0:>16,.0f}  {state}")
+    print()
+    print(f"  La fuente mas estrecha es '{summary['thinnest_source']}': vive en entidades de "
+          f"{summary['thinnest_adv_usd'] or 0:,.0f} USD/dia")
+    print(f"  Tolerancia del test: x{summary['tolerance_factor']:.0f} (un orden de magnitud: "
+          f"la pregunta que contesta el campo es si cabe tamano, no cuanto exactamente)")
+    return 0
+
+
+def cmd_signals_dat(args: argparse.Namespace) -> int:
+    """
+    Compone la distribucion de mNAV de las tesorerias cotizadas. No toca red.
+
+    Es la gemela de `signals events` y con el mismo contrato: lee el archivo crudo, deriva
+    con el adaptador REAL y publica la cifra que sustituye a la creencia. Aqui esa cifra es
+    el N —observaciones de companıa agrupadas sobre la cohorte, no eventos de una— y, al
+    lado, con cuantas companias distintas se compuso: doscientas observaciones de tres
+    companias y doscientas de cuarenta sostienen inferencias distintas.
+    """
+    import json
+
+    from ai_trader.signals.adapters.treasuries import (
+        cohort_report,
+        declared_vs_measured_lag,
+        write_cohort_report,
+    )
+    from ai_trader.signals.capture import connect_adapters
+    from ai_trader.signals.store import SignalStore
+
+    config = load_config(args.config)
+    connect_adapters()
+    records = SignalStore(config.signals.raw_root or None).read("dat_mnav")
+    report = cohort_report(records)
+    path = write_cohort_report(report)
+
+    if args.json:
+        print(json.dumps(report, indent=2))
+        return 0
+
+    print(f"=== TESORERIAS COTIZADAS | {report['companies']} de "
+          f"{report['companies_examined']} companias | {report['pooled_observations']} "
+          f"observaciones pooled ===")
+    lag = report["median_disclosure_lag_days"]
+    print(f"  Retraso MEDIDO de las tenencias: {lag if lag is not None else '-'} dias "
+          f"(la fila se fecha en el dia de PUBLICACION, nunca en el de referencia)")
+    print()
+    print(f"  {'activo':<8} {'compan.':>8} {'obs.':>6} {'bajo 1x':>9} {'mediana':>9} "
+          f"{'p25':>8}  ultima")
+    for asset, block in report["assets"].items():
+        last = block["latest"] or {}
+        below = f"{last['below_nav_share']:.0%}" if last else "-"
+        median = f"{1 + last['mnav_gap']:.2f}x" if last else "-"
+        p25 = f"{last['mnav_p25']:.2f}x" if last else "-"
+        print(f"  {asset:<8} {block['n_companies']:>8} {block['observations']:>6} "
+              f"{below:>9} {median:>9} {p25:>8}  {last.get('day', '-')}")
+
+    if report["rejections"]:
+        print()
+        print("  --- por que se cayeron las demas (cobertura explicita, no un hueco) ---")
+        for reason, count in report["rejections"].items():
+            print(f"  {count:>4}  {reason}")
+
+    if args.rejected:
+        print()
+        for row in report["rejected"]:
+            print(f"  {str(row.get('ticker') or '?'):<8} {str(row.get('name') or '')[:34]:<36} "
+                  f"{row.get('reason')}")
+
+    row = declared_vs_measured_lag()
+    state = (
+        "sin medir" if row["measured_days"] is None
+        else "no declarado" if row["declared_days"] is None
+        else "ok" if row["matches"] else "FUERA DE TOLERANCIA"
+    )
+    print()
+    print(f"  Retraso declarado en el catalogo: {row['declared_days'] or '-'} | "
+          f"medido: {row['measured_days'] or '-'} | {state}")
+    print(f"  Umbrales declarados: tesoro >= {report['policy']['treasury_min_asset_share']:.0%} "
+          f"del activo | tolerancia del precio implicito x"
+          f"{report['policy']['unit_price_tolerance']:.2f} | cohorte minima "
+          f"{report['policy']['min_cohort']}")
+    print(f"  Informe publicado en {path}")
     return 0
 
 
@@ -651,6 +801,28 @@ def main(argv: list[str] | None = None) -> int:
     ev.add_argument("--json", action="store_true", help="Emit the pool report as JSON.")
     ev.add_argument("--symbol", default=None, help="Ademas, imprime el radar de este simbolo.")
 
+    adv = signals_sub.add_parser(
+        "adv",
+        help="MIDE el ADV de las entidades donde vive cada senal y escribe el registro.",
+    )
+    adv.add_argument("--json", action="store_true", help="Emit the ledger summary as JSON.")
+    adv.add_argument(
+        "--from-ledger",
+        action="store_true",
+        help="No toca red: lee la ultima medicion y la compara con lo declarado.",
+    )
+
+    dat = signals_sub.add_parser(
+        "dat",
+        help="Compone la distribucion de mNAV de las tesorerias cotizadas y publica el N.",
+    )
+    dat.add_argument("--json", action="store_true", help="Emit the cohort report as JSON.")
+    dat.add_argument(
+        "--rejected",
+        action="store_true",
+        help="Lista companıa a companıa las que NO entraron en la cohorte, con su motivo.",
+    )
+
     report_parser = sub.add_parser("report", help="Print reports without running a cycle.")
     report_parser.add_argument(
         "which",
@@ -677,6 +849,8 @@ def main(argv: list[str] | None = None) -> int:
             "depth": cmd_signals_depth,
             "features": cmd_signals_features,
             "events": cmd_signals_events,
+            "adv": cmd_signals_adv,
+            "dat": cmd_signals_dat,
         }
         return signal_handlers[args.signals_command](args)
 

@@ -2551,9 +2551,10 @@ function renderSignals(){
       ajustes</b> de dificultad y <b>${(POOL.defillama_hacks||{}).pooled_events||0} hacks</b> fechados,
       que era «el caso duro». Ahora <b>todas las fuentes van al motor por la misma vía</b>, y lo que
       decide la codificación no es el tier sino la <b>cadencia</b>: ${R.n_event_sources||0} fuentes de
-      evento —serie casi toda a ceros, donde una z contra su propia historia no significa nada— y
-      ${R.n_continuous_sources||0} continuas, con las dos varas de
-      <span class="mono">normalize.py</span>. La distinción no es cosmética: <span class="mono">staking_queue</span>
+      evento —serie casi toda a ceros, donde una z contra su propia historia no significa nada—,
+      ${R.n_continuous_sources||0} continuas con las dos varas de
+      <span class="mono">normalize.py</span> y ${R.n_price_map_sources||0} <b>mapas de precios</b>, la
+      tercera codificación, que entró con el lote caro. La distinción no es cosmética: <span class="mono">staking_queue</span>
       es mecánica y publica un <b>nivel</b> diario, así que enrutar por el tier le habría puesto un
       días-al-evento a una cola de validadores.</p>
     <div class="note"><b>Y entonces qué impide sobreajustar una muestra corta.</b> Dos cosas medibles y una
@@ -2576,17 +2577,20 @@ function renderSignals(){
       a mano.</div>
     <div class="card"><div class="tblwrap"><table>
       <thead><tr><th>fuente</th><th>codificación</th><th>point-in-time</th>
-        <th class="num">features</th><th class="num">ent.</th><th>declarada</th><th>MEDIDA</th>
+        <th class="num">features</th><th class="num">ent.</th><th class="num">ADV típico</th>
+        <th>declarada</th><th>MEDIDA</th>
         <th class="num">días</th><th class="num">registros</th><th>acceso</th></tr></thead>
       <tbody>${S.sources.map(s=>`<tr>
         <td><b>${esc(s.title)}</b><div class="tag mono">${esc(s.key)} · ${esc(s.scope)} · ${esc(s.cadence)}</div></td>
-        <td><span class="chip ${s.encoding==='evento'?'mixto':'bajo'}">${esc(s.encoding||'')}</span>
+        <td><span class="chip ${s.encoding==='evento'?'mixto':s.encoding==='mapa de precios'?'alto':'bajo'}">${esc(s.encoding||'')}</span>
           <div class="tag">bloque ${esc(s.block||'')} · tier ${s.tier}</div>
           ${s.pooled_events?`<div class="tag">${s.pooled_events.toLocaleString('es')} eventos</div>`:''}
+          ${s.snapshots?`<div class="tag">${s.snapshots.toLocaleString('es')} fotos</div>`:''}
           ${s.connected?'<div class="tag">conectada</div>':'<div class="tag">sin adaptador</div>'}</td>
         <td>${esc(PIT_LABEL[s.pit]||s.pit)}<div class="tag">${esc(PIT_NOTE[s.pit]||'')}</div></td>
         <td class="num">${s.features.length}</td>
         <td class="num">${s.n_entities}</td>
+        <td class="num">${s.typical_adv_usd?`<b>${fmt(s.typical_adv_usd,0)} $</b>`:'<span class="tag">no aplica</span>'}</td>
         <td>${s.history_from?esc(s.history_from):'<span class="chip pend">sin medir</span>'}</td>
         <td>${s.measured_from?`${esc(s.measured_from)}<div class="tag">${esc(s.measure_method||'')} · ${s.measured_entities} ent.</div>`
           :`<span class="chip pend">—</span>${s.measure_error?`<div class="tag">${esc(String(s.measure_error).slice(0,60))}</div>`:''}`}</td>
@@ -2601,9 +2605,9 @@ function renderSignals(){
         <span class="mono">forward_capture</span> miden lo que llevan capturado, que arranca en cero por
         definición y crece un día por día real.</p></div>
 
-    <h2>El radar: de diecisiete fuentes a seis números</h2>
-    <p class="lead">Cuarenta y cinco columnas crudas no son un espacio de observación: son cuarenta y
-      cinco grados de libertad esperando a que alguien los pondere. El radar
+    <h2>El radar: de ${M.n_sources} fuentes a seis números</h2>
+    <p class="lead">${M.n_features} columnas crudas no son un espacio de observación: son ${M.n_features}
+      grados de libertad esperando a que alguien los pondere. El radar
       (<span class="mono">observation/signal_radar.py</span>) las reduce a <b>tres ejes</b> y los publica
       por <b>dos bloques</b> que se mantienen separados <i>en el código</i>, porque un factor común y un
       componente idiosincrático no se simulan igual —y el generador sintético va a necesitar esa
@@ -2681,6 +2685,140 @@ function renderSignals(){
         token sean cientos de observaciones comparables. Las dos fuentes con muestra corta lo son por un
         motivo <b>medido</b> y no por naturaleza: el endpoint de <i>unlocks</i> de DefiLlama pasó a ser de
         pago (402) y beaconcha.in ahora pide credencial (401).</p></div>`:''}
+
+    <h2>La tercera codificación: el mapa de precios</h2>
+    <p class="lead">El lote caro trajo un objeto que ninguna de las dos codificaciones anteriores sabe
+      leer: un <b>mapa de liquidación</b>. Se observa todos los días —luego no es un evento fechado, no
+      hay ninguna fecha futura que anticipar— y lo que dice no es un nivel sino una <b>distancia en
+      precio</b>: «hay 94 M$ de posiciones que revientan un 16,5% más arriba». Las otras dos lo leerían
+      mal, cada una a su manera, y <b>ninguna daría error</b>: con las dos z la feature contestaría
+      «¿es hoy la distancia alta <i>para este activo</i>?», que no es la pregunta —que un clúster esté al
+      4% es un hecho absoluto, no un percentil de su historia—; con la codificación de evento,
+      <span class="mono">_ahead</span> contaría días hasta una fecha que no existe.</p>
+    <div class="grid cards">
+      <div class="card"><h3>Proximidad en precio, con tope</h3>
+        <p class="lead" style="margin:8px 0">Mismo patrón que los días-al-evento, otra unidad: la cuenta
+          va invertida y acotada a <b>${fmt(((R.event_spec||{}).price_map||{}).distance_cap_pct||0,0)}%</b>
+          de precio, así que «no hay nada cerca» es un 0 que significa eso. <b>Medido el 13 de agosto de
+          2026</b>: los clústeres de BTC caían a −25%, −32% y −69%, o sea que ninguno pesa. Esa es la
+          lectura correcta —las 200 cuentas mayores no estaban cerca de reventar— y no un tope mal puesto.</p></div>
+      <div class="card"><h3>El signo lo pone el lado, no el tamaño</h3>
+        <p class="lead" style="margin:8px 0">Un clúster <b>por debajo</b> son largos que revientan
+          <i>vendiendo</i>; por encima, cortos que revientan comprando. El notional es una cantidad; lo
+          que tiene dirección es dónde está el clúster, así que la magnitud toma el signo de la distancia
+          y la polaridad del radar es +1.</p></div>
+      <div class="card"><h3>No hay estela, hay caducidad</h3>
+        <p class="lead" style="margin:8px 0">Un calendario viejo sigue siendo cierto; una foto del libro
+          de hace dos semanas <b>no describe ningún libro</b>. Por eso el mapa no tiene ventana de
+          decaimiento sino caducidad: pasados
+          <b>${fmt(((R.event_spec||{}).price_map||{}).stale_days||0,0)} días</b> deja de contar como
+          cobertura, en vez de seguir pareciendo fresco.</p></div>
+      <div class="card"><h3>Y el hueco está declarado</h3>
+        <p class="lead" style="margin:8px 0">Solo el <b>75,7%</b> de las posiciones muestreadas trae
+          precio de liquidación: en las de margen cruzado con holgura, el venue lo devuelve nulo. El mapa
+          está <b>incompleto</b> y el notional publicado es una cota inferior. No se estima el hueco:
+          estimarlo exigiría replicar el motor de margen del venue.</p></div>
+    </div>
+    ${Object.keys(S.price_maps||{}).length?`<div class="card"><div class="tblwrap"><table>
+      <thead><tr><th>mapa</th><th class="num">fotos</th><th class="num">entidades</th>
+        <th>ventana</th><th>distancia</th></tr></thead>
+      <tbody>${Object.entries(S.price_maps).map(([k,r])=>`<tr>
+        <td class="mono">${esc(k)}</td>
+        <td class="num"><b>${(r.snapshots||0).toLocaleString('es')}</b></td>
+        <td class="num">${r.entities||0}</td>
+        <td>${r.first_day?`${esc(r.first_day)} → ${esc(r.last_day)}`:'<span class="chip pend">sin dato</span>'}</td>
+        <td class="tag">${esc(r.distance||'—')}</td></tr>`).join('')}</tbody></table></div>
+      <p class="tag">La unidad aquí es la <b>foto diaria</b> y no el evento, y por eso van en tabla
+        aparte: sumarlas al recuento <i>pooled</i> diría que hay más eventos de los que hay.</p></div>`:''}
+
+    ${(S.dat||{}).companies_examined?(()=>{const T=S.dat,P=T.policy||{},AS=Object.entries(T.assets||{});
+      const REJ=Object.entries(T.rejections||{}).sort((a,b)=>b[1]-a[1]);
+      return `<h2>Tesorerías cotizadas: la única fuente <i>compuesta</i>, y lo que midió</h2>
+    <p class="lead">Una tesorería cotizada es una empresa cuyo balance <b>es</b> un tesoro de cripto.
+      Por encima de 1× de <span class="mono">mNAV</span> la máquina va hacia adelante —emitir acciones es
+      acretivo—; por <b>debajo</b> va en reversa, y es aritmética, no sentimiento: emitir diluye, así que
+      la vía barata para levantar caja pasa a ser <b>vender el tesoro</b>. Lo que interesa no es el mNAV de
+      nadie sino la <b>distribución</b> por activo subyacente: la fracción bajo 1× es oferta futura
+      estructural. No hay API —los cuatro sitios que lo publican son cuadros de mando— así que la serie se
+      <b>compone</b> de tres patas: tenencias y acciones del XBRL de la SEC, precio de la acción y precio
+      del activo del mismo cierre de sesión.</p>
+    <div class="note"><b>Y el resultado de componerla no es el que se esperaba.</b> De
+      <b>${T.companies_examined}</b> declarantes de cripto en el registro XBRL quedan
+      <b>${T.companies}</b> compañías publicables, repartidas en ${AS.length} activo${AS.length===1?'':'s'}
+      distinto${AS.length===1?'':'s'}. Con una cohorte mínima de ${P.min_cohort||3} para que la palabra
+      «distribución» signifique algo, <b>hoy no hay ninguna distribución que publicar</b> y la fuente
+      produce <b>${T.rows||0} filas</b>. Eso es la medición, no un pendiente: el desglose de abajo dice
+      exactamente dónde se pierde cada compañía.</div>
+    <div class="grid cards">
+      <div class="card"><h3>Tres filtros, y ninguno mira el mNAV</h3>
+        <p class="lead" style="margin:8px 0">Definir la cohorte con el propio mNAV <b>truncaría justo la
+          cola que se publica</b>. Los tres salen del balance o del registro de la SEC: fuera los SIC
+          ${(P.excluded_sic||[]).join(' y ')} (trusts al contado, que cotizan al NAV por arbitraje, y
+          brokers que custodian cripto ajena); dentro solo si el tesoro pasa del
+          <b>${Math.round((P.treasury_min_asset_share||0)*100)}%</b> del activo total; y solo si se sabe
+          qué activo es.</p></div>
+      <div class="card"><h3>Un nombre identifica, el precio verifica</h3>
+        <p class="lead" style="margin:8px 0">La primera versión identificaba por <b>precio implícito</b>
+          (valor razonable ÷ unidades) y daba <b>dos falsos positivos de ocho</b>: TON Strategy Co salía
+          NEAR e Hyperion DeFi salía LTC. «El único que cuadra» solo significa algo con el conjunto de
+          candidatos completo, y hay miles de tokens. Hoy identifica un <b>nombre</b> y el precio solo
+          <b>rechaza</b>, con tolerancia ×${(P.unit_price_tolerance||0).toFixed(2)}.</p></div>
+      <div class="card"><h3>El retraso es un dato, no una suposición</h3>
+        <p class="lead" style="margin:8px 0">Cada hecho trae su fecha de referencia y su fecha de
+          publicación, y la fila se fecha en la <b>de publicación</b>. El retraso realizado medido es de
+          <b>${T.median_lag_days!=null?Math.round(T.median_lag_days):'—'} días</b>: sin fecharlo así, un
+          backtest usaría el 30 de junio una tenencia que no se publicó hasta agosto.</p></div>
+      <div class="card"><h3>El hueco mayor, declarado</h3>
+        <p class="lead" style="margin:8px 0">Las APIs XBRL solo exponen hechos <b>sin dimensiones</b>, así
+          que una compañía con varias clases de acción no publica recuento de ordinarias y <b>la tesorería
+          más grande que existe queda fuera</b>. No se sustituye por la media ponderada del periodo: es una
+          media, y estas compañías emiten todos los días, así que sesgaría a la baja la capitalización
+          justo de las más activas.</p></div>
+    </div>
+    ${AS.length?`<div class="card"><div class="tblwrap"><table>
+      <thead><tr><th>activo</th><th class="num">compañías</th><th class="num">observaciones</th>
+        <th>quién</th></tr></thead>
+      <tbody>${AS.map(([a,b])=>`<tr><td class="mono">${esc(a)}</td>
+        <td class="num"><b>${b.n_companies||0}</b></td><td class="num">${b.observations||0}</td>
+        <td class="tag">${(b.companies||[]).map(c=>esc(c.ticker)+' ('+Math.round((c.treasury_share_of_assets||0)*100)+'% del balance)').join(', ')}</td>
+        </tr>`).join('')}</tbody></table></div>
+      <p class="tag">El <b>N</b> de esta fuente no lo dan los eventos de una compañía —cada una publica
+        cuatro veces al año— sino el <i>pooling</i> sobre la cohorte:
+        <b>${T.pooled_observations||0}</b> observaciones de compañía. Va al lado del número de compañías a
+        propósito: doscientas observaciones de tres y doscientas de cuarenta sostienen inferencias
+        distintas.</p></div>`:''}
+    <div class="card"><h3>Por qué se cae cada una (cobertura explícita, no un hueco)</h3>
+      <div class="tblwrap"><table><thead><tr><th class="num">n</th><th>motivo</th></tr></thead>
+      <tbody>${REJ.map(([r,n])=>`<tr><td class="num"><b>${n}</b></td><td>${esc(r)}</td></tr>`).join('')}</tbody>
+      </table></div>
+      <p class="tag">Una cobertura del 3% sin decir qué pasó con el otro 97% es indistinguible de un filtro
+        mal escrito. El desglose está en <span class="mono">data/signals/dat_cohort.json</span> y se
+        regenera con <span class="mono">signals dat</span>.</p></div>`;})():''}
+
+    ${(S.liquidity||{}).n_declared?`<h2>El ADV: por qué una señal genuina puede no servir</h2>
+    <p class="lead">Una señal puede ser real, tener historia, pasar el break-even de IC y <b>no servir
+      para nada</b>, y la razón casi nunca es estadística: es que vive en activos donde <b>no cabe
+      tamaño</b>. Ese fallo no lo detecta ninguna métrica de las que ya había —el Sharpe de un backtest
+      sin impacto de mercado no sabe cuánto volumen tenía el activo— y se descubre tarde, cuando ya se ha
+      escalado. Desde el lote caro, el catálogo declara el <b>ADV típico</b> de las entidades donde cada
+      señal existe, medido por <span class="mono">signals/liquidity.py</span> y con un test que exige que
+      lo declarado esté respaldado por el registro, igual que con <span class="mono">history_from</span>.</p>
+    <div class="card"><div class="tblwrap"><table>
+      <thead><tr><th>venue</th><th class="num">entidades</th><th class="num">con volumen</th>
+        <th class="num">mediana 24h</th><th class="num">decil inferior</th><th class="num">máximo</th></tr></thead>
+      <tbody>${Object.entries((S.liquidity||{}).venues||{}).map(([k,r])=>`<tr>
+        <td class="mono">${esc(k)}</td>
+        <td class="num">${r.n_entities||0}</td>
+        <td class="num">${r.n_traded||0}</td>
+        <td class="num"><b>${fmt(r.median_usd||0,0)} $</b></td>
+        <td class="num">${fmt(r.p10_usd||0,0)} $</td>
+        <td class="num">${fmt(r.max_usd||0,0)} $</td></tr>`).join('')}</tbody></table></div>
+      <p class="tag">La <b>mediana</b> y no la media, y sobre las entidades que <i>negocian</i>: en
+        Hyperliquid la media diría 12,7 M$ porque BTC mueve 1.700 M$, y el perp del medio mueve
+        ${fmt(((S.liquidity||{}).venues||{}).hyperliquid?.median_usd||0,0)} $. La fuente más estrecha del
+        catálogo vive en entidades de <b>${fmt((S.liquidity||{}).thinnest_adv_usd||0,0)} $/día</b>
+        (<span class="mono">${esc((S.liquidity||{}).thinnest_source||'')}</span>): el evento es limpio y
+        el tamaño que admite, no. Esa cifra tiene que estar delante <b>antes</b> de escalar, no después.</p></div>`:''}
 
     <h2>Símbolo → entidad: una regla, y una tabla que arranca vacía</h2>
     <p class="lead">Las fuentes externas no hablan en símbolos de mercado. La clave común se deriva con una

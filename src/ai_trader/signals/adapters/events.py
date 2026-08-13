@@ -57,6 +57,7 @@ from ai_trader.data.providers.http import JsonHttpConfig
 from ai_trader.shared.entities import MARKET_ENTITY
 from ai_trader.shared.signals import DAY, ENTITY
 from ai_trader.signals.adapters.common import (
+    certifi_bundle,
     day_or_none,
     env_secret,
     iso_day,
@@ -366,7 +367,7 @@ class OfacSdn(BaseJsonAdapter):
 
     def __init__(self, source, **kwargs) -> None:
         config = kwargs.pop("http_config", None) or JsonHttpConfig(
-            timeout_seconds=120.0, ca_bundle=_certifi_bundle()
+            timeout_seconds=120.0, ca_bundle=certifi_bundle()
         )
         super().__init__(source, base_url=OFAC_BASE, http_config=config, **kwargs)
 
@@ -428,14 +429,6 @@ def crypto_addresses(xml: str) -> dict:
         if id_type.startswith(CRYPTO_ID_PREFIX)
     ]
     return {"publish_date": day, "addresses": addresses}
-
-
-def _certifi_bundle() -> str | None:
-    try:
-        import certifi
-    except ImportError:  # pragma: no cover - sin certifi se usa el almacen del sistema
-        return None
-    return certifi.where()
 
 
 def _sorted_by_fetch(records: Sequence[Mapping]) -> list[Mapping]:

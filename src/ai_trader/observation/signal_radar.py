@@ -1,5 +1,5 @@
 """
-EL RADAR DE SENALES: diecisiete fuentes -> seis numeros que una decision puede usar.
+EL RADAR DE SENALES: treinta fuentes -> seis numeros que una decision puede usar.
 
 QUE ES ESTO Y QUE NO
 --------------------
@@ -16,7 +16,7 @@ puede hacer es bloquear por falta de datos (ver `signal_gate_reason`).
 
 SEIS NUMEROS, Y POR QUE SEIS
 ----------------------------
-Cuarenta y cinco columnas crudas no son un espacio de observacion: son cuarenta y cinco
+Sesenta y siete columnas crudas no son un espacio de observacion: son sesenta y siete
 grados de libertad esperando a que alguien los pondere. El radar las reduce a tres ejes,
 por dos BLOQUES que se mantienen separados EN CODIGO:
 
@@ -69,14 +69,20 @@ from ai_trader.signals.catalog import CATALOG, SignalSource
 from ai_trader.signals.events import (
     EVENT_SPECS,
     MAGNITUDE_CLIP,
+    PRICE_MAP_STALE_DAYS,
+    PRICE_SPECS,
     SUFFIX_ACTIVE,
     SUFFIX_AHEAD,
     SUFFIX_MAG,
+    SUFFIX_NEAR,
     EventSpec,
+    PriceMapSpec,
     as_naive,
     day_values,
     encode_arrays,
+    encode_price_arrays,
     is_event_source,
+    is_price_map_source,
 )
 from ai_trader.signals.normalize import SUFFIX_CROSS, SUFFIX_SELF, Z_CLIP, normalize_features
 
@@ -168,6 +174,41 @@ POLARITY: dict[str, float] = {
     f"btc_difficulty{SUFFIX_MAG}": +1.0,    # hashrate creciendo; negativo = capitulacion
     # `macro_calendar` no aparece: lo que aporta es CUANDO, no en que direccion. Un FOMC
     # no es bueno ni malo antes de ocurrir, y darle signo seria inventarse el resultado.
+    # --- lote de alta friccion (2026-08-13) ---
+    #
+    # El skew es el unico numero de opciones con direccion defendible sin hipotesis nueva:
+    # es literalmente cuanto mas cara esta la proteccion que la apuesta, medida en la misma
+    # unidad. `dvol_index`, `atm_iv_30d` y `iv_term_slope` NO entran: una volatilidad alta
+    # acompana tanto a las caidas como a los tramos verticales al alza, y la inversion de
+    # la estructura temporal indica tension sin decir hacia donde se resuelve. Las tres
+    # siguen contando como INTENSIDAD, que es lo que si se puede afirmar de ellas.
+    "skew_25d": -1.0,
+    f"cex_listings{SUFFIX_MAG}": +1.0,      # alta = demanda nueva; baja = oferta forzada
+    f"appstore_rank{SUFFIX_MAG}": +1.0,     # Corea por delante de EE.UU. = retail entrando
+    # Tesorerias cotizadas por debajo de su NAV: oferta futura ESTRUCTURAL sobre ese activo.
+    # El signo es de los pocos que no necesita una hipotesis sobre el mundo, porque es
+    # aritmetica de balance: emitir por debajo de 1 diluye, asi que la via barata para
+    # levantar caja pasa a ser vender el tesoro. Es la misma direccion —y por el mismo
+    # motivo— que `token_unlocks`: oferta que va a llegar.
+    f"dat_mnav{SUFFIX_MAG}": -1.0,
+    # Los dos mapas de precios llevan el signo DENTRO de la magnitud (negativo = el cluster
+    # esta por debajo, es decir combustible para caer), asi que su polaridad es +1 y lo que
+    # aporta la direccion es la geometria del mapa, no una hipotesis sobre el mundo.
+    f"hyperliquid_liqmap{SUFFIX_MAG}": +1.0,
+    f"lending_health{SUFFIX_MAG}": +1.0,
+    # LO QUE NO ENTRA, Y POR QUE, que aqui no es un olvido en tres casos concretos:
+    #   `deribit_expiries`   un vencimiento grande no es alcista ni bajista; es un dia con
+    #                        gamma. Aporta intensidad, que es exactamente lo que es.
+    #   `sec_edgar_fts`      el recuento de 13F sube el 14 de febrero y el 15 de mayo por
+    #                        el calendario de presentacion, no por el mercado: darle signo
+    #                        seria convertir una fecha limite administrativa en una senal.
+    #   `federal_register` / `courtlistener_dockets`  mas actividad regulatoria o judicial
+    #                        puede ser una aprobacion o una demanda, y el recuento no
+    #                        distingue. Leer el contenido es otro problema (ver legal.py).
+    #   `naver_datalab` / `yandex_wordstat`  igual que `wikipedia_pageviews`, que tampoco
+    #                        esta: la atencion sube con el miedo y con la euforia.
+    #   `hl_leverage_*` / `hl_oi_top5_share`  la fragilidad no tiene direccion. Un perp muy
+    #                        apalancado y concentrado se mueve mas, no se mueve arriba.
 }
 
 
@@ -220,6 +261,7 @@ class SignalRadarProvider:
         self._market_keys: list[str] = []
         self._series: dict[str, dict[str, _Series]] = {}
         self._events: dict[str, dict[str, _Calendar]] = {}
+        self._maps: dict[str, dict[str, _PriceMap]] = {}
         # Denominador de la cobertura: las fuentes que el CATALOGO declara en cada bloque,
         # no las que hoy tienen fichero. Es la diferencia entre "tengo 1 de las 8 fuentes de
         # mercado" (cobertura 0,13, la puerta se salta) y "tengo la unica que cargue"
@@ -239,6 +281,8 @@ class SignalRadarProvider:
             )
             if is_event_source(source):
                 self._events[source.key] = _index_events(frame, source)
+            elif is_price_map_source(source):
+                self._maps[source.key] = _index_price_maps(frame, source)
             else:
                 self._series[source.key] = _index_series(frame, source, polarity)
 
@@ -262,7 +306,7 @@ class SignalRadarProvider:
     @property
     def is_empty(self) -> bool:
         """True si no hay ninguna fuente con dato detras. El sistema arranca asi."""
-        return not (self._series or self._events)
+        return not (self._series or self._events or self._maps)
 
     def coverage_report(self) -> dict:
         """Que fuentes sostienen el radar, para publicarlo al lado de las cifras."""
@@ -271,6 +315,7 @@ class SignalRadarProvider:
             "market_sources": sorted(self._market_keys),
             "event_sources": sorted(self._events),
             "continuous_sources": sorted(self._series),
+            "price_map_sources": sorted(self._maps),
             "min_coverage": MIN_SIGNAL_COVERAGE,
             "max_stale_days": self._max_stale_days,
         }
@@ -318,6 +363,16 @@ class SignalRadarProvider:
                 _event_reading(key, calendar, cutoff, spec, self._polarity)
                 for calendar in targets.values()
                 if calendar is not None
+            ]
+
+        maps = self._maps.get(key)
+        if maps is not None:
+            spec = PRICE_SPECS.get(key)
+            targets = maps if entity is None else {entity: maps.get(entity)}
+            return [
+                _price_map_reading(key, block, cutoff, spec, self._polarity)
+                for block in targets.values()
+                if block is not None and spec is not None
             ]
 
         series = self._series.get(key)
@@ -394,6 +449,45 @@ def _event_reading(
     )
 
 
+def _price_map_reading(
+    key: str,
+    block: _PriceMap,
+    cutoff: pd.Timestamp,
+    spec: PriceMapSpec,
+    polarity_table: Mapping[str, float] = POLARITY,
+) -> _Reading:
+    """Lectura de un mapa de precios. Gemela de `_event_reading`, con dos diferencias.
+
+    La proximidad se mide en PRECIO y no en dias, y la cobertura NO es automatica: un mapa
+    caducado (`events.PRICE_MAP_STALE_DAYS`) no cubre. Un calendario de eventos sigue siendo
+    cierto aunque el ultimo evento fuera hace un ano; una foto del libro de hace dos semanas
+    no describe ningun libro, y darla por buena seria la unica forma de que esta fuente
+    mintiera sin que se note.
+    """
+    index = int(np.searchsorted(block.days, as_naive(cutoff), side="left"))
+    if index == 0:
+        return _Reading(0.0, 0.0, False)
+    stale = (cutoff - pd.Timestamp(block.days[index - 1], tz="UTC")).days
+    if stale > PRICE_MAP_STALE_DAYS:
+        return _Reading(0.0, 0.0, False)
+
+    # Una foto fresca SIN cluster si cubre: "hay mapa y no hay nada cerca" es una lectura,
+    # y es la misma distincion que hace `_seen` en las fuentes de evento.
+    encoded = encode_price_arrays(
+        block.days, block.distances, block.notionals, cutoff, key, spec
+    )
+    near = encoded[f"{key}{SUFFIX_NEAR}"]
+    magnitude = encoded[f"{key}{SUFFIX_MAG}"]
+    polarity = polarity_table.get(f"{key}{SUFFIX_MAG}", 0.0)
+    return _Reading(
+        # La proximidad PONDERA, igual que en un evento: 200 M$ que revientan un 20% mas
+        # abajo y los mismos 200 M$ a un 1% no son el mismo hecho.
+        tone=polarity * magnitude * near,
+        intensity=float(np.clip(near * abs(magnitude), 0.0, MAGNITUDE_CLIP)),
+        covered=True,
+    )
+
+
 def _series_reading(block: _Series, cutoff: pd.Timestamp, max_stale_days: int) -> _Reading:
     index = int(np.searchsorted(block.days, as_naive(cutoff), side="left"))
     if index == 0:
@@ -430,6 +524,15 @@ class _Calendar:
 
     days: np.ndarray
     values: np.ndarray
+
+
+@dataclass(frozen=True, slots=True)
+class _PriceMap:
+    """Serie de fotos del mapa de una entidad: dia, distancia al cluster y su notional."""
+
+    days: np.ndarray
+    distances: np.ndarray
+    notionals: np.ndarray
 
 
 def _index_series(
@@ -507,6 +610,30 @@ def _index_events(frame: pd.DataFrame, source: SignalSource) -> dict[str, _Calen
         out[str(entity)] = _Calendar(
             days=day_values(block.index.get_level_values(DAY)),
             values=np.nan_to_num(values, nan=0.0),
+        )
+    return out
+
+
+def _index_price_maps(frame: pd.DataFrame, source: SignalSource) -> dict[str, _PriceMap]:
+    """Trocea el mapa por entidad. Sin normalizar: la distancia YA esta en su unidad.
+
+    Es la diferencia de fondo con `_index_series`: una distancia en porcentaje de precio no
+    necesita una z que la haga comparable, porque ya lo es. Pasarla por la normalizacion la
+    convertiria en 'alta para este activo', que es otra pregunta.
+    """
+    spec = PRICE_SPECS.get(source.key)
+    if spec is None or spec.distance not in frame.columns:
+        return {}
+    out: dict[str, _PriceMap] = {}
+    for entity, block in frame.sort_index().groupby(level=ENTITY, sort=False):
+        out[str(entity)] = _PriceMap(
+            days=day_values(block.index.get_level_values(DAY)),
+            distances=pd.to_numeric(block[spec.distance], errors="coerce").to_numpy(dtype=float),
+            notionals=(
+                pd.to_numeric(block[spec.notional], errors="coerce").to_numpy(dtype=float)
+                if spec.notional in block.columns
+                else np.zeros(len(block), dtype=float)
+            ),
         )
     return out
 

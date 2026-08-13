@@ -1,5 +1,5 @@
 """
-EL CATALOGO ENTERO, CONECTADO: once fuentes continuas y seis de evento.
+EL CATALOGO ENTERO, CONECTADO: dieciseis continuas, once de evento y dos mapas de precios.
 
 Las once continuas (tier `B`) son series con efectos pequenos y decadentes: sentimiento,
 flujos de ETF, macro, oferta de stablecoins, ingresos de protocolo, cuota DEX/CEX, atencion
@@ -22,9 +22,34 @@ porque lo que las separaba del resto ya no existe:
 
     events.py      Ajuste de dificultad, hacks, calendario macro, OFAC, unlocks, staking.
 
+Y el LOTE DE ALTA FRICCION (2026-08-13), que son doce fuentes mas repartidas en seis
+modulos. Lo que las separa de las anteriores no es el precio —nueve de las doce son gratis
+y sin credencial— sino el trabajo que dan:
+
+    hyperliquid.py Apalancamiento, concentracion y mapa de liquidacion, reconstruidos
+                   cuenta a cuenta. Una sola descarga alimenta las dos fuentes.
+    deribit.py     DVOL con backfill paginado, y skew de 25 delta calculando el delta
+                   nosotros porque el libro no publica griegas. Mas el calendario de
+                   vencimientos con su OI.
+    lending.py     El otro lado del apalancamiento. Sin clave no hay dato, y eso es lo
+                   que se midio.
+    attention.py   App Store (Corea menos EE.UU.), Naver y Yandex.
+    legal.py       EDGAR full-text, Federal Register y CourtListener: eventos fechados
+                   que existen antes que su noticia.
+    listings.py    Altas, bajas y avisos de vigilancia de Upbit, desde 2017.
+
+Y la trigesima, que no se parece a ninguna: es la primera SIN PROVEEDOR.
+
+    treasuries.py  El mNAV de las tesorerias cotizadas. No hay API —los cuatro sitios que
+                   lo publican son cuadros de mando— asi que la serie se COMPONE de tres
+                   patas: tenencias y acciones del XBRL de la SEC, precio de la accion y
+                   precio del activo del mismo cierre de sesion. Lo que publica no es el
+                   mNAV de nadie sino la DISTRIBUCION por activo subyacente.
+
 TODAS VAN AL MISMO SITIO. El tier ya no enruta: describe la CODIFICACION que le toca a cada
-una (`signals/normalize.py` para las continuas, `signals/events.py` para las de evento) y
-las dos acaban en el mismo espacio de observacion, en backtest y en vivo.
+una (`signals/normalize.py` para las continuas, `signals/events.py` para las de evento y
+para los mapas de precios) y las tres acaban en el mismo espacio de observacion, en backtest
+y en vivo.
 
 LO QUE COMPARTEN, QUE ES LO QUE HACE BARATA LA FUENTE N+1
 ---------------------------------------------------------
@@ -36,7 +61,7 @@ profundidad: `history_from` sale de `signals/depth.py`, que lo MIDE.
 
 REGISTRAR ES UN ACTO EXPLICITO
 ------------------------------
-`register_all()` es lo que pasa el registro de adaptadores de vacio a diecisiete. Se llama
+`register_all()` es lo que pasa el registro de adaptadores de vacio a treinta. Se llama
 desde `signals/capture.py` al arrancar una captura, no al importar el catalogo: importar
 una lista de declaraciones no puede tener como efecto que exista un cliente HTTP. Y es
 idempotente, porque `register_adapter` rechaza el duplicado y aqui se ignora ese rechazo a
@@ -55,15 +80,22 @@ from __future__ import annotations
 import logging
 
 from ai_trader.signals.adapters import (
+    attention,
     cftc,
     defillama,
+    deribit,
     etf_flows,
     events,
     fred,
     funding,
     github,
     guavy,
+    hyperliquid,
+    legal,
+    lending,
+    listings,
     p2p,
+    treasuries,
     wikipedia,
 )
 
@@ -71,7 +103,25 @@ logger = logging.getLogger(__name__)
 
 # Modulos con adaptadores, en el orden en que se registran. El orden no importa para nada
 # salvo para el log, y por eso es el del catalogo: se lee al lado.
-MODULES = (guavy, etf_flows, fred, defillama, wikipedia, p2p, funding, github, cftc, events)
+MODULES = (
+    guavy,
+    etf_flows,
+    fred,
+    defillama,
+    wikipedia,
+    p2p,
+    funding,
+    github,
+    cftc,
+    events,
+    hyperliquid,
+    deribit,
+    lending,
+    attention,
+    legal,
+    listings,
+    treasuries,
+)
 
 
 def register_all() -> tuple[str, ...]:
@@ -90,15 +140,22 @@ def register_all() -> tuple[str, ...]:
 
 __all__ = [
     "MODULES",
+    "attention",
     "cftc",
     "defillama",
+    "deribit",
     "etf_flows",
     "events",
     "fred",
     "funding",
     "github",
     "guavy",
+    "hyperliquid",
+    "legal",
+    "lending",
+    "listings",
     "p2p",
     "register_all",
+    "treasuries",
     "wikipedia",
 ]

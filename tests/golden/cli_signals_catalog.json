@@ -39,6 +39,11 @@
     "endpoint": "https://guavy.com/api/v1/sentiment/get-sentiment-history/<symbol>",
     "auth_env": "GUAVY_API_KEY",
     "fixed_entities": [],
+    "encoding": "continuous",
+    "typical_adv_usd": null,
+    "adv_note": "",
+    "disclosure_lag_days": null,
+    "lag_note": "",
     "notes": "Se consumen SOLO los conteos crudos. Los endpoints trend/signal son el output de SU modelo: pueden estar recalculados con informacion posterior y no son auditables (el adaptador los rechaza por codigo). El host esta MEDIDO: guavy.com responde 401 sin token y api.guavy.com da 404. Sin credencial en el entorno la sonda no pudo medir profundidad, y por eso history_from sigue a None."
   },
   {
@@ -75,6 +80,11 @@
     "endpoint": "https://www.tftc.io/bitcoin-etf-flows/data.json",
     "auth_env": null,
     "fixed_entities": [],
+    "encoding": "continuous",
+    "typical_adv_usd": null,
+    "adv_note": "",
+    "disclosure_lag_days": null,
+    "lag_note": "",
     "notes": "MEDIDO: solo BITCOIN. TFTC no publica dataset equivalente de ETH (las rutas evidentes dan 404), asi que ETH no tiene cobertura por esta puerta y NO se rellena con un agregado de otro sitio: sin desglose por emisor, etf_issuer_dispersion significaria otra cosa para ese activo. Los flujos se revisan al alza el dia siguiente, de ahi archive_revisable."
   },
   {
@@ -115,6 +125,11 @@
       "VIXCLS",
       "DCOILWTICO"
     ],
+    "encoding": "continuous",
+    "typical_adv_usd": null,
+    "adv_note": "",
+    "disclosure_lag_days": null,
+    "lag_note": "",
     "notes": "La entidad es la SERIE, no un activo, y cada una mapea sobre un factor del generador sintetico (adapters/fred.py::FACTOR_OF; universe.py: EQUITY, RATES, USD, COMMODITY). Las nueve existen: COMPROBADO. El ORO no esta y es una medicion, no un olvido: FRED discontinuo las series de la LBMA (GOLDAMGBD228NLBM da 404 hoy) y el factor COMMODITY se cubre con WTI. FRED revisa series hacia atras: sin el archivo crudo con fetched_at no hay forma de saber que se veia aquel dia. Sin FRED_API_KEY en el entorno la sonda no pudo medir profundidad."
   },
   {
@@ -152,6 +167,11 @@
       "tron",
       "bsc"
     ],
+    "encoding": "continuous",
+    "typical_adv_usd": null,
+    "adv_note": "",
+    "disclosure_lag_days": null,
+    "lag_note": "",
     "notes": "La emision neta es polvora seca entrando; el desglose POR CADENA es rotacion de capital entre ecosistemas, que es la parte que no se publica agregada. La emision se deriva como VARIACION de la oferta: tras un hueco, el primer dia acumula lo emitido durante todo el hueco, y `observed` esta al lado para saber cuando fiarse."
   },
   {
@@ -188,6 +208,11 @@
     "endpoint": "https://api.llama.fi/summary/fees/<protocol>",
     "auth_env": null,
     "fixed_entities": [],
+    "encoding": "continuous",
+    "typical_adv_usd": null,
+    "adv_note": "",
+    "disclosure_lag_days": null,
+    "lag_note": "",
     "notes": "Con el precio ya en el sistema salen P/F y P/S. El universo con ingresos reales es pequeno e ignorado, que es lo que lo hace interesante. Los 24 slugs estan COMPROBADOS: XRP y ATOM entran por su cadena (xrpl, cosmos-hub) porque el slug obvio da 400. La serie llega en tres llamadas (dailyFees, dailyRevenue, y el TVL del protocolo) marcadas en request.series."
   },
   {
@@ -224,6 +249,11 @@
     "endpoint": "https://api.llama.fi/overview/dexs/<chain>",
     "auth_env": null,
     "fixed_entities": [],
+    "encoding": "continuous",
+    "typical_adv_usd": null,
+    "adv_note": "",
+    "disclosure_lag_days": null,
+    "lag_note": "",
     "notes": "Donde se forma el precio. La cuota necesita las DOS patas y DefiLlama no publica volumen de CEX: la de CEX sale de CCXT y se archiva como un crudo mas, marcado en request.series. Solo estan las cadenas MEDIDAS: polkadot, celestia y cosmos devuelven 500, asi que DOT, TIA y ATOM no tienen pata DEX. Un activo cuyo volumen migra a DEX cambia de microestructura y el modelo de costes lo trata igual (limite conocido)."
   },
   {
@@ -254,6 +284,11 @@
     "endpoint": "https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article",
     "auth_env": null,
     "fixed_entities": [],
+    "encoding": "continuous",
+    "typical_adv_usd": null,
+    "adv_note": "",
+    "disclosure_lag_days": null,
+    "lag_note": "",
     "notes": "Desglosado por idioma, que es lo que Google Trends no da limpio: seis proyectos (en/es/de/ja/ru/zh) dan una descomposicion geografica de la atencion. Dos limites MEDIDOS: el User-Agent generico se come un 403 y el limite de peticiones salta a 429 incluso en serie a 0,7 s, asi que el adaptador va secuencial con pausa de 2 s. Los titulos son una TABLA (el articulo de SOL es 'Solana (blockchain platform)'), comprobada uno a uno: lo que daba 404 no esta."
   },
   {
@@ -286,6 +321,11 @@
     "fixed_entities": [
       "USDT"
     ],
+    "encoding": "continuous",
+    "typical_adv_usd": null,
+    "adv_note": "",
+    "disclosure_lag_days": null,
+    "lag_note": "",
     "notes": "TRY/ARS/NGN contra USDT (MEDIDO: TRY y ARS tienen libro lleno, NGN devuelve cero anuncios y por eso p2p_currencies vale 2). Demanda por crisis monetaria: un driver distinto y no correlacionado con el ciclo especulativo. Cada registro crudo guarda el libro Y el tipo oficial del mismo momento, porque la prima es un cociente y ninguna de las dos patas se puede re-descargar con fecha pasada. NADIE publica el historico de un libro P2P: lo que no se capture hoy no existe manana, y por eso la profundidad crece un dia por dia real."
   },
   {
@@ -322,6 +362,11 @@
     "endpoint": "ccxt.fetch_funding_rate (binance, bybit, okx)",
     "auth_env": null,
     "fixed_entities": [],
+    "encoding": "continuous",
+    "typical_adv_usd": null,
+    "adv_note": "",
+    "disclosure_lag_days": null,
+    "lag_note": "",
     "notes": "La DISPERSION, no el nivel: el nivel esta muy arbitrado. Los tres venues estan MEDIDOS (los tres devolvieron funding de BTC/USDT:USDT). La dispersion se calcula ENTRE VENUES en cada ventana de funding y solo despues se promedia el dia: al reves mediria la variacion horaria, que es otra cosa. Se exigen 3 venues como minimo. fetch_funding_rate da la foto de AHORA, asi que la profundidad crece con la captura."
   },
   {
@@ -352,6 +397,11 @@
     "endpoint": "https://api.github.com/repos/<owner>/<repo>/stats/commit_activity",
     "auth_env": "GITHUB_TOKEN",
     "fixed_entities": [],
+    "encoding": "continuous",
+    "typical_adv_usd": null,
+    "adv_note": "",
+    "disclosure_lag_days": null,
+    "lag_note": "",
     "notes": "Santiment cobra por esto y el dato crudo es publico. LAS DOS FEATURES NO TIENEN LA MISMA PROFUNDIDAD, y por eso hay que decirlo aqui: history_from (2009, la creacion del repo mas viejo) la alcanza contributors, que llega con cubos semanales desde el principio; commits solo tiene 52 semanas por captura, asi que hacia atras es NaN \u2014no cero\u2014 y la historia larga se acumula captura a captura en el archivo. commit_activity reparte la semana en curso en siete dias incluidos los que AUN NO HAN PASADO: la capa 2 los corta con el fetched_at del registro, porque un cero en un dia que no ha ocurrido no es 'no hubo commits'. contributors es SEMANAL y se ancla al inicio de su semana; repetirlo siete veces convertiria una observacion en siete. Sin GITHUB_TOKEN son 60 peticiones/hora y el universo necesita 48: la sonda se quedo sin cuota en el primer intento (medido). contributors es SEMANAL y se ancla al inicio de su semana; repetirlo siete veces convertiria una observacion en siete. El 202 con cuerpo vacio (GitHub calculando) se trata como 'hoy no hay dato'. Revisable: un force-push reescribe el historico de commits."
   },
   {
@@ -388,6 +438,11 @@
     "endpoint": "https://publicreporting.cftc.gov/resource/gpe5-46if.json",
     "auth_env": null,
     "fixed_entities": [],
+    "encoding": "continuous",
+    "typical_adv_usd": null,
+    "adv_note": "",
+    "disclosure_lag_days": null,
+    "lag_note": "",
     "notes": "Semanal: foto del MARTES, publicada el VIERNES. El dia con el que se archiva es el de PUBLICACION, no el de referencia \u2014el martes queda en el payload\u2014, porque el recorte por dia de observacion no ve un desfase de tres dias y fechar el martes meteria tres dias de futuro en cualquier cruce. Solo los dos contratos de CME con serie larga (BTC 435 semanas, ETH 279, medidas); los micro y los de otros exchanges quedan fuera para no sumar contratos de tamano distinto."
   },
   {
@@ -418,6 +473,11 @@
     "endpoint": "https://api.llama.fi/emissions",
     "auth_env": null,
     "fixed_entities": [],
+    "encoding": "event",
+    "typical_adv_usd": null,
+    "adv_note": "",
+    "disclosure_lag_days": null,
+    "lag_note": "",
     "notes": "Lo valioso NO es 'hay unlock' (explotado) sino el desbloqueo NORMALIZADO: un 3% sobre un token con 40 dias de volumen en circulacion es un evento; el mismo 3% sobre uno liquido no lo es. Esa normalizacion es ademas lo que permite agrupar: la unidad de observacion es el evento comparable entre activos, no el token. MEDIDO 2026-08-12: la API responde 402 Payment Required, asi que hoy no hay muestra que contar y history_from sigue a None. El adaptador existe para que eso sea una MEDICION y no un hueco. El calendario futuro se reescribe cuando el equipo cambia el vesting: revisable por naturaleza."
   },
   {
@@ -450,6 +510,11 @@
     "fixed_entities": [
       "ethereum"
     ],
+    "encoding": "continuous",
+    "typical_adv_usd": null,
+    "adv_note": "",
+    "disclosure_lag_days": null,
+    "lag_note": "",
     "notes": "Oferta futura con FECHA CONOCIDA dias antes. Tres correcciones MEDIDAS el 2026-08-12: (1) el endpoint devuelve 401 sin credencial, asi que la fuente declara auth_env y sin la variable en el entorno no hay medicion; (2) solo cubre Ethereum \u2014Solana y Cosmos no tienen este endpoint\u2014 y por eso fixed_entities baja a una; (3) la espera en DIAS no se publica y no se estima: convertir la cola en dias exige el limite de churn vigente, que cambia con cada fork. Forward_capture puro: devuelve la foto de AHORA y no guarda la de ayer, el caso que mas penaliza retrasar la captura."
   },
   {
@@ -476,6 +541,11 @@
     "fixed_entities": [
       "bitcoin"
     ],
+    "encoding": "event",
+    "typical_adv_usd": null,
+    "adv_note": "",
+    "disclosure_lag_days": null,
+    "lag_note": "",
     "notes": "LA HIPOTESIS DE 'DECENAS' ERA FALSA AQUI POR UN FACTOR DE DIEZ: 321 ajustes MEDIDOS en la ventana de la sonda (doce anos, 2014-08-19 en adelante), uno cada 2016 bloques. El limite lo pone PROBE_YEARS y no el proveedor: el endpoint devuelve los 463 retargets desde el bloque 0 (2009-01-03, COMPROBADO), y el catalogo declara lo medido, no lo disponible. Las cabeceras de bloque no se reescriben, de ahi el pit. El endpoint que se sondea no es el que estaba declarado: /difficulty-adjustment da la foto de AHORA y /mining/difficulty-adjustments/all da la serie entera en 21 KB. LIMITE DECLARADO: los dias-al-evento del pasado se cuentan contra la fecha en que el retarget OCURRIO, que aquel dia era una estimacion (bloques restantes x 10 min) con error de horas. El HASHPRICE queda fuera: exige una pata en USD que esta capa no tiene, y publicarlo a medias seria peor que no publicarlo."
   },
   {
@@ -506,6 +576,11 @@
     "endpoint": "https://api.llama.fi/hacks",
     "auth_env": null,
     "fixed_entities": [],
+    "encoding": "event",
+    "typical_adv_usd": null,
+    "adv_note": "",
+    "disclosure_lag_days": null,
+    "lag_note": "",
     "notes": "Era 'el caso mas duro del catalogo' y la sonda dice otra cosa: 621 incidentes MEDIDOS desde 2016-06-17, la segunda muestra mas grande de las seis de evento. El importe llega en MILLONES de dolares y el adaptador lo pasa a dolares, para que no se compare un 1,5 de aqui con un 1,5 de otra serie. El evento no se anuncia, asi que aqui los dias-al-evento no miran adelante: lo que codifica es la ventana POSTERIOR. Revisable: DefiLlama corrige importes y clasificaciones despues del incidente."
   },
   {
@@ -536,6 +611,11 @@
     "endpoint": "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN.XML",
     "auth_env": null,
     "fixed_entities": [],
+    "encoding": "event",
+    "typical_adv_usd": null,
+    "adv_note": "",
+    "disclosure_lag_days": null,
+    "lag_note": "",
     "notes": "Se publica la lista de HOY, no la de una fecha pasada. Reconstruir el pasado exige haber guardado cada version: forward_capture, y por eso el archivo es append-only con fetched_at. MEDIDO: 28 MB de XML, 19.199 registros y 977 direcciones de cripto (529 XBT, 198 TRX, 100 ETH...). Se archiva SOLO el subconjunto cripto \u2014la unica excepcion del catalogo a 'el payload intacto', razonada en adapters/events.py\u2014 y el certificado del host no lo valida el almacen de Windows, asi que esta fuente usa el bundle de certifi."
   },
   {
@@ -566,6 +646,502 @@
     "endpoint": "https://www.federalreserve.gov/json/calendar.json",
     "auth_env": null,
     "fixed_entities": [],
+    "encoding": "event",
+    "typical_adv_usd": null,
+    "adv_note": "",
+    "disclosure_lag_days": null,
+    "lag_note": "",
     "notes": "Determinista y conocido con meses de antelacion: las fechas son exactas y no revisables, que es la mejor propiedad que puede tener una feature de evento. De una reunion de dos dias se toma el SEGUNDO, que es cuando sale el comunicado. DOS PROFUNDIDADES DISTINTAS, como en GitHub: el calendario de la Fed llega a 2017 (MEDIDO), pero el del BLS es una ventana RODANTE de ~13 meses, asi que la historia larga del IPC solo se acumula captura a captura y un cpi_release vacio en 2019 no significa que no hubiera IPC. El BLS no publica esto en JSON: se archiva el HTML crudo para poder re-derivar."
+  },
+  {
+    "key": "hyperliquid_leverage",
+    "title": "Distribucion del apalancamiento y concentracion del OI (Hyperliquid)",
+    "tier": "B",
+    "scope": "asset",
+    "cadence": "daily",
+    "entity_kind": "token",
+    "features": [
+      {
+        "name": "hl_leverage_median",
+        "agg": "last",
+        "unit": "x",
+        "description": "Mediana del apalancamiento declarado, ponderada por posicion."
+      },
+      {
+        "name": "hl_leverage_p90",
+        "agg": "last",
+        "unit": "x",
+        "description": "Percentil 90 del apalancamiento."
+      },
+      {
+        "name": "hl_high_leverage_share",
+        "agg": "last",
+        "unit": "0-1",
+        "description": "Fraccion del notional muestreado en posiciones de 10x o mas."
+      },
+      {
+        "name": "hl_oi_top5_share",
+        "agg": "last",
+        "unit": "0-1",
+        "description": "Fraccion del notional muestreado que esta en 5 cuentas."
+      },
+      {
+        "name": "hl_sampled_oi_usd",
+        "agg": "last",
+        "unit": "USD",
+        "description": "Notional de la muestra."
+      }
+    ],
+    "pit": "forward_capture",
+    "license": "Hyperliquid: abierta, sin auth ni KYC.",
+    "history_from": null,
+    "backtestable": false,
+    "endpoint": "https://api.hyperliquid.xyz/info",
+    "auth_env": null,
+    "fixed_entities": [],
+    "encoding": "continuous",
+    "typical_adv_usd": 307370.0,
+    "adv_note": "MEDIDO 2026-08-13: mediana de `dayNtlVlm` sobre los 177 perps que NEGOCIAN (de 232 listados; los otros 55 no movieron nada en 24 horas). Decil inferior 93.597 $, maximo 1.748 M$. La media enganaria por tres ordenes de magnitud: la distribucion del apalancamiento existe en los 232, y el tamano solo cabe en la docena de arriba.",
+    "disclosure_lag_days": null,
+    "lag_note": "",
+    "notes": "LO QUE NINGUN CEX PERMITE: Binance publica el OI agregado; aqui el estado de cada cuenta es publico y la DISTRIBUCION se puede calcular. MEDIDO 2026-08-13: el leaderboard trae 41.714 cuentas y la muestra de las 200 mayores cubre el 21,7% del OI del venue (1.578 M$ de 7.285 M$). Es una MUESTRA SESGADA por construccion \u2014las cuentas grandes\u2014 y esa es justo la mitad que decide un gap, pero la palabra 'distribucion' aqui significa 'distribucion en la cola de arriba' y no 'del libro entero'. Forward capture puro: nadie publica el estado de ayer, asi que cada dia sin capturar es profundidad perdida."
+  },
+  {
+    "key": "hyperliquid_liqmap",
+    "title": "Mapa de precios de liquidacion (Hyperliquid)",
+    "tier": "A",
+    "scope": "asset",
+    "cadence": "daily",
+    "entity_kind": "token",
+    "features": [
+      {
+        "name": "liq_cluster_distance_pct",
+        "agg": "last",
+        "unit": "%",
+        "description": "Distancia al cluster mas cercano, con signo (- = por debajo)."
+      },
+      {
+        "name": "liq_cluster_notional_usd",
+        "agg": "last",
+        "unit": "USD",
+        "description": "Notional acumulado entre el precio y ese cluster, incluido."
+      }
+    ],
+    "pit": "forward_capture",
+    "license": "Hyperliquid: abierta, sin auth ni KYC.",
+    "history_from": null,
+    "backtestable": false,
+    "endpoint": "https://api.hyperliquid.xyz/info",
+    "auth_env": null,
+    "fixed_entities": [],
+    "encoding": "price_map",
+    "typical_adv_usd": 307370.0,
+    "adv_note": "El mismo venue y la misma medicion que `hyperliquid_leverage`.",
+    "disclosure_lag_days": null,
+    "lag_note": "",
+    "notes": "LA TERCERA CODIFICACION DEL SISTEMA, y entra porque las otras dos no saben leer esto: un mapa de liquidacion no tiene fecha (no es un evento fechado) ni es un nivel comparable con su propia historia (una z de 'distancia al cluster' no responde a la pregunta). Lo que tiene es una DISTANCIA EN PRECIO y un notional, que es exactamente lo que codifica `events.py::PRICE_SPECS`. LIMITE MEDIDO 2026-08-13: solo el 75,7% de las posiciones muestreadas trae `liquidationPx`; en las de margen cruzado con holgura el campo llega nulo, asi que el mapa esta INCOMPLETO por abajo y el notional publicado es una cota inferior. No se estima el hueco: estimarlo exigiria replicar el motor de margen del venue."
+  },
+  {
+    "key": "deribit_volatility",
+    "title": "Superficie de volatilidad: DVOL, skew de 25 delta y term structure (Deribit)",
+    "tier": "B",
+    "scope": "asset",
+    "cadence": "daily",
+    "entity_kind": "token",
+    "features": [
+      {
+        "name": "dvol_index",
+        "agg": "last",
+        "unit": "vol %",
+        "description": "Indice DVOL de la moneda."
+      },
+      {
+        "name": "skew_25d",
+        "agg": "last",
+        "unit": "vol %",
+        "description": "IV del put de 25 delta menos la del call de 25 delta."
+      },
+      {
+        "name": "atm_iv_30d",
+        "agg": "last",
+        "unit": "vol %",
+        "description": "IV at-the-money a ~30 dias."
+      },
+      {
+        "name": "iv_term_slope",
+        "agg": "last",
+        "unit": "vol %",
+        "description": "IV ATM del vencimiento largo menos la del corto."
+      }
+    ],
+    "pit": "archive_revisable",
+    "license": "Deribit: API publica, sin auth.",
+    "history_from": "2021-03-24",
+    "backtestable": true,
+    "endpoint": "https://www.deribit.com/api/v2/public/get_volatility_index_data",
+    "auth_env": null,
+    "fixed_entities": [],
+    "encoding": "continuous",
+    "typical_adv_usd": 100937354.0,
+    "adv_note": "MEDIDO 2026-08-13: mediana del volumen 24h en USD del perpetuo de las DOS monedas con libro de opciones (BTC 152,2 M$, ETH 49,7 M$). Aqui el ADV no es la restriccion \u2014es la unica fuente del lote que vive en los dos activos mas profundos que existen\u2014 y por eso se declara: para que se vea que la restriccion esta en otras.",
+    "disclosure_lag_days": null,
+    "lag_note": "",
+    "notes": "DOS PROFUNDIDADES EN LA MISMA FUENTE, como en `macro_calendar`. El DVOL tiene backfill REAL y medido \u20142021-03-24 en BTC y en ETH, con paginacion hacia atras porque la API devuelve 1.000 puntos por peticion\u2014 y el skew y la pendiente salen del LIBRO DE HOY, que no tiene historia: esas dos son forward_capture dentro de una fuente declarada revisable, y el `history_from` de arriba solo respalda al DVOL. MEDIDO ademas: solo BTC y ETH tienen libro de opciones vivo (820 y 688 instrumentos); SOL tuvo DVOL entre 2022-05 y 2022-11 y dejo de publicarse, y XRP nunca lo tuvo. EL DELTA SE CALCULA AQUI: el libro no publica griegas, asi que el strike de 25 delta se busca con un Black-Scholes de tipo cero sobre `mark_iv` y se interpola en delta. Es una APROXIMACION declarada (las opciones de Deribit son inversas), y se hace en la capa pura para que sea testeable sin red."
+  },
+  {
+    "key": "deribit_expiries",
+    "title": "Calendario de vencimientos de opciones con OI por strike (Deribit)",
+    "tier": "A",
+    "scope": "asset",
+    "cadence": "event",
+    "entity_kind": "token",
+    "features": [
+      {
+        "name": "expiry_oi_usd",
+        "agg": "last",
+        "unit": "USD",
+        "description": "Notional de interes abierto que vence ese dia."
+      },
+      {
+        "name": "expiry_oi_share",
+        "agg": "last",
+        "unit": "0-1",
+        "description": "Fraccion del interes abierto total que vence ese dia."
+      }
+    ],
+    "pit": "forward_capture",
+    "license": "Deribit: API publica, sin auth.",
+    "history_from": null,
+    "backtestable": false,
+    "endpoint": "https://www.deribit.com/api/v2/public/get_book_summary_by_currency",
+    "auth_env": null,
+    "fixed_entities": [],
+    "encoding": "event",
+    "typical_adv_usd": 100937354.0,
+    "adv_note": "El mismo venue y la misma medicion que `deribit_volatility`.",
+    "disclosure_lag_days": null,
+    "lag_note": "",
+    "notes": "LA MEJOR PROPIEDAD QUE PUEDE TENER UNA FEATURE DE EVENTO: la fecha es fija y no la revisa nadie \u2014el ultimo viernes del mes a las 08:00 UTC\u2014, asi que los dias-al-evento son exactos y el calendario de hoy es el que estaba publicado hace un ano. MEDIDO 2026-08-13: 12 vencimientos vivos en BTC repartidos en 820 instrumentos; el trimestral de septiembre concentra 108.894 contratos y el semanal siguiente 19.888. Forward capture: el OI por strike es la foto de HOY y nadie publica la de una fecha pasada, asi que la profundidad de la MAGNITUD se compra capturando. Las FECHAS futuras, en cambio, ya estan."
+  },
+  {
+    "key": "lending_health",
+    "title": "Health factors y mapa de liquidacion del colateral (Aave / Compound)",
+    "tier": "A",
+    "scope": "asset",
+    "cadence": "daily",
+    "entity_kind": "token",
+    "features": [
+      {
+        "name": "lending_liq_distance_pct",
+        "agg": "last",
+        "unit": "%",
+        "description": "Caida del colateral que empieza a liquidar, con signo."
+      },
+      {
+        "name": "lending_liq_notional_usd",
+        "agg": "last",
+        "unit": "USD",
+        "description": "Colateral liquidable hasta ese nivel."
+      }
+    ],
+    "pit": "forward_capture",
+    "license": "Subgrafos: la red descentralizada de The Graph exige clave (auth error medido).",
+    "history_from": null,
+    "backtestable": false,
+    "endpoint": "https://gateway.thegraph.com/api/subgraphs/id",
+    "auth_env": "THEGRAPH_API_KEY",
+    "fixed_entities": [],
+    "encoding": "price_map",
+    "typical_adv_usd": null,
+    "adv_note": "Sin medicion: sin clave no hay respuesta y el eje de entidades no se puede resolver. Declararlo por analogia con Hyperliquid seria inventarlo.",
+    "disclosure_lag_days": null,
+    "lag_note": "",
+    "notes": "EL OTRO LADO DEL APALANCAMIENTO: Hyperliquid dice donde revienta el apalancamiento del perpetuo y esto dice donde revienta el del colateral SPOT, que es el que fuerza ventas de verdad en el mercado al contado. Se codifica igual \u2014mapa de precios\u2014 a proposito: son la misma clase de objeto. MEDIDO 2026-08-13, y el resultado es que hoy NO HAY VIA GRATUITA: api.thegraph.com ya no resuelve (el servicio alojado se retiro), el gateway descentralizado responde 'auth error: missing authorization header', la API de cuentas de Compound v2 devuelve 410 Gone y los datasets de liquidaciones de DefiLlama, 404. El adaptador se escribe igualmente por lo mismo que el de unlocks: para que eso sea una MEDICION fechada y no un hueco que se lea como 'nadie lo ha intentado'."
+  },
+  {
+    "key": "appstore_rank",
+    "title": "Atencion retail por geografia: ranking en App Store (Corea frente a EE.UU.)",
+    "tier": "B",
+    "scope": "market",
+    "cadence": "event",
+    "entity_kind": "market",
+    "features": [
+      {
+        "name": "app_visibility_kr",
+        "agg": "last",
+        "unit": "0-1",
+        "description": "Visibilidad de las apps cripto en la lista coreana."
+      },
+      {
+        "name": "app_visibility_us",
+        "agg": "last",
+        "unit": "0-1",
+        "description": "Visibilidad de las apps cripto en la lista estadounidense."
+      },
+      {
+        "name": "app_visibility_gap",
+        "agg": "last",
+        "unit": "-1..1",
+        "description": "Corea menos EE.UU.: hacia donde esta entrando el retail."
+      }
+    ],
+    "pit": "forward_capture",
+    "license": "Apple RSS (marketing tools): abierta, sin auth.",
+    "history_from": null,
+    "backtestable": false,
+    "endpoint": "https://rss.applemarketingtools.com/api/v2/kr/apps/top-free/100/apps.json",
+    "auth_env": null,
+    "fixed_entities": [],
+    "encoding": "event",
+    "typical_adv_usd": null,
+    "adv_note": "Alcance de mercado: el eje no es un activo, asi que el ADV que limita es el del universo que se opere y no uno de la fuente.",
+    "disclosure_lag_days": null,
+    "lag_note": "",
+    "notes": "LA VERSION BUENA ES EL DIFERENCIAL, no el ranking de Coinbase en EE.UU.: la se\u00f1al es que Corea se caliente ANTES, y el nivel absoluto de cada lista lo domina lo que no tiene nada que ver con cripto. DOS LIMITES MEDIDOS 2026-08-13 que cambian el diseno: (1) la lista es de CIEN puestos y no mas \u2014pedir 200 devuelve 500\u2014 y el parametro de genero se IGNORA, asi que la unica lista disponible es la general; (2) ese dia NINGUNA de las cuatro apps (Upbit, Coinbase, Binance, Bitget) estaba en el top 100 de Corea ni en el de EE.UU. Una serie continua de ceros no la puede normalizar `normalize.py` \u2014mediana 0, IQR 0, z indefinida\u2014 asi que la fuente se declara de EVENTO: el evento es 'una app cripto entra en la lista general', que es exactamente el hecho que interesa, y los dias en que no entra ninguna no producen fila."
+  },
+  {
+    "key": "naver_datalab",
+    "title": "Interes de busqueda en Corea (Naver DataLab)",
+    "tier": "B",
+    "scope": "market",
+    "cadence": "daily",
+    "entity_kind": "market",
+    "features": [
+      {
+        "name": "naver_search_index",
+        "agg": "last",
+        "unit": "0-100",
+        "description": "Indice relativo de busquedas cripto en Naver."
+      }
+    ],
+    "pit": "archive_revisable",
+    "license": "Naver Developers: gratuito, exige client id y secret (401 medido).",
+    "history_from": null,
+    "backtestable": false,
+    "endpoint": "https://openapi.naver.com/v1/datalab/search",
+    "auth_env": "NAVER_CLIENT_ID",
+    "fixed_entities": [],
+    "encoding": "continuous",
+    "typical_adv_usd": null,
+    "adv_note": "Alcance de mercado: igual que `appstore_rank`.",
+    "disclosure_lag_days": null,
+    "lag_note": "",
+    "notes": "Naver es el buscador de Corea y Corea pesa de forma desproporcionada en las altcoins; el dato es gratuito y practicamente nadie lo mira fuera del pais. MEDIDO 2026-08-13: 401 sin credencial. Hacen falta DOS variables (NAVER_CLIENT_ID y NAVER_CLIENT_SECRET) y el catalogo solo declara el nombre de una porque el campo es uno; el adaptador lee las dos y lo dice si falta cualquiera. La API devuelve un indice RELATIVO a la ventana pedida: dos ventanas distintas no son comparables entre si, y por eso se pide siempre la misma longitud de ventana y la fuente se declara revisable."
+  },
+  {
+    "key": "yandex_wordstat",
+    "title": "Interes de busqueda en Rusia (Yandex Wordstat)",
+    "tier": "B",
+    "scope": "market",
+    "cadence": "monthly",
+    "entity_kind": "market",
+    "features": [
+      {
+        "name": "yandex_search_shows",
+        "agg": "last",
+        "unit": "impresiones",
+        "description": "Impresiones mensuales de las frases cripto en Yandex."
+      }
+    ],
+    "pit": "forward_capture",
+    "license": "Yandex Direct API: gratuito con cuenta de anunciante, exige token OAuth.",
+    "history_from": null,
+    "backtestable": false,
+    "endpoint": "https://api.direct.yandex.ru/v4/json/",
+    "auth_env": "YANDEX_OAUTH_TOKEN",
+    "fixed_entities": [],
+    "encoding": "continuous",
+    "typical_adv_usd": null,
+    "adv_note": "Alcance de mercado: igual que `appstore_rank`.",
+    "disclosure_lag_days": null,
+    "lag_note": "",
+    "notes": "MEDIDO 2026-08-13: sin token la API contesta con error propio (codigo 501) en vez de 401, que es su forma de decir que no hay sesion. Wordstat es MENSUAL \u2014no publica serie diaria\u2014 y ademas es una foto: el informe se genera contra el momento en que se pide, asi que su pasado no se descarga. Es la fuente menos util de las tres de atencion y esta aqui porque el hueco geografico que cubre no lo cubre ninguna otra."
+  },
+  {
+    "key": "sec_edgar_fts",
+    "title": "Menciones en filings de la SEC (EDGAR full-text search)",
+    "tier": "A",
+    "scope": "market",
+    "cadence": "event",
+    "entity_kind": "market",
+    "features": [
+      {
+        "name": "edgar_filings",
+        "agg": "sum",
+        "unit": "n",
+        "description": "Filings con la consulta cripto ese dia."
+      },
+      {
+        "name": "edgar_institutional",
+        "agg": "sum",
+        "unit": "n",
+        "description": "De esos, los de tenencia institucional (13F/13G)."
+      }
+    ],
+    "pit": "archive_revisable",
+    "license": "SEC: dominio publico. Exige User-Agent identificable.",
+    "history_from": "2025-06-20",
+    "backtestable": true,
+    "endpoint": "https://efts.sec.gov/LATEST/search-index",
+    "auth_env": null,
+    "fixed_entities": [],
+    "encoding": "event",
+    "typical_adv_usd": null,
+    "adv_note": "Alcance de mercado: igual que `appstore_rank`.",
+    "disclosure_lag_days": null,
+    "lag_note": "",
+    "notes": "LLEGA ANTES QUE LA NOTICIA porque ES la noticia: un 8-K esta publicado en EDGAR horas antes de que nadie lo escriba. MEDIDO 2026-08-13: la API responde sin credencial, cubre desde 2001 (consultas de 2001, 2005, 2011 y 2014 devuelven resultados) y hay 5.784 filings 13F-HR que mencionan bitcoin en lo que va de 2026. DOS LIMITES MEDIDOS: la respuesta trae como mucho ~100 hits y el total se corta en 10.000, asi que el recuento DIARIO se pide un dia por peticion; y por eso el adaptador declara un tope de dias por pasada (EDGAR_MAX_DAYS) en vez de fingir que un backfill de doce anos cabe en una llamada. Revisable: un filing se puede enmendar y reindexar. Y por eso el history_from de arriba es 2025-06-20 y no 2001: es lo que UNA pasada ha medido, no lo que el proveedor tiene. Cada pasada nueva lo empuja hacia atras otros catorce meses, y el registro de profundidad lo ira diciendo."
+  },
+  {
+    "key": "federal_register",
+    "title": "Actividad regulatoria fechada (Federal Register API)",
+    "tier": "A",
+    "scope": "macro",
+    "cadence": "event",
+    "entity_kind": "market",
+    "features": [
+      {
+        "name": "fedreg_documents",
+        "agg": "sum",
+        "unit": "n",
+        "description": "Documentos publicados ese dia con la consulta cripto."
+      },
+      {
+        "name": "fedreg_rules",
+        "agg": "sum",
+        "unit": "n",
+        "description": "De esos, los que son norma o propuesta de norma."
+      }
+    ],
+    "pit": "archive_revisable",
+    "license": "Federal Register: dominio publico, sin auth.",
+    "history_from": "2015-11-02",
+    "backtestable": true,
+    "endpoint": "https://www.federalregister.gov/api/v1/documents.json",
+    "auth_env": null,
+    "fixed_entities": [],
+    "encoding": "event",
+    "typical_adv_usd": null,
+    "adv_note": "Alcance de mercado: igual que `appstore_rank`.",
+    "disclosure_lag_days": null,
+    "lag_note": "",
+    "notes": "La fuente mas comoda de las tres legales: acepta rangos de fecha, devuelve hasta 1.000 documentos por peticion y no pide credencial. DOS MEDICIONES 2026-08-13 que conviene no confundir: una consulta suelta sin limite de fecha encuentra 398 documentos con 'digital asset' desde 2010-01-11 (y el archivo entero del Federal Register llega a 1994), pero la SONDA, que pide los doce anos que declara PROBE_YEARS, encontro el primero en 2015-11-02. El catalogo declara lo segundo: lo que el adaptador REAL trajo, no lo que el proveedor tiene. Se fecha por `publication_date` \u2014el dia en que el EXISTE\u2014 y no por `effective_on`, que suele ser posterior y a veces nulo. Las fechas futuras que el propio documento trae (fin del plazo de comentarios, entrada en vigor) quedan en el payload crudo para el dia que se quieran usar: hoy no se anticipan, asi que la codificacion no mira adelante."
+  },
+  {
+    "key": "courtlistener_dockets",
+    "title": "Litigios y dockets federales (CourtListener / RECAP)",
+    "tier": "A",
+    "scope": "market",
+    "cadence": "event",
+    "entity_kind": "market",
+    "features": [
+      {
+        "name": "court_dockets",
+        "agg": "sum",
+        "unit": "n",
+        "description": "Dockets nuevos ese dia con la consulta cripto."
+      }
+    ],
+    "pit": "archive_revisable",
+    "license": "Free Law Project: API publica; v4 responde sin token (v3 da 403).",
+    "history_from": null,
+    "backtestable": false,
+    "endpoint": "https://www.courtlistener.com/api/rest/v4/search/",
+    "auth_env": null,
+    "fixed_entities": [],
+    "encoding": "event",
+    "typical_adv_usd": null,
+    "adv_note": "Alcance de mercado: igual que `appstore_rank`.",
+    "disclosure_lag_days": null,
+    "lag_note": "",
+    "notes": "MEDIDO 2026-08-13: la version 4 de la API contesta SIN token (9.569 dockets con 'cryptocurrency') y la version 3 devuelve 403, que es al reves de lo que documenta media internet. Pagina de veinte en veinte, asi que el adaptador declara un tope de paginas por pasada: lo que hay dentro de la ventana cubierta es exacto y lo que queda fuera se declara, en vez de publicar un recuento truncado como si fuera completo."
+  },
+  {
+    "key": "cex_listings",
+    "title": "Listados y deslistados de CEX (Upbit)",
+    "tier": "A",
+    "scope": "asset",
+    "cadence": "event",
+    "entity_kind": "token",
+    "features": [
+      {
+        "name": "listing_change",
+        "agg": "sum",
+        "unit": "+1/-1",
+        "description": "Alta (+1) o baja (-1) de negociacion en el venue."
+      },
+      {
+        "name": "listing_warning",
+        "agg": "sum",
+        "unit": "n",
+        "description": "Designaciones de 'valor de inversion en vigilancia'."
+      }
+    ],
+    "pit": "archive_revisable",
+    "license": "Upbit: endpoint publico de anuncios, sin auth.",
+    "history_from": "2018-08-02",
+    "backtestable": true,
+    "endpoint": "https://api-manager.upbit.com/api/v1/announcements",
+    "auth_env": null,
+    "fixed_entities": [],
+    "encoding": "event",
+    "typical_adv_usd": 247645.0,
+    "adv_note": "MEDIDO 2026-08-13: mediana del volumen 24h de los 283 mercados KRW, con el cambio KRW/USD sacado del propio venue (p10 = 39.450 $, maximo = 99,0 M$). El 'efecto Upbit' es real y vive en activos cuya mediana mueve un cuarto de millon al dia: el evento es limpio y el tamano que admite, no.",
+    "disclosure_lag_days": null,
+    "lag_note": "",
+    "notes": "EL EVENTO MAS LIMPIO DE CRIPTO, y ademas el unico del lote que pide una guarda OPERATIVA y no solo una feature: un deslistado es oferta forzada mas riesgo de liquidez, y eso no se arregla con una feature (ver la evolucion 'Guarda operativa por simbolo', que sigue pendiente a proposito). MEDIDO 2026-08-13: el endpoint tiene 38 paginas de categoria 'trade' que llegan a 2017-10-27, y la sonda bajo 33 de ellas \u2014523 eventos fechados sobre 343 tokens desde 2018-08-02\u2014 antes de topar con el limite de tasa; el catalogo declara ESO y no el fondo del archivo. Los tres tipos que importan estan: alta, baja y designacion de vigilancia previa a la baja. SE FECHA EL ANUNCIO, no la ejecucion, por lo mismo que el COT se fecha el dia de publicacion: el anuncio es cuando la informacion existe. Y por eso `announced=False`: un listado no se preanuncia, asi que mirar hacia adelante aqui seria futuro. LIMITE DECLARADO: el endpoint de listado solo da el TITULO, y la fecha de ejecucion de una baja vive en el cuerpo del anuncio; leerla exigiria una peticion por anuncio."
+  },
+  {
+    "key": "dat_mnav",
+    "title": "Estres de vendedores forzados: distribucion del mNAV de las tesorerias cotizadas",
+    "tier": "A",
+    "scope": "asset",
+    "cadence": "event",
+    "entity_kind": "token",
+    "features": [
+      {
+        "name": "dat_below_nav_share",
+        "agg": "last",
+        "unit": "0-1",
+        "description": "Fraccion de la cohorte que cotiza por debajo de su tesoro."
+      },
+      {
+        "name": "dat_mnav_gap",
+        "agg": "last",
+        "unit": "x",
+        "description": "Mediana del mNAV menos 1: distancia del activo a la frontera."
+      },
+      {
+        "name": "dat_mnav_p25",
+        "agg": "last",
+        "unit": "x",
+        "description": "Cuartil inferior del mNAV: donde vive la cola que engorda."
+      },
+      {
+        "name": "dat_companies",
+        "agg": "last",
+        "unit": "n",
+        "description": "Companias de la cohorte ese dia (la muestra, en la propia fila)."
+      },
+      {
+        "name": "dat_disclosure_lag_days",
+        "agg": "last",
+        "unit": "dias",
+        "description": "Retraso REALIZADO de las tenencias que sostienen la fila."
+      }
+    ],
+    "pit": "archive_revisable",
+    "license": "SEC: dominio publico, exige User-Agent identificable. Precios: endpoint publico.",
+    "history_from": null,
+    "backtestable": false,
+    "endpoint": "https://data.sec.gov/api/xbrl/frames/us-gaap/CryptoAssetFairValue/USD",
+    "auth_env": null,
+    "fixed_entities": [],
+    "encoding": "event",
+    "typical_adv_usd": null,
+    "adv_note": "El eje es el activo subyacente y son los mas profundos que existen, asi que aqui el ADV no restringe. Lo que restringe es el otro lado del cociente \u2014la accion\u2014 y ese venue no lo mide `signals/liquidity.py`, cuyas tres sondas son de cripto: declararlo por analogia seria inventarlo.",
+    "disclosure_lag_days": 49.0,
+    "lag_note": "MEDIDO 2026-08-13 sobre las observaciones de la cohorte: mediana de `filed - end`, o sea cuanto tarda una tenencia en existir para el publico desde la fecha a la que se refiere. Coherente con el plazo que fija la SEC para un 10-Q (40 dias para un declarante acelerado grande, 45 para el resto), que es el suelo estructural. El registro esta en data/signals/dat_cohort.json y un test compara las dos cifras, igual que con history_from y typical_adv_usd. Lo que PROTEGE del look-ahead no es este campo sino que la fila se fecha en `filed`; el campo es lo que hace que la magnitud del desfase se pueda citar.",
+    "notes": "LO QUE PUBLICA NO ES EL mNAV DE NADIE: es la DISTRIBUCION por activo subyacente. Por debajo de 1 la maquina va en reversa y es aritmetica, no sentimiento \u2014emitir diluye, asi que la via barata para levantar caja es vender el tesoro\u2014 y cada compan\u0131a en esa cola es oferta futura estructural. TRES FILTROS Y NINGUNO MIRA EL mNAV, porque definir la cohorte con el propio mNAV truncaria justo la cola que se publica: fuera los SIC 6221 (ETF y trusts al contado, que cotizan al NAV por arbitraje) y 6211 (brokers que custodian cripto ajena); dentro solo si el tesoro pasa del 50% del ACTIVO TOTAL del balance; y solo si se sabe que activo es. EL RESULTADO DE COMPONERLA, MEDIDO 2026-08-13, Y NO ES EL QUE SE ESPERABA: de 138 declarantes de cripto en el registro XBRL quedan TRES companias publicables, repartidas en tres activos distintos, asi que HOY NO HAY NINGUNA DISTRIBUCION QUE PUBLICAR y la fuente produce cero filas. El desglose es la medicion: 25 trusts y 3 brokers fuera por SIC, 61 que declaran el valor razonable en dolares y NO el numero de unidades (sin unidades no se puede marcar a mercado ni identificar el activo), 26 cuyo tesoro no llega al 50% del balance \u2014mineras, sobre todo\u2014, 6 multiclase, 12 que no nombran su activo y 4 cuyo activo no se opera. LA IDENTIFICACION ES LO QUE MAS CUESTA, y la primera version estaba mal: identificar por el PRECIO IMPLICITO (valor razonable / unidades) y quedarse con el unico activo del universo que cuadrase daba DOS falsos positivos de ocho (TON Strategy Co salia NEAR, Hyperion DeFi salia LTC), porque 'el unico que cuadra' solo significa algo con el conjunto de candidatos completo y hay miles de tokens. Hoy IDENTIFICA UN NOMBRE \u2014la etiqueta de unidad o la razon social\u2014 y el precio implicito solo VERIFICA, que es lo que atrapa a CleanSpark declarando 1.719.000 unidades `Bitcoin` a 58,53 $ (error de escala de mil en el propio filing) y a Bit Digital con un valor razonable que cubre toda su cartera. Se paga en cobertura y esta contado. HUECO DECLARADO, y es el mayor: las APIs XBRL solo exponen hechos SIN DIMENSIONES, asi que una compan\u0131a con varias clases de accion no publica recuento de ordinarias y LA TESORERIA MAS GRANDE QUE EXISTE queda fuera (COMPROBADO: el `companyfacts` de Strategy tiene un solo tag `dei`, EntityPublicFloat). No se sustituye por la media ponderada del periodo, que si esta: es una MEDIA, y estas companias emiten contra el mercado todos los dias, asi que sesgaria a la baja la capitalizacion justo de las mas activas y las empujaria hacia la cola inferior. history_from sigue a None porque no hay ninguna fila que fechar, y eso es la medicion y no un pendiente."
   }
 ]

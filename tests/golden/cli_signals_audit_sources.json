@@ -134,5 +134,109 @@
     "pit": "forward_capture",
     "history_from": "2017-02-01",
     "backtestable": true
+  },
+  {
+    "source_key": "hyperliquid_leverage",
+    "tier": "B",
+    "cadence": "daily",
+    "pit": "forward_capture",
+    "history_from": null,
+    "backtestable": false
+  },
+  {
+    "source_key": "hyperliquid_liqmap",
+    "tier": "A",
+    "cadence": "daily",
+    "pit": "forward_capture",
+    "history_from": null,
+    "backtestable": false
+  },
+  {
+    "source_key": "deribit_volatility",
+    "tier": "B",
+    "cadence": "daily",
+    "pit": "archive_revisable",
+    "history_from": "2021-03-24",
+    "backtestable": true
+  },
+  {
+    "source_key": "deribit_expiries",
+    "tier": "A",
+    "cadence": "event",
+    "pit": "forward_capture",
+    "history_from": null,
+    "backtestable": false
+  },
+  {
+    "source_key": "lending_health",
+    "tier": "A",
+    "cadence": "daily",
+    "pit": "forward_capture",
+    "history_from": null,
+    "backtestable": false
+  },
+  {
+    "source_key": "appstore_rank",
+    "tier": "B",
+    "cadence": "event",
+    "pit": "forward_capture",
+    "history_from": null,
+    "backtestable": false
+  },
+  {
+    "source_key": "naver_datalab",
+    "tier": "B",
+    "cadence": "daily",
+    "pit": "archive_revisable",
+    "history_from": null,
+    "backtestable": false
+  },
+  {
+    "source_key": "yandex_wordstat",
+    "tier": "B",
+    "cadence": "monthly",
+    "pit": "forward_capture",
+    "history_from": null,
+    "backtestable": false
+  },
+  {
+    "source_key": "sec_edgar_fts",
+    "tier": "A",
+    "cadence": "event",
+    "pit": "archive_revisable",
+    "history_from": "2025-06-20",
+    "backtestable": true
+  },
+  {
+    "source_key": "federal_register",
+    "tier": "A",
+    "cadence": "event",
+    "pit": "archive_revisable",
+    "history_from": "2015-11-02",
+    "backtestable": true
+  },
+  {
+    "source_key": "courtlistener_dockets",
+    "tier": "A",
+    "cadence": "event",
+    "pit": "archive_revisable",
+    "history_from": null,
+    "backtestable": false
+  },
+  {
+    "source_key": "cex_listings",
+    "tier": "A",
+    "cadence": "event",
+    "pit": "archive_revisable",
+    "history_from": "2018-08-02",
+    "backtestable": true
+  },
+  {
+    "source_key": "dat_mnav",
+    "tier": "A",
+    "cadence": "event",
+    "pit": "archive_revisable",
+    "history_from": null,
+    "backtestable": false
   }
 ]

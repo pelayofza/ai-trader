@@ -12,17 +12,53 @@
     },
     "missing": "0.0 con `_seen` = 0 (la ausencia de dato se declara aparte)",
     "sources": {
+      "appstore_rank": {
+        "magnitude": "app_visibility_gap",
+        "scale": 0.5,
+        "announced": false,
+        "reason": "Medio punto de diferencia de visibilidad entre Corea y EE.UU. es una unidad. Que la fuente sea de evento y no continua es una consecuencia MEDIDA: la lista solo tiene cien puestos y las apps cripto estan fuera casi siempre, asi que la serie continua seria ceros y su z no existiria."
+      },
       "btc_difficulty": {
         "magnitude": "difficulty_change_pct",
         "scale": 5.0,
         "announced": true,
         "reason": "Un ajuste del 5% es grande: la mediana historica esta en torno al 1-2%. La fecha se estima con los bloques que faltan, no la anuncia nadie."
       },
+      "cex_listings": {
+        "magnitude": "listing_change",
+        "scale": 1.0,
+        "announced": false,
+        "reason": "Un alta o una baja es una unidad, con signo. NO se anuncia: entre que Upbit publica y el mercado reacciona hay minutos, y mirar hacia adelante aqui seria futuro puro. Lo que queda es la estela, que es donde vive el efecto."
+      },
+      "courtlistener_dockets": {
+        "magnitude": "court_dockets",
+        "scale": 5.0,
+        "announced": false,
+        "reason": "Cinco dockets nuevos en un dia es una acumulacion visible. Una demanda no se preanuncia."
+      },
+      "dat_mnav": {
+        "magnitude": "dat_below_nav_share",
+        "scale": 0.25,
+        "announced": false,
+        "reason": "Una cuarta parte de la cohorte cotizando por debajo de su tesoro es una unidad: deja de ser el caso raro de una compan\u0131a mal gestionada y pasa a ser un regimen en el que la via barata de financiacion del grupo es vender. EL EVENTO ES LA PUBLICACION, no el cruce: la tenencia solo cambia cuando alguien la declara, y la fila se fecha en el dia en que se declara. announced=False porque lo que tiene fecha conocida es el PLAZO del 10-Q, no su contenido: anticipar la temporada de resultados encenderia la feature cuatro veces al ano hubiera o no estres, que es ruido con calendario. LIMITE DECLARADO: de las dos features que publica el frame, esta codificacion lleva la MAGNITUD (la fraccion bajo 1) y no la DISTANCIA (`dat_mnav_gap`), que se queda en el frame como la pata auditable y como lo que hace comparable un activo con otro. Llevar las dos exigiria la codificacion de mapa de precios, cuya frontera absoluta \u2014el 1,0x\u2014 y cuyo signo encajan; no se hace hoy porque la fuente entra como esta declarada."
+      },
       "defillama_hacks": {
         "magnitude": "hack_amount_usd",
         "scale": 100000000.0,
         "announced": false,
         "reason": "100 M$ comprometidos es una unidad. Un hack NO se anuncia: mirar hacia adelante aqui seria futuro puro, asi que solo queda la estela."
+      },
+      "deribit_expiries": {
+        "magnitude": "expiry_oi_share",
+        "scale": 0.25,
+        "announced": true,
+        "reason": "Un vencimiento que se lleva el 25% del interes abierto es una unidad. Es la fuente con la mejor propiedad de todo el catalogo: la fecha es el ultimo viernes del mes y no la revisa nadie, asi que los dias-al-evento del pasado son EXACTOS y no una estimacion, que es lo que si pasa en el retarget."
+      },
+      "federal_register": {
+        "magnitude": "fedreg_rules",
+        "scale": 3.0,
+        "announced": false,
+        "reason": "Tres normas o propuestas de norma en un dia es un dia de actividad regulatoria real. Se cuenta la pata normativa y no el total porque el total lo domina el aviso administrativo rutinario. Las fechas futuras que el propio documento trae no se anticipan todavia: por eso announced=False."
       },
       "macro_calendar": {
         "magnitude": null,
@@ -36,17 +72,62 @@
         "announced": false,
         "reason": "Diez direcciones nuevas en una publicacion es un dia grande. La lista sale sin preaviso."
       },
+      "sec_edgar_fts": {
+        "magnitude": "edgar_institutional",
+        "scale": 10.0,
+        "announced": false,
+        "reason": "Diez filings de tenencia institucional en un dia es un dia grande. La magnitud es la pata 13F/13G y no el total: un 8-K de una empresa que menciona bitcoin de pasada y una posicion declarada no son el mismo hecho."
+      },
       "token_unlocks": {
         "magnitude": "unlock_pct_float",
         "scale": 1.0,
         "announced": true,
         "reason": "Un 1% del float en un dia es una unidad. El calendario de vesting se publica con meses de antelacion (y se reescribe: por eso es revisable)."
       }
+    },
+    "price_map": {
+      "routed_by": "campo `encoding` del catalogo (excepcion declarada a la cadencia)",
+      "distance_cap_pct": 25.0,
+      "stale_days": 2.0,
+      "magnitude_clip": 4.0,
+      "suffixes": {
+        "near": "_near",
+        "magnitude": "_mag",
+        "seen": "_seen"
+      },
+      "sign": "la magnitud es negativa si el cluster esta POR DEBAJO del precio",
+      "missing": "0.0 con `_seen` = 0; una foto de mas de `stale_days` no cuenta",
+      "sources": {
+        "hyperliquid_liqmap": {
+          "distance": "liq_cluster_distance_pct",
+          "notional": "liq_cluster_notional_usd",
+          "scale": 100000000.0,
+          "reason": "100 M$ de posiciones que revientan antes de llegar al cluster es una unidad. Es el mismo orden que la escala de los hacks, y a proposito: son dos formas de que salga capital de golpe y conviene que pesen igual."
+        },
+        "lending_health": {
+          "distance": "lending_liq_distance_pct",
+          "notional": "lending_liq_notional_usd",
+          "scale": 1000000000.0,
+          "reason": "1.000 M$ de colateral liquidable es una unidad: un orden de magnitud MAS que el perpetuo porque el colateral spot de Aave se mide en decenas de miles de millones. Igualar las dos escalas haria que el mapa on-chain saturase el recorte todos los dias y dejara de distinguir nada."
+        }
+      }
     }
   },
-  "n_event_sources": 5,
-  "pooled_events_total": 917,
+  "n_event_sources": 12,
+  "pooled_events_total": 2290,
   "sources": {
+    "appstore_rank": {
+      "tier": "B",
+      "cadence": "event",
+      "announced": false,
+      "magnitude": "app_visibility_gap",
+      "pooled_events": 0,
+      "entities": 0,
+      "events_per_entity": 0.0,
+      "with_magnitude": 0,
+      "first_day": null,
+      "last_day": null
+    },
     "btc_difficulty": {
       "tier": "A",
       "cadence": "event",
@@ -58,7 +139,45 @@
       "with_magnitude": 321,
       "first_day": "2014-08-19",
       "last_day": "2026-08-08",
-      "observations": 321
+      "observations": 323
+    },
+    "cex_listings": {
+      "tier": "A",
+      "cadence": "event",
+      "announced": false,
+      "magnitude": "listing_change",
+      "pooled_events": 522,
+      "entities": 343,
+      "events_per_entity": 1.52,
+      "with_magnitude": 522,
+      "first_day": "2018-08-02",
+      "last_day": "2026-08-12",
+      "observations": 523
+    },
+    "courtlistener_dockets": {
+      "tier": "A",
+      "cadence": "event",
+      "announced": false,
+      "magnitude": "court_dockets",
+      "pooled_events": 104,
+      "entities": 1,
+      "events_per_entity": 104.0,
+      "with_magnitude": 104,
+      "first_day": "2026-03-24",
+      "last_day": "2026-08-12",
+      "observations": 400
+    },
+    "dat_mnav": {
+      "tier": "A",
+      "cadence": "event",
+      "announced": false,
+      "magnitude": "dat_below_nav_share",
+      "pooled_events": 0,
+      "entities": 0,
+      "events_per_entity": 0.0,
+      "with_magnitude": 0,
+      "first_day": null,
+      "last_day": null
     },
     "defillama_hacks": {
       "tier": "A",
@@ -71,7 +190,33 @@
       "with_magnitude": 519,
       "first_day": "2016-06-17",
       "last_day": "2026-08-09",
-      "observations": 621
+      "observations": 660
+    },
+    "deribit_expiries": {
+      "tier": "A",
+      "cadence": "event",
+      "announced": true,
+      "magnitude": "expiry_oi_share",
+      "pooled_events": 24,
+      "entities": 2,
+      "events_per_entity": 12.0,
+      "with_magnitude": 24,
+      "first_day": "2026-08-14",
+      "last_day": "2027-06-25",
+      "observations": 24
+    },
+    "federal_register": {
+      "tier": "A",
+      "cadence": "event",
+      "announced": false,
+      "magnitude": "fedreg_rules",
+      "pooled_events": 303,
+      "entities": 1,
+      "events_per_entity": 303.0,
+      "with_magnitude": 303,
+      "first_day": "2015-11-02",
+      "last_day": "2026-08-13",
+      "observations": 397
     },
     "macro_calendar": {
       "tier": "A",
@@ -84,7 +229,7 @@
       "with_magnitude": 0,
       "first_day": "2017-02-01",
       "last_day": "2026-12-10",
-      "observations": 76
+      "observations": 86
     },
     "ofac_sdn": {
       "tier": "A",
@@ -97,7 +242,20 @@
       "with_magnitude": 1,
       "first_day": "2026-08-07",
       "last_day": "2026-08-07",
-      "observations": 1
+      "observations": 2
+    },
+    "sec_edgar_fts": {
+      "tier": "A",
+      "cadence": "event",
+      "announced": false,
+      "magnitude": "edgar_institutional",
+      "pooled_events": 420,
+      "entities": 1,
+      "events_per_entity": 420.0,
+      "with_magnitude": 420,
+      "first_day": "2025-06-20",
+      "last_day": "2026-08-13",
+      "observations": 420
     },
     "token_unlocks": {
       "tier": "A",
@@ -110,6 +268,27 @@
       "with_magnitude": 0,
       "first_day": null,
       "last_day": null
+    }
+  },
+  "price_maps": {
+    "n_sources": 2,
+    "sources": {
+      "hyperliquid_liqmap": {
+        "tier": "A",
+        "distance": "liq_cluster_distance_pct",
+        "snapshots": 5,
+        "entities": 5,
+        "first_day": "2026-08-13",
+        "last_day": "2026-08-13"
+      },
+      "lending_health": {
+        "tier": "A",
+        "distance": "lending_liq_distance_pct",
+        "snapshots": 0,
+        "entities": 0,
+        "first_day": null,
+        "last_day": null
+      }
     }
   }
 }

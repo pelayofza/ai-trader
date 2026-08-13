@@ -1,22 +1,37 @@
-=== CATALOGO DE SENALES | 17 fuentes | 40 features ===
-  clave                    tier  scope   cadencia  pit                historia    feats
-  guavy_sentiment          B     asset   daily     archive_revisable  solo adelante 4
-  etf_flows                B     asset   daily     archive_revisable  2024-01-11  3
-  fred_macro               B     macro   daily     archive_revisable  solo adelante 2
-  defillama_stablecoins    B     chain   daily     archive_revisable  2017-11-29  2
-  defillama_fees           B     asset   daily     archive_revisable  2011-01-31  3
-  defillama_volumes        B     asset   daily     archive_revisable  2017-08-17  3
-  wikipedia_pageviews      B     asset   hourly    archive_revisable  2015-07-01  2
-  p2p_premium              B     venue   hourly    forward_capture    solo adelante 2
-  funding_dispersion       B     venue   hourly    forward_capture    solo adelante 3
-  github_activity          B     asset   daily     archive_revisable  2009-08-23  2
-  cftc_cot                 B     asset   weekly    archive_revisable  2018-04-13  3
-  token_unlocks            A     asset   event     archive_revisable  solo adelante 2
-  staking_queue            A     chain   daily     forward_capture    solo adelante 2
-  btc_difficulty           A     chain   event     chain_immutable    2014-08-19  1
-  defillama_hacks          A     market  event     archive_revisable  2016-06-17  2
-  ofac_sdn                 A     market  event     forward_capture    solo adelante 2
-  macro_calendar           A     macro   event     forward_capture    2017-02-01  2
+=== CATALOGO DE SENALES | 30 fuentes | 72 features ===
+  clave                    tier  scope   codificacion pit                historia          ADV tipico feats
+  guavy_sentiment          B     asset   continuous   archive_revisable  solo adelante              - 4
+  etf_flows                B     asset   continuous   archive_revisable  2024-01-11                 - 3
+  fred_macro               B     macro   continuous   archive_revisable  solo adelante              - 2
+  defillama_stablecoins    B     chain   continuous   archive_revisable  2017-11-29                 - 2
+  defillama_fees           B     asset   continuous   archive_revisable  2011-01-31                 - 3
+  defillama_volumes        B     asset   continuous   archive_revisable  2017-08-17                 - 3
+  wikipedia_pageviews      B     asset   continuous   archive_revisable  2015-07-01                 - 2
+  p2p_premium              B     venue   continuous   forward_capture    solo adelante              - 2
+  funding_dispersion       B     venue   continuous   forward_capture    solo adelante              - 3
+  github_activity          B     asset   continuous   archive_revisable  2009-08-23                 - 2
+  cftc_cot                 B     asset   continuous   archive_revisable  2018-04-13                 - 3
+  token_unlocks            A     asset   event        archive_revisable  solo adelante              - 2
+  staking_queue            A     chain   continuous   forward_capture    solo adelante              - 2
+  btc_difficulty           A     chain   event        chain_immutable    2014-08-19                 - 1
+  defillama_hacks          A     market  event        archive_revisable  2016-06-17                 - 2
+  ofac_sdn                 A     market  event        forward_capture    solo adelante              - 2
+  macro_calendar           A     macro   event        forward_capture    2017-02-01                 - 2
+  hyperliquid_leverage     B     asset   continuous   forward_capture    solo adelante        307,370 5
+  hyperliquid_liqmap       A     asset   price_map    forward_capture    solo adelante        307,370 2
+  deribit_volatility       B     asset   continuous   archive_revisable  2021-03-24       100,937,354 4
+  deribit_expiries         A     asset   event        forward_capture    solo adelante    100,937,354 2
+  lending_health           A     asset   price_map    forward_capture    solo adelante              - 2
+  appstore_rank            B     market  event        forward_capture    solo adelante              - 3
+  naver_datalab            B     market  continuous   archive_revisable  solo adelante              - 1
+  yandex_wordstat          B     market  continuous   forward_capture    solo adelante              - 1
+  sec_edgar_fts            A     market  event        archive_revisable  2025-06-20                 - 2
+  federal_register         A     macro   event        archive_revisable  2015-11-02                 - 2
+  courtlistener_dockets    A     market  event        archive_revisable  solo adelante              - 1
+  cex_listings             A     asset   event        archive_revisable  2018-08-02           247,645 2
+  dat_mnav                 A     asset   event        archive_revisable  solo adelante              - 5
 
-  Backtesteables HOY: 10/17 (el resto no tiene history_from MEDIDO: solo existen hacia adelante)
-  Sin credencial: 13/17
+  Backtesteables HOY: 14/30 (el resto no tiene history_from MEDIDO: solo existen hacia adelante)
+  Sin credencial: 23/30
+  Codificacion: continuous 16 | event 12 | price_map 2
+  ADV declarado en 5 fuentes; la mas estrecha vive en entidades de 247,645 USD/dia

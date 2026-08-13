@@ -93,6 +93,29 @@ def env_secret(name: str | None) -> str | None:
     return value or None
 
 
+def certifi_bundle() -> str | None:
+    """
+    El bundle de certificados de `certifi`, o None si no esta instalado.
+
+    Empezo siendo privado del adaptador de OFAC, cuya cadena no valida el almacen de
+    Windows (CERTIFICATE_VERIFY_FAILED, MEDIDO). Con el lote de alta friccion resulto que
+    no era un caso raro: MEDIDO 2026-08-13, fallan igual api.hyperliquid.xyz,
+    stats-data.hyperliquid.xyz, api.upbit.com, api-manager.upbit.com,
+    www.federalregister.gov y www.courtlistener.com, mientras que deribit.com,
+    efts.sec.gov, api.llama.fi y rss.applemarketingtools.com validan sin problema.
+
+    Sigue siendo POR FUENTE y no global, por lo mismo de siempre: usar otro almacen de
+    confianza es una decision, y una decision que se toma de forma global es una que nadie
+    vuelve a mirar. Lo que cambia es que la funcion vive aqui, porque seis modulos que
+    repiten el mismo try/import son seis sitios donde arreglar el dia que cambie.
+    """
+    try:
+        import certifi
+    except ImportError:  # pragma: no cover - sin certifi se usa el almacen del sistema
+        return None
+    return certifi.where()
+
+
 def day_or_none(moment: datetime | None) -> str | None:
     """`YYYY-MM-DD` de un instante, o None. El corte por delante de `chart_records`."""
     return None if moment is None else moment.astimezone(UTC).date().isoformat()
@@ -148,6 +171,41 @@ def safe_call(fetch, *, what: str, logger: Any = None) -> Any:
         return None
 
 
+def unique_records(
+    records: Sequence[Mapping[str, Any]],
+    *,
+    key_of,
+) -> list[Mapping[str, Any]]:
+    """
+    Los registros con clave DISTINTA, quedandose con el ultimo capturado de cada una.
+
+    Existe por un fallo que solo aparece con el tiempo y solo en las features que se SUMAN.
+    El archivo es append-only y la captura pide una ventana de treinta dias, asi que un
+    evento del dia 3 se vuelve a archivar los dias 4, 5, ... 33. Con `agg='last'` eso da
+    igual —la ultima copia gana— pero con `agg='sum'` el mismo hecho se cuenta treinta
+    veces, y el resultado no se parece a un error: se parece a un mes muy activo.
+
+    La deduplicacion vive aqui, en la capa PURA, y no al escribir: el archivo tiene que
+    conservar las copias con su `fetched_at`, porque comparar dos copias del mismo hecho es
+    la unica forma de medir cuanto revisa un proveedor. Lo que no puede es contarlas dos
+    veces al derivar.
+
+    `key_of` devuelve la identidad del hecho segun el proveedor —un numero de accession, un
+    id de anuncio, un numero de documento—, nunca una fecha: dos hechos distintos del mismo
+    dia son dos hechos.
+    """
+    out: dict[Any, Mapping[str, Any]] = {}
+    for record in sorted(records or [], key=lambda r: str(r.get("fetched_at") or "")):
+        try:
+            key = key_of(record)
+        except (TypeError, ValueError, KeyError, AttributeError):
+            key = None
+        if key is None:
+            continue
+        out[key] = record
+    return list(out.values())
+
+
 def rows_from_records(
     records: Sequence[Mapping[str, Any]],
     *,
@@ -175,6 +233,7 @@ def rows_from_records(
 __all__ = [
     "MILLIS_THRESHOLD",
     "UTC",
+    "certifi_bundle",
     "chart_records",
     "day_or_none",
     "env_secret",
@@ -182,6 +241,7 @@ __all__ = [
     "numeric",
     "rows_from_records",
     "safe_call",
+    "unique_records",
     "unix_day",
     "wiki_stamp",
 ]

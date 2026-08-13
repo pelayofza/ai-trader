@@ -103,6 +103,82 @@ PIT_LABEL = {
 }
 
 
+def _dat_section(dat, table):
+    """
+    La fuente COMPUESTA: el mNAV de las tesorerias cotizadas.
+
+    Es la unica del catalogo sin proveedor —no hay API de mNAV— y la unica cuyo resultado
+    principal, hoy, es que NO se puede componer la distribucion que pretendia publicar. Eso
+    se escribe con el mismo detalle que se habria escrito un exito: la metodologia no
+    documenta solo lo que salio.
+    """
+    if not dat.get("companies_examined"):
+        return ""
+    policy = dat.get("policy") or {}
+    assets = dat.get("assets") or {}
+    lag = dat.get("median_lag_days")
+    return f"""
+<h4>Tesorerías cotizadas: la única fuente <i>compuesta</i>, y lo que midió</h4>
+<p>Una tesorería cotizada es una empresa cuyo balance <b>es</b> un tesoro de cripto. Por encima de 1× de
+mNAV la máquina va hacia adelante —emitir acciones es acretivo, se emite y se compra más— y por
+<b>debajo</b> va en reversa, y es aritmética y no sentimiento: emitir diluye, así que la vía barata para
+levantar caja pasa a ser <b>vender el tesoro</b>. Lo interesante no es el mNAV de ninguna compañía sino la
+<b>distribución</b> por activo subyacente: la fracción por debajo de 1× es oferta futura estructural sobre
+ese activo, y la distancia de la mediana a esa frontera dice cuánto falta para que la cola engorde. No hay
+API —los cuatro sitios que lo publican son cuadros de mando— así que la serie se <b>compone</b> de tres
+patas: tenencias y acciones del XBRL de la SEC, más el precio de la acción y el del activo <i>del mismo
+cierre de sesión</i>, porque el mNAV es un cociente y mezclar un cierre de cripto (medianoche UTC) con uno
+de bolsa (21:00 UTC) mete nueve horas de desfase dentro de él.</p>
+
+<div class="why"><b>Y el resultado de componerla no es el que se esperaba.</b> De
+<b>{dat.get('companies_examined', 0)} declarantes</b> de cripto en el registro XBRL quedan
+<b>{dat.get('companies', 0)} compañías</b> publicables, repartidas en {len(assets)} activos distintos. Con
+una cohorte mínima de {policy.get('min_cohort', 3)} para que la palabra «distribución» signifique algo,
+<b>hoy no hay ninguna distribución que publicar</b> y la fuente produce {dat.get('rows', 0)} filas. Eso es
+la medición, no un pendiente: el adaptador existe para que el hueco esté <b>fechado y desglosado</b> en vez
+de leerse como «nadie lo ha intentado».</div>
+
+<p>La cohorte se define con <b>tres filtros y ninguno mira el mNAV</b>, porque definirla con el propio mNAV
+truncaría justo la cola que se publica: fuera los SIC {" y ".join(policy.get("excluded_sic", []))} —los
+trusts al contado, que crean y redimen <i>al</i> NAV y por tanto tienen el mNAV clavado en 1 por arbitraje,
+y los brokers que custodian cripto de sus clientes—; dentro solo si el tesoro pasa del
+<b>{_pc(policy.get('treasury_min_asset_share'), 0)}</b> del activo total del balance, que es lo que separa
+una tesorería de una minera con algo de cripto; y solo si se sabe <b>qué activo</b> tiene.</p>
+
+<p>Lo tercero es lo que más cuesta, y la primera versión estaba mal. Identificar por el <b>precio
+implícito</b> —valor razonable dividido entre unidades— y quedarse con el único activo del universo que
+cuadrase producía <b>dos falsos positivos de ocho</b>: TON Strategy Co (Toncoin, ~1,60 $) salía NEAR e
+Hyperion DeFi (HYPE) salía LTC. El fallo no es la tolerancia: es que «el único que cuadra» solo significa
+algo si el conjunto de candidatos está <b>completo</b>, y hay miles de tokens frente a veinticuatro. Hoy
+<b>identifica un nombre</b> —la etiqueta de unidad o la razón social del emisor— y el precio implícito solo
+<b>verifica</b>, con tolerancia ×{_n(policy.get('unit_price_tolerance', 0), 2)}. Eso atrapa los dos errores
+que ninguna otra regla ve y que no darían ningún error por sí solos: CleanSpark declarando 1.719.000
+unidades etiquetadas <span class="mono">Bitcoin</span> que valen 58,53 $ cada una —son 1.719, con un error
+de escala de mil en el propio <i>filing</i>— y Bit Digital con un valor razonable que cubre toda su cartera
+y un cociente que no es el precio de nada.</p>
+
+{table}
+
+<div class="why"><b>El hueco mayor está declarado y no se parchea.</b> Las APIs XBRL de la SEC solo exponen
+hechos <b>sin dimensiones</b>. Una compañía con varias clases de acción etiqueta su recuento por clase, así
+que el hecho no existe sin dimensión y <b>la tesorería más grande que existe queda fuera</b> —comprobado:
+su <span class="mono">companyfacts</span> tiene un solo <i>tag</i> en el espacio <span class="mono">dei</span>—.
+No se sustituye por la media ponderada del periodo, que sí está: es una <b>media</b>, y estas compañías
+emiten acciones contra el mercado todos los días, así que subestimaría el recuento justo en las más activas
+y las empujaría hacia la cola inferior, que es la parte de la distribución que la señal mide.</div>
+
+<p>El retraso de publicación no se supone: cada hecho trae la fecha a la que se refiere y la fecha en que
+se publicó, la fila se fecha en <b>la de publicación</b> —igual que el COT se fecha el viernes y no el
+martes— y el desfase realizado es de <b>{_n(lag, 0) if lag is not None else '—'} días</b> de mediana, medido
+y declarado en el catálogo. Sin eso, un <i>backtest</i> usaría el 30 de junio una tenencia que no se publicó
+hasta agosto, y no daría ningún error. El <b>N</b> de esta fuente tampoco lo dan los eventos de una compañía
+—cada una publica cuatro veces al año— sino el <i>pooling</i> sobre la cohorte:
+<b>{dat.get('pooled_observations', 0)} observaciones de compañía</b>, que va publicado al lado del número de
+compañías porque doscientas observaciones de tres y doscientas de cuarenta sostienen inferencias
+distintas.</p>
+"""
+
+
 def _signals_block(s):
     """Seccion 2.2: la plataforma de ingesta de senales externas.
 
@@ -117,22 +193,36 @@ def _signals_block(s):
     m, e, n = s["summary"], s["entities"], s["normalization"]
     radar, events = s.get("radar", {}), s.get("events", {})
     spec = events.get("spec", {})
+    liquidity, maps = s.get("liquidity", {}), s.get("price_maps", {})
+    dat = s.get("dat", {})
     rows = [
-        (key, enc, PIT_LABEL.get(pit, pit), nf, conn, hist, measured, days)
-        for key, enc, pit, nf, conn, hist, measured, days in s["rows"]
+        (key, enc, PIT_LABEL.get(pit, pit), nf, conn, hist, measured, days, adv)
+        for key, enc, pit, nf, conn, hist, measured, days, adv in s["rows"]
     ]
     table = _rows(
         rows,
         ["Fuente", "Codificación", "Point-in-time", "Features", "Adaptador", "Declarada",
-         "MEDIDA", "Días"],
+         "MEDIDA", "Días", "ADV típico"],
     )
     pool_table = _rows(
         events.get("rows", []),
         ["Fuente de evento", "Eventos pooled", "Entidades", "Anunciado", "Primer día",
          "Último día"],
     ) if events.get("rows") else ""
+    map_table = _rows(
+        maps.get("rows", []),
+        ["Mapa de precios", "Fotos", "Entidades", "Primer día", "Último día"],
+    ) if maps.get("rows") else ""
+    adv_table = _rows(
+        liquidity.get("rows", []),
+        ["Venue", "Entidades", "Con volumen", "Mediana 24 h", "Decil inferior", "Máximo"],
+    ) if liquidity.get("rows") else ""
+    dat_table = _rows(
+        dat.get("rows", []),
+        ["Motivo por el que la compañía no entra", "Compañías"],
+    ) if dat.get("rows") else ""
     return f"""
-<h3>2.2 · Señales externas: diecisiete fuentes, una sola vía hasta la decisión</h3>
+<h3>2.2 · Señales externas: {m['n_sources']} fuentes, una sola vía hasta la decisión</h3>
 <p>La captura de §2.1 produce <b>precio y volumen</b>, y durante toda la vida del proyecto eso fue todo lo
 que el sistema podía ver: su único canal de contexto era el bloque de régimen (§4.2), construido sobre las
 propias barras. Éste es el segundo sustrato de datos, y el único que trae información de fuera del precio.
@@ -216,10 +306,10 @@ ponerlos todos en la misma distribución: catorce desbloqueos por token son cien
 
 <p>Así que <b>todas las señales fluyen al motor por la misma vía</b> —features al espacio de observación,
 en <i>backtest</i> y en vivo— y lo que determina la <b>codificación</b> no es el tier sino la
-<b>cadencia</b>: {radar.get('n_event', 0)} fuentes de evento y {radar.get('n_continuous', 0)} continuas. La
-distinción no es cosmética: <span class="mono">staking_queue</span> es mecánica (tier A) y publica un
-<b>nivel</b> diario, así que enrutar por el tier le habría puesto un días-al-evento a una cola de
-validadores.</p>
+<b>cadencia</b>: {radar.get('n_event', 0)} fuentes de evento, {radar.get('n_continuous', 0)} continuas y
+{radar.get('n_price_map', 0)} mapas de precios. La distinción no es cosmética:
+<span class="mono">staking_queue</span> es mecánica (tier A) y publica un <b>nivel</b> diario, así que
+enrutar por el tier le habría puesto un días-al-evento a una cola de validadores.</p>
 
 <h4>Por qué los eventos no pasan por la misma normalización</h4>
 <p>Una z contra una serie que es <b>99 % ceros</b> no significa nada: su mediana es 0, su rango
@@ -240,6 +330,61 @@ eso. Y el tope hace un segundo trabajo que no se ve: es lo que mantiene honesto 
 —a treinta días vista la respuesta es la que se habría tenido entonces; a dos años, no—. Lo que no se
 anuncia (un <i>hack</i>, una sanción) tiene la mirada hacia adelante apagada <b>por código</b>: solo queda
 su estela.</div>
+
+<h4>La tercera codificación: el mapa de precios</h4>
+<p>El lote de fuentes de alta fricción trajo un objeto que ninguna de las dos codificaciones anteriores
+sabe leer: un <b>mapa de liquidación</b>. Se observa todos los días —luego no es un evento fechado: no hay
+ninguna fecha futura que anticipar— y lo que dice no es un nivel sino una <b>distancia en precio</b>, más
+el notional acumulado hasta ella. Las dos codificaciones anteriores lo leerían mal, cada una a su manera, y
+—esto es lo que obliga a añadir la tercera— <b>ninguna de las dos daría error</b>: con las dos varas de la
+normalización, la feature contestaría «¿es hoy la distancia alta <i>para este activo</i>?», que no es la
+pregunta, porque que un clúster esté al 4 % es un hecho absoluto y no un percentil de su historia; con la
+codificación de evento, la proximidad contaría días hasta una fecha que no existe.</p>
+<p>La proximidad se mide entonces en la unidad en la que el hecho vive —porcentaje de precio— con el mismo
+patrón que ya estaba: tope declarado de
+<b>{_n((maps.get('spec') or {}).get('distance_cap_pct', 0), 0)} %</b>, cuenta invertida para que «no hay
+nada cerca» sea un 0 que significa eso, y magnitud normalizada por su escala y recortada al mismo tope que
+todo lo demás. El <b>signo lo pone el lado</b>: un clúster por debajo son largos que revientan vendiendo, y
+por encima, cortos que revientan comprando. Y no hay estela sino <b>caducidad</b>: un calendario viejo
+sigue siendo cierto, pero una foto del libro de hace dos semanas no describe ningún libro, así que pasados
+{_n((maps.get('spec') or {}).get('stale_days', 0), 0)} días deja de contar como cobertura en vez de seguir
+pareciendo fresca. Qué fuente va por aquí lo declara el catálogo campo a campo, y no la cadencia: es la
+excepción, y es explícita para que se vea.</p>
+
+{map_table}
+
+<div class="why"><b>El hueco del mapa está declarado.</b> Solo el <b>75,7 %</b> de las posiciones
+muestreadas trae precio de liquidación —en las de margen cruzado con holgura el venue lo devuelve nulo—,
+así que el mapa está incompleto por abajo y el notional publicado es una <b>cota inferior</b>. No se
+estima: estimarlo exigiría replicar el motor de margen del venue. Y la muestra son las 200 cuentas mayores
+del <i>leaderboard</i>, que cubren el <b>21,7 %</b> del interés abierto: el sesgo hacia las cuentas grandes
+es deliberado —una cuenta de 763 dólares no mueve el precio al ser liquidada— y significa que
+«distribución del apalancamiento» aquí quiere decir «distribución en la cola de arriba».</div>
+
+{_dat_section(dat, dat_table)}
+
+<h4>El ADV: por qué una señal genuina puede no servir para nada</h4>
+<p>Una señal puede ser real, tener historia, superar el break-even de IC de §7.5 y no servir para nada, y
+la razón casi nunca es estadística: es que <b>vive en activos donde no cabe tamaño</b>. Ese fallo no lo
+detecta ninguna métrica de las anteriores —el Sharpe de un backtest sin impacto de mercado no sabe cuánto
+volumen tenía el activo— y se descubre tarde, cuando ya se ha escalado. Por eso el catálogo declara desde
+el lote caro un campo más, <span class="mono">typical_adv_usd</span>: el volumen diario <b>mediano</b>, en
+dólares, de las entidades donde esa señal existe. Se mide con
+<span class="mono">signals/liquidity.py</span>, se apunta en
+<span class="mono">data/signals/entity_adv.json</span> y un test exige que lo declarado esté respaldado por
+el registro, exactamente igual que con <span class="mono">history_from</span>.</p>
+
+{adv_table}
+
+<p>La mediana y no la media, y sobre las entidades que <i>negocian</i>: en Hyperliquid la media diría 12,7
+millones de dólares porque BTC mueve 1.700, y el perpetuo del medio mueve trescientos mil. La fuente más
+estrecha del catálogo vive en entidades de
+<b>{_n(liquidity.get('thinnest_adv_usd', 0), 0)} dólares al día</b>
+(<span class="mono">{liquidity.get('thinnest_source', '')}</span>). El «efecto Upbit» es de los eventos más
+limpios que existen en cripto <i>y</i> vive en mercados cuya mediana mueve un cuarto de millón: las dos
+cosas son verdad a la vez, y tenerlas juntas delante es la única forma de no confundir una señal buena con
+una señal escalable. La tolerancia del test es de un <b>orden de magnitud</b>, y es deliberado: entre
+174.000 y 253.000 no hay ninguna decisión distinta; entre 174.000 y 174 millones están todas.</p>
 
 <h4>El radar: de {m['n_features']} columnas crudas a seis números</h4>
 <p>{m['n_features']} columnas no son un espacio de observación: son {m['n_features']} grados de libertad

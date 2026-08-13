@@ -64,8 +64,8 @@ figure{margin:14px 0}
 <h1>AI-Trader — Documentación funcional</h1>
 <div class="sub">Cómo funciona la herramienta, con el detalle necesario para replicarla y auditarla.
 Cada decisión de diseño va justificada.</div>
-<div class="meta">Documento vivo · generado desde el commit <span class="mono">a71d5d8</span>
-(96 commits)2026-08-13 · se regenera con <span class="mono">python -m docs.build_docs</span>.
+<div class="meta">Documento vivo · generado desde el commit <span class="mono">032c568</span>
+(98 commits)2026-08-13 · se regenera con <span class="mono">python -m docs.build_docs</span>.
 Las cifras marcadas son extraídas del repositorio en el momento de generar este documento.</div>
 
 <div class="toc noprint">
@@ -223,13 +223,13 @@ silencio en cada ciclo, que fue el caso de MATIC/USDT— y el sintético tiene q
 declarado en código.</div>
 
 
-<h3>2.2 · Señales externas: diecisiete fuentes, una sola vía hasta la decisión</h3>
+<h3>2.2 · Señales externas: 30 fuentes, una sola vía hasta la decisión</h3>
 <p>La captura de §2.1 produce <b>precio y volumen</b>, y durante toda la vida del proyecto eso fue todo lo
 que el sistema podía ver: su único canal de contexto era el bloque de régimen (§4.2), construido sobre las
 propias barras. Éste es el segundo sustrato de datos, y el único que trae información de fuera del precio.
-El catálogo declara 17 fuentes que producen 40 features; hoy
-<b>17 tienen adaptador</b> —el catálogo entero, evento incluido—,
-<b>13 tienen profundidad medida</b> y <b>10 pueden entrar en un
+El catálogo declara 30 fuentes que producen 72 features; hoy
+<b>30 tienen adaptador</b> —el catálogo entero, evento incluido—,
+<b>21 tienen profundidad medida</b> y <b>14 pueden entrar en un
 backtest</b>. Que las tres cifras no coincidan es el punto: tener adaptador no es tener historia, y tener
 historia solo cuenta si se ha comprobado. Y todas ellas llegan ya al espacio de observación y a la
 decisión, en <i>backtest</i> y en vivo.</p>
@@ -237,7 +237,7 @@ decisión, en <i>backtest</i> y en vivo.</p>
 <div class="why"><b>Por qué el esqueleto antes que las fuentes.</b> El valor no está en conectar
 <i>una</i> fuente, está en que la fuente N+1 cueste casi cero: un adaptador, una entrada de catálogo y un
 test. Las diecisiete comparten puerto, archivo, esquema, normalización y sonda. Y hay un motivo para
-arrancar la captura antes que nada: <b>5 de las 17</b> fuentes
+arrancar la captura antes que nada: <b>11 de las 30</b> fuentes
 son <i>forward capture</i> —nadie publica su pasado—, así que su profundidad histórica no depende de
 escribir mejor código después sino del calendario. Cada día sin capturar es profundidad que no se
 recupera.</div>
@@ -246,13 +246,13 @@ recupera.</div>
 primera fecha con dato <b>comprobado por nosotros</b>, no la que anuncia el proveedor. Esa comprobación es
 una operación explícita —<span class="mono">ai&#8209;trader signals depth</span>— que descarga la serie, la
 deriva con el adaptador real y escribe lo que encuentra en
-<span class="mono">data/signals/history_depth.json</span> (última medición: 2026-08-12); el
+<span class="mono">data/signals/history_depth.json</span> (última medición: 2026-08-13); el
 catálogo solo puede declarar lo que ese registro respalda, y un test lo verifica.
 <span class="mono">pit</span> dice de qué naturaleza es esa historia —capturada en vivo, backfill revisable
 o derivada del precio—. Juntos contestan la única pregunta que hay que responder antes de puntuar nada:
 qué fuentes pueden participar en un backtest y cuáles solo en vivo.</p>
 
-<table><thead><tr><th>Fuente</th><th class=n>Codificación</th><th class=n>Point-in-time</th><th class=n>Features</th><th class=n>Adaptador</th><th class=n>Declarada</th><th class=n>MEDIDA</th><th class=n>Días</th></tr></thead><tbody><tr><td class=mono>guavy_sentiment</td><td class=n mono>continua</td><td class=n mono>backfill revisable</td><td class=n mono>4</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>—</td><td class=n mono>0</td></tr><tr><td class=mono>etf_flows</td><td class=n mono>continua</td><td class=n mono>backfill revisable</td><td class=n mono>3</td><td class=n mono>si</td><td class=n mono>2024-01-11</td><td class=n mono>2024-01-11</td><td class=n mono>662</td></tr><tr><td class=mono>fred_macro</td><td class=n mono>continua</td><td class=n mono>backfill revisable</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>—</td><td class=n mono>0</td></tr><tr><td class=mono>defillama_stablecoins</td><td class=n mono>continua</td><td class=n mono>backfill revisable</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>2017-11-29</td><td class=n mono>2017-11-29</td><td class=n mono>12 497</td></tr><tr><td class=mono>defillama_fees</td><td class=n mono>continua</td><td class=n mono>backfill revisable</td><td class=n mono>3</td><td class=n mono>si</td><td class=n mono>2011-01-31</td><td class=n mono>2011-01-31</td><td class=n mono>54 129</td></tr><tr><td class=mono>defillama_volumes</td><td class=n mono>continua</td><td class=n mono>backfill revisable</td><td class=n mono>3</td><td class=n mono>si</td><td class=n mono>2017-08-17</td><td class=n mono>2017-08-17</td><td class=n mono>30 590</td></tr><tr><td class=mono>wikipedia_pageviews</td><td class=n mono>continua</td><td class=n mono>backfill revisable</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>2015-07-01</td><td class=n mono>2015-07-01</td><td class=n mono>36 024</td></tr><tr><td class=mono>p2p_premium</td><td class=n mono>continua</td><td class=n mono>solo hacia adelante</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>2026-08-11</td><td class=n mono>1</td></tr><tr><td class=mono>funding_dispersion</td><td class=n mono>continua</td><td class=n mono>solo hacia adelante</td><td class=n mono>3</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>2026-08-11</td><td class=n mono>24</td></tr><tr><td class=mono>github_activity</td><td class=n mono>continua</td><td class=n mono>backfill revisable</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>2009-08-23</td><td class=n mono>2009-08-23</td><td class=n mono>15 877</td></tr><tr><td class=mono>cftc_cot</td><td class=n mono>continua</td><td class=n mono>backfill revisable</td><td class=n mono>3</td><td class=n mono>si</td><td class=n mono>2018-04-13</td><td class=n mono>2018-04-13</td><td class=n mono>714</td></tr><tr><td class=mono>token_unlocks</td><td class=n mono>evento</td><td class=n mono>backfill revisable</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>—</td><td class=n mono>0</td></tr><tr><td class=mono>staking_queue</td><td class=n mono>continua</td><td class=n mono>solo hacia adelante</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>—</td><td class=n mono>0</td></tr><tr><td class=mono>btc_difficulty</td><td class=n mono>evento</td><td class=n mono>registro inmutable</td><td class=n mono>1</td><td class=n mono>si</td><td class=n mono>2014-08-19</td><td class=n mono>2014-08-19</td><td class=n mono>321</td></tr><tr><td class=mono>defillama_hacks</td><td class=n mono>evento</td><td class=n mono>backfill revisable</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>2016-06-17</td><td class=n mono>2016-06-17</td><td class=n mono>519</td></tr><tr><td class=mono>ofac_sdn</td><td class=n mono>evento</td><td class=n mono>solo hacia adelante</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>2026-08-07</td><td class=n mono>1</td></tr><tr><td class=mono>macro_calendar</td><td class=n mono>evento</td><td class=n mono>solo hacia adelante</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>2017-02-01</td><td class=n mono>2017-02-01</td><td class=n mono>76</td></tr></tbody></table>
+<table><thead><tr><th>Fuente</th><th class=n>Codificación</th><th class=n>Point-in-time</th><th class=n>Features</th><th class=n>Adaptador</th><th class=n>Declarada</th><th class=n>MEDIDA</th><th class=n>Días</th><th class=n>ADV típico</th></tr></thead><tbody><tr><td class=mono>guavy_sentiment</td><td class=n mono>continua</td><td class=n mono>backfill revisable</td><td class=n mono>4</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>—</td><td class=n mono>0</td><td class=n mono>—</td></tr><tr><td class=mono>etf_flows</td><td class=n mono>continua</td><td class=n mono>backfill revisable</td><td class=n mono>3</td><td class=n mono>si</td><td class=n mono>2024-01-11</td><td class=n mono>2024-01-11</td><td class=n mono>662</td><td class=n mono>—</td></tr><tr><td class=mono>fred_macro</td><td class=n mono>continua</td><td class=n mono>backfill revisable</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>—</td><td class=n mono>0</td><td class=n mono>—</td></tr><tr><td class=mono>defillama_stablecoins</td><td class=n mono>continua</td><td class=n mono>backfill revisable</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>2017-11-29</td><td class=n mono>2017-11-29</td><td class=n mono>12 497</td><td class=n mono>—</td></tr><tr><td class=mono>defillama_fees</td><td class=n mono>continua</td><td class=n mono>backfill revisable</td><td class=n mono>3</td><td class=n mono>si</td><td class=n mono>2011-01-31</td><td class=n mono>2011-01-31</td><td class=n mono>54 129</td><td class=n mono>—</td></tr><tr><td class=mono>defillama_volumes</td><td class=n mono>continua</td><td class=n mono>backfill revisable</td><td class=n mono>3</td><td class=n mono>si</td><td class=n mono>2017-08-17</td><td class=n mono>2017-08-17</td><td class=n mono>30 590</td><td class=n mono>—</td></tr><tr><td class=mono>wikipedia_pageviews</td><td class=n mono>continua</td><td class=n mono>backfill revisable</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>2015-07-01</td><td class=n mono>2015-07-01</td><td class=n mono>36 024</td><td class=n mono>—</td></tr><tr><td class=mono>p2p_premium</td><td class=n mono>continua</td><td class=n mono>solo hacia adelante</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>2026-08-11</td><td class=n mono>1</td><td class=n mono>—</td></tr><tr><td class=mono>funding_dispersion</td><td class=n mono>continua</td><td class=n mono>solo hacia adelante</td><td class=n mono>3</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>2026-08-11</td><td class=n mono>24</td><td class=n mono>—</td></tr><tr><td class=mono>github_activity</td><td class=n mono>continua</td><td class=n mono>backfill revisable</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>2009-08-23</td><td class=n mono>2009-08-23</td><td class=n mono>15 877</td><td class=n mono>—</td></tr><tr><td class=mono>cftc_cot</td><td class=n mono>continua</td><td class=n mono>backfill revisable</td><td class=n mono>3</td><td class=n mono>si</td><td class=n mono>2018-04-13</td><td class=n mono>2018-04-13</td><td class=n mono>714</td><td class=n mono>—</td></tr><tr><td class=mono>token_unlocks</td><td class=n mono>evento</td><td class=n mono>backfill revisable</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>—</td><td class=n mono>0</td><td class=n mono>—</td></tr><tr><td class=mono>staking_queue</td><td class=n mono>continua</td><td class=n mono>solo hacia adelante</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>—</td><td class=n mono>0</td><td class=n mono>—</td></tr><tr><td class=mono>btc_difficulty</td><td class=n mono>evento</td><td class=n mono>registro inmutable</td><td class=n mono>1</td><td class=n mono>si</td><td class=n mono>2014-08-19</td><td class=n mono>2014-08-19</td><td class=n mono>321</td><td class=n mono>—</td></tr><tr><td class=mono>defillama_hacks</td><td class=n mono>evento</td><td class=n mono>backfill revisable</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>2016-06-17</td><td class=n mono>2016-06-17</td><td class=n mono>519</td><td class=n mono>—</td></tr><tr><td class=mono>ofac_sdn</td><td class=n mono>evento</td><td class=n mono>solo hacia adelante</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>2026-08-07</td><td class=n mono>1</td><td class=n mono>—</td></tr><tr><td class=mono>macro_calendar</td><td class=n mono>evento</td><td class=n mono>solo hacia adelante</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>2017-02-01</td><td class=n mono>2017-02-01</td><td class=n mono>76</td><td class=n mono>—</td></tr><tr><td class=mono>hyperliquid_leverage</td><td class=n mono>continua</td><td class=n mono>solo hacia adelante</td><td class=n mono>5</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>2026-08-13</td><td class=n mono>5</td><td class=n mono>307 370</td></tr><tr><td class=mono>hyperliquid_liqmap</td><td class=n mono>mapa precios</td><td class=n mono>solo hacia adelante</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>2026-08-13</td><td class=n mono>5</td><td class=n mono>307 370</td></tr><tr><td class=mono>deribit_volatility</td><td class=n mono>continua</td><td class=n mono>backfill revisable</td><td class=n mono>4</td><td class=n mono>si</td><td class=n mono>2021-03-24</td><td class=n mono>2021-03-24</td><td class=n mono>3 938</td><td class=n mono>100 937 354</td></tr><tr><td class=mono>deribit_expiries</td><td class=n mono>evento</td><td class=n mono>solo hacia adelante</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>2026-08-14</td><td class=n mono>24</td><td class=n mono>100 937 354</td></tr><tr><td class=mono>lending_health</td><td class=n mono>mapa precios</td><td class=n mono>solo hacia adelante</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>—</td><td class=n mono>0</td><td class=n mono>—</td></tr><tr><td class=mono>appstore_rank</td><td class=n mono>evento</td><td class=n mono>solo hacia adelante</td><td class=n mono>3</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>—</td><td class=n mono>0</td><td class=n mono>—</td></tr><tr><td class=mono>naver_datalab</td><td class=n mono>continua</td><td class=n mono>backfill revisable</td><td class=n mono>1</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>—</td><td class=n mono>0</td><td class=n mono>—</td></tr><tr><td class=mono>yandex_wordstat</td><td class=n mono>continua</td><td class=n mono>solo hacia adelante</td><td class=n mono>1</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>—</td><td class=n mono>0</td><td class=n mono>—</td></tr><tr><td class=mono>sec_edgar_fts</td><td class=n mono>evento</td><td class=n mono>backfill revisable</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>2025-06-20</td><td class=n mono>2025-06-20</td><td class=n mono>420</td><td class=n mono>—</td></tr><tr><td class=mono>federal_register</td><td class=n mono>evento</td><td class=n mono>backfill revisable</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>2015-11-02</td><td class=n mono>2015-11-02</td><td class=n mono>303</td><td class=n mono>—</td></tr><tr><td class=mono>courtlistener_dockets</td><td class=n mono>evento</td><td class=n mono>backfill revisable</td><td class=n mono>1</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>2026-04-09</td><td class=n mono>92</td><td class=n mono>—</td></tr><tr><td class=mono>cex_listings</td><td class=n mono>evento</td><td class=n mono>backfill revisable</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>2018-08-02</td><td class=n mono>2018-08-02</td><td class=n mono>522</td><td class=n mono>247 645</td></tr><tr><td class=mono>dat_mnav</td><td class=n mono>evento</td><td class=n mono>backfill revisable</td><td class=n mono>5</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>—</td><td class=n mono>0</td><td class=n mono>—</td></tr></tbody></table>
 
 <h4>Toda feature se publica normalizada, con dos varas de medir</h4>
 <p>Las fuentes producen magnitudes que no se pueden ni sumar ni comparar: miles de millones de oferta de
@@ -296,9 +296,9 @@ de <i>decenas</i>; sobre catorce observaciones un CEM libre construye una estrat
 descansaba en un número <b>que nadie había medido</b>. Al medirlo con la misma sonda que corrigió los
 <span class="mono">history_from</span> del folleto, resultó falso por un factor de diez.</p>
 
-<table><thead><tr><th>Fuente de evento</th><th class=n>Eventos pooled</th><th class=n>Entidades</th><th class=n>Anunciado</th><th class=n>Primer día</th><th class=n>Último día</th></tr></thead><tbody><tr><td class=mono>btc_difficulty</td><td class=n mono>321</td><td class=n mono>1</td><td class=n mono>si</td><td class=n mono>2014-08-19</td><td class=n mono>2026-08-08</td></tr><tr><td class=mono>defillama_hacks</td><td class=n mono>519</td><td class=n mono>1</td><td class=n mono>no</td><td class=n mono>2016-06-17</td><td class=n mono>2026-08-09</td></tr><tr><td class=mono>macro_calendar</td><td class=n mono>76</td><td class=n mono>1</td><td class=n mono>si</td><td class=n mono>2017-02-01</td><td class=n mono>2026-12-10</td></tr><tr><td class=mono>ofac_sdn</td><td class=n mono>1</td><td class=n mono>1</td><td class=n mono>no</td><td class=n mono>2026-08-07</td><td class=n mono>2026-08-07</td></tr><tr><td class=mono>token_unlocks</td><td class=n mono>0</td><td class=n mono>0</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>—</td></tr></tbody></table>
+<table><thead><tr><th>Fuente de evento</th><th class=n>Eventos pooled</th><th class=n>Entidades</th><th class=n>Anunciado</th><th class=n>Primer día</th><th class=n>Último día</th></tr></thead><tbody><tr><td class=mono>appstore_rank</td><td class=n mono>0</td><td class=n mono>0</td><td class=n mono>no</td><td class=n mono>—</td><td class=n mono>—</td></tr><tr><td class=mono>btc_difficulty</td><td class=n mono>321</td><td class=n mono>1</td><td class=n mono>si</td><td class=n mono>2014-08-19</td><td class=n mono>2026-08-08</td></tr><tr><td class=mono>cex_listings</td><td class=n mono>522</td><td class=n mono>343</td><td class=n mono>no</td><td class=n mono>2018-08-02</td><td class=n mono>2026-08-12</td></tr><tr><td class=mono>courtlistener_dockets</td><td class=n mono>104</td><td class=n mono>1</td><td class=n mono>no</td><td class=n mono>2026-03-24</td><td class=n mono>2026-08-12</td></tr><tr><td class=mono>dat_mnav</td><td class=n mono>0</td><td class=n mono>0</td><td class=n mono>no</td><td class=n mono>—</td><td class=n mono>—</td></tr><tr><td class=mono>defillama_hacks</td><td class=n mono>519</td><td class=n mono>1</td><td class=n mono>no</td><td class=n mono>2016-06-17</td><td class=n mono>2026-08-09</td></tr><tr><td class=mono>deribit_expiries</td><td class=n mono>24</td><td class=n mono>2</td><td class=n mono>si</td><td class=n mono>2026-08-14</td><td class=n mono>2027-06-25</td></tr><tr><td class=mono>federal_register</td><td class=n mono>303</td><td class=n mono>1</td><td class=n mono>no</td><td class=n mono>2015-11-02</td><td class=n mono>2026-08-13</td></tr><tr><td class=mono>macro_calendar</td><td class=n mono>76</td><td class=n mono>1</td><td class=n mono>si</td><td class=n mono>2017-02-01</td><td class=n mono>2026-12-10</td></tr><tr><td class=mono>ofac_sdn</td><td class=n mono>1</td><td class=n mono>1</td><td class=n mono>no</td><td class=n mono>2026-08-07</td><td class=n mono>2026-08-07</td></tr><tr><td class=mono>sec_edgar_fts</td><td class=n mono>420</td><td class=n mono>1</td><td class=n mono>no</td><td class=n mono>2025-06-20</td><td class=n mono>2026-08-13</td></tr><tr><td class=mono>token_unlocks</td><td class=n mono>0</td><td class=n mono>0</td><td class=n mono>si</td><td class=n mono>—</td><td class=n mono>—</td></tr></tbody></table>
 
-<p>Son <b>917 eventos</b> en total, publicados en
+<p>Son <b>2290 eventos</b> en total, publicados en
 <span class="mono">data/signals/event_pool.json</span>. Y donde la muestra <i>sí</i> es corta, la razón es
 también una medición y no una propiedad de la fuente: el endpoint de desbloqueos de DefiLlama pasó a
 responder <b>402 Payment Required</b> y el de colas de staking, <b>401 Unauthorized</b>. La unidad de esa
@@ -307,10 +307,10 @@ ponerlos todos en la misma distribución: catorce desbloqueos por token son cien
 
 <p>Así que <b>todas las señales fluyen al motor por la misma vía</b> —features al espacio de observación,
 en <i>backtest</i> y en vivo— y lo que determina la <b>codificación</b> no es el tier sino la
-<b>cadencia</b>: 5 fuentes de evento y 12 continuas. La
-distinción no es cosmética: <span class="mono">staking_queue</span> es mecánica (tier A) y publica un
-<b>nivel</b> diario, así que enrutar por el tier le habría puesto un días-al-evento a una cola de
-validadores.</p>
+<b>cadencia</b>: 12 fuentes de evento, 16 continuas y
+2 mapas de precios. La distinción no es cosmética:
+<span class="mono">staking_queue</span> es mecánica (tier A) y publica un <b>nivel</b> diario, así que
+enrutar por el tier le habría puesto un días-al-evento a una cola de validadores.</p>
 
 <h4>Por qué los eventos no pasan por la misma normalización</h4>
 <p>Una z contra una serie que es <b>99 % ceros</b> no significa nada: su mediana es 0, su rango
@@ -332,14 +332,128 @@ eso. Y el tope hace un segundo trabajo que no se ve: es lo que mantiene honesto 
 anuncia (un <i>hack</i>, una sanción) tiene la mirada hacia adelante apagada <b>por código</b>: solo queda
 su estela.</div>
 
-<h4>El radar: de 40 columnas crudas a seis números</h4>
-<p>40 columnas no son un espacio de observación: son 40 grados de libertad
+<h4>La tercera codificación: el mapa de precios</h4>
+<p>El lote de fuentes de alta fricción trajo un objeto que ninguna de las dos codificaciones anteriores
+sabe leer: un <b>mapa de liquidación</b>. Se observa todos los días —luego no es un evento fechado: no hay
+ninguna fecha futura que anticipar— y lo que dice no es un nivel sino una <b>distancia en precio</b>, más
+el notional acumulado hasta ella. Las dos codificaciones anteriores lo leerían mal, cada una a su manera, y
+—esto es lo que obliga a añadir la tercera— <b>ninguna de las dos daría error</b>: con las dos varas de la
+normalización, la feature contestaría «¿es hoy la distancia alta <i>para este activo</i>?», que no es la
+pregunta, porque que un clúster esté al 4 % es un hecho absoluto y no un percentil de su historia; con la
+codificación de evento, la proximidad contaría días hasta una fecha que no existe.</p>
+<p>La proximidad se mide entonces en la unidad en la que el hecho vive —porcentaje de precio— con el mismo
+patrón que ya estaba: tope declarado de
+<b>25 %</b>, cuenta invertida para que «no hay
+nada cerca» sea un 0 que significa eso, y magnitud normalizada por su escala y recortada al mismo tope que
+todo lo demás. El <b>signo lo pone el lado</b>: un clúster por debajo son largos que revientan vendiendo, y
+por encima, cortos que revientan comprando. Y no hay estela sino <b>caducidad</b>: un calendario viejo
+sigue siendo cierto, pero una foto del libro de hace dos semanas no describe ningún libro, así que pasados
+2 días deja de contar como cobertura en vez de seguir
+pareciendo fresca. Qué fuente va por aquí lo declara el catálogo campo a campo, y no la cadencia: es la
+excepción, y es explícita para que se vea.</p>
+
+<table><thead><tr><th>Mapa de precios</th><th class=n>Fotos</th><th class=n>Entidades</th><th class=n>Primer día</th><th class=n>Último día</th></tr></thead><tbody><tr><td class=mono>hyperliquid_liqmap</td><td class=n mono>5</td><td class=n mono>5</td><td class=n mono>2026-08-13</td><td class=n mono>2026-08-13</td></tr><tr><td class=mono>lending_health</td><td class=n mono>0</td><td class=n mono>0</td><td class=n mono>—</td><td class=n mono>—</td></tr></tbody></table>
+
+<div class="why"><b>El hueco del mapa está declarado.</b> Solo el <b>75,7 %</b> de las posiciones
+muestreadas trae precio de liquidación —en las de margen cruzado con holgura el venue lo devuelve nulo—,
+así que el mapa está incompleto por abajo y el notional publicado es una <b>cota inferior</b>. No se
+estima: estimarlo exigiría replicar el motor de margen del venue. Y la muestra son las 200 cuentas mayores
+del <i>leaderboard</i>, que cubren el <b>21,7 %</b> del interés abierto: el sesgo hacia las cuentas grandes
+es deliberado —una cuenta de 763 dólares no mueve el precio al ser liquidada— y significa que
+«distribución del apalancamiento» aquí quiere decir «distribución en la cola de arriba».</div>
+
+
+<h4>Tesorerías cotizadas: la única fuente <i>compuesta</i>, y lo que midió</h4>
+<p>Una tesorería cotizada es una empresa cuyo balance <b>es</b> un tesoro de cripto. Por encima de 1× de
+mNAV la máquina va hacia adelante —emitir acciones es acretivo, se emite y se compra más— y por
+<b>debajo</b> va en reversa, y es aritmética y no sentimiento: emitir diluye, así que la vía barata para
+levantar caja pasa a ser <b>vender el tesoro</b>. Lo interesante no es el mNAV de ninguna compañía sino la
+<b>distribución</b> por activo subyacente: la fracción por debajo de 1× es oferta futura estructural sobre
+ese activo, y la distancia de la mediana a esa frontera dice cuánto falta para que la cola engorde. No hay
+API —los cuatro sitios que lo publican son cuadros de mando— así que la serie se <b>compone</b> de tres
+patas: tenencias y acciones del XBRL de la SEC, más el precio de la acción y el del activo <i>del mismo
+cierre de sesión</i>, porque el mNAV es un cociente y mezclar un cierre de cripto (medianoche UTC) con uno
+de bolsa (21:00 UTC) mete nueve horas de desfase dentro de él.</p>
+
+<div class="why"><b>Y el resultado de componerla no es el que se esperaba.</b> De
+<b>108 declarantes</b> de cripto en el registro XBRL quedan
+<b>3 compañías</b> publicables, repartidas en 3 activos distintos. Con
+una cohorte mínima de 3 para que la palabra «distribución» signifique algo,
+<b>hoy no hay ninguna distribución que publicar</b> y la fuente produce [('no declara unidades, solo valor razonable', '61'), ('ni la etiqueta ni la razon social nombran ningun activo', '12'), ('sin recuento de acciones sin dimension (multiclase)', '6'), ('el tesoro es el 4% del activo, no es una tesoreria', '4'), ('el tesoro es el 0% del activo, no es una tesoreria', '2'), ('el tesoro es el 14% del activo, no es una tesoreria', '2'), ('el tesoro es el 2% del activo, no es una tesoreria', '2'), ('el tesoro es el 10% del activo, no es una tesoreria', '1'), ('el tesoro es el 17% del activo, no es una tesoreria', '1'), ('el tesoro es el 20% del activo, no es una tesoreria', '1'), ('el tesoro es el 22% del activo, no es una tesoreria', '1'), ('el tesoro es el 23% del activo, no es una tesoreria', '1'), ('el tesoro es el 3% del activo, no es una tesoreria', '1'), ('el tesoro es el 30% del activo, no es una tesoreria', '1'), ('el tesoro es el 37% del activo, no es una tesoreria', '1'), ('el tesoro es el 39% del activo, no es una tesoreria', '1'), ('el tesoro es el 44% del activo, no es una tesoreria', '1'), ('el tesoro es el 7% del activo, no es una tesoreria', '1'), ('el tesoro es el 9% del activo, no es una tesoreria', '1'), ('tesoro en CANTON, que no esta en el universo', '1'), ('tesoro en HYPE, que no esta en el universo', '1'), ('tesoro en TON, que no esta en el universo', '1'), ('tesoro en USDC, que no esta en el universo', '1')] filas. Eso es
+la medición, no un pendiente: el adaptador existe para que el hueco esté <b>fechado y desglosado</b> en vez
+de leerse como «nadie lo ha intentado».</div>
+
+<p>La cohorte se define con <b>tres filtros y ninguno mira el mNAV</b>, porque definirla con el propio mNAV
+truncaría justo la cola que se publica: fuera los SIC 6211 y 6221 —los
+trusts al contado, que crean y redimen <i>al</i> NAV y por tanto tienen el mNAV clavado en 1 por arbitraje,
+y los brokers que custodian cripto de sus clientes—; dentro solo si el tesoro pasa del
+<b>50 %</b> del activo total del balance, que es lo que separa
+una tesorería de una minera con algo de cripto; y solo si se sabe <b>qué activo</b> tiene.</p>
+
+<p>Lo tercero es lo que más cuesta, y la primera versión estaba mal. Identificar por el <b>precio
+implícito</b> —valor razonable dividido entre unidades— y quedarse con el único activo del universo que
+cuadrase producía <b>dos falsos positivos de ocho</b>: TON Strategy Co (Toncoin, ~1,60 $) salía NEAR e
+Hyperion DeFi (HYPE) salía LTC. El fallo no es la tolerancia: es que «el único que cuadra» solo significa
+algo si el conjunto de candidatos está <b>completo</b>, y hay miles de tokens frente a veinticuatro. Hoy
+<b>identifica un nombre</b> —la etiqueta de unidad o la razón social del emisor— y el precio implícito solo
+<b>verifica</b>, con tolerancia ×1,25. Eso atrapa los dos errores
+que ninguna otra regla ve y que no darían ningún error por sí solos: CleanSpark declarando 1.719.000
+unidades etiquetadas <span class="mono">Bitcoin</span> que valen 58,53 $ cada una —son 1.719, con un error
+de escala de mil en el propio <i>filing</i>— y Bit Digital con un valor razonable que cubre toda su cartera
+y un cociente que no es el precio de nada.</p>
+
+<table><thead><tr><th>Motivo por el que la compañía no entra</th><th class=n>Compañías</th></tr></thead><tbody><tr><td class=mono>no declara unidades, solo valor razonable</td><td class=n mono>61</td></tr><tr><td class=mono>ni la etiqueta ni la razon social nombran ningun activo</td><td class=n mono>12</td></tr><tr><td class=mono>sin recuento de acciones sin dimension (multiclase)</td><td class=n mono>6</td></tr><tr><td class=mono>el tesoro es el 4% del activo, no es una tesoreria</td><td class=n mono>4</td></tr><tr><td class=mono>el tesoro es el 0% del activo, no es una tesoreria</td><td class=n mono>2</td></tr><tr><td class=mono>el tesoro es el 14% del activo, no es una tesoreria</td><td class=n mono>2</td></tr><tr><td class=mono>el tesoro es el 2% del activo, no es una tesoreria</td><td class=n mono>2</td></tr><tr><td class=mono>el tesoro es el 10% del activo, no es una tesoreria</td><td class=n mono>1</td></tr><tr><td class=mono>el tesoro es el 17% del activo, no es una tesoreria</td><td class=n mono>1</td></tr><tr><td class=mono>el tesoro es el 20% del activo, no es una tesoreria</td><td class=n mono>1</td></tr><tr><td class=mono>el tesoro es el 22% del activo, no es una tesoreria</td><td class=n mono>1</td></tr><tr><td class=mono>el tesoro es el 23% del activo, no es una tesoreria</td><td class=n mono>1</td></tr><tr><td class=mono>el tesoro es el 3% del activo, no es una tesoreria</td><td class=n mono>1</td></tr><tr><td class=mono>el tesoro es el 30% del activo, no es una tesoreria</td><td class=n mono>1</td></tr><tr><td class=mono>el tesoro es el 37% del activo, no es una tesoreria</td><td class=n mono>1</td></tr><tr><td class=mono>el tesoro es el 39% del activo, no es una tesoreria</td><td class=n mono>1</td></tr><tr><td class=mono>el tesoro es el 44% del activo, no es una tesoreria</td><td class=n mono>1</td></tr><tr><td class=mono>el tesoro es el 7% del activo, no es una tesoreria</td><td class=n mono>1</td></tr><tr><td class=mono>el tesoro es el 9% del activo, no es una tesoreria</td><td class=n mono>1</td></tr><tr><td class=mono>tesoro en CANTON, que no esta en el universo</td><td class=n mono>1</td></tr><tr><td class=mono>tesoro en HYPE, que no esta en el universo</td><td class=n mono>1</td></tr><tr><td class=mono>tesoro en TON, que no esta en el universo</td><td class=n mono>1</td></tr><tr><td class=mono>tesoro en USDC, que no esta en el universo</td><td class=n mono>1</td></tr></tbody></table>
+
+<div class="why"><b>El hueco mayor está declarado y no se parchea.</b> Las APIs XBRL de la SEC solo exponen
+hechos <b>sin dimensiones</b>. Una compañía con varias clases de acción etiqueta su recuento por clase, así
+que el hecho no existe sin dimensión y <b>la tesorería más grande que existe queda fuera</b> —comprobado:
+su <span class="mono">companyfacts</span> tiene un solo <i>tag</i> en el espacio <span class="mono">dei</span>—.
+No se sustituye por la media ponderada del periodo, que sí está: es una <b>media</b>, y estas compañías
+emiten acciones contra el mercado todos los días, así que subestimaría el recuento justo en las más activas
+y las empujaría hacia la cola inferior, que es la parte de la distribución que la señal mide.</div>
+
+<p>El retraso de publicación no se supone: cada hecho trae la fecha a la que se refiere y la fecha en que
+se publicó, la fila se fecha en <b>la de publicación</b> —igual que el COT se fecha el viernes y no el
+martes— y el desfase realizado es de <b>49 días</b> de mediana, medido
+y declarado en el catálogo. Sin eso, un <i>backtest</i> usaría el 30 de junio una tenencia que no se publicó
+hasta agosto, y no daría ningún error. El <b>N</b> de esta fuente tampoco lo dan los eventos de una compañía
+—cada una publica cuatro veces al año— sino el <i>pooling</i> sobre la cohorte:
+<b>7 observaciones de compañía</b>, que va publicado al lado del número de
+compañías porque doscientas observaciones de tres y doscientas de cuarenta sostienen inferencias
+distintas.</p>
+
+
+<h4>El ADV: por qué una señal genuina puede no servir para nada</h4>
+<p>Una señal puede ser real, tener historia, superar el break-even de IC de §7.5 y no servir para nada, y
+la razón casi nunca es estadística: es que <b>vive en activos donde no cabe tamaño</b>. Ese fallo no lo
+detecta ninguna métrica de las anteriores —el Sharpe de un backtest sin impacto de mercado no sabe cuánto
+volumen tenía el activo— y se descubre tarde, cuando ya se ha escalado. Por eso el catálogo declara desde
+el lote caro un campo más, <span class="mono">typical_adv_usd</span>: el volumen diario <b>mediano</b>, en
+dólares, de las entidades donde esa señal existe. Se mide con
+<span class="mono">signals/liquidity.py</span>, se apunta en
+<span class="mono">data/signals/entity_adv.json</span> y un test exige que lo declarado esté respaldado por
+el registro, exactamente igual que con <span class="mono">history_from</span>.</p>
+
+<table><thead><tr><th>Venue</th><th class=n>Entidades</th><th class=n>Con volumen</th><th class=n>Mediana 24 h</th><th class=n>Decil inferior</th><th class=n>Máximo</th></tr></thead><tbody><tr><td class=mono>deribit</td><td class=n mono>2</td><td class=n mono>2</td><td class=n mono>100 937 354</td><td class=n mono>59 922 228</td><td class=n mono>152 206 260</td></tr><tr><td class=mono>hyperliquid</td><td class=n mono>232</td><td class=n mono>177</td><td class=n mono>307 370</td><td class=n mono>93 597</td><td class=n mono>1 747 619 256</td></tr><tr><td class=mono>upbit</td><td class=n mono>283</td><td class=n mono>283</td><td class=n mono>247 645</td><td class=n mono>39 450</td><td class=n mono>99 003 957</td></tr></tbody></table>
+
+<p>La mediana y no la media, y sobre las entidades que <i>negocian</i>: en Hyperliquid la media diría 12,7
+millones de dólares porque BTC mueve 1.700, y el perpetuo del medio mueve trescientos mil. La fuente más
+estrecha del catálogo vive en entidades de
+<b>247 645 dólares al día</b>
+(<span class="mono">cex_listings</span>). El «efecto Upbit» es de los eventos más
+limpios que existen en cripto <i>y</i> vive en mercados cuya mediana mueve un cuarto de millón: las dos
+cosas son verdad a la vez, y tenerlas juntas delante es la única forma de no confundir una señal buena con
+una señal escalable. La tolerancia del test es de un <b>orden de magnitud</b>, y es deliberado: entre
+174.000 y 253.000 no hay ninguna decisión distinta; entre 174.000 y 174 millones están todas.</p>
+
+<h4>El radar: de 72 columnas crudas a seis números</h4>
+<p>72 columnas no son un espacio de observación: son 72 grados de libertad
 esperando a que alguien los pondere. El radar (<span class="mono">observation/signal_radar.py</span>, con
 la forma exacta del proveedor de régimen de §4.2: <span class="mono">features(symbol)</span>, memo por el
 «ahora» del reloj y el mismo recorte anti-<i>look-ahead</i>) las reduce a <b>tres ejes</b> publicados por
 <b>dos bloques</b>: <span class="mono">signal_tone · signal_intensity · signal_coverage</span> del activo y
 <span class="mono">signal_market_tone · signal_market_intensity · signal_market_coverage</span> del mercado, iguales para todos los
-símbolos ese día. El <b>tono</b> suma solo las 18 features con polaridad
+símbolos ese día. El <b>tono</b> suma solo las 24 features con polaridad
 declarada y razonada una a una; lo que no está en esa tabla no es un olvido, es una feature cuya dirección
 exigiría una hipótesis que nadie ha medido. La <b>intensidad</b> no tiene signo, y es el único eje en el
 que momentum y reversión a la media quieren cosas opuestas: la primera la usa como confirmación (piso) y
@@ -410,7 +524,7 @@ cobertura <b>100,0 %</b> (24 por regla,
 </ul>
 
 <h4>El cableado, en los dos sitios, y su compuerta</h4>
-<p>El catálogo declara, la captura archiva (347484 registros hoy), la sonda mide, la normalización
+<p>El catálogo declara, la captura archiva (427562 registros hoy), la sonda mide, la normalización
 publica y el radar lo lleva a la decisión. Las estrategias reciben el proveedor por el mismo bucle
 <i>duck-typed</i> que ya usaban para el régimen, y ese bucle es idéntico en el motor de <i>backtest</i> y
 en el proceso en vivo: tener dos comportamientos según dónde corre el sistema es un defecto, no una fase.
@@ -720,7 +834,7 @@ reproducible con <span class="mono">python -m ai_trader.synthetic.fidelity_study
 (30 escenarios × 5 caminos; 2026-08-10).</p>
 
 <h3>2.11 · Qué garantizan los tests sobre los datos</h3>
-<p>La base cuenta con <b>909 tests</b> automatizados y <i>linting</i> (ruff) sobre todo el código.
+<p>La base cuenta con <b>1053 tests</b> automatizados y <i>linting</i> (ruff) sobre todo el código.
 Más allá del número importa <b>qué</b> se garantiza, así que la lista va repartida por capítulos: aquí los
 invariantes del sustrato, en §3.10 los de una operación y en §4.15 los del ranking.</p>
 <ul>
@@ -1815,5 +1929,5 @@ agrupamiento de volatilidad, autocorrelación) que un buen simulador debe reprod
 <li><b>Forward capture:</b> fuente cuyo pasado nadie publica: su profundidad histórica sólo crece
 capturando, un día por día real.</li>
 </ul>
-<p class="meta">Fin del documento · AI-Trader · commit <span class="mono">a71d5d8</span>.</p>
+<p class="meta">Fin del documento · AI-Trader · commit <span class="mono">032c568</span>.</p>
 </div></body></html>

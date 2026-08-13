@@ -6,7 +6,7 @@ Nueve piezas, y el orden en que se leen es el camino que recorre un dato:
     catalog.py   Que fuentes existen, que producen y con que honestidad (`history_from`
                  MEDIDO, `pit`). Es una lista de declaraciones: no toca red.
     source.py    El puerto: `fetch_raw` (red, payload intacto) + `daily_from_raw` (PURA).
-    adapters/    Los diecisiete adaptadores: once continuos y seis de evento.
+    adapters/    Los treinta adaptadores: dieciseis continuos, doce de evento y dos mapas.
     store.py     Archivo crudo append-only en `data/signals_raw/` (no re-derivable) y
                  cache derivada desechable en `.cache/signals/`.
     capture.py   Recorre el catalogo y archiva. Se arranca YA: lo que no se capture hoy

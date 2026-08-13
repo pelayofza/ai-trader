@@ -52,6 +52,41 @@ acierta en cinco de las seis mecanicas; la sexta, `staking_queue`, es mecanica y
 publica un NIVEL diario (cuantos validadores hay en cola), que se codifica con las dos z
 como cualquier serie continua. Enrutar por el tier habria puesto una z de evento sobre un
 nivel y un dias-al-evento sobre una cola. La cadencia no se equivoca en ese caso.
+
+EL MAPA DE PRECIOS: LA TERCERA CODIFICACION (2026-08-13)
+--------------------------------------------------------
+El lote de alta friccion trae un objeto que ninguna de las dos anteriores sabe leer: un
+MAPA DE LIQUIDACION. Se observa todos los dias (luego no es un evento fechado: no hay
+ninguna fecha futura que anticipar) y lo que dice no es un nivel sino una DISTANCIA EN
+PRECIO —"hay 180 M$ de posiciones que revientan un 4% mas abajo"— mas el notional acumulado
+hasta ahi.
+
+Las dos codificaciones anteriores lo leerian mal, cada una a su manera, y NINGUNA DE LAS
+DOS DARIA ERROR:
+
+  - con las dos z, la feature contestaria "¿es hoy la distancia alta PARA ESTE ACTIVO?",
+    y esa no es la pregunta. Que un cluster este al 4% es un hecho absoluto: no mejora ni
+    empeora porque el mes pasado estuviera al 9%.
+  - con la codificacion de evento, `_ahead` contaria dias hasta una fecha que no existe.
+
+Asi que la proximidad se mide en la unidad en la que el hecho vive —porcentaje de precio—
+con el mismo patron que ya estaba: un tope declarado (`PRICE_DISTANCE_CAP_PCT`), la cuenta
+invertida para que "no hay nada cerca" sea un 0 que significa eso, y una magnitud
+normalizada por su escala y recortada al mismo `MAGNITUDE_CLIP` que todo lo demas.
+
+    `<fuente>_near`  proximidad al cluster mas cercano, en [0, 1]. 1 = en el precio;
+                     0 = mas lejos que el tope, o no hay mapa.
+    `<fuente>_mag`   notional acumulado hasta ese cluster, normalizado y CON SIGNO:
+                     negativo si el cluster esta POR DEBAJO (largos que revientan vendiendo)
+                     y positivo si esta por encima (cortos que revientan comprando).
+    `<fuente>_seen`  1 si esa entidad tiene mapa, 0 si no.
+
+No hay `_active`: un mapa no tiene estela. La foto de ayer no es el rastro de nada, es
+simplemente una foto vieja, y por eso lo que la gobierna es la CADUCIDAD
+(`PRICE_MAP_STALE_DAYS`) y no una ventana de decaimiento.
+
+Que enruta a esto: el campo `encoding` del catalogo, declarado fuente a fuente. La regla
+general sigue siendo la cadencia; esto es la excepcion, y es explicita para que se vea.
 """
 from __future__ import annotations
 
@@ -66,7 +101,12 @@ import pandas as pd
 
 from ai_trader.shared.clock import visible_cutoff
 from ai_trader.shared.signals import DAY, ENTITY, OBSERVED
-from ai_trader.signals.catalog import CATALOG, SignalSource
+from ai_trader.signals.catalog import (
+    CATALOG,
+    ENCODING_EVENT,
+    ENCODING_PRICE_MAP,
+    SignalSource,
+)
 
 # --- politica declarada -------------------------------------------------------------
 
@@ -77,6 +117,7 @@ SUFFIX_AHEAD = "_ahead"
 SUFFIX_ACTIVE = "_active"
 SUFFIX_MAG = "_mag"
 SUFFIX_SEEN = "_seen"
+SUFFIX_NEAR = "_near"
 
 # Tope de dias-al-evento. Treinta dias naturales: mas alla, la anticipacion de un evento de
 # oferta no se distingue del ruido, y ademas es la ventana dentro de la cual el calendario
@@ -158,6 +199,141 @@ EVENT_SPECS: dict[str, EventSpec] = {
         reason="No tiene magnitud: lo que aporta es CUANDO, y el cuando se sabe con meses "
                "de antelacion. La magnitud queda en 0 y solo cuenta la proximidad.",
     ),
+    # --- lote de alta friccion (2026-08-13) ---
+    "deribit_expiries": EventSpec(
+        magnitude="expiry_oi_share",
+        scale=0.25,
+        announced=True,
+        reason="Un vencimiento que se lleva el 25% del interes abierto es una unidad. Es la "
+               "fuente con la mejor propiedad de todo el catalogo: la fecha es el ultimo "
+               "viernes del mes y no la revisa nadie, asi que los dias-al-evento del pasado "
+               "son EXACTOS y no una estimacion, que es lo que si pasa en el retarget.",
+    ),
+    "cex_listings": EventSpec(
+        magnitude="listing_change",
+        scale=1.0,
+        announced=False,
+        reason="Un alta o una baja es una unidad, con signo. NO se anuncia: entre que Upbit "
+               "publica y el mercado reacciona hay minutos, y mirar hacia adelante aqui "
+               "seria futuro puro. Lo que queda es la estela, que es donde vive el efecto.",
+    ),
+    "appstore_rank": EventSpec(
+        magnitude="app_visibility_gap",
+        scale=0.5,
+        announced=False,
+        reason="Medio punto de diferencia de visibilidad entre Corea y EE.UU. es una "
+               "unidad. Que la fuente sea de evento y no continua es una consecuencia "
+               "MEDIDA: la lista solo tiene cien puestos y las apps cripto estan fuera casi "
+               "siempre, asi que la serie continua seria ceros y su z no existiria.",
+    ),
+    "sec_edgar_fts": EventSpec(
+        magnitude="edgar_institutional",
+        scale=10.0,
+        announced=False,
+        reason="Diez filings de tenencia institucional en un dia es un dia grande. La "
+               "magnitud es la pata 13F/13G y no el total: un 8-K de una empresa que "
+               "menciona bitcoin de pasada y una posicion declarada no son el mismo hecho.",
+    ),
+    "federal_register": EventSpec(
+        magnitude="fedreg_rules",
+        scale=3.0,
+        announced=False,
+        reason="Tres normas o propuestas de norma en un dia es un dia de actividad "
+               "regulatoria real. Se cuenta la pata normativa y no el total porque el total "
+               "lo domina el aviso administrativo rutinario. Las fechas futuras que el "
+               "propio documento trae no se anticipan todavia: por eso announced=False.",
+    ),
+    "courtlistener_dockets": EventSpec(
+        magnitude="court_dockets",
+        scale=5.0,
+        announced=False,
+        reason="Cinco dockets nuevos en un dia es una acumulacion visible. Una demanda no "
+               "se preanuncia.",
+    ),
+    "dat_mnav": EventSpec(
+        magnitude="dat_below_nav_share",
+        scale=0.25,
+        announced=False,
+        reason="Una cuarta parte de la cohorte cotizando por debajo de su tesoro es una "
+               "unidad: deja de ser el caso raro de una companıa mal gestionada y pasa a "
+               "ser un regimen en el que la via barata de financiacion del grupo es vender. "
+               "EL EVENTO ES LA PUBLICACION, no el cruce: la tenencia solo cambia cuando "
+               "alguien la declara, y la fila se fecha en el dia en que se declara. "
+               "announced=False porque lo que tiene fecha conocida es el PLAZO del 10-Q, no "
+               "su contenido: anticipar la temporada de resultados encenderia la feature "
+               "cuatro veces al ano hubiera o no estres, que es ruido con calendario. "
+               "LIMITE DECLARADO: de las dos features que publica el frame, esta "
+               "codificacion lleva la MAGNITUD (la fraccion bajo 1) y no la DISTANCIA "
+               "(`dat_mnav_gap`), que se queda en el frame como la pata auditable y como lo "
+               "que hace comparable un activo con otro. Llevar las dos exigiria la "
+               "codificacion de mapa de precios, cuya frontera absoluta —el 1,0x— y cuyo "
+               "signo encajan; no se hace hoy porque la fuente entra como esta declarada.",
+    ),
+}
+
+
+# --- mapa de precios: la tercera codificacion -----------------------------------------
+
+# Tope de distancia, en PORCENTAJE DE PRECIO. Un cuarto del precio es donde deja de tener
+# sentido llamar "cercano" a un cluster: para llegar hasta ahi el precio tiene que hacer un
+# recorrido que ya es la noticia por si mismo, y la aceleracion que aporta la liquidacion
+# deja de ser lo que explica el movimiento. Cumple ademas el mismo papel que
+# `DAYS_AHEAD_CAP`: convierte "no hay nada cerca" en un 0 que significa exactamente eso.
+#
+# Coincide con el horizonte de busqueda del adaptador (`CLUSTER_SEARCH_PCT`) a proposito: si
+# el tope fuera mas estrecho, el adaptador gastaria trabajo en encontrar clusters que este
+# modulo iba a pesar con cero, y el frame publicaria una distancia que no significa nada.
+#
+# MEDIDO 2026-08-13, y conviene tenerlo delante antes de leer la feature: en la muestra de
+# ese dia los clusters de BTC caian a -25%, -32% y -69%. Con este tope, ninguno pesa, y esa
+# es la lectura CORRECTA —las doscientas cuentas mayores no estaban cerca de reventar— y no
+# un tope mal puesto. La feature vale precisamente los dias en que deja de ser cero.
+PRICE_DISTANCE_CAP_PCT = 25.0
+
+# Cuantos dias puede tener la ultima foto del mapa antes de dejar de contar. Un mapa de
+# liquidacion de hace dos semanas no describe el libro de hoy —las posiciones que lo
+# formaban ya se han cerrado, movido o liquidado— y usarlo seria peor que no tener mapa,
+# porque tendria la misma pinta que uno fresco. Es la caducidad de `signal_radar.py`
+# aplicada aqui, y mas corta: dos dias.
+PRICE_MAP_STALE_DAYS = 2.0
+
+
+@dataclass(frozen=True, slots=True)
+class PriceMapSpec:
+    """Como se lee UN mapa de precios. Igual que `EventSpec`: todo declarado."""
+
+    distance: str  # columna con la distancia al cluster, en % y CON SIGNO
+    notional: str  # columna con el notional acumulado hasta el
+    scale: float  # cuanto notional vale UNA unidad de magnitud
+    reason: str = ""
+
+    def as_dict(self) -> dict:
+        return {
+            "distance": self.distance,
+            "notional": self.notional,
+            "scale": self.scale,
+            "reason": self.reason,
+        }
+
+
+PRICE_SPECS: dict[str, PriceMapSpec] = {
+    "hyperliquid_liqmap": PriceMapSpec(
+        distance="liq_cluster_distance_pct",
+        notional="liq_cluster_notional_usd",
+        scale=1e8,
+        reason="100 M$ de posiciones que revientan antes de llegar al cluster es una "
+               "unidad. Es el mismo orden que la escala de los hacks, y a proposito: son "
+               "dos formas de que salga capital de golpe y conviene que pesen igual.",
+    ),
+    "lending_health": PriceMapSpec(
+        distance="lending_liq_distance_pct",
+        notional="lending_liq_notional_usd",
+        scale=1e9,
+        reason="1.000 M$ de colateral liquidable es una unidad: un orden de magnitud MAS "
+               "que el perpetuo porque el colateral spot de Aave se mide en decenas de "
+               "miles de millones. Igualar las dos escalas haria que el mapa on-chain "
+               "saturase el recorte todos los dias y dejara de distinguir nada.",
+    ),
 }
 
 
@@ -180,12 +356,23 @@ def as_naive(moment: pd.Timestamp) -> np.datetime64:
 
 
 def event_sources(catalog: Sequence[SignalSource] = CATALOG) -> tuple[SignalSource, ...]:
-    """Las fuentes que se codifican como evento. Es la cadencia, no el tier."""
-    return tuple(s for s in catalog if s.cadence == EVENT_CADENCE)
+    """Las fuentes que se codifican como evento FECHADO. Es la cadencia, no el tier."""
+    return tuple(s for s in catalog if is_event_source(s))
 
 
 def is_event_source(source: SignalSource) -> bool:
-    return source.cadence == EVENT_CADENCE
+    """Evento fechado. Se pregunta al catalogo, que deriva la respuesta de la cadencia
+    salvo que la fuente declare otra codificacion (`price_map`)."""
+    return source.encoding_kind == ENCODING_EVENT
+
+
+def price_map_sources(catalog: Sequence[SignalSource] = CATALOG) -> tuple[SignalSource, ...]:
+    """Las fuentes que se codifican como mapa de precios. Ver el docstring del modulo."""
+    return tuple(s for s in catalog if is_price_map_source(s))
+
+
+def is_price_map_source(source: SignalSource) -> bool:
+    return source.encoding_kind == ENCODING_PRICE_MAP
 
 
 def encoded_names(source_key: str) -> tuple[str, ...]:
@@ -193,6 +380,15 @@ def encoded_names(source_key: str) -> tuple[str, ...]:
     return (
         f"{source_key}{SUFFIX_AHEAD}",
         f"{source_key}{SUFFIX_ACTIVE}",
+        f"{source_key}{SUFFIX_MAG}",
+        f"{source_key}{SUFFIX_SEEN}",
+    )
+
+
+def price_encoded_names(source_key: str) -> tuple[str, ...]:
+    """Las columnas que produce un mapa de precios. Tres y no cuatro: no hay estela."""
+    return (
+        f"{source_key}{SUFFIX_NEAR}",
         f"{source_key}{SUFFIX_MAG}",
         f"{source_key}{SUFFIX_SEEN}",
     )
@@ -213,6 +409,25 @@ def event_encoding_spec() -> dict:
         },
         "missing": "0.0 con `_seen` = 0 (la ausencia de dato se declara aparte)",
         "sources": {key: spec.as_dict() for key, spec in sorted(EVENT_SPECS.items())},
+        "price_map": price_map_encoding_spec(),
+    }
+
+
+def price_map_encoding_spec() -> dict:
+    """La politica del mapa de precios, publicada al lado de la de evento."""
+    return {
+        "routed_by": "campo `encoding` del catalogo (excepcion declarada a la cadencia)",
+        "distance_cap_pct": PRICE_DISTANCE_CAP_PCT,
+        "stale_days": PRICE_MAP_STALE_DAYS,
+        "magnitude_clip": MAGNITUDE_CLIP,
+        "suffixes": {
+            "near": SUFFIX_NEAR,
+            "magnitude": SUFFIX_MAG,
+            "seen": SUFFIX_SEEN,
+        },
+        "sign": "la magnitud es negativa si el cluster esta POR DEBAJO del precio",
+        "missing": "0.0 con `_seen` = 0; una foto de mas de `stale_days` no cuenta",
+        "sources": {key: spec.as_dict() for key, spec in sorted(PRICE_SPECS.items())},
     }
 
 
@@ -322,6 +537,123 @@ def scaled_magnitude(value: float, scale: float) -> float:
     return float(np.clip(value / scale, -MAGNITUDE_CLIP, MAGNITUDE_CLIP))
 
 
+def encode_price_at(
+    frame: pd.DataFrame,
+    source_key: str,
+    as_of: datetime,
+    *,
+    entities: Sequence[str] | None = None,
+    spec: PriceMapSpec | None = None,
+) -> dict[str, dict[str, float]]:
+    """
+    Codifica UN mapa de precios en el 'ahora' del reloj. `entidad -> columnas`.
+
+    Gemelo de `encode_at` y con una diferencia que no es de forma: aqui el futuro NO se
+    mira, porque no existe. Un mapa es la foto de un instante y la unica pregunta valida es
+    cual es la ultima foto ANTERIOR a la frontera, y si sigue siendo fresca.
+    """
+    spec = spec or PRICE_SPECS.get(source_key)
+    names = price_encoded_names(source_key)
+    empty = dict.fromkeys(names, 0.0)
+
+    keys = list(entities or ())
+    out: dict[str, dict[str, float]] = {key: dict(empty) for key in keys}
+    if frame is None or frame.empty or spec is None:
+        return out
+
+    cutoff = visible_cutoff(as_of)
+    has_distance = spec.distance in frame.columns
+    has_notional = spec.notional in frame.columns
+    if not (has_distance and has_notional):
+        return out
+
+    for entity, block in frame.groupby(level=ENTITY, sort=False):
+        entity = str(entity)
+        if keys and entity not in out:
+            continue
+        out[entity] = encode_price_arrays(
+            day_values(block.index.get_level_values(DAY)),
+            pd.to_numeric(block[spec.distance], errors="coerce").to_numpy(dtype=float),
+            pd.to_numeric(block[spec.notional], errors="coerce").to_numpy(dtype=float),
+            cutoff,
+            source_key,
+            spec,
+        )
+    return out
+
+
+def encode_price_arrays(
+    days: np.ndarray,
+    distances: np.ndarray,
+    notionals: np.ndarray,
+    cutoff: pd.Timestamp,
+    source_key: str,
+    spec: PriceMapSpec,
+    *,
+    stale_days: float = PRICE_MAP_STALE_DAYS,
+) -> dict[str, float]:
+    """
+    EL NUCLEO del mapa de precios: la serie de fotos de UNA entidad -> las tres columnas.
+
+    Sobre arrays y no sobre un frame por el mismo motivo que `encode_arrays`: lo llaman la
+    API legible y el radar, y dos implementaciones de la misma cuenta son dos cuentas
+    distintas en cuanto alguien toque una.
+    """
+    names = price_encoded_names(source_key)
+    encoded = dict.fromkeys(names, 0.0)
+    if days is None or len(days) == 0:
+        return encoded
+
+    # `_seen` mira si la entidad tiene mapa, no si hoy dice algo: es la misma distincion
+    # entre "no hay cluster cerca" y "de este activo no se nada".
+    encoded[f"{source_key}{SUFFIX_SEEN}"] = 1.0
+
+    index = int(np.searchsorted(days, as_naive(cutoff), side="left"))
+    if index == 0:
+        return encoded  # todas las fotos son posteriores a la frontera
+
+    last = index - 1
+    stale = (cutoff - pd.Timestamp(days[last], tz="UTC")).days
+    if stale > stale_days:
+        return encoded  # foto caducada: ver PRICE_MAP_STALE_DAYS
+
+    distance = distances[last]
+    notional = notionals[last]
+    if not np.isfinite(distance) or not np.isfinite(notional):
+        return encoded
+
+    encoded[f"{source_key}{SUFFIX_NEAR}"] = max(
+        0.0, 1.0 - abs(float(distance)) / PRICE_DISTANCE_CAP_PCT
+    )
+    # EL SIGNO ES EL DE LA DISTANCIA, no el del notional: el notional es una cantidad y lo
+    # que tiene direccion es donde esta el cluster. Un cluster por debajo son largos que
+    # revientan VENDIENDO; por encima, cortos que revientan comprando.
+    magnitude = scaled_magnitude(abs(float(notional)), spec.scale)
+    encoded[f"{source_key}{SUFFIX_MAG}"] = magnitude * (-1.0 if distance < 0 else 1.0)
+    return encoded
+
+
+def encode_price_series(
+    frame: pd.DataFrame,
+    source_key: str,
+    days: Sequence[datetime],
+    *,
+    entities: Sequence[str] | None = None,
+) -> pd.DataFrame:
+    """La version DENSA del mapa, para publicar e inspeccionar. Ver `encode_series`."""
+    keys = list(entities or _entities_of(frame))
+    rows: list[dict] = []
+    encoded: dict[str, dict[str, float]] = {}
+    for day in days:
+        encoded = encode_price_at(frame, source_key, day, entities=keys)
+        for entity, values in encoded.items():
+            rows.append({ENTITY: entity, DAY: day, **values})
+    if not rows:
+        return pd.DataFrame(columns=[*price_encoded_names(source_key)])
+    out = pd.DataFrame(rows).set_index([ENTITY, DAY]).sort_index()
+    return out[list(price_encoded_names(source_key))]
+
+
 def encode_series(
     frame: pd.DataFrame,
     source_key: str,
@@ -414,7 +746,37 @@ def pool_report(frames: Mapping[str, pd.DataFrame]) -> dict:
         "n_event_sources": len(out),
         "pooled_events_total": sum(r["pooled_events"] for r in out.values()),
         "sources": dict(sorted(out.items())),
+        # Los mapas de precios van APARTE y no dentro de `sources`: su unidad de
+        # observacion es la FOTO DIARIA y no el evento, asi que sumarlos al recuento
+        # pooled inflaria la muestra de eventos con algo que no lo es.
+        "price_maps": price_map_pool(frames),
     }
+
+
+def price_map_pool(frames: Mapping[str, pd.DataFrame]) -> dict:
+    """Cuantas fotos de mapa hay, por fuente. La cifra que dice si el mapa existe."""
+    out: dict[str, dict] = {}
+    for source in price_map_sources():
+        frame = frames.get(source.key)
+        spec = PRICE_SPECS.get(source.key)
+        row = {
+            "tier": source.tier,
+            "distance": spec.distance if spec else None,
+            "snapshots": 0,
+            "entities": 0,
+            "first_day": None,
+            "last_day": None,
+        }
+        if frame is not None and not frame.empty:
+            days = frame.index.get_level_values(DAY)
+            row.update(
+                snapshots=int(len(frame)),
+                entities=int(frame.index.get_level_values(ENTITY).nunique()),
+                first_day=days.min().date().isoformat(),
+                last_day=days.max().date().isoformat(),
+            )
+        out[source.key] = row
+    return {"n_sources": len(out), "sources": dict(sorted(out.items()))}
 
 
 # El recuento publicado. Va en data/ y no en .cache/ por el mismo motivo que el registro de
@@ -449,22 +811,35 @@ __all__ = [
     "EVENT_CADENCE",
     "EVENT_SPECS",
     "MAGNITUDE_CLIP",
+    "PRICE_DISTANCE_CAP_PCT",
+    "PRICE_MAP_STALE_DAYS",
+    "PRICE_SPECS",
     "SUFFIX_ACTIVE",
     "SUFFIX_AHEAD",
     "SUFFIX_MAG",
+    "SUFFIX_NEAR",
     "SUFFIX_SEEN",
     "EventSpec",
+    "PriceMapSpec",
     "as_naive",
     "day_values",
     "encode_arrays",
     "encode_at",
+    "encode_price_arrays",
+    "encode_price_at",
+    "encode_price_series",
     "encode_series",
     "scaled_magnitude",
     "encoded_names",
     "event_encoding_spec",
     "event_sources",
     "is_event_source",
+    "is_price_map_source",
     "load_pool_report",
     "pool_report",
+    "price_encoded_names",
+    "price_map_encoding_spec",
+    "price_map_pool",
+    "price_map_sources",
     "write_pool_report",
 ]

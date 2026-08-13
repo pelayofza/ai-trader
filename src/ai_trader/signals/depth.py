@@ -4,7 +4,7 @@ LA SONDA DE PROFUNDIDAD: convierte `history_from` de promesa en medicion.
 EL CAMPO QUE ESTE MODULO EXISTE PARA LLENAR
 -------------------------------------------
 `SignalSource.history_from` decide si una fuente puede entrar en un backtest. Arranco en
-`None` en las diecisiete, y `None` significa "solo hacia adelante". La tentacion, con el
+`None` en las diecisiete de entonces, y `None` significa "solo hacia adelante". La tentacion, con el
 adaptador ya escrito, es rellenarlo con lo que dice el proveedor —"serie completa desde
 enero de 2024"— y seguir. Este modulo existe para que eso no pase: la fecha se pide a la
 API, se deriva con el `daily_from_raw` de verdad, y lo que sale se escribe en un fichero
@@ -143,7 +143,7 @@ class DepthReport:
 
 
 def _connect() -> None:
-    """Registra los diecisiete adaptadores. Importar aqui y no arriba mantiene el
+    """Registra los treinta adaptadores. Importar aqui y no arriba mantiene el
     modulo importable sin `ccxt` ni ningun cliente detras."""
     from ai_trader.signals.adapters import register_all
 

@@ -1,5 +1,12 @@
 [
   {
+    "source_key": "appstore_rank",
+    "tier": "B",
+    "cadence": "event",
+    "announced": false,
+    "magnitude": "app_visibility_gap"
+  },
+  {
     "source_key": "btc_difficulty",
     "tier": "A",
     "cadence": "event",
@@ -7,11 +14,46 @@
     "magnitude": "difficulty_change_pct"
   },
   {
+    "source_key": "cex_listings",
+    "tier": "A",
+    "cadence": "event",
+    "announced": false,
+    "magnitude": "listing_change"
+  },
+  {
+    "source_key": "courtlistener_dockets",
+    "tier": "A",
+    "cadence": "event",
+    "announced": false,
+    "magnitude": "court_dockets"
+  },
+  {
+    "source_key": "dat_mnav",
+    "tier": "A",
+    "cadence": "event",
+    "announced": false,
+    "magnitude": "dat_below_nav_share"
+  },
+  {
     "source_key": "defillama_hacks",
     "tier": "A",
     "cadence": "event",
     "announced": false,
     "magnitude": "hack_amount_usd"
+  },
+  {
+    "source_key": "deribit_expiries",
+    "tier": "A",
+    "cadence": "event",
+    "announced": true,
+    "magnitude": "expiry_oi_share"
+  },
+  {
+    "source_key": "federal_register",
+    "tier": "A",
+    "cadence": "event",
+    "announced": false,
+    "magnitude": "fedreg_rules"
   },
   {
     "source_key": "macro_calendar",
@@ -26,6 +68,13 @@
     "cadence": "event",
     "announced": false,
     "magnitude": "sdn_new_entries"
+  },
+  {
+    "source_key": "sec_edgar_fts",
+    "tier": "A",
+    "cadence": "event",
+    "announced": false,
+    "magnitude": "edgar_institutional"
   },
   {
     "source_key": "token_unlocks",

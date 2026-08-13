@@ -40,12 +40,27 @@ util— y el catalogo espera a que la ventana exista.
 
 Juntos responden la unica pregunta que importa antes de puntuar nada: **que fuentes pueden
 entrar en un backtest y cuales solo en vivo**. El dia que se construyo el esqueleto la
-respuesta era "ninguna", con el catalogo entero en `None`. Hoy, con las diecisiete
-conectadas y sondeadas, son diez, y las demas siguen a `None` por motivos distintos que
-conviene no confundir: la credencial no esta en el entorno (Guavy, FRED, beaconcha.in), el
-proveedor cerro el endpoint detras de un muro de pago (unlocks de DefiLlama: 402 medido), o
-la fuente no tiene pasado que descargar y su profundidad la compra el calendario (P2P,
-funding, OFAC).
+respuesta era "ninguna", con el catalogo entero en `None`. Hoy, con las treinta
+conectadas y sondeadas, son trece, y las demas siguen a `None` por motivos distintos que
+conviene no confundir: la credencial no esta en el entorno (Guavy, FRED, beaconcha.in,
+Naver, Yandex, los subgrafos de prestamos), el proveedor cerro el endpoint detras de un
+muro de pago (unlocks de DefiLlama: 402 medido), o la fuente no tiene pasado que descargar
+y su profundidad la compra el calendario (P2P, funding, OFAC, el estado de las cuentas de
+Hyperliquid, el OI por strike de Deribit).
+
+EL TERCER CAMPO, QUE LLEGA CON EL LOTE CARO: `typical_adv_usd`
+--------------------------------------------------------------
+Una senal puede ser genuina y no servir para nada, y la razon casi nunca es estadistica:
+es que vive en activos donde no cabe tamano. Este campo declara el ADV TIPICO —la mediana
+en dolares— de las entidades donde la senal existe, MEDIDO por `signals/liquidity.py` y
+apuntado en `data/signals/entity_adv.json` con la misma disciplina que `history_from`: un
+test falla si el catalogo declara una cifra que el registro no respalda.
+
+Las dos cifras que salieron de la primera medicion son el motivo de que el campo exista: el
+perp MEDIANO de Hyperliquid mueve 307.000 dolares al dia —el medio, no el pequeno, y de los
+232 listados solo 177 negocian algo— y el mercado KRW mediano de Upbit, 248.000. Las dos
+fuentes que cuelgan de ellos son buenas y no admiten tamano, y eso hay que saberlo ANTES de
+escalar y no despues.
 
 EL `tier` DESCRIBE; YA NO ENRUTA (2026-08-11)
 ---------------------------------------------
@@ -78,6 +93,13 @@ varas de `normalize.py`. Coinciden en cinco de las seis mecanicas; la sexta,
 `staking_queue`, es mecanica y publica un NIVEL diario, y enrutar por el tier le habria
 puesto un dias-al-evento a una cola de validadores.
 
+Con UNA excepcion declarada desde 2026-08-13, y declarada fuente a fuente en el campo
+`encoding`: el MAPA DE PRECIOS (`price_map`). Un mapa de liquidacion se observa todos los
+dias —luego no es un evento fechado— y lo que dice es una DISTANCIA EN PRECIO, no un nivel
+comparable con su propia historia. Las dos codificaciones anteriores lo leerian mal de dos
+maneras distintas y ninguna daria error, que es el peor de los casos. Son dos fuentes:
+`hyperliquid_liqmap` y `lending_health`.
+
 QUE SUSTITUYE A LA PUERTA, sin fingir que es equivalente: NINGUNA feature —de ningun tier—
 entra en `scoring/search_space.py`, y los umbrales de las puertas son constantes declaradas
 y razonadas en codigo, no parametros sorteables. Eso limita los grados de libertad, pero no
@@ -96,7 +118,7 @@ comparar, no un aprobado.
 ESTE MODULO NO CONECTA NADA. No importa `requests` ni ningun cliente: es una lista de
 declaraciones. Los adaptadores viven en `signals/adapters/` y se registran en
 `signals/source.py`; el catalogo es lo que permite medir cuantos faltan (hoy, ninguno).
-"""
+"""  # noqa: RUF002 - las notas citan titulos y unidades tal y como los publica cada fuente
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -151,6 +173,22 @@ CADENCE_DAYS: dict[str, float | None] = {
     "event": None,
 }
 CADENCES: tuple[str, ...] = tuple(CADENCE_DAYS)
+
+# Como se codifica la fuente para el espacio de observacion. La regla sigue siendo la de
+# siempre —la CADENCIA decide— y este campo es la EXCEPCION DECLARADA, no un sustituto:
+# `encoding_kind` deriva de la cadencia salvo que la fuente escriba otra cosa a mano.
+#
+# La tercera codificacion entra con el mapa de liquidacion, y entra porque las otras dos no
+# saben leerlo. Un mapa de liquidacion es una observacion DIARIA (luego no es un evento
+# fechado: no tiene fecha futura que anticipar) cuyo contenido es una DISTANCIA EN PRECIO y
+# un notional acumulado hasta ella. Con las dos z, la feature seria "¿es hoy la distancia
+# alta PARA ESTE ACTIVO?", que no es la pregunta: la pregunta es si el cluster esta cerca,
+# y "cerca" es un hecho absoluto en porcentaje de precio, no un percentil de su historia.
+# Con la codificacion de evento, el `_ahead` mediria dias hasta una fecha que no existe.
+ENCODING_CONTINUOUS = "continuous"
+ENCODING_EVENT = "event"
+ENCODING_PRICE_MAP = "price_map"
+ENCODINGS: tuple[str, ...] = (ENCODING_CONTINUOUS, ENCODING_EVENT, ENCODING_PRICE_MAP)
 
 # Entidades que puede tener una fuente segun su alcance. Un alcance de mercado tiene UNA
 # entidad (`MARKET_ENTITY`); uno de activo, una por activo del universo.
@@ -219,6 +257,28 @@ class SignalSource:
     # cadena, una serie macro. Vacio = las entidades se derivan del universo configurado
     # (`signals/capture.py::entities_for`), que es el caso de todo lo que es por activo.
     fixed_entities: tuple[str, ...] = ()
+    # Codificacion DECLARADA. None = la decide la cadencia, que es el caso de todas menos
+    # las de mapa de precios. Ver `ENCODINGS`.
+    encoding: str | None = None
+    # ADV TIPICO (mediana, USD) de las entidades donde esta senal existe. MEDIDO por
+    # `signals/liquidity.py`, que lo apunta en `data/signals/entity_adv.json`; un test falla
+    # si alguien escribe aqui una cifra que el registro no respalda, igual que con
+    # `history_from`. None = no aplica (fuentes de alcance mercado, cuyo eje no es un
+    # activo) o no se ha podido medir; las dos cosas se distinguen en `adv_note`.
+    typical_adv_usd: float | None = None
+    adv_note: str = ""
+    # RETRASO TIPICO DE PUBLICACION, en dias: cuanto tarda el dato en existir desde la fecha
+    # a la que se refiere. MEDIDO, con la misma disciplina que los dos campos anteriores (el
+    # registro lo escribe la propia fuente y un test compara). None = la fuente publica en
+    # el dia y no hay desfase que declarar, que es el caso de casi todas; `lag_note` lo dice
+    # para que None no signifique dos cosas.
+    #
+    # No es cosmetico y no lo cubre `pit`: `pit` dice si el pasado se puede descargar, y
+    # esto dice si el dato de un dia ESTABA ese dia. Una fuente cuyo dato se publica cinco
+    # semanas tarde y se fecha en su fecha de referencia mete cinco semanas de futuro en
+    # cualquier backtest, y no da ningun error.
+    disclosure_lag_days: float | None = None
+    lag_note: str = ""
     notes: str = ""
 
     def __post_init__(self) -> None:
@@ -232,6 +292,14 @@ class SignalSource:
             raise ValueError(f"Cadencia desconocida en '{self.key}': '{self.cadence}'")
         if self.pit not in PIT_KINDS:
             raise ValueError(f"pit desconocido en '{self.key}': '{self.pit}'")
+        if self.encoding is not None and self.encoding not in ENCODINGS:
+            raise ValueError(f"Codificacion desconocida en '{self.key}': '{self.encoding}'")
+        if self.typical_adv_usd is not None and self.typical_adv_usd <= 0:
+            raise ValueError(f"ADV invalido en '{self.key}': {self.typical_adv_usd}")
+        if self.disclosure_lag_days is not None and self.disclosure_lag_days < 0:
+            raise ValueError(
+                f"Retraso de publicacion negativo en '{self.key}': {self.disclosure_lag_days}"
+            )
         if not self.license:
             raise ValueError(f"La fuente '{self.key}' no declara licencia")
         if not self.features:
@@ -257,6 +325,17 @@ class SignalSource:
         la fuente existe unicamente hacia adelante, por muy profundo que sea el backfill
         que anuncie el proveedor."""
         return self.history_from is not None
+
+    @property
+    def encoding_kind(self) -> str:
+        """Como se codifica. La cadencia decide; el campo `encoding` es la excepcion.
+
+        Que el default se DERIVE y no se escriba en cada fuente es lo que impide que
+        anadir una fuente de evento y olvidarse del campo la mande en silencio a las dos z,
+        que es exactamente el fallo que `events.py` existe para evitar."""
+        if self.encoding is not None:
+            return self.encoding
+        return ENCODING_EVENT if self.cadence == "event" else ENCODING_CONTINUOUS
 
     @property
     def expected_days_between_observations(self) -> float | None:
@@ -288,6 +367,11 @@ class SignalSource:
             "endpoint": self.endpoint,
             "auth_env": self.auth_env,
             "fixed_entities": list(self.fixed_entities),
+            "encoding": self.encoding_kind,
+            "typical_adv_usd": self.typical_adv_usd,
+            "adv_note": self.adv_note,
+            "disclosure_lag_days": self.disclosure_lag_days,
+            "lag_note": self.lag_note,
             "notes": self.notes,
         }
 
@@ -735,6 +819,465 @@ CATALOG: tuple[SignalSource, ...] = (
               "un cpi_release vacio en 2019 no significa que no hubiera IPC. El BLS no "
               "publica esto en JSON: se archiva el HTML crudo para poder re-derivar.",
     ),
+    # ================== Lote de alta friccion (2026-08-13) ==========================
+    #
+    # Lo que separa a estas doce de las diecisiete anteriores no es el precio —todas menos
+    # tres son gratuitas y sin credencial— sino el TRABAJO: hay que reconstruir estado a
+    # partir de posiciones sueltas, calcular deltas para encontrar un strike, parsear
+    # titulos en coreano o pedir el mismo endpoint un dia detras de otro porque no acepta
+    # rangos. Nadie las conecta porque da trabajo, no porque sean secretas.
+    #
+    # Y traen el campo que faltaba: `typical_adv_usd`. Varias son senales genuinas que
+    # viven en activos donde no cabe tamano —la mediana de los perps que negocian en
+    # Hyperliquid mueve 307.000 $ al dia y la de los 283 mercados KRW de Upbit, 248.000— y
+    # esa cifra tiene que estar delante ANTES de que a alguien se le ocurra escalar.
+    SignalSource(
+        key="hyperliquid_leverage",
+        title="Distribucion del apalancamiento y concentracion del OI (Hyperliquid)",
+        tier=TIER_STATISTICAL,
+        scope=SCOPE_ASSET,
+        cadence="daily",
+        entity_kind=EntityKind.TOKEN,
+        features=(
+            SignalFeature("hl_leverage_median", AGG_LAST, "x",
+                          "Mediana del apalancamiento declarado, ponderada por posicion."),
+            SignalFeature("hl_leverage_p90", AGG_LAST, "x", "Percentil 90 del apalancamiento."),
+            SignalFeature("hl_high_leverage_share", AGG_LAST, "0-1",
+                          "Fraccion del notional muestreado en posiciones de 10x o mas."),
+            SignalFeature("hl_oi_top5_share", AGG_LAST, "0-1",
+                          "Fraccion del notional muestreado que esta en 5 cuentas."),
+            SignalFeature("hl_sampled_oi_usd", AGG_LAST, "USD", "Notional de la muestra."),
+        ),
+        pit=PIT_FORWARD_CAPTURE,
+        license="Hyperliquid: abierta, sin auth ni KYC.",
+        endpoint="https://api.hyperliquid.xyz/info",
+        typical_adv_usd=307_370.0,
+        adv_note="MEDIDO 2026-08-13: mediana de `dayNtlVlm` sobre los 177 perps que "
+                 "NEGOCIAN (de 232 listados; los otros 55 no movieron nada en 24 horas). "
+                 "Decil inferior 93.597 $, maximo 1.748 M$. La media enganaria por tres "
+                 "ordenes de magnitud: la distribucion del apalancamiento existe en los "
+                 "232, y el tamano solo cabe en la docena de arriba.",
+        notes="LO QUE NINGUN CEX PERMITE: Binance publica el OI agregado; aqui el estado de "
+              "cada cuenta es publico y la DISTRIBUCION se puede calcular. MEDIDO "
+              "2026-08-13: el leaderboard trae 41.714 cuentas y la muestra de las 200 "
+              "mayores cubre el 21,7% del OI del venue (1.578 M$ de 7.285 M$). Es una "
+              "MUESTRA SESGADA por construccion —las cuentas grandes— y esa es justo la "
+              "mitad que decide un gap, pero la palabra 'distribucion' aqui significa "
+              "'distribucion en la cola de arriba' y no 'del libro entero'. Forward capture "
+              "puro: nadie publica el estado de ayer, asi que cada dia sin capturar es "
+              "profundidad perdida.",
+    ),
+    SignalSource(
+        key="hyperliquid_liqmap",
+        title="Mapa de precios de liquidacion (Hyperliquid)",
+        tier=TIER_MECHANICAL,
+        scope=SCOPE_ASSET,
+        cadence="daily",
+        entity_kind=EntityKind.TOKEN,
+        features=(
+            SignalFeature("liq_cluster_distance_pct", AGG_LAST, "%",
+                          "Distancia al cluster mas cercano, con signo (- = por debajo)."),
+            SignalFeature("liq_cluster_notional_usd", AGG_LAST, "USD",
+                          "Notional acumulado entre el precio y ese cluster, incluido."),
+        ),
+        pit=PIT_FORWARD_CAPTURE,
+        encoding=ENCODING_PRICE_MAP,
+        license="Hyperliquid: abierta, sin auth ni KYC.",
+        endpoint="https://api.hyperliquid.xyz/info",
+        typical_adv_usd=307_370.0,
+        adv_note="El mismo venue y la misma medicion que `hyperliquid_leverage`.",
+        notes="LA TERCERA CODIFICACION DEL SISTEMA, y entra porque las otras dos no saben "
+              "leer esto: un mapa de liquidacion no tiene fecha (no es un evento fechado) ni "
+              "es un nivel comparable con su propia historia (una z de 'distancia al "
+              "cluster' no responde a la pregunta). Lo que tiene es una DISTANCIA EN PRECIO "
+              "y un notional, que es exactamente lo que codifica `events.py::PRICE_SPECS`. "
+              "LIMITE MEDIDO 2026-08-13: solo el 75,7% de las posiciones muestreadas trae "
+              "`liquidationPx`; en las de margen cruzado con holgura el campo llega nulo, "
+              "asi que el mapa esta INCOMPLETO por abajo y el notional publicado es una "
+              "cota inferior. No se estima el hueco: estimarlo exigiria replicar el motor "
+              "de margen del venue.",
+    ),
+    SignalSource(
+        key="deribit_volatility",
+        title="Superficie de volatilidad: DVOL, skew de 25 delta y term structure (Deribit)",
+        tier=TIER_STATISTICAL,
+        scope=SCOPE_ASSET,
+        cadence="daily",
+        entity_kind=EntityKind.TOKEN,
+        features=(
+            SignalFeature("dvol_index", AGG_LAST, "vol %", "Indice DVOL de la moneda."),
+            SignalFeature("skew_25d", AGG_LAST, "vol %",
+                          "IV del put de 25 delta menos la del call de 25 delta."),
+            SignalFeature("atm_iv_30d", AGG_LAST, "vol %", "IV at-the-money a ~30 dias."),
+            SignalFeature("iv_term_slope", AGG_LAST, "vol %",
+                          "IV ATM del vencimiento largo menos la del corto."),
+        ),
+        pit=PIT_ARCHIVE_REVISABLE,
+        history_from=date(2021, 3, 24),  # MEDIDO: primer punto de DVOL en BTC y ETH
+        license="Deribit: API publica, sin auth.",
+        endpoint="https://www.deribit.com/api/v2/public/get_volatility_index_data",
+        typical_adv_usd=100_937_354.0,
+        adv_note="MEDIDO 2026-08-13: mediana del volumen 24h en USD del perpetuo de las DOS "
+                 "monedas con libro de opciones (BTC 152,2 M$, ETH 49,7 M$). Aqui el ADV no "
+                 "es la restriccion —es la unica fuente del lote que vive en los dos "
+                 "activos mas profundos que existen— y por eso se declara: para que se vea "
+                 "que la restriccion esta en otras.",
+        notes="DOS PROFUNDIDADES EN LA MISMA FUENTE, como en `macro_calendar`. El DVOL tiene "
+              "backfill REAL y medido —2021-03-24 en BTC y en ETH, con paginacion hacia "
+              "atras porque la API devuelve 1.000 puntos por peticion— y el skew y la "
+              "pendiente salen del LIBRO DE HOY, que no tiene historia: esas dos son "
+              "forward_capture dentro de una fuente declarada revisable, y el "
+              "`history_from` de arriba solo respalda al DVOL. MEDIDO ademas: solo BTC y "
+              "ETH tienen libro de opciones vivo (820 y 688 instrumentos); SOL tuvo DVOL "
+              "entre 2022-05 y 2022-11 y dejo de publicarse, y XRP nunca lo tuvo. EL DELTA "
+              "SE CALCULA AQUI: el libro no publica griegas, asi que el strike de 25 delta "
+              "se busca con un Black-Scholes de tipo cero sobre `mark_iv` y se interpola en "
+              "delta. Es una APROXIMACION declarada (las opciones de Deribit son inversas), "
+              "y se hace en la capa pura para que sea testeable sin red.",
+    ),
+    SignalSource(
+        key="deribit_expiries",
+        title="Calendario de vencimientos de opciones con OI por strike (Deribit)",
+        tier=TIER_MECHANICAL,
+        scope=SCOPE_ASSET,
+        cadence="event",
+        entity_kind=EntityKind.TOKEN,
+        features=(
+            SignalFeature("expiry_oi_usd", AGG_LAST, "USD",
+                          "Notional de interes abierto que vence ese dia."),
+            SignalFeature("expiry_oi_share", AGG_LAST, "0-1",
+                          "Fraccion del interes abierto total que vence ese dia."),
+        ),
+        pit=PIT_FORWARD_CAPTURE,
+        license="Deribit: API publica, sin auth.",
+        endpoint="https://www.deribit.com/api/v2/public/get_book_summary_by_currency",
+        typical_adv_usd=100_937_354.0,
+        adv_note="El mismo venue y la misma medicion que `deribit_volatility`.",
+        notes="LA MEJOR PROPIEDAD QUE PUEDE TENER UNA FEATURE DE EVENTO: la fecha es fija y "
+              "no la revisa nadie —el ultimo viernes del mes a las 08:00 UTC—, asi que los "
+              "dias-al-evento son exactos y el calendario de hoy es el que estaba publicado "
+              "hace un ano. MEDIDO 2026-08-13: 12 vencimientos vivos en BTC repartidos en "
+              "820 instrumentos; el trimestral de septiembre concentra 108.894 contratos y "
+              "el semanal siguiente 19.888. Forward capture: el OI por strike es la foto de "
+              "HOY y nadie publica la de una fecha pasada, asi que la profundidad de la "
+              "MAGNITUD se compra capturando. Las FECHAS futuras, en cambio, ya estan.",
+    ),
+    SignalSource(
+        key="lending_health",
+        title="Health factors y mapa de liquidacion del colateral (Aave / Compound)",
+        tier=TIER_MECHANICAL,
+        scope=SCOPE_ASSET,
+        cadence="daily",
+        entity_kind=EntityKind.TOKEN,
+        features=(
+            SignalFeature("lending_liq_distance_pct", AGG_LAST, "%",
+                          "Caida del colateral que empieza a liquidar, con signo."),
+            SignalFeature("lending_liq_notional_usd", AGG_LAST, "USD",
+                          "Colateral liquidable hasta ese nivel."),
+        ),
+        pit=PIT_FORWARD_CAPTURE,
+        encoding=ENCODING_PRICE_MAP,
+        license="Subgrafos: la red descentralizada de The Graph exige clave (auth error medido).",
+        endpoint="https://gateway.thegraph.com/api/subgraphs/id",
+        auth_env="THEGRAPH_API_KEY",
+        adv_note="Sin medicion: sin clave no hay respuesta y el eje de entidades no se "
+                 "puede resolver. Declararlo por analogia con Hyperliquid seria inventarlo.",
+        notes="EL OTRO LADO DEL APALANCAMIENTO: Hyperliquid dice donde revienta el "
+              "apalancamiento del perpetuo y esto dice donde revienta el del colateral "
+              "SPOT, que es el que fuerza ventas de verdad en el mercado al contado. Se "
+              "codifica igual —mapa de precios— a proposito: son la misma clase de objeto. "
+              "MEDIDO 2026-08-13, y el resultado es que hoy NO HAY VIA GRATUITA: "
+              "api.thegraph.com ya no resuelve (el servicio alojado se retiro), el gateway "
+              "descentralizado responde 'auth error: missing authorization header', la API "
+              "de cuentas de Compound v2 devuelve 410 Gone y los datasets de liquidaciones "
+              "de DefiLlama, 404. El adaptador se escribe igualmente por lo mismo que el de "
+              "unlocks: para que eso sea una MEDICION fechada y no un hueco que se lea como "
+              "'nadie lo ha intentado'.",
+    ),
+    SignalSource(
+        key="appstore_rank",
+        title="Atencion retail por geografia: ranking en App Store (Corea frente a EE.UU.)",
+        tier=TIER_STATISTICAL,
+        scope=SCOPE_MARKET,
+        cadence="event",
+        entity_kind=EntityKind.MARKET,
+        features=(
+            SignalFeature("app_visibility_kr", AGG_LAST, "0-1",
+                          "Visibilidad de las apps cripto en la lista coreana."),
+            SignalFeature("app_visibility_us", AGG_LAST, "0-1",
+                          "Visibilidad de las apps cripto en la lista estadounidense."),
+            SignalFeature("app_visibility_gap", AGG_LAST, "-1..1",
+                          "Corea menos EE.UU.: hacia donde esta entrando el retail."),
+        ),
+        pit=PIT_FORWARD_CAPTURE,
+        license="Apple RSS (marketing tools): abierta, sin auth.",
+        endpoint="https://rss.applemarketingtools.com/api/v2/kr/apps/top-free/100/apps.json",
+        adv_note="Alcance de mercado: el eje no es un activo, asi que el ADV que limita es "
+                 "el del universo que se opere y no uno de la fuente.",
+        notes="LA VERSION BUENA ES EL DIFERENCIAL, no el ranking de Coinbase en EE.UU.: la "
+              "señal es que Corea se caliente ANTES, y el nivel absoluto de cada lista lo "
+              "domina lo que no tiene nada que ver con cripto. DOS LIMITES MEDIDOS "
+              "2026-08-13 que cambian el diseno: (1) la lista es de CIEN puestos y no mas "
+              "—pedir 200 devuelve 500— y el parametro de genero se IGNORA, asi que la "
+              "unica lista disponible es la general; (2) ese dia NINGUNA de las cuatro apps "
+              "(Upbit, Coinbase, Binance, Bitget) estaba en el top 100 de Corea ni en el de "
+              "EE.UU. Una serie continua de ceros no la puede normalizar `normalize.py` "
+              "—mediana 0, IQR 0, z indefinida— asi que la fuente se declara de EVENTO: el "
+              "evento es 'una app cripto entra en la lista general', que es exactamente el "
+              "hecho que interesa, y los dias en que no entra ninguna no producen fila.",
+    ),
+    SignalSource(
+        key="naver_datalab",
+        title="Interes de busqueda en Corea (Naver DataLab)",
+        tier=TIER_STATISTICAL,
+        scope=SCOPE_MARKET,
+        cadence="daily",
+        entity_kind=EntityKind.MARKET,
+        features=(
+            SignalFeature("naver_search_index", AGG_LAST, "0-100",
+                          "Indice relativo de busquedas cripto en Naver."),
+        ),
+        pit=PIT_ARCHIVE_REVISABLE,
+        license="Naver Developers: gratuito, exige client id y secret (401 medido).",
+        endpoint="https://openapi.naver.com/v1/datalab/search",
+        auth_env="NAVER_CLIENT_ID",
+        adv_note="Alcance de mercado: igual que `appstore_rank`.",
+        notes="Naver es el buscador de Corea y Corea pesa de forma desproporcionada en las "
+              "altcoins; el dato es gratuito y practicamente nadie lo mira fuera del pais. "
+              "MEDIDO 2026-08-13: 401 sin credencial. Hacen falta DOS variables "
+              "(NAVER_CLIENT_ID y NAVER_CLIENT_SECRET) y el catalogo solo declara el nombre "
+              "de una porque el campo es uno; el adaptador lee las dos y lo dice si falta "
+              "cualquiera. La API devuelve un indice RELATIVO a la ventana pedida: dos "
+              "ventanas distintas no son comparables entre si, y por eso se pide siempre la "
+              "misma longitud de ventana y la fuente se declara revisable.",
+    ),
+    SignalSource(
+        key="yandex_wordstat",
+        title="Interes de busqueda en Rusia (Yandex Wordstat)",
+        tier=TIER_STATISTICAL,
+        scope=SCOPE_MARKET,
+        cadence="monthly",
+        entity_kind=EntityKind.MARKET,
+        features=(
+            SignalFeature("yandex_search_shows", AGG_LAST, "impresiones",
+                          "Impresiones mensuales de las frases cripto en Yandex."),
+        ),
+        pit=PIT_FORWARD_CAPTURE,
+        license="Yandex Direct API: gratuito con cuenta de anunciante, exige token OAuth.",
+        endpoint="https://api.direct.yandex.ru/v4/json/",
+        auth_env="YANDEX_OAUTH_TOKEN",
+        adv_note="Alcance de mercado: igual que `appstore_rank`.",
+        notes="MEDIDO 2026-08-13: sin token la API contesta con error propio (codigo 501) en "
+              "vez de 401, que es su forma de decir que no hay sesion. Wordstat es MENSUAL "
+              "—no publica serie diaria— y ademas es una foto: el informe se genera contra "
+              "el momento en que se pide, asi que su pasado no se descarga. Es la fuente "
+              "menos util de las tres de atencion y esta aqui porque el hueco geografico "
+              "que cubre no lo cubre ninguna otra.",
+    ),
+    SignalSource(
+        key="sec_edgar_fts",
+        title="Menciones en filings de la SEC (EDGAR full-text search)",
+        tier=TIER_MECHANICAL,
+        scope=SCOPE_MARKET,
+        cadence="event",
+        entity_kind=EntityKind.MARKET,
+        features=(
+            SignalFeature("edgar_filings", AGG_SUM, "n",
+                          "Filings con la consulta cripto ese dia."),
+            SignalFeature("edgar_institutional", AGG_SUM, "n",
+                          "De esos, los de tenencia institucional (13F/13G)."),
+        ),
+        pit=PIT_ARCHIVE_REVISABLE,
+        history_from=date(2025, 6, 20),  # MEDIDO: los 420 dias que compra una pasada
+        license="SEC: dominio publico. Exige User-Agent identificable.",
+        endpoint="https://efts.sec.gov/LATEST/search-index",
+        adv_note="Alcance de mercado: igual que `appstore_rank`.",
+        notes="LLEGA ANTES QUE LA NOTICIA porque ES la noticia: un 8-K esta publicado en "
+              "EDGAR horas antes de que nadie lo escriba. MEDIDO 2026-08-13: la API "
+              "responde sin credencial, cubre desde 2001 (consultas de 2001, 2005, 2011 y "
+              "2014 devuelven resultados) y hay 5.784 filings 13F-HR que mencionan bitcoin "
+              "en lo que va de 2026. DOS LIMITES MEDIDOS: la respuesta trae como mucho ~100 "
+              "hits y el total se corta en 10.000, asi que el recuento DIARIO se pide un dia "
+              "por peticion; y por eso el adaptador declara un tope de dias por pasada "
+              "(EDGAR_MAX_DAYS) en vez de fingir que un backfill de doce anos cabe en una "
+              "llamada. Revisable: un filing se puede enmendar y reindexar. Y por eso el "
+              "history_from de arriba es 2025-06-20 y no 2001: es lo que UNA pasada ha "
+              "medido, no lo que el proveedor tiene. Cada pasada nueva lo empuja hacia "
+              "atras otros catorce meses, y el registro de profundidad lo ira diciendo.",
+    ),
+    SignalSource(
+        key="federal_register",
+        title="Actividad regulatoria fechada (Federal Register API)",
+        tier=TIER_MECHANICAL,
+        scope=SCOPE_MACRO,
+        cadence="event",
+        entity_kind=EntityKind.MARKET,
+        features=(
+            SignalFeature("fedreg_documents", AGG_SUM, "n",
+                          "Documentos publicados ese dia con la consulta cripto."),
+            SignalFeature("fedreg_rules", AGG_SUM, "n",
+                          "De esos, los que son norma o propuesta de norma."),
+        ),
+        pit=PIT_ARCHIVE_REVISABLE,
+        history_from=date(2015, 11, 2),  # MEDIDO: primer documento dentro de la ventana sondeada
+        license="Federal Register: dominio publico, sin auth.",
+        endpoint="https://www.federalregister.gov/api/v1/documents.json",
+        adv_note="Alcance de mercado: igual que `appstore_rank`.",
+        notes="La fuente mas comoda de las tres legales: acepta rangos de fecha, devuelve "
+              "hasta 1.000 documentos por peticion y no pide credencial. DOS MEDICIONES "
+              "2026-08-13 que conviene no confundir: una consulta suelta sin limite de "
+              "fecha encuentra 398 documentos con 'digital asset' desde 2010-01-11 (y el "
+              "archivo entero del Federal Register llega a 1994), pero la SONDA, que pide "
+              "los doce anos que declara PROBE_YEARS, encontro el primero en 2015-11-02. "
+              "El catalogo declara lo segundo: lo que el adaptador REAL trajo, no lo que "
+              "el proveedor tiene. Se fecha por `publication_date` —el dia en que el "
+              "EXISTE— y no por `effective_on`, que suele ser posterior y a veces nulo. Las "
+              "fechas futuras que el propio documento trae (fin del plazo de comentarios, "
+              "entrada en vigor) quedan en el payload crudo para el dia que se quieran "
+              "usar: hoy no se anticipan, asi que la codificacion no mira adelante.",
+    ),
+    SignalSource(
+        key="courtlistener_dockets",
+        title="Litigios y dockets federales (CourtListener / RECAP)",
+        tier=TIER_MECHANICAL,
+        scope=SCOPE_MARKET,
+        cadence="event",
+        entity_kind=EntityKind.MARKET,
+        features=(
+            SignalFeature("court_dockets", AGG_SUM, "n",
+                          "Dockets nuevos ese dia con la consulta cripto."),
+        ),
+        pit=PIT_ARCHIVE_REVISABLE,
+        license="Free Law Project: API publica; v4 responde sin token (v3 da 403).",
+        endpoint="https://www.courtlistener.com/api/rest/v4/search/",
+        adv_note="Alcance de mercado: igual que `appstore_rank`.",
+        notes="MEDIDO 2026-08-13: la version 4 de la API contesta SIN token (9.569 dockets "
+              "con 'cryptocurrency') y la version 3 devuelve 403, que es al reves de lo que "
+              "documenta media internet. Pagina de veinte en veinte, asi que el adaptador "
+              "declara un tope de paginas por pasada: lo que hay dentro de la ventana "
+              "cubierta es exacto y lo que queda fuera se declara, en vez de publicar un "
+              "recuento truncado como si fuera completo.",
+    ),
+    SignalSource(
+        key="cex_listings",
+        title="Listados y deslistados de CEX (Upbit)",
+        tier=TIER_MECHANICAL,
+        scope=SCOPE_ASSET,
+        cadence="event",
+        entity_kind=EntityKind.TOKEN,
+        features=(
+            SignalFeature("listing_change", AGG_SUM, "+1/-1",
+                          "Alta (+1) o baja (-1) de negociacion en el venue."),
+            SignalFeature("listing_warning", AGG_SUM, "n",
+                          "Designaciones de 'valor de inversion en vigilancia'."),
+        ),
+        pit=PIT_ARCHIVE_REVISABLE,
+        history_from=date(2018, 8, 2),  # MEDIDO: 523 eventos sobre 343 tokens, 33 paginas
+        license="Upbit: endpoint publico de anuncios, sin auth.",
+        endpoint="https://api-manager.upbit.com/api/v1/announcements",
+        typical_adv_usd=247_645.0,
+        adv_note="MEDIDO 2026-08-13: mediana del volumen 24h de los 283 mercados KRW, con "
+                 "el cambio KRW/USD sacado del propio venue (p10 = 39.450 $, maximo = "
+                 "99,0 M$). El 'efecto Upbit' es real y vive en activos cuya mediana mueve "
+                 "un cuarto de millon al dia: el evento es limpio y el tamano que admite, "
+                 "no.",
+        notes="EL EVENTO MAS LIMPIO DE CRIPTO, y ademas el unico del lote que pide una "
+              "guarda OPERATIVA y no solo una feature: un deslistado es oferta forzada mas "
+              "riesgo de liquidez, y eso no se arregla con una feature (ver la evolucion "
+              "'Guarda operativa por simbolo', que sigue pendiente a proposito). MEDIDO "
+              "2026-08-13: el endpoint tiene 38 paginas de categoria 'trade' que llegan a "
+              "2017-10-27, y la sonda bajo 33 de ellas —523 eventos fechados sobre 343 "
+              "tokens desde 2018-08-02— antes de topar con el limite de tasa; el catalogo "
+              "declara ESO y no el fondo del archivo. Los tres tipos que importan estan: "
+              "alta, baja y designacion de vigilancia previa a la baja. SE FECHA EL "
+              "ANUNCIO, no la ejecucion, por lo "
+              "mismo que el COT se fecha el dia de publicacion: el anuncio es cuando la "
+              "informacion existe. Y por eso `announced=False`: un listado no se preanuncia, "
+              "asi que mirar hacia adelante aqui seria futuro. LIMITE DECLARADO: el "
+              "endpoint de listado solo da el TITULO, y la fecha de ejecucion de una baja "
+              "vive en el cuerpo del anuncio; leerla exigiria una peticion por anuncio.",
+    ),
+    # ============ Tesorerias cotizadas: la fuente COMPUESTA (2026-08-13) =============
+    #
+    # La primera del catalogo que no tiene proveedor: no existe API de mNAV —los cuatro
+    # sitios que lo publican son cuadros de mando— y la serie se compone de tres patas
+    # (tenencias y acciones del XBRL de la SEC, precio de la accion y del activo del mismo
+    # cierre de sesion). Esa friccion es lo que la mantiene sin arbitrar, y es tambien lo
+    # que obliga a declarar aqui el campo nuevo: `disclosure_lag_days`.
+    SignalSource(
+        key="dat_mnav",
+        title="Estres de vendedores forzados: distribucion del mNAV de las tesorerias cotizadas",
+        tier=TIER_MECHANICAL,
+        scope=SCOPE_ASSET,
+        cadence="event",
+        entity_kind=EntityKind.TOKEN,
+        features=(
+            SignalFeature("dat_below_nav_share", AGG_LAST, "0-1",
+                          "Fraccion de la cohorte que cotiza por debajo de su tesoro."),
+            SignalFeature("dat_mnav_gap", AGG_LAST, "x",
+                          "Mediana del mNAV menos 1: distancia del activo a la frontera."),
+            SignalFeature("dat_mnav_p25", AGG_LAST, "x",
+                          "Cuartil inferior del mNAV: donde vive la cola que engorda."),
+            SignalFeature("dat_companies", AGG_LAST, "n",
+                          "Companias de la cohorte ese dia (la muestra, en la propia fila)."),
+            SignalFeature("dat_disclosure_lag_days", AGG_LAST, "dias",
+                          "Retraso REALIZADO de las tenencias que sostienen la fila."),
+        ),
+        pit=PIT_ARCHIVE_REVISABLE,
+        license="SEC: dominio publico, exige User-Agent identificable. Precios: endpoint publico.",
+        endpoint="https://data.sec.gov/api/xbrl/frames/us-gaap/CryptoAssetFairValue/USD",
+        adv_note="El eje es el activo subyacente y son los mas profundos que existen, asi que "
+                 "aqui el ADV no restringe. Lo que restringe es el otro lado del cociente "
+                 "—la accion— y ese venue no lo mide `signals/liquidity.py`, cuyas tres "
+                 "sondas son de cripto: declararlo por analogia seria inventarlo.",
+        disclosure_lag_days=49.0,
+        lag_note="MEDIDO 2026-08-13 sobre las observaciones de la cohorte: mediana de "
+                 "`filed - end`, o sea cuanto tarda una tenencia en existir para el publico "
+                 "desde la fecha a la que se refiere. Coherente con el plazo que fija la SEC "
+                 "para un 10-Q (40 dias para un declarante acelerado grande, 45 para el "
+                 "resto), que es el suelo estructural. El registro esta en "
+                 "data/signals/dat_cohort.json y un test compara las dos cifras, igual que "
+                 "con history_from y typical_adv_usd. Lo que PROTEGE del look-ahead no es "
+                 "este campo sino que la fila se fecha en `filed`; el campo es lo que hace "
+                 "que la magnitud del desfase se pueda citar.",
+        notes="LO QUE PUBLICA NO ES EL mNAV DE NADIE: es la DISTRIBUCION por activo "
+              "subyacente. Por debajo de 1 la maquina va en reversa y es aritmetica, no "
+              "sentimiento —emitir diluye, asi que la via barata para levantar caja es "
+              "vender el tesoro— y cada companıa en esa cola es oferta futura estructural. "
+              "TRES FILTROS Y NINGUNO MIRA EL mNAV, porque definir la cohorte con el propio "
+              "mNAV truncaria justo la cola que se publica: fuera los SIC 6221 (ETF y trusts "
+              "al contado, que cotizan al NAV por arbitraje) y 6211 (brokers que custodian "
+              "cripto ajena); dentro solo si el tesoro pasa del 50% del ACTIVO TOTAL del "
+              "balance; y solo si se sabe que activo es. "
+              "EL RESULTADO DE COMPONERLA, MEDIDO 2026-08-13, Y NO ES EL QUE SE ESPERABA: de "
+              "138 declarantes de cripto en el registro XBRL quedan TRES companias "
+              "publicables, repartidas en tres activos distintos, asi que HOY NO HAY NINGUNA "
+              "DISTRIBUCION QUE PUBLICAR y la fuente produce cero filas. El desglose es la "
+              "medicion: 25 trusts y 3 brokers fuera por SIC, 61 que declaran el valor "
+              "razonable en dolares y NO el numero de unidades (sin unidades no se puede "
+              "marcar a mercado ni identificar el activo), 26 cuyo tesoro no llega al 50% "
+              "del balance —mineras, sobre todo—, 6 multiclase, 12 que no nombran su activo "
+              "y 4 cuyo activo no se opera. "
+              "LA IDENTIFICACION ES LO QUE MAS CUESTA, y la primera version estaba mal: "
+              "identificar por el PRECIO IMPLICITO (valor razonable / unidades) y quedarse "
+              "con el unico activo del universo que cuadrase daba DOS falsos positivos de "
+              "ocho (TON Strategy Co salia NEAR, Hyperion DeFi salia LTC), porque 'el unico "
+              "que cuadra' solo significa algo con el conjunto de candidatos completo y hay "
+              "miles de tokens. Hoy IDENTIFICA UN NOMBRE —la etiqueta de unidad o la razon "
+              "social— y el precio implicito solo VERIFICA, que es lo que atrapa a CleanSpark "
+              "declarando 1.719.000 unidades `Bitcoin` a 58,53 $ (error de escala de mil en "
+              "el propio filing) y a Bit Digital con un valor razonable que cubre toda su "
+              "cartera. Se paga en cobertura y esta contado. "
+              "HUECO DECLARADO, y es el mayor: las APIs XBRL solo exponen hechos SIN "
+              "DIMENSIONES, asi que una companıa con varias clases de accion no publica "
+              "recuento de ordinarias y LA TESORERIA MAS GRANDE QUE EXISTE queda fuera "
+              "(COMPROBADO: el `companyfacts` de Strategy tiene un solo tag `dei`, "
+              "EntityPublicFloat). No se sustituye por la media ponderada del periodo, que si "
+              "esta: es una MEDIA, y estas companias emiten contra el mercado todos los dias, "
+              "asi que sesgaria a la baja la capitalizacion justo de las mas activas y las "
+              "empujaria hacia la cola inferior. history_from sigue a None porque no hay "
+              "ninguna fila que fechar, y eso es la medicion y no un pendiente.",
+    ),
 )
 
 
@@ -781,17 +1324,29 @@ def backtestable_sources() -> tuple[SignalSource, ...]:
     return tuple(s for s in CATALOG if s.backtestable)
 
 
+def sources_by_encoding(kind: str) -> tuple[SignalSource, ...]:
+    if kind not in ENCODINGS:
+        raise ValueError(f"Codificacion desconocida: '{kind}'")
+    return tuple(s for s in CATALOG if s.encoding_kind == kind)
+
+
 def catalog_summary() -> dict:
     """Recuento del catalogo tal y como se publica en el dashboard y en la metodologia."""
+    with_adv = [s.typical_adv_usd for s in CATALOG if s.typical_adv_usd]
     return {
         "n_sources": len(CATALOG),
         "n_features": sum(len(s.features) for s in CATALOG),
         "by_tier": {tier: len(sources_by_tier(tier)) for tier in TIERS},
         "by_scope": {scope: sum(1 for s in CATALOG if s.scope == scope) for scope in SCOPES},
         "by_pit": {kind: sum(1 for s in CATALOG if s.pit == kind) for kind in PIT_KINDS},
+        "by_encoding": {kind: len(sources_by_encoding(kind)) for kind in ENCODINGS},
         "n_backtestable": len(backtestable_sources()),
         "n_forward_only": sum(1 for s in CATALOG if not s.backtestable),
         "n_open": sum(1 for s in CATALOG if s.auth_env is None),
+        # El ADV no se resume con una media: la pregunta que contesta es "¿cabe tamano en
+        # las entidades donde esto existe?", y la respuesta util es la mas pequena.
+        "n_with_adv": len(with_adv),
+        "min_adv_usd": min(with_adv) if with_adv else None,
     }
 
 
@@ -800,6 +1355,10 @@ __all__ = [
     "CADENCE_DAYS",
     "CATALOG",
     "CATALOG_BY_KEY",
+    "ENCODINGS",
+    "ENCODING_CONTINUOUS",
+    "ENCODING_EVENT",
+    "ENCODING_PRICE_MAP",
     "PIT_ARCHIVE_REVISABLE",
     "PIT_DERIVED_FROM_PRICE",
     "PIT_FORWARD_CAPTURE",
@@ -818,5 +1377,6 @@ __all__ = [
     "backtestable_sources",
     "catalog_summary",
     "get_source",
+    "sources_by_encoding",
     "sources_by_tier",
 ]

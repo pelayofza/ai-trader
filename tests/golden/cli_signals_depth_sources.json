@@ -100,5 +100,83 @@
     "method": "archive",
     "connected": true,
     "error": null
+  },
+  {
+    "source_key": "hyperliquid_leverage",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  },
+  {
+    "source_key": "hyperliquid_liqmap",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  },
+  {
+    "source_key": "deribit_volatility",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  },
+  {
+    "source_key": "deribit_expiries",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  },
+  {
+    "source_key": "lending_health",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  },
+  {
+    "source_key": "appstore_rank",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  },
+  {
+    "source_key": "naver_datalab",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  },
+  {
+    "source_key": "yandex_wordstat",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  },
+  {
+    "source_key": "sec_edgar_fts",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  },
+  {
+    "source_key": "federal_register",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  },
+  {
+    "source_key": "courtlistener_dockets",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  },
+  {
+    "source_key": "cex_listings",
+    "method": "archive",
+    "connected": true,
+    "error": null
+  },
+  {
+    "source_key": "dat_mnav",
+    "method": "archive",
+    "connected": true,
+    "error": null
   }
 ]

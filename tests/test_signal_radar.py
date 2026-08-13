@@ -46,6 +46,7 @@ from ai_trader.signals.events import (
     DAYS_AHEAD_CAP,
     EVENT_SPECS,
     MAGNITUDE_CLIP,
+    PRICE_SPECS,
     SUFFIX_ACTIVE,
     SUFFIX_AHEAD,
     SUFFIX_MAG,
@@ -329,9 +330,15 @@ class TestRadar:
 
     def test_la_polaridad_es_una_tabla_declarada_sobre_features_que_existen(self):
         catalog_features = {f.name for s in CATALOG for f in s.features}
-        event_columns = {f"{key}{SUFFIX_MAG}" for key in EVENT_SPECS}
+        # Las columnas de magnitud son de las DOS codificaciones que las producen: la de
+        # evento y la de mapa de precios. Una entrada de POLARITY que no case con ninguna
+        # de las tres cosas es una polaridad sobre una feature que no existe, y esas no
+        # fallan: simplemente no se aplican nunca.
+        magnitude_columns = {
+            f"{key}{SUFFIX_MAG}" for key in (*EVENT_SPECS, *PRICE_SPECS)
+        }
         for name in POLARITY:
-            assert name in catalog_features or name in event_columns, name
+            assert name in catalog_features or name in magnitude_columns, name
         assert set(POLARITY.values()) <= {1.0, -1.0}
 
 
