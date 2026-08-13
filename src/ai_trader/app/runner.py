@@ -16,6 +16,7 @@ from ai_trader.app.journal import (
     NullJournal,
     closed_record,
     cycle_record,
+    exit_record,
     fill_record,
     open_record,
     order_record,
@@ -411,12 +412,17 @@ class TradingRunner:
             return None
 
         order_request = self._build_order_request(signal, decision.size_usd, reference_price)
+        # El instante EXACTO en que la decision queda tomada: despues de que el riesgo
+        # haya aprobado y el precio de referencia este fijado, justo antes de enrutar.
+        # Restarselo a `executed_at` da la latencia real de esta orden.
+        decided_at = self.clock.now()
         diag.orders.append(
             order_record(
                 signal.strategy_id,
                 order_request.side.value,
                 order_request.size,
                 reference_price,
+                decided_at=decided_at,
             )
         )
 
@@ -529,6 +535,7 @@ class TradingRunner:
             metadata={"close_reason": reason, "position_id": position.position_id or ""},
         )
 
+        decided_at = self.clock.now()
         try:
             result = self.execution_router.execute(closing_order, reference_price=exit_price)
             fill_price = result.filled_price or exit_price
@@ -536,7 +543,13 @@ class TradingRunner:
             self.state.execution_results.append(result)
             if self._journal_active():
                 self._exit_fills.append(
-                    {**fill_record(result), "symbol": position.symbol, "close_reason": reason}
+                    exit_record(
+                        position,
+                        result,
+                        reason,
+                        reference_price=exit_price,
+                        decided_at=decided_at,
+                    )
                 )
         except Exception as exc:
             logger.exception("Closing order failed | symbol=%s", position.symbol)

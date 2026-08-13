@@ -434,6 +434,119 @@ código: <span class="mono">scoring/activity.py</span> y
 <span class="mono">scoring/activity_study.py</span>.</p>"""
 
 
+def _divergence_block(d):
+    """
+    Seccion 5.4: cuanto se aparta lo ejecutado de lo que el motor predecia.
+
+    Es la unica seccion del documento cuyo estado NORMAL durante meses es "sin cifra", y
+    por eso los dos caminos estan escritos con el mismo cuidado. El de sin-potencia no es
+    un hueco: es el estudio negandose a publicar, con cuantos dias faltan y por que, que
+    es una afirmacion comprobable donde antes habia una promesa.
+
+    LA SECCION VA MARCADA COMO VOLATIL, y es el unico sitio del documento que lo esta.
+    Todo lo demas sale de informes commiteados y por eso se regenera igual en cualquier
+    clon; esto sale de `data/live/`, que esta fuera de git a proposito porque crece cada
+    quince minutos en la maquina que opera. Sin la marca, la caracterizacion de
+    `docs/metodologia.html` fallaria con solo dejar el bot corriendo una noche. Lo que la
+    marca oculta se prueba en `tests/test_divergence.py`, contra el informe y no contra
+    el HTML.
+    """
+    return "<!--LIVE-->" + _divergence_body(d) + "<!--/LIVE-->"
+
+
+def _divergence_body(d):
+    if not d:
+        return (
+            "<h3>5.4 · Divergencia live-vs-backtest</h3>"
+            "<div class=\"note\"><b>No medida en esta copia.</b> Se mide con "
+            "<span class=\"mono\">python -m ai_trader.backtest.divergence_study</span> y se publica en "
+            "<span class=\"mono\">data/live/divergence.json</span>. El material —el diario de ciclos— "
+            "ya se está guardando desde el primer ciclo.</div>"
+        )
+
+    journal, power = d["journal"], d["power"]
+    head = (
+        "<h3>5.4 · Divergencia live-vs-backtest</h3>"
+        "<p>La cifra que justifica el capítulo 3 entero. Se coge la ventana de calendario que cubre el "
+        "diario, se corre <b>el mismo periodo</b> con el motor de <i>backtest</i> sobre las barras reales "
+        "de esos días, y se comparan las dos ejecuciones <b>decisión a decisión</b>, no un Sharpe contra "
+        "otro: dos curvas distintas pueden dar el mismo Sharpe, y entonces el número no dice dónde está "
+        "la diferencia. La unidad de pareo es <span class=\"mono\">(día UTC, símbolo, estrategia)</span>, "
+        "que es lo más fino en lo que los dos mundos son comparables — en vivo el <i>runner</i> despierta "
+        "decenas de veces al día y en <i>backtest</i> una vez, pero los dos deciden sobre la misma barra "
+        "diaria ya cerrada.</p>"
+        "<p>La re-simulación no reimplementa nada: se le engancha un diario en memoria al mismo motor, de "
+        "modo que emite <b>exactamente el mismo esquema de línea</b> que el paper trading en vivo.</p>"
+    )
+
+    if not d["measured"]:
+        reasons = "".join(f"<li>{r}</li>" for r in power.get("reasons", []))
+        return head + (
+            "<div class=\"why\"><b>Hoy no hay cifra, y eso es el resultado.</b> El diario cubre "
+            f"<b>{journal['span_days']} días</b> de calendario ({journal['n_days']} con ciclos) y la regla "
+            f"declarada pide <b>{power['required_days']}</b>: faltan <b>{power['missing_days']}</b>. El "
+            "estudio <b>se niega a re-simular y a publicar</b> en vez de sacar una divergencia medida "
+            "sobre cuatro días, que tendría exactamente el mismo aspecto que la buena."
+            f"<ul>{reasons}</ul>"
+            "Las dos condiciones —<i>span</i> de calendario y días con ciclos— no son redundantes: un "
+            "proceso que corrió dos días, se apagó cinco semanas y volvió tiene <i>span</i> de sobra y no "
+            "ha observado nada.</div>"
+            "<p>Cuando haya calendario, lo que se publicará es la diferencia de precio de llenado "
+            "<b>repartida en tres sumandos que suman</b> —referencia, coste y término cruzado—, el embudo "
+            "de decisiones de los dos mundos, y la latencia en tiempo y en puntos básicos. Que las piernas "
+            "sumen es lo que impide que una absorba en silencio el error de otra.</p>"
+            f"<p class=\"tag\">Informe: <span class=\"mono\">data/live/divergence.json</span> · "
+            f"{d['generated_at']}</p>"
+        )
+
+    comps, verdict = d["components"], d["verdict"]
+    rules = verdict["rules"]
+
+    def bps(block, key="median"):
+        value = (block or {}).get(key)
+        return "—" if value is None else f"{value:+.2f}"
+
+    stage_rows = "".join(
+        f"<tr><td>{k}</td><td class='n mono'>{r['live']}</td>"
+        f"<td class='n mono'>{r['resim']}</td><td class='n mono'><b>{r['both']}</b></td>"
+        f"<td class='n mono'>{r['only_live']}</td><td class='n mono'>{r['only_resim']}</td></tr>"
+        for k, r in d["stages"].items()
+    )
+    verdict_rows = "".join(
+        f"<li><b>{rules[k]['rule']}</b> → {rules[k]['text']}</li>"
+        for k in ("decisions", "cost", "latency")
+    )
+    return head + (
+        "<table><thead><tr><th>Pierna</th><th class=n>mediana (pb)</th><th class=n>p90</th>"
+        "<th>Qué es</th></tr></thead><tbody>"
+        f"<tr><td><b>total</b></td><td class='n mono'><b>{bps(d['total_bps'])}</b></td>"
+        f"<td class='n mono'>{bps(d['total_bps'], 'p90')}</td>"
+        "<td>lo que se pagó de más frente a lo que el modelo predecía</td></tr>"
+        f"<tr><td>referencia</td><td class='n mono'>{bps(comps['reference_bps'])}</td>"
+        f"<td class='n mono'>{bps(comps['reference_bps'], 'p90')}</td>"
+        "<td>decidir con un cierre diario que en el instante del <i>fill</i> ya es viejo</td></tr>"
+        f"<tr><td>coste</td><td class='n mono'>{bps(comps['cost_bps'])}</td>"
+        f"<td class='n mono'>{bps(comps['cost_bps'], 'p90')}</td>"
+        "<td>deslizamiento cobrado contra el modelado</td></tr>"
+        f"<tr><td>cruzado</td><td class='n mono'>{bps(comps['cross_bps'])}</td>"
+        f"<td class='n mono'>{bps(comps['cross_bps'], 'p90')}</td>"
+        "<td>término de segundo orden, publicado para que la suma cierre</td></tr>"
+        "</tbody></table>"
+        f"<p class=\"tag\">{d['n_repriced']} entradas re-tasadas; la descomposición "
+        f"{'cierra' if d['decomposition_ok'] else '<b>NO cierra</b>'}.</p>"
+        "<h4>Decisiones que no se tomaron</h4>"
+        "<p>El recuento de decisiones detecta divergencias que el PnL esconde: si en vivo se generan la "
+        "mitad de las señales, el problema no es el coste, <b>son los datos</b>.</p>"
+        "<table><thead><tr><th>Etapa</th><th class=n>vivo</th><th class=n>re-simulado</th>"
+        "<th class=n>ambos</th><th class=n>sólo vivo</th><th class=n>sólo resim.</th></tr></thead>"
+        f"<tbody>{stage_rows}</tbody></table>"
+        f"<h4>Las tres reglas declaradas</h4><ul>{verdict_rows}</ul>"
+        f"<div class=\"why\"><b>El techo de lo que esto mide hoy.</b> {d['ceiling']}</div>"
+        f"<p class=\"tag\">Informe: <span class=\"mono\">data/live/divergence.json</span> · "
+        f"{journal['span_days']} días de diario · {d['generated_at']}</p>"
+    )
+
+
 def _sessions_block(s):
     """Seccion 3.5: la limitacion MEDIDA de la convencion de llenado (§3.4).
 
@@ -1518,6 +1631,7 @@ def render_html(f: dict) -> str:
         "SIGNALCHANNEL": _signal_channel_block(f.get("signal_channel")),
         "VALIDATION": _validation_block(f.get("validation")),
         "SESSIONS": _sessions_block(f.get("sessions")),
+        "DIVERGENCE": _divergence_block(f.get("divergence")),
         "ACTIVITY": _activity_block(f.get("activity")),
         "SIGNALS": _signals_block(f.get("signals")),
         "LAMBDA": _n((f.get("calibration") or {}).get("lambda", 0.5), 2),
@@ -2215,8 +2329,14 @@ máximo y caída máxima desde el pico.</td><td>Motor de riesgo (§3.3), anotado
 <b>Hecho.</b></td></tr>
 <tr><td><b>Divergencia live-vs-backtest</b></td><td>La cifra que justifica todo el capítulo 3: cuánto se
 aparta lo ejecutado de lo que el motor predecía, separando precio de llenado, coste y latencia.</td>
-<td>Diario de ciclos contra el mismo periodo re-simulado. <b>Necesita meses de operación.</b></td></tr>
+<td>Diario de ciclos contra el mismo periodo re-simulado (§5.4). <b>Medición cableada; la cifra necesita
+meses de calendario y el estudio se niega a publicarla antes.</b></td></tr>
 </tbody></table>
+<p>Cada línea lleva además los dos instantes que hacen medible la latencia: <b>cuándo se decidió</b> la
+orden —justo después de que el riesgo aprobara y con el precio de referencia ya fijado— y cuándo se
+llenó. El sello del ciclo no sirve para eso, porque la línea se escribe al <i>terminar</i> el ciclo y es
+posterior a todos sus <i>fills</i>; restarlos daría un hueco negativo. Es información que no se puede
+reconstruir después, que es el mismo motivo por el que el diario existe.</p>
 <h3>5.2 · Por qué es PnL y no <i>equity</i> de cuenta</h3>
 <p>En vivo el sistema opera <b>sin capital declarado</b>: el motor de riesgo dimensiona en absoluto
 —tamaño máximo por posición, exposición máxima— y no como fracción de un patrimonio (§3.3). Declarar un
@@ -2232,6 +2352,9 @@ arrancara de cero <b>en silencio</b>. Ahora cada escritura deja copia rotatoria 
 escribe a un temporal que se sincroniza antes de renombrarse, y si al arrancar no parsea se recupera de la
 copia más reciente que sí lo haga <b>avisando por Telegram</b>. Si no hay ninguna utilizable, arranca de
 cero pero diciéndolo.</p>
+
+%%DIVERGENCE%%
+
 <div class="why"><b>Por qué esto no se puede acelerar.</b> Es la única parte del proyecto que consume
 <b>tiempo de calendario</b> y no cómputo: la divergencia entre lo ejecutado y lo simulado necesita meses
 de operaciones para ser medible. Por eso el paper trading corre en paralelo a todo lo demás (§6): cada

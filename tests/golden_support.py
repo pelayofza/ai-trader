@@ -68,7 +68,18 @@ _KEYED = (
     # corrido un ciclo mas. Enmascararlo es lo que mantiene la caracterizacion util para
     # las otras ~2.000 lineas del generador; lo que el bloque contenga se prueba en
     # tests/test_journal.py, contra el diario y no contra el HTML.
-    (re.compile(r'"paper": \{.*?\}, "roadmap":', re.S), '"paper": <LIVE>, "roadmap":'),
+    (re.compile(r'"paper": \{.*?\}, "divergence":', re.S), '"paper": <LIVE>, "divergence":'),
+    # El informe de divergencia (`data/live/divergence.json`) se deriva del MISMO diario
+    # local, asi que es igual de volatil: cambia de "faltan 30 dias" a "faltan 29" solo
+    # con que pase un dia. Va enmascarado por separado y no aprovechando que el patron de
+    # arriba se lo tragaria: dos bloques distintos con dos motivos que se leen, no uno
+    # que se come al siguiente por como esta escrita la expresion.
+    (re.compile(r'"divergence": (?:\{.*?\}|null), "roadmap":', re.S),
+     '"divergence": <LIVE>, "roadmap":'),
+    # Lo mismo en el HTML de la documentacion, que cita la seccion 5.4 con las cifras del
+    # diario. El generador marca la region volatil al emitirla (docs/template.py) en vez
+    # de que el scrubber adivine sus bordes con una expresion regular sobre prosa.
+    (re.compile(r"<!--LIVE-->.*?<!--/LIVE-->", re.S), "<LIVE>"),
 )
 
 

@@ -64,8 +64,8 @@ figure{margin:14px 0}
 <h1>AI-Trader — Documentación funcional</h1>
 <div class="sub">Cómo funciona la herramienta, con el detalle necesario para replicarla y auditarla.
 Cada decisión de diseño va justificada.</div>
-<div class="meta">Documento vivo · generado desde el commit <span class="mono">aa0fc36</span>
-(95 commits)2026-08-13 · se regenera con <span class="mono">python -m docs.build_docs</span>.
+<div class="meta">Documento vivo · generado desde el commit <span class="mono">a71d5d8</span>
+(96 commits)2026-08-13 · se regenera con <span class="mono">python -m docs.build_docs</span>.
 Las cifras marcadas son extraídas del repositorio en el momento de generar este documento.</div>
 
 <div class="toc noprint">
@@ -720,7 +720,7 @@ reproducible con <span class="mono">python -m ai_trader.synthetic.fidelity_study
 (30 escenarios × 5 caminos; 2026-08-10).</p>
 
 <h3>2.11 · Qué garantizan los tests sobre los datos</h3>
-<p>La base cuenta con <b>877 tests</b> automatizados y <i>linting</i> (ruff) sobre todo el código.
+<p>La base cuenta con <b>909 tests</b> automatizados y <i>linting</i> (ruff) sobre todo el código.
 Más allá del número importa <b>qué</b> se garantiza, así que la lista va repartida por capítulos: aquí los
 invariantes del sustrato, en §3.10 los de una operación y en §4.15 los del ranking.</p>
 <ul>
@@ -1615,8 +1615,14 @@ máximo y caída máxima desde el pico.</td><td>Motor de riesgo (§3.3), anotado
 <b>Hecho.</b></td></tr>
 <tr><td><b>Divergencia live-vs-backtest</b></td><td>La cifra que justifica todo el capítulo 3: cuánto se
 aparta lo ejecutado de lo que el motor predecía, separando precio de llenado, coste y latencia.</td>
-<td>Diario de ciclos contra el mismo periodo re-simulado. <b>Necesita meses de operación.</b></td></tr>
+<td>Diario de ciclos contra el mismo periodo re-simulado (§5.4). <b>Medición cableada; la cifra necesita
+meses de calendario y el estudio se niega a publicarla antes.</b></td></tr>
 </tbody></table>
+<p>Cada línea lleva además los dos instantes que hacen medible la latencia: <b>cuándo se decidió</b> la
+orden —justo después de que el riesgo aprobara y con el precio de referencia ya fijado— y cuándo se
+llenó. El sello del ciclo no sirve para eso, porque la línea se escribe al <i>terminar</i> el ciclo y es
+posterior a todos sus <i>fills</i>; restarlos daría un hueco negativo. Es información que no se puede
+reconstruir después, que es el mismo motivo por el que el diario existe.</p>
 <h3>5.2 · Por qué es PnL y no <i>equity</i> de cuenta</h3>
 <p>En vivo el sistema opera <b>sin capital declarado</b>: el motor de riesgo dimensiona en absoluto
 —tamaño máximo por posición, exposición máxima— y no como fracción de un patrimonio (§3.3). Declarar un
@@ -1632,6 +1638,9 @@ arrancara de cero <b>en silencio</b>. Ahora cada escritura deja copia rotatoria 
 escribe a un temporal que se sincroniza antes de renombrarse, y si al arrancar no parsea se recupera de la
 copia más reciente que sí lo haga <b>avisando por Telegram</b>. Si no hay ninguna utilizable, arranca de
 cero pero diciéndolo.</p>
+
+<!--LIVE--><h3>5.4 · Divergencia live-vs-backtest</h3><p>La cifra que justifica el capítulo 3 entero. Se coge la ventana de calendario que cubre el diario, se corre <b>el mismo periodo</b> con el motor de <i>backtest</i> sobre las barras reales de esos días, y se comparan las dos ejecuciones <b>decisión a decisión</b>, no un Sharpe contra otro: dos curvas distintas pueden dar el mismo Sharpe, y entonces el número no dice dónde está la diferencia. La unidad de pareo es <span class="mono">(día UTC, símbolo, estrategia)</span>, que es lo más fino en lo que los dos mundos son comparables — en vivo el <i>runner</i> despierta decenas de veces al día y en <i>backtest</i> una vez, pero los dos deciden sobre la misma barra diaria ya cerrada.</p><p>La re-simulación no reimplementa nada: se le engancha un diario en memoria al mismo motor, de modo que emite <b>exactamente el mismo esquema de línea</b> que el paper trading en vivo.</p><div class="why"><b>Hoy no hay cifra, y eso es el resultado.</b> El diario cubre <b>0 días</b> de calendario (2 con ciclos) y la regla declarada pide <b>30</b>: faltan <b>30</b>. El estudio <b>se niega a re-simular y a publicar</b> en vez de sacar una divergencia medida sobre cuatro días, que tendría exactamente el mismo aspecto que la buena.<ul><li>el diario cubre 0 dias de calendario y hacen falta 30</li><li>solo hay ciclos en 2 dias distintos y hacen falta 30</li></ul>Las dos condiciones —<i>span</i> de calendario y días con ciclos— no son redundantes: un proceso que corrió dos días, se apagó cinco semanas y volvió tiene <i>span</i> de sobra y no ha observado nada.</div><p>Cuando haya calendario, lo que se publicará es la diferencia de precio de llenado <b>repartida en tres sumandos que suman</b> —referencia, coste y término cruzado—, el embudo de decisiones de los dos mundos, y la latencia en tiempo y en puntos básicos. Que las piernas sumen es lo que impide que una absorba en silencio el error de otra.</p><p class="tag">Informe: <span class="mono">data/live/divergence.json</span> · 2026-08-13</p><!--/LIVE-->
+
 <div class="why"><b>Por qué esto no se puede acelerar.</b> Es la única parte del proyecto que consume
 <b>tiempo de calendario</b> y no cómputo: la divergencia entre lo ejecutado y lo simulado necesita meses
 de operaciones para ser medible. Por eso el paper trading corre en paralelo a todo lo demás (§6): cada
@@ -1806,5 +1815,5 @@ agrupamiento de volatilidad, autocorrelación) que un buen simulador debe reprod
 <li><b>Forward capture:</b> fuente cuyo pasado nadie publica: su profundidad histórica sólo crece
 capturando, un día por día real.</li>
 </ul>
-<p class="meta">Fin del documento · AI-Trader · commit <span class="mono">aa0fc36</span>.</p>
+<p class="meta">Fin del documento · AI-Trader · commit <span class="mono">a71d5d8</span>.</p>
 </div></body></html>

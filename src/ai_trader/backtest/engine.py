@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 
+from ai_trader.app.journal import Journal
 from ai_trader.app.runner import TradingRunner
 from ai_trader.app.state_store import InMemoryStateStore
 from ai_trader.backtest.metrics import (
@@ -162,6 +163,7 @@ class BacktestEngine:
         headline_weights: HeadlineWeights = DEFAULT_HEADLINE_WEIGHTS,
         signals: dict | None = None,
         signal_provider_factory: Callable[[HistoricalClock], object] | None = None,
+        journal: Journal | None = None,
     ) -> None:
         if data_provider is None and bars is None:
             raise ValueError("BacktestEngine requires either a data_provider or preloaded bars")
@@ -171,6 +173,16 @@ class BacktestEngine:
         self.starting_equity = starting_equity
         self.headline_weights = headline_weights
         self._preloaded_bars = bars
+        # Diario de la re-simulacion. None -entiendase: NADIE lo pide- es el caso normal
+        # y el runner cae a `NullJournal`, que es lo que hace que el camino caliente del
+        # backtest no pague por construir lineas que nadie lee.
+        #
+        # Lo pide UN consumidor: el estudio de divergencia, que necesita que la ventana
+        # re-simulada emita el MISMO esquema de linea que el paper trading en vivo para
+        # poder parear decision a decision. Ojo si se usa con `run()` o con varios folds:
+        # todas las ventanas escriben en el mismo diario, asi que solo tiene sentido con
+        # una ventana unica (o asumiendo que se concatenan).
+        self._journal = journal
         # Senales externas ya derivadas (clave de fuente -> frame diario canonico), tal y
         # como las devuelve `signals/feed.py::load_frames`. None es el caso normal: un
         # backtest sin senales construye el radar vacio y las puertas se saltan solas, de
@@ -201,6 +213,7 @@ class BacktestEngine:
         headline_weights: HeadlineWeights = DEFAULT_HEADLINE_WEIGHTS,
         signals: dict | None = None,
         signal_provider_factory: Callable[[HistoricalClock], object] | None = None,
+        journal: Journal | None = None,
     ) -> BacktestEngine:
         """Construye un motor sobre series ya generadas (datos simulados o cualquier
         OHLCV en memoria), sin pasar por un proveedor."""
@@ -211,6 +224,7 @@ class BacktestEngine:
             headline_weights=headline_weights,
             signals=signals,
             signal_provider_factory=signal_provider_factory,
+            journal=journal,
         )
 
     def run(
@@ -478,6 +492,7 @@ class BacktestEngine:
             clock=clock,
             market_model=IntrabarMarketModel(source, clock),
             starting_equity=self.starting_equity,
+            journal=self._journal,
         )
 
     def _default_signal_provider(self, clock: HistoricalClock) -> SignalRadarProvider:

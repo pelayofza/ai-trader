@@ -109,7 +109,14 @@ def risk_record(signal: Signal, decision: RiskDecision) -> dict[str, Any]:
     }
 
 
-def order_record(strategy_id: str, side: str, size: float, reference_price: float) -> dict[str, Any]:
+def order_record(
+    strategy_id: str,
+    side: str,
+    size: float,
+    reference_price: float,
+    *,
+    decided_at: datetime,
+) -> dict[str, Any]:
     return {
         "strategy_id": strategy_id,
         "side": side,
@@ -117,6 +124,12 @@ def order_record(strategy_id: str, side: str, size: float, reference_price: floa
         # El precio con el que se DECIDIO. Comparado con `filled_price` da el
         # deslizamiento realizado, que es la mitad de la divergencia live-vs-backtest.
         "reference_price": reference_price,
+        # CUANDO se decidio, y por que no vale el sello del ciclo: la linea del diario
+        # se escribe al TERMINAR el ciclo, asi que su `timestamp` es posterior a todos
+        # los fills y restarselos daria un hueco negativo. La otra mitad de la
+        # divergencia -la latencia- es `executed_at` menos ESTE instante, y no hay
+        # ningun otro campo del que se pueda derivar.
+        "decided_at": decided_at.isoformat(),
     }
 
 
@@ -133,6 +146,34 @@ def fill_record(result: ExecutionResult) -> dict[str, Any]:
         "slippage_bps": result.slippage_bps,
         "message": result.message,
         "executed_at": result.executed_at.isoformat(),
+    }
+
+
+def exit_record(
+    position: Position,
+    result: ExecutionResult,
+    reason: str,
+    *,
+    reference_price: float,
+    decided_at: datetime,
+) -> dict[str, Any]:
+    """
+    La EJECUCION de la orden que cierra una posicion: el mismo fill, mas de que
+    posicion salia, por que, y con que precio se decidio salir. Su gemelo
+    `closed_record` es la CONTABILIDAD del cierre.
+
+    Lleva las mismas dos cosas que la orden de entrada, y por el mismo motivo: salir
+    tambien paga deslizamiento y tambien tiene latencia. Sin `reference_price` no se
+    puede saber cuanto se deslizo la salida, y sin `decided_at` no se puede fechar; y
+    ninguna de las dos se puede reconstruir despues.
+    """
+    return {
+        **fill_record(result),
+        "symbol": position.symbol,
+        "strategy_id": position.strategy_id,
+        "close_reason": reason,
+        "reference_price": reference_price,
+        "decided_at": decided_at.isoformat(),
     }
 
 
@@ -264,6 +305,35 @@ class NullJournal:
 
     def read(self) -> list[dict]:
         return []
+
+
+class MemoryJournal:
+    """
+    Diario que guarda en una lista y no toca el disco.
+
+    Existe para UNA cosa, y conviene que se lea porque es lo que hace medible la
+    divergencia: cuando el motor de backtest re-simula el mismo periodo que corrio en
+    vivo, se le engancha este diario y entonces las dos ejecuciones —la real y la
+    simulada— emiten EXACTAMENTE el mismo esquema de linea. Comparar deja de ser
+    traducir dos formatos y pasa a ser una funcion sobre dos listas de lo mismo.
+
+    No sustituye a `NullJournal`, que sigue siendo el defecto del runner: el backtest
+    normal corre miles de ciclos por ventana y acumularlos en memoria seria pagar por
+    algo que nadie va a leer. Este se pide explicitamente.
+    """
+
+    is_null = False
+
+    def __init__(self) -> None:
+        self.records: list[dict] = []
+
+    def append(self, record: Mapping[str, Any]) -> dict:
+        stored = dict(record)
+        self.records.append(stored)
+        return stored
+
+    def read(self) -> list[dict]:
+        return list(self.records)
 
 
 class CycleJournal:
@@ -525,9 +595,11 @@ __all__ = [
     "STATUS_RAN",
     "CycleJournal",
     "Journal",
+    "MemoryJournal",
     "NullJournal",
     "closed_record",
     "cycle_record",
+    "exit_record",
     "fill_record",
     "journal_summary",
     "max_drawdown_usd",

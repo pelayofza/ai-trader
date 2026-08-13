@@ -16,6 +16,11 @@ from pathlib import Path
 
 import numpy as np
 
+from ai_trader.backtest.divergence_study import (
+    DIVERGENCE_REPORT,
+    STATUS_MEASURED as DIVERGENCE_MEASURED,
+    load_divergence_report,
+)
 from ai_trader.backtest.engine import DEFAULT_STARTING_EQUITY
 from ai_trader.backtest.metrics import DEFAULT_HEADLINE_WEIGHTS
 from ai_trader.backtest.session_study import (
@@ -473,6 +478,46 @@ def _sessions() -> dict | None:
     }
 
 
+def _divergence() -> dict | None:
+    """Cifras del estudio de divergencia live-vs-backtest (data/live/divergence.json).
+
+    Es lo que llena el capitulo 5, y el unico del documento cuyo estado normal durante
+    meses sera "sin potencia". Ese estado tambien se publica: decir cuantos dias faltan,
+    medidos, es una afirmacion que se puede comprobar, y la prosa que sustituye ("necesita
+    meses de operacion") no lo era."""
+    report = load_divergence_report(ROOT / DIVERGENCE_REPORT)
+    if not report:
+        logger.warning("Sin informe de divergencia: la seccion 5.4 saldra degradada")
+        return None
+
+    measured = report.get("status") == DIVERGENCE_MEASURED
+    out = {
+        "measured": measured,
+        "journal": report["journal"],
+        "power": report["power"],
+        "thresholds": report["plan"]["thresholds"],
+        "reference_cost_bps": report["plan"]["reference_cost_bps"],
+        "generated_at": report["generated_at"][:10],
+    }
+    if not measured:
+        return out
+
+    price = report["fill_price"]
+    return {
+        **out,
+        "stages": report["decisions"]["stages"],
+        "coverage": report["decisions"]["coverage"],
+        "total_bps": price.get("total_bps"),
+        "components": price.get("components"),
+        "n_repriced": price.get("n_repriced", 0),
+        "decomposition_ok": price.get("decomposition_ok"),
+        "cost": report["cost"],
+        "latency": report["latency"],
+        "verdict": report["verdict"],
+        "ceiling": report["ceiling"],
+    }
+
+
 def _app_config():
     """El config operado, cargado una sola vez: lo consumen la 2.1 y el capitulo 3."""
     global _CONFIG_CACHE
@@ -670,6 +715,7 @@ def collect() -> dict:
     facts["transfer"] = _transfer()
     facts["validation"] = _validation()
     facts["sessions"] = _sessions()
+    facts["divergence"] = _divergence()
     facts["activity"] = _activity()
     facts["signal_channel"] = _signal_channel()
     facts["signals"] = _signals()

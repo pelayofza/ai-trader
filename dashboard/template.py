@@ -2101,6 +2101,88 @@ function paperPositions(P){
     :'<div class="card"><p class="tag">Todavía no se ha cerrado ninguna posición.</p></div>'}`;
 }
 
+// La divergencia live-vs-backtest. Tiene DOS estados y los dos son un resultado: sin un
+// mes de diario el estudio se niega a publicar cifra, y decir cuánto falta -medido, con
+// fecha- es mejor que la prosa de "necesita meses" que estuvo escrita a mano aquí.
+function paperDivergence(V){
+  if(!V) return `
+    <h2>Divergencia live-vs-backtest</h2>
+    <div class="card"><p class="tag">No hay informe publicado. Genéralo con
+      <span class="mono">python -m ai_trader.backtest.divergence_study --offline</span>.</p></div>`;
+
+  const J=V.journal, P=V.power;
+  if(!V.measured) return `
+    <h2>Divergencia live-vs-backtest <span class="chip pendiente">sin potencia</span></h2>
+    <div class="card">
+      <p class="lead" style="margin:8px 0">El estudio existe, está cableado y <b>se ha negado a publicar
+        una cifra</b>: el diario cubre <b>${J.span_days} días</b> de calendario (${J.n_days} con ciclos) y
+        la regla declarada pide <b>${P.required_days}</b>. Faltan <b>${P.missing_days}</b>.</p>
+      <ul style="margin:6px 0 10px;padding-left:18px">${(P.reasons||[]).map(r=>`<li>${esc(r)}</li>`).join('')}</ul>
+      <p class="tag">Una divergencia medida sobre cuatro días tendría exactamente el mismo aspecto que la
+        buena, y por eso no se publica. Las dos condiciones —span de calendario y días con ciclos— existen
+        para que un proceso que corrió dos días, se apagó cinco semanas y volvió no cuele por span.
+        Informe: <span class="mono">${esc(V.report_path)}</span> · ${esc(V.generated_at)}</p></div>`;
+
+  const C=V.components||{}, VD=V.verdict||{}, R=VD.rules||{};
+  const mins=V.cycle_interval_seconds?Math.round(V.cycle_interval_seconds/60):null;
+  const chip=ok=>ok===null||ok===undefined?'<span class="chip pendiente">sin datos</span>'
+    :ok?'<span class="chip hecho">cumple</span>':'<span class="chip pend">falla</span>';
+  const bps=v=>v===null||v===undefined?'—':(v>=0?'+':'')+fmt(v,2)+' pb';
+
+  return `
+    <h2>Divergencia live-vs-backtest ${chip(VD.ok)}</h2>
+    <div class="card">
+      <p class="lead" style="margin:8px 0">El mismo periodo del diario, re-simulado con el motor de
+        backtest sobre las barras reales de esos días, y pareado <b>decisión a decisión</b> por
+        <span class="mono">(día, símbolo, estrategia)</span> — no un Sharpe contra otro, que no diría
+        dónde está la diferencia.</p>
+
+      <h3>El precio de llenado, repartido en tres</h3>
+      <div class="tblwrap"><table>
+        <thead><tr><th>Pierna</th><th class="num">mediana</th><th class="num">p90</th><th>qué es</th></tr></thead>
+        <tbody>
+        <tr><td><b>total</b></td><td class="num"><b>${bps(V.total_bps&&V.total_bps.median)}</b></td>
+          <td class="num">${bps(V.total_bps&&V.total_bps.p90)}</td>
+          <td class="tag">lo que se pagó de más frente a lo que el modelo predecía</td></tr>
+        <tr><td>referencia</td><td class="num">${bps(C.reference_bps&&C.reference_bps.median)}</td>
+          <td class="num">${bps(C.reference_bps&&C.reference_bps.p90)}</td>
+          <td class="tag">decidir con un cierre diario que ya es viejo</td></tr>
+        <tr><td>coste</td><td class="num">${bps(C.cost_bps&&C.cost_bps.median)}</td>
+          <td class="num">${bps(C.cost_bps&&C.cost_bps.p90)}</td>
+          <td class="tag">deslizamiento cobrado contra el modelado</td></tr>
+        <tr><td>cruzado</td><td class="num">${bps(C.cross_bps&&C.cross_bps.median)}</td>
+          <td class="num">${bps(C.cross_bps&&C.cross_bps.p90)}</td>
+          <td class="tag">término de segundo orden, publicado para que la suma cierre</td></tr>
+        </tbody></table></div>
+      <p class="tag">${V.n_repriced} entradas re-tasadas. La descomposición
+        ${V.decomposition_ok?'<b>cierra</b>':'<b>NO cierra</b>'}: las tres piernas suman el total, así que
+        ninguna puede absorber en silencio el error de otra.</p>
+
+      <h3>Decisiones que no se tomaron</h3>
+      <div class="tblwrap"><table>
+        <thead><tr><th>Etapa</th><th class="num">vivo</th><th class="num">re-simulado</th>
+          <th class="num">ambos</th><th class="num">sólo vivo</th><th class="num">sólo resim.</th></tr></thead>
+        <tbody>${Object.entries(V.stages||{}).map(([k,r])=>`<tr><td>${esc(k)}</td>
+          <td class="num">${r.live}</td><td class="num">${r.resim}</td><td class="num"><b>${r.both}</b></td>
+          <td class="num">${r.only_live}</td><td class="num">${r.only_resim}</td></tr>`).join('')}
+        </tbody></table></div>
+      <p class="tag">Deduplicado por día: en vivo hay un ciclo
+        ${mins?'cada '+mins+' minutos':'por intervalo'} y en la re-simulación uno por día de mercado, así
+        que los recuentos en bruto no son comparables. Si en vivo se generan la mitad de las señales, el
+        problema <b>no es el coste, son los datos</b>.</p>
+
+      <h3>Las tres reglas, y si las cumple</h3>
+      <ul style="margin:6px 0 10px;padding-left:18px">
+        <li>${chip(R.decisions&&R.decisions.ok)} ${esc((R.decisions||{}).text||'')}</li>
+        <li>${chip(R.cost&&R.cost.ok)} ${esc((R.cost||{}).text||'')}</li>
+        <li>${chip(R.latency&&R.latency.ok)} ${esc((R.latency||{}).text||'')}</li>
+      </ul>
+      <p class="tag">Informe: <span class="mono">${esc(V.report_path)}</span> ·
+        ${J.span_days} días de diario · ${esc(V.generated_at)}</p></div>
+
+    <div class="note"><b>El techo de lo que esto puede medir hoy.</b> ${esc(V.ceiling)}</div>`;
+}
+
 function paperEmpty(P){
   return `
     <div class="card"><h3>Sin ciclos registrados <span class="chip pendiente">esperando</span></h3>
@@ -2313,12 +2395,7 @@ function renderPaper(){
         <i>backtestear</i> mercados de predicción.</p></div>`:''}
     `:paperEmpty(P)}
 
-    <h2>Lo que todavía no está aquí</h2>
-    <div class="card"><h3>Divergencia live-vs-backtest <span class="chip pendiente">necesita meses</span></h3>
-      <p class="tag">Cuánto se aparta lo ejecutado de lo que el motor predecía, separando precio de
-        llenado, coste y latencia. El material ya se está guardando —cada línea del diario lleva el precio
-        de referencia con el que se decidió, el de llenado y el <span class="mono">slippage_bps</span>
-        realmente cobrado—, pero la cifra necesita meses de operaciones para ser medible.</p></div>
+    ${paperDivergence(D.divergence)}
 
     <div class="note"><b>Por qué esto no se puede acelerar.</b> Es la única parte del proyecto que consume
       <b>tiempo de calendario</b> y no cómputo. Por eso el paper trading corre en paralelo a todo lo demás:

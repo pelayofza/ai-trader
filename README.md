@@ -475,6 +475,42 @@ en §3.3 de la documentación; se reproduce con:
 .venv\Scripts\python.exe -m ai_trader.backtest.session_study --offline  # solo caché
 ```
 
+### Divergencia live-vs-backtest: la medición cableada, y por qué todavía no da cifra
+
+Es la cifra que justifica el capítulo 3 entero —cuánto se aparta lo ejecutado de lo que el
+motor predecía— y **la única del proyecto que no se puede acelerar con cómputo**: consume
+calendario. El estudio ya está entero, y lo que hace hoy es **negarse a publicar**.
+
+Coge la ventana que cubre `data/live/cycles.jsonl`, corre el **mismo periodo** con
+`backtest/engine.py` sobre las barras reales de esos días y compara **decisión a decisión**
+por `(día UTC, símbolo, estrategia)`. No un Sharpe contra otro: dos curvas distintas pueden
+dar el mismo Sharpe, y entonces el número no dice *dónde* está la diferencia. La
+re-simulación no reimplementa nada — se le engancha un diario en memoria al mismo motor, así
+que emite exactamente el mismo esquema de línea que el vivo.
+
+La diferencia de precio se reparte en **tres sumandos que suman**: `referencia` (decidir con
+un cierre diario que en el instante del *fill* ya es viejo), `coste` (deslizamiento cobrado
+contra el modelado) y el término `cruzado` de segundo orden, publicado en vez de repartido
+para que la descomposición cierre y se pueda auditar. Aparte van el embudo de **decisiones**
+—si en vivo se generan la mitad de las señales, el problema no es el coste sino los datos— y
+la **latencia**, en tiempo (`decided_at → executed_at`, que el diario ahora sella) y en
+puntos básicos contra barras 1H reales.
+
+Tres reglas declaradas que **pueden fallar**: cobertura de decisiones ≥ 0,80; desvío mediano
+del coste ≤ 5 pb; desplazamiento por latencia ≤ 1× el coste de referencia. Y una puerta
+previa: **con menos de 30 días de diario no re-simula ni publica**, porque una divergencia
+medida sobre cuatro días tendría el mismo aspecto que la buena. Hoy el diario cubre horas,
+así que el informe dice cuántos días faltan y nada más.
+
+**Techo declarado:** mientras la ejecución sea de papel, el `filled_price` lo produce el
+mismo motor que el backtest, así que la pierna de coste mide *contexto en vivo contra
+contexto re-simulado*, no modelo contra mercado. La de referencia/latencia no tiene ese techo.
+
+```powershell
+.venv\Scripts\python.exe -m ai_trader.backtest.divergence_study --offline  # solo caché
+.venv\Scripts\python.exe -m ai_trader.backtest.divergence_study --verify-determinism
+```
+
 ### Señales externas: 17 declaradas, 17 conectadas, 10 backtesteables, y ya en la decisión
 
 Hasta hoy las estrategias solo veían **precio y volumen**. `signals/` es el sitio donde se enchufan

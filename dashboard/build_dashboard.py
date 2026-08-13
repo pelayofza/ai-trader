@@ -21,6 +21,11 @@ from pathlib import Path
 
 import numpy as np
 
+from ai_trader.backtest.divergence_study import (
+    DIVERGENCE_REPORT,
+    STATUS_MEASURED,
+    load_divergence_report,
+)
 from ai_trader.backtest.metrics import DEFAULT_HEADLINE_WEIGHTS
 from ai_trader.backtest.session_study import (
     SESSIONS_REPORT,
@@ -1477,6 +1482,56 @@ def collect_paper() -> dict:
     }
 
 
+def collect_divergence() -> dict | None:
+    """
+    La divergencia live-vs-backtest (data/live/divergence.json).
+
+    Se LEE del informe publicado, no se recalcula: medirla re-simula el periodo entero
+    del diario con el motor de backtest, y el dashboard tiene que seguir siendo
+    regenerable sin volver a correr un estudio.
+
+    Devuelve algo tambien cuando el estudio dice que NO hay potencia, y eso es lo
+    importante de esta vista mientras el diario sea joven: "faltan 28 dias" es una
+    afirmacion medida, con su fecha, y sustituye a la prosa de "necesita meses" que
+    estaba escrita a mano en la plantilla y no podia equivocarse porque no decia nada.
+    """
+    report = load_divergence_report(ROOT / DIVERGENCE_REPORT)
+    if not report:
+        logger.warning("Sin informe de divergencia: el panel del capitulo 5 saldra vacio")
+        return None
+
+    measured = report.get("status") == STATUS_MEASURED
+    out = {
+        "status": report["status"],
+        "measured": measured,
+        "journal": report["journal"],
+        "power": report["power"],
+        "thresholds": report["plan"]["thresholds"],
+        "reference_cost_bps": report["plan"]["reference_cost_bps"],
+        "cycle_interval_seconds": report["plan"].get("cycle_interval_seconds"),
+        "report_path": str(DIVERGENCE_REPORT).replace("\\", "/"),
+        "generated_at": report["generated_at"][:10],
+    }
+    if not measured:
+        return out
+
+    price = report["fill_price"]
+    return {
+        **out,
+        "resimulation": report["resimulation"],
+        "stages": report["decisions"]["stages"],
+        "coverage": report["decisions"]["coverage"],
+        "total_bps": price.get("total_bps"),
+        "components": price.get("components"),
+        "n_repriced": price.get("n_repriced", 0),
+        "decomposition_ok": price.get("decomposition_ok"),
+        "cost": report["cost"],
+        "latency": report["latency"],
+        "verdict": report["verdict"],
+        "ceiling": report["ceiling"],
+    }
+
+
 def _cycle_interval_seconds() -> int | None:
     """El intervalo del ciclo automatico, leido de donde vive. Si el paquete de Telegram
     no esta instalado el dashboard se genera igual: es una cifra de contexto, no un dato
@@ -1523,6 +1578,7 @@ def build() -> None:
     logger.info("Transferencia de ranking real vs sintetico (informe publicado)...")
     transfer = collect_transfer()
     logger.info("Descomposicion por sesion horaria (informe publicado)...")
+    logger.info("Divergencia live-vs-backtest (informe publicado)...")
     logger.info("Suelo de actividad del ranking (informe publicado)...")
     logger.info("Break-even del IC: barrido de rho (informe publicado)...")
     logger.info("Catalogo de senales externas y auditoria de cobertura...")
@@ -1556,6 +1612,7 @@ def build() -> None:
         "signal_channel": collect_signal_channel(),
         "signals_platform": signals_platform,
         "paper": collect_paper(),
+        "divergence": collect_divergence(),
         "roadmap": collect_roadmap(),
         "roadmap_groups": ROADMAP_GROUPS,
     }
@@ -1760,58 +1817,49 @@ ROADMAP = [
         "rank": 1,
         "group": "ahora",
         "priority": "alta",
-        "title": "Medir la divergencia live-vs-backtest sobre el diario de ciclos",
-        "line": "Live", "status": "pendiente", "impact": "alto", "effort": "medio",
-        "evidence": "La INFRAESTRUCTURA ya está hecha y probada: diario append-only con fsync y "
-                    "rotación por mes o tamaño (app/journal.py, data/live/cycles.jsonl), copia "
-                    "rotatoria del estado con arranque desde backup y aviso por Telegram "
-                    "(app/state_store.py), vista de paper trading conectada a las dos fuentes, y "
-                    "procedimiento de arranque continuo en Windows documentado. Cada línea del "
-                    "diario ya lleva el precio de referencia con el que se decidió, el de llenado "
-                    "y el slippage_bps realmente cobrado. Lo que falta es CALENDARIO y la "
-                    "medición que se hace encima.",
-        "why": "Sigue siendo el número 1 porque es lo único que no se puede comprimir después: la "
-               "divergencia necesita meses de operaciones reales para ser medible, y cada semana "
-               "que el proceso no corre es una semana perdida al final. La diferencia con antes "
-               "es que ahora el material SE ESTÁ GUARDANDO: cuando haya unos meses de diario, "
-               "esta entrada deja de ser 'arrancar' y pasa a ser 're-simular el mismo periodo con "
-               "el motor de backtest y separar la diferencia en sus tres componentes'. Mientras "
-               "tanto, mantenerlo vivo es todo el trabajo.",
+        "title": "Mantener el proceso vivo hasta que el diario tenga un mes",
+        "line": "Live", "status": "pendiente", "impact": "alto", "effort": "bajo",
+        "evidence": "La MEDICIÓN ya está hecha y probada, no solo la infraestructura: "
+                    "backtest/divergence_study.py re-simula la ventana del diario con el mismo "
+                    "motor (enganchándole un MemoryJournal, así que emite el mismo esquema de "
+                    "línea), parea por (día, símbolo, estrategia), reparte la diferencia de "
+                    "precio en tres sumandos que SUMAN -referencia, coste y cruzado-, compara el "
+                    "embudo de decisiones y tasa la latencia contra barras 1H reales. Publica en "
+                    "data/live/divergence.json con tres reglas que pueden fallar. Y el diario "
+                    "sella ahora los dos instantes que hacen medible la latencia (decided_at en "
+                    "la orden y en la salida). Lo único que falta es CALENDARIO: con menos de 30 "
+                    "días el estudio se niega a re-simular y dice cuántos faltan.",
+        "why": "Sigue siendo el número 1 porque es lo único que no se puede comprimir después, "
+               "pero el trabajo cambió de naturaleza: ya no hay nada que construir, hay que "
+               "DEJAR CORRER. Cada semana que el proceso no despierta es una semana perdida al "
+               "final, y ahora el coste de no hacerlo es visible -la vista de paper trading dice "
+               "cuántos días faltan, medidos-. Cuando el diario pase de 30 días, esta entrada se "
+               "cierra corriendo un comando.",
         "prompt": (
-            "Proyecto ai-trader (Python). El paper trading en vivo YA deja huella auditable: "
-            "src/ai_trader/app/journal.py escribe una linea JSONL por ciclo en "
-            "data/live/cycles.jsonl con los simbolos evaluados, las senales con su confianza, la "
-            "decision del riesgo con su motivo, la orden enviada con el PRECIO DE REFERENCIA con "
-            "el que se decidio, el fill con precio, comision y slippage_bps REALMENTE cobrado, y "
-            "el PnL marcado a mercado con la exposicion desplegada. La vista 'Paper trading' del "
-            "dashboard ya lo lee.\n"
+            "Proyecto ai-trader (Python). NO HAY NADA QUE PROGRAMAR EN ESTA ENTRADA: la medicion "
+            "de divergencia live-vs-backtest ya esta escrita, probada y publicada en "
+            "src/ai_trader/backtest/divergence_study.py -> data/live/divergence.json, conectada a "
+            "la vista 'Paper trading' y a la seccion 5.4 de la documentacion.\n"
             "\n"
-            "OBJETIVO: convertir ese archivo en la MEDICION que justifica el capitulo 3 entero: "
-            "cuanto se aparta lo ejecutado de lo que el motor de backtest predecia.\n"
+            "Lo que falta es CALENDARIO. El estudio exige 30 dias de diario (span de calendario Y "
+            "dias con ciclos) y, por debajo de eso, se niega a re-simular y publica el estado "
+            "'sin_potencia' diciendo cuantos dias faltan.\n"
             "\n"
-            "(1) RE-SIMULACION PAREADA. Coge la ventana de calendario que cubre el diario y "
-            "corre el MISMO periodo con backtest/engine.py sobre las barras reales de esos "
-            "mismos dias y la misma configuracion. La comparacion tiene que ser pareada por "
-            "ciclo, no agregada: un Sharpe contra otro Sharpe no dice donde esta la diferencia.\n"
-            "(2) DESCOMPONER LA DIFERENCIA EN TRES, que es lo que hace accionable la cifra: "
-            "(a) PRECIO DE LLENADO -- filled_price contra el precio que el modelo de "
-            "microestructura predecia para ese tamano y esa barra; (b) COSTE -- slippage_bps y "
-            "comision realmente cobrados contra los modelados; (c) LATENCIA -- el hueco entre el "
-            "instante de la decision y el del fill, que el estudio de sesiones "
-            "(backtest/session_study.py) ya midio que cuesta 3,9x el coste modelado.\n"
-            "(3) DECISIONES QUE NO SE TOMARON. El diario guarda tambien los rechazos del riesgo y "
-            "las senales que no llegaron a orden. Comparar el CONTEO de decisiones (cuantas "
-            "senales, cuantas aprobadas, cuantas ejecutadas) entre vivo y re-simulacion detecta "
-            "divergencias que el PnL esconde: si en vivo se generan la mitad de senales, el "
-            "problema no es el coste sino los datos.\n"
-            "(4) PUBLICAR el informe en data/live/divergence.json con la misma disciplina que el "
-            "resto de estudios (load_*/write_* y un umbral que el estudio PUEDA fallar), y "
-            "conectarlo a la vista 'Paper trading' y a la seccion 5 de la documentacion.\n"
+            "QUE HACER, en este orden:\n"
+            "(1) Comprobar que el proceso en vivo sigue despertando: data/live/cycles.jsonl tiene "
+            "que crecer. Si lleva dias parado, arrancarlo (seccion 'Operacion continua' del "
+            "README) es TODO el trabajo de esta entrada.\n"
+            "(2) Correr el estudio y mirar que dice:\n"
+            "    .venv\\Scripts\\python.exe -m ai_trader.backtest.divergence_study --offline\n"
+            "(3) Si ya hay potencia y publica cifra, LEERLA en este orden y no en otro: primero "
+            "la cobertura de decisiones (si los dos mundos no ven las mismas senales, cualquier "
+            "cifra de coste esta explicando la diferencia equivocada), despues el reparto del "
+            "precio de llenado, y solo entonces la latencia.\n"
+            "(4) Regenerar dashboard y docs, y actualizar esta entrada con el resultado -incluido "
+            "si alguna de las tres reglas FALLA, que es un resultado y no un fallo del estudio-.\n"
             "\n"
-            "NO SE PUEDE CORRER TODAVIA: hacen falta meses de diario. Si al arrancar hay menos de "
-            "un mes de ciclos, el estudio tiene que DECIRLO y no publicar una cifra sin "
-            "potencia. Tests + .venv\\Scripts\\python.exe (poetry run esta roto) + ruff. "
-            "Regenera dashboard y docs."
+            "Si al leer la cifra decides cambiar el motor (por ejemplo, modelar la latencia), eso "
+            "es OTRA entrada: este estudio mide y declara, no toca execution/."
         ),
     },
     {
