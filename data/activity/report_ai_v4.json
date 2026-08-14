@@ -1,0 +1,3192 @@
+{
+ "generated_at": "2026-08-14T04:05:17.894685+00:00",
+ "source": {
+  "units": "data\\transfer\\units_ai_v4.json",
+  "library_id": "ai_v4",
+  "n_configs": 64,
+  "cvar_alpha": 0.25,
+  "blocks": {
+   "real": 5,
+   "synthetic": 8
+  },
+  "windows_per_block": 15
+ },
+ "floor": {
+  "min_median_trades_per_window": 3.0,
+  "max_zero_window_pct": 25.0,
+  "derived": {
+   "max_zero_window_pct": "es alpha en porcentaje: por encima de esa fraccion de ventanas vacias, el cuartil que promedia el CVaR puede estar hecho de ceros estructurales"
+  }
+ },
+ "mechanism": {
+  "sides": {
+   "real": {
+    "windows": 4800,
+    "empty_windows": 626,
+    "empty_windows_scoring_exactly_zero": 626,
+    "non_empty_windows_scoring_exactly_zero": 0,
+    "holds": true,
+    "cvar_tail_windows": 1216,
+    "cvar_tail_empty_windows": 87,
+    "cvar_tail_empty_pct": 7.15,
+    "spearman_reward_activity": 0.0025
+   },
+   "synthetic": {
+    "windows": 7680,
+    "empty_windows": 1297,
+    "empty_windows_scoring_exactly_zero": 1297,
+    "non_empty_windows_scoring_exactly_zero": 0,
+    "holds": true,
+    "cvar_tail_windows": 1920,
+    "cvar_tail_empty_windows": 173,
+    "cvar_tail_empty_pct": 9.01,
+    "spearman_reward_activity": -0.7393
+   }
+  }
+ },
+ "configs": [
+  {
+   "config_id": "crypto_momentum#00",
+   "real": {
+    "n_windows": 75,
+    "trades": 2442,
+    "trades_per_window": 32.56,
+    "median_trades_per_window": 33.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.3106,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 4222,
+    "trades_per_window": 35.183,
+    "median_trades_per_window": 33.5,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.8318,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "crypto_momentum#01",
+   "real": {
+    "n_windows": 75,
+    "trades": 570,
+    "trades_per_window": 7.6,
+    "median_trades_per_window": 5.0,
+    "zero_windows": 9,
+    "zero_window_pct": 12.0,
+    "reward": -1.4543,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 1004,
+    "trades_per_window": 8.367,
+    "median_trades_per_window": 8.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.7081,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "crypto_momentum#02",
+   "real": {
+    "n_windows": 75,
+    "trades": 3541,
+    "trades_per_window": 47.213,
+    "median_trades_per_window": 44.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.6469,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 4623,
+    "trades_per_window": 38.525,
+    "median_trades_per_window": 34.5,
+    "zero_windows": 1,
+    "zero_window_pct": 0.83,
+    "reward": -2.1236,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "crypto_momentum#03",
+   "real": {
+    "n_windows": 75,
+    "trades": 2963,
+    "trades_per_window": 39.507,
+    "median_trades_per_window": 37.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.6542,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 4991,
+    "trades_per_window": 41.592,
+    "median_trades_per_window": 39.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.4689,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "crypto_momentum#04",
+   "real": {
+    "n_windows": 75,
+    "trades": 2798,
+    "trades_per_window": 37.307,
+    "median_trades_per_window": 37.0,
+    "zero_windows": 1,
+    "zero_window_pct": 1.33,
+    "reward": -1.992,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 4215,
+    "trades_per_window": 35.125,
+    "median_trades_per_window": 30.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.7879,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "crypto_momentum#05",
+   "real": {
+    "n_windows": 75,
+    "trades": 2457,
+    "trades_per_window": 32.76,
+    "median_trades_per_window": 31.0,
+    "zero_windows": 1,
+    "zero_window_pct": 1.33,
+    "reward": -2.2634,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 4059,
+    "trades_per_window": 33.825,
+    "median_trades_per_window": 30.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.6357,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "crypto_momentum#06",
+   "real": {
+    "n_windows": 75,
+    "trades": 190,
+    "trades_per_window": 2.533,
+    "median_trades_per_window": 1.0,
+    "zero_windows": 27,
+    "zero_window_pct": 36.0,
+    "reward": -1.1276,
+    "rankable": false,
+    "informative": false
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 220,
+    "trades_per_window": 1.833,
+    "median_trades_per_window": 1.0,
+    "zero_windows": 32,
+    "zero_window_pct": 26.67,
+    "reward": -1.739,
+    "rankable": false,
+    "informative": false
+   }
+  },
+  {
+   "config_id": "crypto_momentum#07",
+   "real": {
+    "n_windows": 75,
+    "trades": 1804,
+    "trades_per_window": 24.053,
+    "median_trades_per_window": 21.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.9306,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 4036,
+    "trades_per_window": 33.633,
+    "median_trades_per_window": 31.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.7363,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "mean_reversion#00",
+   "real": {
+    "n_windows": 75,
+    "trades": 58,
+    "trades_per_window": 0.773,
+    "median_trades_per_window": 0.0,
+    "zero_windows": 51,
+    "zero_window_pct": 68.0,
+    "reward": -0.8258,
+    "rankable": false,
+    "informative": false
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 235,
+    "trades_per_window": 1.958,
+    "median_trades_per_window": 1.0,
+    "zero_windows": 30,
+    "zero_window_pct": 25.0,
+    "reward": -1.6658,
+    "rankable": false,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "mean_reversion#01",
+   "real": {
+    "n_windows": 75,
+    "trades": 205,
+    "trades_per_window": 2.733,
+    "median_trades_per_window": 2.0,
+    "zero_windows": 19,
+    "zero_window_pct": 25.33,
+    "reward": -1.8229,
+    "rankable": false,
+    "informative": false
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 536,
+    "trades_per_window": 4.467,
+    "median_trades_per_window": 4.0,
+    "zero_windows": 7,
+    "zero_window_pct": 5.83,
+    "reward": -1.9416,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "mean_reversion#02",
+   "real": {
+    "n_windows": 75,
+    "trades": 55,
+    "trades_per_window": 0.733,
+    "median_trades_per_window": 0.0,
+    "zero_windows": 44,
+    "zero_window_pct": 58.67,
+    "reward": -0.889,
+    "rankable": false,
+    "informative": false
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 140,
+    "trades_per_window": 1.167,
+    "median_trades_per_window": 1.0,
+    "zero_windows": 43,
+    "zero_window_pct": 35.83,
+    "reward": -1.8528,
+    "rankable": false,
+    "informative": false
+   }
+  },
+  {
+   "config_id": "mean_reversion#03",
+   "real": {
+    "n_windows": 75,
+    "trades": 700,
+    "trades_per_window": 9.333,
+    "median_trades_per_window": 10.0,
+    "zero_windows": 1,
+    "zero_window_pct": 1.33,
+    "reward": -1.6335,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 1495,
+    "trades_per_window": 12.458,
+    "median_trades_per_window": 12.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.8636,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "mean_reversion#04",
+   "real": {
+    "n_windows": 75,
+    "trades": 20,
+    "trades_per_window": 0.267,
+    "median_trades_per_window": 0.0,
+    "zero_windows": 56,
+    "zero_window_pct": 74.67,
+    "reward": -0.528,
+    "rankable": false,
+    "informative": false
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 75,
+    "trades_per_window": 0.625,
+    "median_trades_per_window": 1.0,
+    "zero_windows": 59,
+    "zero_window_pct": 49.17,
+    "reward": -1.7071,
+    "rankable": false,
+    "informative": false
+   }
+  },
+  {
+   "config_id": "mean_reversion#05",
+   "real": {
+    "n_windows": 75,
+    "trades": 220,
+    "trades_per_window": 2.933,
+    "median_trades_per_window": 2.0,
+    "zero_windows": 28,
+    "zero_window_pct": 37.33,
+    "reward": -1.215,
+    "rankable": false,
+    "informative": false
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 696,
+    "trades_per_window": 5.8,
+    "median_trades_per_window": 4.0,
+    "zero_windows": 3,
+    "zero_window_pct": 2.5,
+    "reward": -1.8355,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "mean_reversion#06",
+   "real": {
+    "n_windows": 75,
+    "trades": 971,
+    "trades_per_window": 12.947,
+    "median_trades_per_window": 12.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.2237,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 2841,
+    "trades_per_window": 23.675,
+    "median_trades_per_window": 24.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.2394,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "mean_reversion#07",
+   "real": {
+    "n_windows": 75,
+    "trades": 5,
+    "trades_per_window": 0.067,
+    "median_trades_per_window": 0.0,
+    "zero_windows": 70,
+    "zero_window_pct": 93.33,
+    "reward": 0.0,
+    "rankable": false,
+    "informative": false
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 45,
+    "trades_per_window": 0.375,
+    "median_trades_per_window": 0.0,
+    "zero_windows": 81,
+    "zero_window_pct": 67.5,
+    "reward": -1.0958,
+    "rankable": false,
+    "informative": false
+   }
+  },
+  {
+   "config_id": "liquidation_cascade#00",
+   "real": {
+    "n_windows": 75,
+    "trades": 60,
+    "trades_per_window": 0.8,
+    "median_trades_per_window": 0.0,
+    "zero_windows": 50,
+    "zero_window_pct": 66.67,
+    "reward": -1.2873,
+    "rankable": false,
+    "informative": false
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 40,
+    "trades_per_window": 0.333,
+    "median_trades_per_window": 0.0,
+    "zero_windows": 101,
+    "zero_window_pct": 84.17,
+    "reward": -0.9664,
+    "rankable": false,
+    "informative": false
+   }
+  },
+  {
+   "config_id": "liquidation_cascade#01",
+   "real": {
+    "n_windows": 75,
+    "trades": 620,
+    "trades_per_window": 8.267,
+    "median_trades_per_window": 7.0,
+    "zero_windows": 1,
+    "zero_window_pct": 1.33,
+    "reward": -2.4657,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 270,
+    "trades_per_window": 2.25,
+    "median_trades_per_window": 2.0,
+    "zero_windows": 24,
+    "zero_window_pct": 20.0,
+    "reward": -2.1373,
+    "rankable": false,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "liquidation_cascade#02",
+   "real": {
+    "n_windows": 75,
+    "trades": 1238,
+    "trades_per_window": 16.507,
+    "median_trades_per_window": 14.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.9434,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 1030,
+    "trades_per_window": 8.583,
+    "median_trades_per_window": 7.0,
+    "zero_windows": 1,
+    "zero_window_pct": 0.83,
+    "reward": -2.0499,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "liquidation_cascade#03",
+   "real": {
+    "n_windows": 75,
+    "trades": 565,
+    "trades_per_window": 7.533,
+    "median_trades_per_window": 6.0,
+    "zero_windows": 4,
+    "zero_window_pct": 5.33,
+    "reward": -2.8771,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 325,
+    "trades_per_window": 2.708,
+    "median_trades_per_window": 2.0,
+    "zero_windows": 35,
+    "zero_window_pct": 29.17,
+    "reward": -2.6274,
+    "rankable": false,
+    "informative": false
+   }
+  },
+  {
+   "config_id": "liquidation_cascade#04",
+   "real": {
+    "n_windows": 75,
+    "trades": 1261,
+    "trades_per_window": 16.813,
+    "median_trades_per_window": 15.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.7427,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 755,
+    "trades_per_window": 6.292,
+    "median_trades_per_window": 4.0,
+    "zero_windows": 4,
+    "zero_window_pct": 3.33,
+    "reward": -2.204,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "liquidation_cascade#05",
+   "real": {
+    "n_windows": 75,
+    "trades": 1130,
+    "trades_per_window": 15.067,
+    "median_trades_per_window": 13.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -3.0093,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 1435,
+    "trades_per_window": 11.958,
+    "median_trades_per_window": 11.5,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.4432,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "liquidation_cascade#06",
+   "real": {
+    "n_windows": 75,
+    "trades": 1348,
+    "trades_per_window": 17.973,
+    "median_trades_per_window": 14.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -3.6719,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 1696,
+    "trades_per_window": 14.133,
+    "median_trades_per_window": 13.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.9505,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "liquidation_cascade#07",
+   "real": {
+    "n_windows": 75,
+    "trades": 1749,
+    "trades_per_window": 23.32,
+    "median_trades_per_window": 21.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -3.2185,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 1915,
+    "trades_per_window": 15.958,
+    "median_trades_per_window": 15.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.2553,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "vol_term_structure#00",
+   "real": {
+    "n_windows": 75,
+    "trades": 2282,
+    "trades_per_window": 30.427,
+    "median_trades_per_window": 30.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -0.6712,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 3770,
+    "trades_per_window": 31.417,
+    "median_trades_per_window": 32.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.2533,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "vol_term_structure#01",
+   "real": {
+    "n_windows": 75,
+    "trades": 2434,
+    "trades_per_window": 32.453,
+    "median_trades_per_window": 34.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.2963,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 4539,
+    "trades_per_window": 37.825,
+    "median_trades_per_window": 36.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.0831,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "vol_term_structure#02",
+   "real": {
+    "n_windows": 75,
+    "trades": 345,
+    "trades_per_window": 4.6,
+    "median_trades_per_window": 4.0,
+    "zero_windows": 11,
+    "zero_window_pct": 14.67,
+    "reward": -1.5971,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 711,
+    "trades_per_window": 5.925,
+    "median_trades_per_window": 2.0,
+    "zero_windows": 16,
+    "zero_window_pct": 13.33,
+    "reward": -2.3319,
+    "rankable": false,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "vol_term_structure#03",
+   "real": {
+    "n_windows": 75,
+    "trades": 2877,
+    "trades_per_window": 38.36,
+    "median_trades_per_window": 38.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.6441,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 4964,
+    "trades_per_window": 41.367,
+    "median_trades_per_window": 41.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.3498,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "vol_term_structure#04",
+   "real": {
+    "n_windows": 75,
+    "trades": 3315,
+    "trades_per_window": 44.2,
+    "median_trades_per_window": 44.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.043,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 6032,
+    "trades_per_window": 50.267,
+    "median_trades_per_window": 50.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.9756,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "vol_term_structure#05",
+   "real": {
+    "n_windows": 75,
+    "trades": 2620,
+    "trades_per_window": 34.933,
+    "median_trades_per_window": 37.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.2505,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 4377,
+    "trades_per_window": 36.475,
+    "median_trades_per_window": 35.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.8623,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "vol_term_structure#06",
+   "real": {
+    "n_windows": 75,
+    "trades": 2188,
+    "trades_per_window": 29.173,
+    "median_trades_per_window": 30.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.3625,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 3313,
+    "trades_per_window": 27.608,
+    "median_trades_per_window": 27.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.0207,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "vol_term_structure#07",
+   "real": {
+    "n_windows": 75,
+    "trades": 6401,
+    "trades_per_window": 85.347,
+    "median_trades_per_window": 87.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.8122,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 10707,
+    "trades_per_window": 89.225,
+    "median_trades_per_window": 91.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.3996,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "event_calendar_drift#00",
+   "real": {
+    "n_windows": 75,
+    "trades": 6690,
+    "trades_per_window": 89.2,
+    "median_trades_per_window": 92.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -0.9016,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 11340,
+    "trades_per_window": 94.5,
+    "median_trades_per_window": 95.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.9476,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "event_calendar_drift#01",
+   "real": {
+    "n_windows": 75,
+    "trades": 4719,
+    "trades_per_window": 62.92,
+    "median_trades_per_window": 66.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.1845,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 8444,
+    "trades_per_window": 70.367,
+    "median_trades_per_window": 71.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.7712,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "event_calendar_drift#02",
+   "real": {
+    "n_windows": 75,
+    "trades": 9897,
+    "trades_per_window": 131.96,
+    "median_trades_per_window": 141.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -0.6284,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 18433,
+    "trades_per_window": 153.608,
+    "median_trades_per_window": 156.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.411,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "event_calendar_drift#03",
+   "real": {
+    "n_windows": 75,
+    "trades": 11348,
+    "trades_per_window": 151.307,
+    "median_trades_per_window": 156.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.0587,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 19733,
+    "trades_per_window": 164.442,
+    "median_trades_per_window": 165.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.0447,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "event_calendar_drift#04",
+   "real": {
+    "n_windows": 75,
+    "trades": 7165,
+    "trades_per_window": 95.533,
+    "median_trades_per_window": 98.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -0.6967,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 12819,
+    "trades_per_window": 106.825,
+    "median_trades_per_window": 109.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.6656,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "event_calendar_drift#05",
+   "real": {
+    "n_windows": 75,
+    "trades": 7770,
+    "trades_per_window": 103.6,
+    "median_trades_per_window": 102.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.1647,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 13771,
+    "trades_per_window": 114.758,
+    "median_trades_per_window": 113.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -3.2793,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "event_calendar_drift#06",
+   "real": {
+    "n_windows": 75,
+    "trades": 8656,
+    "trades_per_window": 115.413,
+    "median_trades_per_window": 115.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -0.7516,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 14771,
+    "trades_per_window": 123.092,
+    "median_trades_per_window": 123.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.5443,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "event_calendar_drift#07",
+   "real": {
+    "n_windows": 75,
+    "trades": 7673,
+    "trades_per_window": 102.307,
+    "median_trades_per_window": 103.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.8104,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 13339,
+    "trades_per_window": 111.158,
+    "median_trades_per_window": 110.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -3.0305,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "attention_ignition#00",
+   "real": {
+    "n_windows": 75,
+    "trades": 180,
+    "trades_per_window": 2.4,
+    "median_trades_per_window": 2.0,
+    "zero_windows": 29,
+    "zero_window_pct": 38.67,
+    "reward": -1.1516,
+    "rankable": false,
+    "informative": false
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 15,
+    "trades_per_window": 0.125,
+    "median_trades_per_window": 0.0,
+    "zero_windows": 105,
+    "zero_window_pct": 87.5,
+    "reward": -0.4543,
+    "rankable": false,
+    "informative": false
+   }
+  },
+  {
+   "config_id": "attention_ignition#01",
+   "real": {
+    "n_windows": 75,
+    "trades": 2129,
+    "trades_per_window": 28.387,
+    "median_trades_per_window": 28.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.1457,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 2783,
+    "trades_per_window": 23.192,
+    "median_trades_per_window": 23.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.6206,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "attention_ignition#02",
+   "real": {
+    "n_windows": 75,
+    "trades": 594,
+    "trades_per_window": 7.92,
+    "median_trades_per_window": 7.0,
+    "zero_windows": 1,
+    "zero_window_pct": 1.33,
+    "reward": -2.4597,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 30,
+    "trades_per_window": 0.25,
+    "median_trades_per_window": 0.0,
+    "zero_windows": 100,
+    "zero_window_pct": 83.33,
+    "reward": -0.6074,
+    "rankable": false,
+    "informative": false
+   }
+  },
+  {
+   "config_id": "attention_ignition#03",
+   "real": {
+    "n_windows": 75,
+    "trades": 485,
+    "trades_per_window": 6.467,
+    "median_trades_per_window": 5.0,
+    "zero_windows": 3,
+    "zero_window_pct": 4.0,
+    "reward": -2.4528,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 25,
+    "trades_per_window": 0.208,
+    "median_trades_per_window": 0.0,
+    "zero_windows": 105,
+    "zero_window_pct": 87.5,
+    "reward": -0.4562,
+    "rankable": false,
+    "informative": false
+   }
+  },
+  {
+   "config_id": "attention_ignition#04",
+   "real": {
+    "n_windows": 75,
+    "trades": 1448,
+    "trades_per_window": 19.307,
+    "median_trades_per_window": 17.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.8371,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 370,
+    "trades_per_window": 3.083,
+    "median_trades_per_window": 2.0,
+    "zero_windows": 17,
+    "zero_window_pct": 14.17,
+    "reward": -1.8198,
+    "rankable": false,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "attention_ignition#05",
+   "real": {
+    "n_windows": 75,
+    "trades": 555,
+    "trades_per_window": 7.4,
+    "median_trades_per_window": 6.0,
+    "zero_windows": 1,
+    "zero_window_pct": 1.33,
+    "reward": -1.7064,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 365,
+    "trades_per_window": 3.042,
+    "median_trades_per_window": 2.0,
+    "zero_windows": 19,
+    "zero_window_pct": 15.83,
+    "reward": -1.5384,
+    "rankable": false,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "attention_ignition#06",
+   "real": {
+    "n_windows": 75,
+    "trades": 1003,
+    "trades_per_window": 13.373,
+    "median_trades_per_window": 10.0,
+    "zero_windows": 1,
+    "zero_window_pct": 1.33,
+    "reward": -2.8271,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 60,
+    "trades_per_window": 0.5,
+    "median_trades_per_window": 0.0,
+    "zero_windows": 100,
+    "zero_window_pct": 83.33,
+    "reward": -0.7899,
+    "rankable": false,
+    "informative": false
+   }
+  },
+  {
+   "config_id": "attention_ignition#07",
+   "real": {
+    "n_windows": 75,
+    "trades": 845,
+    "trades_per_window": 11.267,
+    "median_trades_per_window": 10.0,
+    "zero_windows": 3,
+    "zero_window_pct": 4.0,
+    "reward": -1.9156,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 90,
+    "trades_per_window": 0.75,
+    "median_trades_per_window": 0.0,
+    "zero_windows": 72,
+    "zero_window_pct": 60.0,
+    "reward": -1.0706,
+    "rankable": false,
+    "informative": false
+   }
+  },
+  {
+   "config_id": "flow_persistence#00",
+   "real": {
+    "n_windows": 75,
+    "trades": 0,
+    "trades_per_window": 0.0,
+    "median_trades_per_window": 0.0,
+    "zero_windows": 75,
+    "zero_window_pct": 100.0,
+    "reward": 0.0,
+    "rankable": false,
+    "informative": false
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 0,
+    "trades_per_window": 0.0,
+    "median_trades_per_window": 0.0,
+    "zero_windows": 120,
+    "zero_window_pct": 100.0,
+    "reward": 0.0,
+    "rankable": false,
+    "informative": false
+   }
+  },
+  {
+   "config_id": "flow_persistence#01",
+   "real": {
+    "n_windows": 75,
+    "trades": 2167,
+    "trades_per_window": 28.893,
+    "median_trades_per_window": 28.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.5218,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 4949,
+    "trades_per_window": 41.242,
+    "median_trades_per_window": 40.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.6122,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "flow_persistence#02",
+   "real": {
+    "n_windows": 75,
+    "trades": 981,
+    "trades_per_window": 13.08,
+    "median_trades_per_window": 13.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.7566,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 2479,
+    "trades_per_window": 20.658,
+    "median_trades_per_window": 21.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.1898,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "flow_persistence#03",
+   "real": {
+    "n_windows": 75,
+    "trades": 10,
+    "trades_per_window": 0.133,
+    "median_trades_per_window": 0.0,
+    "zero_windows": 65,
+    "zero_window_pct": 86.67,
+    "reward": -0.7092,
+    "rankable": false,
+    "informative": false
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 20,
+    "trades_per_window": 0.167,
+    "median_trades_per_window": 0.0,
+    "zero_windows": 101,
+    "zero_window_pct": 84.17,
+    "reward": -0.0586,
+    "rankable": false,
+    "informative": false
+   }
+  },
+  {
+   "config_id": "flow_persistence#04",
+   "real": {
+    "n_windows": 75,
+    "trades": 389,
+    "trades_per_window": 5.187,
+    "median_trades_per_window": 5.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.4324,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 952,
+    "trades_per_window": 7.933,
+    "median_trades_per_window": 8.0,
+    "zero_windows": 1,
+    "zero_window_pct": 0.83,
+    "reward": -1.8698,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "flow_persistence#05",
+   "real": {
+    "n_windows": 75,
+    "trades": 1633,
+    "trades_per_window": 21.773,
+    "median_trades_per_window": 22.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.6795,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 3572,
+    "trades_per_window": 29.767,
+    "median_trades_per_window": 30.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.5906,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "flow_persistence#06",
+   "real": {
+    "n_windows": 75,
+    "trades": 0,
+    "trades_per_window": 0.0,
+    "median_trades_per_window": 0.0,
+    "zero_windows": 75,
+    "zero_window_pct": 100.0,
+    "reward": 0.0,
+    "rankable": false,
+    "informative": false
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 0,
+    "trades_per_window": 0.0,
+    "median_trades_per_window": 0.0,
+    "zero_windows": 120,
+    "zero_window_pct": 100.0,
+    "reward": 0.0,
+    "rankable": false,
+    "informative": false
+   }
+  },
+  {
+   "config_id": "flow_persistence#07",
+   "real": {
+    "n_windows": 75,
+    "trades": 1962,
+    "trades_per_window": 26.16,
+    "median_trades_per_window": 24.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.2649,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 4231,
+    "trades_per_window": 35.258,
+    "median_trades_per_window": 35.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.1109,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "signal_composite#00",
+   "real": {
+    "n_windows": 75,
+    "trades": 3606,
+    "trades_per_window": 48.08,
+    "median_trades_per_window": 46.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -0.9612,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 8107,
+    "trades_per_window": 67.558,
+    "median_trades_per_window": 70.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.4942,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "signal_composite#01",
+   "real": {
+    "n_windows": 75,
+    "trades": 5033,
+    "trades_per_window": 67.107,
+    "median_trades_per_window": 71.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.7601,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 10279,
+    "trades_per_window": 85.658,
+    "median_trades_per_window": 86.5,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.7174,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "signal_composite#02",
+   "real": {
+    "n_windows": 75,
+    "trades": 4119,
+    "trades_per_window": 54.92,
+    "median_trades_per_window": 57.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.9498,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 8702,
+    "trades_per_window": 72.517,
+    "median_trades_per_window": 75.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.6882,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "signal_composite#03",
+   "real": {
+    "n_windows": 75,
+    "trades": 4622,
+    "trades_per_window": 61.627,
+    "median_trades_per_window": 64.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.0887,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 9212,
+    "trades_per_window": 76.767,
+    "median_trades_per_window": 77.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.1731,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "signal_composite#04",
+   "real": {
+    "n_windows": 75,
+    "trades": 3539,
+    "trades_per_window": 47.187,
+    "median_trades_per_window": 49.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.5468,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 8197,
+    "trades_per_window": 68.308,
+    "median_trades_per_window": 68.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.309,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "signal_composite#05",
+   "real": {
+    "n_windows": 75,
+    "trades": 7539,
+    "trades_per_window": 100.52,
+    "median_trades_per_window": 104.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.4001,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 14244,
+    "trades_per_window": 118.7,
+    "median_trades_per_window": 121.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -3.2092,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "signal_composite#06",
+   "real": {
+    "n_windows": 75,
+    "trades": 5569,
+    "trades_per_window": 74.253,
+    "median_trades_per_window": 77.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.519,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 11127,
+    "trades_per_window": 92.725,
+    "median_trades_per_window": 94.5,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -2.6327,
+    "rankable": true,
+    "informative": true
+   }
+  },
+  {
+   "config_id": "signal_composite#07",
+   "real": {
+    "n_windows": 75,
+    "trades": 3303,
+    "trades_per_window": 44.04,
+    "median_trades_per_window": 47.0,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -1.1352,
+    "rankable": true,
+    "informative": true
+   },
+   "synthetic": {
+    "n_windows": 120,
+    "trades": 7507,
+    "trades_per_window": 62.558,
+    "median_trades_per_window": 61.5,
+    "zero_windows": 0,
+    "zero_window_pct": 0.0,
+    "reward": -3.2093,
+    "rankable": true,
+    "informative": true
+   }
+  }
+ ],
+ "sweep": [
+  {
+   "threshold": 1.0,
+   "sides": {
+    "real": {
+     "n_eligible": 52,
+     "eligible": [
+      "event_calendar_drift#02",
+      "vol_term_structure#00",
+      "event_calendar_drift#04",
+      "event_calendar_drift#06",
+      "event_calendar_drift#00",
+      "signal_composite#00",
+      "vol_term_structure#04",
+      "event_calendar_drift#03",
+      "signal_composite#03",
+      "signal_composite#07",
+      "event_calendar_drift#05",
+      "event_calendar_drift#01",
+      "vol_term_structure#05",
+      "vol_term_structure#01",
+      "crypto_momentum#00",
+      "vol_term_structure#06",
+      "signal_composite#05",
+      "flow_persistence#04",
+      "crypto_momentum#01",
+      "signal_composite#06",
+      "flow_persistence#01",
+      "signal_composite#04",
+      "vol_term_structure#02",
+      "mean_reversion#03",
+      "vol_term_structure#03",
+      "crypto_momentum#02",
+      "flow_persistence#05",
+      "attention_ignition#05",
+      "flow_persistence#02",
+      "signal_composite#01",
+      "event_calendar_drift#07",
+      "vol_term_structure#07",
+      "attention_ignition#04",
+      "attention_ignition#07",
+      "crypto_momentum#07",
+      "signal_composite#02",
+      "crypto_momentum#04",
+      "attention_ignition#01",
+      "mean_reversion#06",
+      "crypto_momentum#05",
+      "flow_persistence#07",
+      "attention_ignition#03",
+      "attention_ignition#02",
+      "liquidation_cascade#01",
+      "crypto_momentum#03",
+      "liquidation_cascade#04",
+      "attention_ignition#06",
+      "liquidation_cascade#03",
+      "liquidation_cascade#02",
+      "liquidation_cascade#05",
+      "liquidation_cascade#07",
+      "liquidation_cascade#06"
+     ],
+     "winner": "event_calendar_drift#02",
+     "winner_changes": true,
+     "approved": [
+      "crypto_momentum#00",
+      "event_calendar_drift#00",
+      "event_calendar_drift#01",
+      "event_calendar_drift#02",
+      "event_calendar_drift#03",
+      "event_calendar_drift#04",
+      "event_calendar_drift#05",
+      "event_calendar_drift#06",
+      "signal_composite#00",
+      "signal_composite#03",
+      "signal_composite#07",
+      "vol_term_structure#00",
+      "vol_term_structure#01",
+      "vol_term_structure#04",
+      "vol_term_structure#05",
+      "vol_term_structure#06"
+     ],
+     "spearman_reward_activity": 0.5663,
+     "max_zero_window_pct_eligible": 14.67,
+     "disagreements": [
+      "crypto_momentum#06",
+      "mean_reversion#01",
+      "mean_reversion#05",
+      "attention_ignition#00"
+     ]
+    },
+    "synthetic": {
+     "n_eligible": 50,
+     "eligible": [
+      "mean_reversion#06",
+      "crypto_momentum#03",
+      "attention_ignition#05",
+      "attention_ignition#01",
+      "crypto_momentum#05",
+      "mean_reversion#00",
+      "crypto_momentum#01",
+      "crypto_momentum#07",
+      "crypto_momentum#04",
+      "attention_ignition#04",
+      "crypto_momentum#00",
+      "mean_reversion#05",
+      "vol_term_structure#05",
+      "mean_reversion#03",
+      "flow_persistence#04",
+      "mean_reversion#01",
+      "vol_term_structure#04",
+      "vol_term_structure#06",
+      "event_calendar_drift#03",
+      "liquidation_cascade#02",
+      "vol_term_structure#01",
+      "flow_persistence#07",
+      "crypto_momentum#02",
+      "liquidation_cascade#01",
+      "signal_composite#03",
+      "flow_persistence#02",
+      "liquidation_cascade#04",
+      "vol_term_structure#00",
+      "liquidation_cascade#07",
+      "signal_composite#04",
+      "vol_term_structure#02",
+      "vol_term_structure#03",
+      "vol_term_structure#07",
+      "event_calendar_drift#02",
+      "liquidation_cascade#05",
+      "signal_composite#00",
+      "event_calendar_drift#06",
+      "flow_persistence#05",
+      "flow_persistence#01",
+      "signal_composite#06",
+      "event_calendar_drift#04",
+      "signal_composite#02",
+      "signal_composite#01",
+      "event_calendar_drift#01",
+      "event_calendar_drift#00",
+      "liquidation_cascade#06",
+      "event_calendar_drift#07",
+      "signal_composite#05",
+      "signal_composite#07",
+      "event_calendar_drift#05"
+     ],
+     "winner": "mean_reversion#06",
+     "winner_changes": true,
+     "approved": [],
+     "spearman_reward_activity": -0.5744,
+     "max_zero_window_pct_eligible": 25.0,
+     "disagreements": [
+      "crypto_momentum#06",
+      "mean_reversion#02",
+      "mean_reversion#04",
+      "liquidation_cascade#03"
+     ]
+    }
+   },
+   "disagreements": 8
+  },
+  {
+   "threshold": 2.0,
+   "sides": {
+    "real": {
+     "n_eligible": 52,
+     "eligible": [
+      "event_calendar_drift#02",
+      "vol_term_structure#00",
+      "event_calendar_drift#04",
+      "event_calendar_drift#06",
+      "event_calendar_drift#00",
+      "signal_composite#00",
+      "vol_term_structure#04",
+      "event_calendar_drift#03",
+      "signal_composite#03",
+      "signal_composite#07",
+      "event_calendar_drift#05",
+      "event_calendar_drift#01",
+      "vol_term_structure#05",
+      "vol_term_structure#01",
+      "crypto_momentum#00",
+      "vol_term_structure#06",
+      "signal_composite#05",
+      "flow_persistence#04",
+      "crypto_momentum#01",
+      "signal_composite#06",
+      "flow_persistence#01",
+      "signal_composite#04",
+      "vol_term_structure#02",
+      "mean_reversion#03",
+      "vol_term_structure#03",
+      "crypto_momentum#02",
+      "flow_persistence#05",
+      "attention_ignition#05",
+      "flow_persistence#02",
+      "signal_composite#01",
+      "event_calendar_drift#07",
+      "vol_term_structure#07",
+      "attention_ignition#04",
+      "attention_ignition#07",
+      "crypto_momentum#07",
+      "signal_composite#02",
+      "crypto_momentum#04",
+      "attention_ignition#01",
+      "mean_reversion#06",
+      "crypto_momentum#05",
+      "flow_persistence#07",
+      "attention_ignition#03",
+      "attention_ignition#02",
+      "liquidation_cascade#01",
+      "crypto_momentum#03",
+      "liquidation_cascade#04",
+      "attention_ignition#06",
+      "liquidation_cascade#03",
+      "liquidation_cascade#02",
+      "liquidation_cascade#05",
+      "liquidation_cascade#07",
+      "liquidation_cascade#06"
+     ],
+     "winner": "event_calendar_drift#02",
+     "winner_changes": true,
+     "approved": [
+      "crypto_momentum#00",
+      "event_calendar_drift#00",
+      "event_calendar_drift#01",
+      "event_calendar_drift#02",
+      "event_calendar_drift#03",
+      "event_calendar_drift#04",
+      "event_calendar_drift#05",
+      "event_calendar_drift#06",
+      "signal_composite#00",
+      "signal_composite#03",
+      "signal_composite#07",
+      "vol_term_structure#00",
+      "vol_term_structure#01",
+      "vol_term_structure#04",
+      "vol_term_structure#05",
+      "vol_term_structure#06"
+     ],
+     "spearman_reward_activity": 0.5663,
+     "max_zero_window_pct_eligible": 14.67,
+     "disagreements": [
+      "mean_reversion#01",
+      "mean_reversion#05",
+      "attention_ignition#00"
+     ]
+    },
+    "synthetic": {
+     "n_eligible": 49,
+     "eligible": [
+      "mean_reversion#06",
+      "crypto_momentum#03",
+      "attention_ignition#05",
+      "attention_ignition#01",
+      "crypto_momentum#05",
+      "crypto_momentum#01",
+      "crypto_momentum#07",
+      "crypto_momentum#04",
+      "attention_ignition#04",
+      "crypto_momentum#00",
+      "mean_reversion#05",
+      "vol_term_structure#05",
+      "mean_reversion#03",
+      "flow_persistence#04",
+      "mean_reversion#01",
+      "vol_term_structure#04",
+      "vol_term_structure#06",
+      "event_calendar_drift#03",
+      "liquidation_cascade#02",
+      "vol_term_structure#01",
+      "flow_persistence#07",
+      "crypto_momentum#02",
+      "liquidation_cascade#01",
+      "signal_composite#03",
+      "flow_persistence#02",
+      "liquidation_cascade#04",
+      "vol_term_structure#00",
+      "liquidation_cascade#07",
+      "signal_composite#04",
+      "vol_term_structure#02",
+      "vol_term_structure#03",
+      "vol_term_structure#07",
+      "event_calendar_drift#02",
+      "liquidation_cascade#05",
+      "signal_composite#00",
+      "event_calendar_drift#06",
+      "flow_persistence#05",
+      "flow_persistence#01",
+      "signal_composite#06",
+      "event_calendar_drift#04",
+      "signal_composite#02",
+      "signal_composite#01",
+      "event_calendar_drift#01",
+      "event_calendar_drift#00",
+      "liquidation_cascade#06",
+      "event_calendar_drift#07",
+      "signal_composite#05",
+      "signal_composite#07",
+      "event_calendar_drift#05"
+     ],
+     "winner": "mean_reversion#06",
+     "winner_changes": true,
+     "approved": [],
+     "spearman_reward_activity": -0.5567,
+     "max_zero_window_pct_eligible": 20.0,
+     "disagreements": [
+      "mean_reversion#00",
+      "liquidation_cascade#03"
+     ]
+    }
+   },
+   "disagreements": 5
+  },
+  {
+   "threshold": 3.0,
+   "sides": {
+    "real": {
+     "n_eligible": 52,
+     "eligible": [
+      "event_calendar_drift#02",
+      "vol_term_structure#00",
+      "event_calendar_drift#04",
+      "event_calendar_drift#06",
+      "event_calendar_drift#00",
+      "signal_composite#00",
+      "vol_term_structure#04",
+      "event_calendar_drift#03",
+      "signal_composite#03",
+      "signal_composite#07",
+      "event_calendar_drift#05",
+      "event_calendar_drift#01",
+      "vol_term_structure#05",
+      "vol_term_structure#01",
+      "crypto_momentum#00",
+      "vol_term_structure#06",
+      "signal_composite#05",
+      "flow_persistence#04",
+      "crypto_momentum#01",
+      "signal_composite#06",
+      "flow_persistence#01",
+      "signal_composite#04",
+      "vol_term_structure#02",
+      "mean_reversion#03",
+      "vol_term_structure#03",
+      "crypto_momentum#02",
+      "flow_persistence#05",
+      "attention_ignition#05",
+      "flow_persistence#02",
+      "signal_composite#01",
+      "event_calendar_drift#07",
+      "vol_term_structure#07",
+      "attention_ignition#04",
+      "attention_ignition#07",
+      "crypto_momentum#07",
+      "signal_composite#02",
+      "crypto_momentum#04",
+      "attention_ignition#01",
+      "mean_reversion#06",
+      "crypto_momentum#05",
+      "flow_persistence#07",
+      "attention_ignition#03",
+      "attention_ignition#02",
+      "liquidation_cascade#01",
+      "crypto_momentum#03",
+      "liquidation_cascade#04",
+      "attention_ignition#06",
+      "liquidation_cascade#03",
+      "liquidation_cascade#02",
+      "liquidation_cascade#05",
+      "liquidation_cascade#07",
+      "liquidation_cascade#06"
+     ],
+     "winner": "event_calendar_drift#02",
+     "winner_changes": true,
+     "approved": [
+      "crypto_momentum#00",
+      "event_calendar_drift#00",
+      "event_calendar_drift#01",
+      "event_calendar_drift#02",
+      "event_calendar_drift#03",
+      "event_calendar_drift#04",
+      "event_calendar_drift#05",
+      "event_calendar_drift#06",
+      "signal_composite#00",
+      "signal_composite#03",
+      "signal_composite#07",
+      "vol_term_structure#00",
+      "vol_term_structure#01",
+      "vol_term_structure#04",
+      "vol_term_structure#05",
+      "vol_term_structure#06"
+     ],
+     "spearman_reward_activity": 0.5663,
+     "max_zero_window_pct_eligible": 14.67,
+     "disagreements": []
+    },
+    "synthetic": {
+     "n_eligible": 45,
+     "eligible": [
+      "mean_reversion#06",
+      "crypto_momentum#03",
+      "attention_ignition#01",
+      "crypto_momentum#05",
+      "crypto_momentum#01",
+      "crypto_momentum#07",
+      "crypto_momentum#04",
+      "crypto_momentum#00",
+      "mean_reversion#05",
+      "vol_term_structure#05",
+      "mean_reversion#03",
+      "flow_persistence#04",
+      "mean_reversion#01",
+      "vol_term_structure#04",
+      "vol_term_structure#06",
+      "event_calendar_drift#03",
+      "liquidation_cascade#02",
+      "vol_term_structure#01",
+      "flow_persistence#07",
+      "crypto_momentum#02",
+      "signal_composite#03",
+      "flow_persistence#02",
+      "liquidation_cascade#04",
+      "vol_term_structure#00",
+      "liquidation_cascade#07",
+      "signal_composite#04",
+      "vol_term_structure#03",
+      "vol_term_structure#07",
+      "event_calendar_drift#02",
+      "liquidation_cascade#05",
+      "signal_composite#00",
+      "event_calendar_drift#06",
+      "flow_persistence#05",
+      "flow_persistence#01",
+      "signal_composite#06",
+      "event_calendar_drift#04",
+      "signal_composite#02",
+      "signal_composite#01",
+      "event_calendar_drift#01",
+      "event_calendar_drift#00",
+      "liquidation_cascade#06",
+      "event_calendar_drift#07",
+      "signal_composite#05",
+      "signal_composite#07",
+      "event_calendar_drift#05"
+     ],
+     "winner": "mean_reversion#06",
+     "winner_changes": true,
+     "approved": [],
+     "spearman_reward_activity": -0.5534,
+     "max_zero_window_pct_eligible": 5.83,
+     "disagreements": [
+      "mean_reversion#00",
+      "liquidation_cascade#01",
+      "vol_term_structure#02",
+      "attention_ignition#04",
+      "attention_ignition#05"
+     ]
+    }
+   },
+   "disagreements": 5
+  },
+  {
+   "threshold": 5.0,
+   "sides": {
+    "real": {
+     "n_eligible": 51,
+     "eligible": [
+      "event_calendar_drift#02",
+      "vol_term_structure#00",
+      "event_calendar_drift#04",
+      "event_calendar_drift#06",
+      "event_calendar_drift#00",
+      "signal_composite#00",
+      "vol_term_structure#04",
+      "event_calendar_drift#03",
+      "signal_composite#03",
+      "signal_composite#07",
+      "event_calendar_drift#05",
+      "event_calendar_drift#01",
+      "vol_term_structure#05",
+      "vol_term_structure#01",
+      "crypto_momentum#00",
+      "vol_term_structure#06",
+      "signal_composite#05",
+      "flow_persistence#04",
+      "crypto_momentum#01",
+      "signal_composite#06",
+      "flow_persistence#01",
+      "signal_composite#04",
+      "mean_reversion#03",
+      "vol_term_structure#03",
+      "crypto_momentum#02",
+      "flow_persistence#05",
+      "attention_ignition#05",
+      "flow_persistence#02",
+      "signal_composite#01",
+      "event_calendar_drift#07",
+      "vol_term_structure#07",
+      "attention_ignition#04",
+      "attention_ignition#07",
+      "crypto_momentum#07",
+      "signal_composite#02",
+      "crypto_momentum#04",
+      "attention_ignition#01",
+      "mean_reversion#06",
+      "crypto_momentum#05",
+      "flow_persistence#07",
+      "attention_ignition#03",
+      "attention_ignition#02",
+      "liquidation_cascade#01",
+      "crypto_momentum#03",
+      "liquidation_cascade#04",
+      "attention_ignition#06",
+      "liquidation_cascade#03",
+      "liquidation_cascade#02",
+      "liquidation_cascade#05",
+      "liquidation_cascade#07",
+      "liquidation_cascade#06"
+     ],
+     "winner": "event_calendar_drift#02",
+     "winner_changes": true,
+     "approved": [
+      "crypto_momentum#00",
+      "event_calendar_drift#00",
+      "event_calendar_drift#01",
+      "event_calendar_drift#02",
+      "event_calendar_drift#03",
+      "event_calendar_drift#04",
+      "event_calendar_drift#05",
+      "event_calendar_drift#06",
+      "signal_composite#00",
+      "signal_composite#03",
+      "signal_composite#07",
+      "vol_term_structure#00",
+      "vol_term_structure#01",
+      "vol_term_structure#04",
+      "vol_term_structure#05",
+      "vol_term_structure#06"
+     ],
+     "spearman_reward_activity": 0.5921,
+     "max_zero_window_pct_eligible": 12.0,
+     "disagreements": [
+      "vol_term_structure#02"
+     ]
+    },
+    "synthetic": {
+     "n_eligible": 42,
+     "eligible": [
+      "mean_reversion#06",
+      "crypto_momentum#03",
+      "attention_ignition#01",
+      "crypto_momentum#05",
+      "crypto_momentum#01",
+      "crypto_momentum#07",
+      "crypto_momentum#04",
+      "crypto_momentum#00",
+      "vol_term_structure#05",
+      "mean_reversion#03",
+      "flow_persistence#04",
+      "vol_term_structure#04",
+      "vol_term_structure#06",
+      "event_calendar_drift#03",
+      "liquidation_cascade#02",
+      "vol_term_structure#01",
+      "flow_persistence#07",
+      "crypto_momentum#02",
+      "signal_composite#03",
+      "flow_persistence#02",
+      "vol_term_structure#00",
+      "liquidation_cascade#07",
+      "signal_composite#04",
+      "vol_term_structure#03",
+      "vol_term_structure#07",
+      "event_calendar_drift#02",
+      "liquidation_cascade#05",
+      "signal_composite#00",
+      "event_calendar_drift#06",
+      "flow_persistence#05",
+      "flow_persistence#01",
+      "signal_composite#06",
+      "event_calendar_drift#04",
+      "signal_composite#02",
+      "signal_composite#01",
+      "event_calendar_drift#01",
+      "event_calendar_drift#00",
+      "liquidation_cascade#06",
+      "event_calendar_drift#07",
+      "signal_composite#05",
+      "signal_composite#07",
+      "event_calendar_drift#05"
+     ],
+     "winner": "mean_reversion#06",
+     "winner_changes": true,
+     "approved": [],
+     "spearman_reward_activity": -0.5448,
+     "max_zero_window_pct_eligible": 0.83,
+     "disagreements": [
+      "mean_reversion#00",
+      "mean_reversion#01",
+      "mean_reversion#05",
+      "liquidation_cascade#01",
+      "liquidation_cascade#04",
+      "vol_term_structure#02",
+      "attention_ignition#04",
+      "attention_ignition#05"
+     ]
+    }
+   },
+   "disagreements": 9
+  },
+  {
+   "threshold": 8.0,
+   "sides": {
+    "real": {
+     "n_eligible": 44,
+     "eligible": [
+      "event_calendar_drift#02",
+      "vol_term_structure#00",
+      "event_calendar_drift#04",
+      "event_calendar_drift#06",
+      "event_calendar_drift#00",
+      "signal_composite#00",
+      "vol_term_structure#04",
+      "event_calendar_drift#03",
+      "signal_composite#03",
+      "signal_composite#07",
+      "event_calendar_drift#05",
+      "event_calendar_drift#01",
+      "vol_term_structure#05",
+      "vol_term_structure#01",
+      "crypto_momentum#00",
+      "vol_term_structure#06",
+      "signal_composite#05",
+      "signal_composite#06",
+      "flow_persistence#01",
+      "signal_composite#04",
+      "mean_reversion#03",
+      "vol_term_structure#03",
+      "crypto_momentum#02",
+      "flow_persistence#05",
+      "flow_persistence#02",
+      "signal_composite#01",
+      "event_calendar_drift#07",
+      "vol_term_structure#07",
+      "attention_ignition#04",
+      "attention_ignition#07",
+      "crypto_momentum#07",
+      "signal_composite#02",
+      "crypto_momentum#04",
+      "attention_ignition#01",
+      "mean_reversion#06",
+      "crypto_momentum#05",
+      "flow_persistence#07",
+      "crypto_momentum#03",
+      "liquidation_cascade#04",
+      "attention_ignition#06",
+      "liquidation_cascade#02",
+      "liquidation_cascade#05",
+      "liquidation_cascade#07",
+      "liquidation_cascade#06"
+     ],
+     "winner": "event_calendar_drift#02",
+     "winner_changes": true,
+     "approved": [
+      "crypto_momentum#00",
+      "event_calendar_drift#00",
+      "event_calendar_drift#01",
+      "event_calendar_drift#02",
+      "event_calendar_drift#03",
+      "event_calendar_drift#04",
+      "event_calendar_drift#05",
+      "event_calendar_drift#06",
+      "signal_composite#00",
+      "signal_composite#03",
+      "signal_composite#07",
+      "vol_term_structure#00",
+      "vol_term_structure#01",
+      "vol_term_structure#04",
+      "vol_term_structure#05",
+      "vol_term_structure#06"
+     ],
+     "spearman_reward_activity": 0.6306,
+     "max_zero_window_pct_eligible": 4.0,
+     "disagreements": [
+      "crypto_momentum#01",
+      "liquidation_cascade#01",
+      "liquidation_cascade#03",
+      "vol_term_structure#02",
+      "attention_ignition#02",
+      "attention_ignition#03",
+      "attention_ignition#05",
+      "flow_persistence#04"
+     ]
+    },
+    "synthetic": {
+     "n_eligible": 41,
+     "eligible": [
+      "mean_reversion#06",
+      "crypto_momentum#03",
+      "attention_ignition#01",
+      "crypto_momentum#05",
+      "crypto_momentum#01",
+      "crypto_momentum#07",
+      "crypto_momentum#04",
+      "crypto_momentum#00",
+      "vol_term_structure#05",
+      "mean_reversion#03",
+      "flow_persistence#04",
+      "vol_term_structure#04",
+      "vol_term_structure#06",
+      "event_calendar_drift#03",
+      "vol_term_structure#01",
+      "flow_persistence#07",
+      "crypto_momentum#02",
+      "signal_composite#03",
+      "flow_persistence#02",
+      "vol_term_structure#00",
+      "liquidation_cascade#07",
+      "signal_composite#04",
+      "vol_term_structure#03",
+      "vol_term_structure#07",
+      "event_calendar_drift#02",
+      "liquidation_cascade#05",
+      "signal_composite#00",
+      "event_calendar_drift#06",
+      "flow_persistence#05",
+      "flow_persistence#01",
+      "signal_composite#06",
+      "event_calendar_drift#04",
+      "signal_composite#02",
+      "signal_composite#01",
+      "event_calendar_drift#01",
+      "event_calendar_drift#00",
+      "liquidation_cascade#06",
+      "event_calendar_drift#07",
+      "signal_composite#05",
+      "signal_composite#07",
+      "event_calendar_drift#05"
+     ],
+     "winner": "mean_reversion#06",
+     "winner_changes": true,
+     "approved": [],
+     "spearman_reward_activity": -0.5427,
+     "max_zero_window_pct_eligible": 0.83,
+     "disagreements": [
+      "mean_reversion#00",
+      "mean_reversion#01",
+      "mean_reversion#05",
+      "liquidation_cascade#01",
+      "liquidation_cascade#02",
+      "liquidation_cascade#04",
+      "vol_term_structure#02",
+      "attention_ignition#04",
+      "attention_ignition#05"
+     ]
+    }
+   },
+   "disagreements": 17
+  },
+  {
+   "threshold": 13.0,
+   "sides": {
+    "real": {
+     "n_eligible": 40,
+     "eligible": [
+      "event_calendar_drift#02",
+      "vol_term_structure#00",
+      "event_calendar_drift#04",
+      "event_calendar_drift#06",
+      "event_calendar_drift#00",
+      "signal_composite#00",
+      "vol_term_structure#04",
+      "event_calendar_drift#03",
+      "signal_composite#03",
+      "signal_composite#07",
+      "event_calendar_drift#05",
+      "event_calendar_drift#01",
+      "vol_term_structure#05",
+      "vol_term_structure#01",
+      "crypto_momentum#00",
+      "vol_term_structure#06",
+      "signal_composite#05",
+      "signal_composite#06",
+      "flow_persistence#01",
+      "signal_composite#04",
+      "vol_term_structure#03",
+      "crypto_momentum#02",
+      "flow_persistence#05",
+      "flow_persistence#02",
+      "signal_composite#01",
+      "event_calendar_drift#07",
+      "vol_term_structure#07",
+      "attention_ignition#04",
+      "crypto_momentum#07",
+      "signal_composite#02",
+      "crypto_momentum#04",
+      "attention_ignition#01",
+      "crypto_momentum#05",
+      "flow_persistence#07",
+      "crypto_momentum#03",
+      "liquidation_cascade#04",
+      "liquidation_cascade#02",
+      "liquidation_cascade#05",
+      "liquidation_cascade#07",
+      "liquidation_cascade#06"
+     ],
+     "winner": "event_calendar_drift#02",
+     "winner_changes": true,
+     "approved": [
+      "crypto_momentum#00",
+      "event_calendar_drift#00",
+      "event_calendar_drift#01",
+      "event_calendar_drift#02",
+      "event_calendar_drift#03",
+      "event_calendar_drift#04",
+      "event_calendar_drift#05",
+      "event_calendar_drift#06",
+      "signal_composite#00",
+      "signal_composite#03",
+      "signal_composite#07",
+      "vol_term_structure#00",
+      "vol_term_structure#01",
+      "vol_term_structure#04",
+      "vol_term_structure#05",
+      "vol_term_structure#06"
+     ],
+     "spearman_reward_activity": 0.6272,
+     "max_zero_window_pct_eligible": 1.33,
+     "disagreements": [
+      "crypto_momentum#01",
+      "mean_reversion#03",
+      "mean_reversion#06",
+      "liquidation_cascade#01",
+      "liquidation_cascade#03",
+      "vol_term_structure#02",
+      "attention_ignition#02",
+      "attention_ignition#03",
+      "attention_ignition#05",
+      "attention_ignition#06",
+      "attention_ignition#07",
+      "flow_persistence#04"
+     ]
+    },
+    "synthetic": {
+     "n_eligible": 37,
+     "eligible": [
+      "mean_reversion#06",
+      "crypto_momentum#03",
+      "attention_ignition#01",
+      "crypto_momentum#05",
+      "crypto_momentum#07",
+      "crypto_momentum#04",
+      "crypto_momentum#00",
+      "vol_term_structure#05",
+      "vol_term_structure#04",
+      "vol_term_structure#06",
+      "event_calendar_drift#03",
+      "vol_term_structure#01",
+      "flow_persistence#07",
+      "crypto_momentum#02",
+      "signal_composite#03",
+      "flow_persistence#02",
+      "vol_term_structure#00",
+      "liquidation_cascade#07",
+      "signal_composite#04",
+      "vol_term_structure#03",
+      "vol_term_structure#07",
+      "event_calendar_drift#02",
+      "signal_composite#00",
+      "event_calendar_drift#06",
+      "flow_persistence#05",
+      "flow_persistence#01",
+      "signal_composite#06",
+      "event_calendar_drift#04",
+      "signal_composite#02",
+      "signal_composite#01",
+      "event_calendar_drift#01",
+      "event_calendar_drift#00",
+      "liquidation_cascade#06",
+      "event_calendar_drift#07",
+      "signal_composite#05",
+      "signal_composite#07",
+      "event_calendar_drift#05"
+     ],
+     "winner": "mean_reversion#06",
+     "winner_changes": true,
+     "approved": [],
+     "spearman_reward_activity": -0.5199,
+     "max_zero_window_pct_eligible": 0.83,
+     "disagreements": [
+      "crypto_momentum#01",
+      "mean_reversion#00",
+      "mean_reversion#01",
+      "mean_reversion#03",
+      "mean_reversion#05",
+      "liquidation_cascade#01",
+      "liquidation_cascade#02",
+      "liquidation_cascade#04",
+      "liquidation_cascade#05",
+      "vol_term_structure#02",
+      "attention_ignition#04",
+      "attention_ignition#05",
+      "flow_persistence#04"
+     ]
+    }
+   },
+   "disagreements": 25
+  },
+  {
+   "threshold": 21.0,
+   "sides": {
+    "real": {
+     "n_eligible": 34,
+     "eligible": [
+      "event_calendar_drift#02",
+      "vol_term_structure#00",
+      "event_calendar_drift#04",
+      "event_calendar_drift#06",
+      "event_calendar_drift#00",
+      "signal_composite#00",
+      "vol_term_structure#04",
+      "event_calendar_drift#03",
+      "signal_composite#03",
+      "signal_composite#07",
+      "event_calendar_drift#05",
+      "event_calendar_drift#01",
+      "vol_term_structure#05",
+      "vol_term_structure#01",
+      "crypto_momentum#00",
+      "vol_term_structure#06",
+      "signal_composite#05",
+      "signal_composite#06",
+      "flow_persistence#01",
+      "signal_composite#04",
+      "vol_term_structure#03",
+      "crypto_momentum#02",
+      "flow_persistence#05",
+      "signal_composite#01",
+      "event_calendar_drift#07",
+      "vol_term_structure#07",
+      "crypto_momentum#07",
+      "signal_composite#02",
+      "crypto_momentum#04",
+      "attention_ignition#01",
+      "crypto_momentum#05",
+      "flow_persistence#07",
+      "crypto_momentum#03",
+      "liquidation_cascade#07"
+     ],
+     "winner": "event_calendar_drift#02",
+     "winner_changes": true,
+     "approved": [
+      "crypto_momentum#00",
+      "event_calendar_drift#00",
+      "event_calendar_drift#01",
+      "event_calendar_drift#02",
+      "event_calendar_drift#03",
+      "event_calendar_drift#04",
+      "event_calendar_drift#05",
+      "event_calendar_drift#06",
+      "signal_composite#00",
+      "signal_composite#03",
+      "signal_composite#07",
+      "vol_term_structure#00",
+      "vol_term_structure#01",
+      "vol_term_structure#04",
+      "vol_term_structure#05",
+      "vol_term_structure#06"
+     ],
+     "spearman_reward_activity": 0.4903,
+     "max_zero_window_pct_eligible": 1.33,
+     "disagreements": [
+      "crypto_momentum#01",
+      "mean_reversion#03",
+      "mean_reversion#06",
+      "liquidation_cascade#01",
+      "liquidation_cascade#02",
+      "liquidation_cascade#03",
+      "liquidation_cascade#04",
+      "liquidation_cascade#05",
+      "liquidation_cascade#06",
+      "vol_term_structure#02",
+      "attention_ignition#02",
+      "attention_ignition#03",
+      "attention_ignition#04",
+      "attention_ignition#05",
+      "attention_ignition#06",
+      "attention_ignition#07",
+      "flow_persistence#02",
+      "flow_persistence#04"
+     ]
+    },
+    "synthetic": {
+     "n_eligible": 35,
+     "eligible": [
+      "mean_reversion#06",
+      "crypto_momentum#03",
+      "attention_ignition#01",
+      "crypto_momentum#05",
+      "crypto_momentum#07",
+      "crypto_momentum#04",
+      "crypto_momentum#00",
+      "vol_term_structure#05",
+      "vol_term_structure#04",
+      "vol_term_structure#06",
+      "event_calendar_drift#03",
+      "vol_term_structure#01",
+      "flow_persistence#07",
+      "crypto_momentum#02",
+      "signal_composite#03",
+      "flow_persistence#02",
+      "vol_term_structure#00",
+      "signal_composite#04",
+      "vol_term_structure#03",
+      "vol_term_structure#07",
+      "event_calendar_drift#02",
+      "signal_composite#00",
+      "event_calendar_drift#06",
+      "flow_persistence#05",
+      "flow_persistence#01",
+      "signal_composite#06",
+      "event_calendar_drift#04",
+      "signal_composite#02",
+      "signal_composite#01",
+      "event_calendar_drift#01",
+      "event_calendar_drift#00",
+      "event_calendar_drift#07",
+      "signal_composite#05",
+      "signal_composite#07",
+      "event_calendar_drift#05"
+     ],
+     "winner": "mean_reversion#06",
+     "winner_changes": true,
+     "approved": [],
+     "spearman_reward_activity": -0.6412,
+     "max_zero_window_pct_eligible": 0.83,
+     "disagreements": [
+      "crypto_momentum#01",
+      "mean_reversion#00",
+      "mean_reversion#01",
+      "mean_reversion#03",
+      "mean_reversion#05",
+      "liquidation_cascade#01",
+      "liquidation_cascade#02",
+      "liquidation_cascade#04",
+      "liquidation_cascade#05",
+      "liquidation_cascade#06",
+      "liquidation_cascade#07",
+      "vol_term_structure#02",
+      "attention_ignition#04",
+      "attention_ignition#05",
+      "flow_persistence#04"
+     ]
+    }
+   },
+   "disagreements": 33
+  }
+ ],
+ "decision": {
+  "rule": "el valor de la rejilla que reproduce con menos desacuerdos la condicion derivada (<= 25% de ventanas vacias, que es alpha); a igualdad, el mayor",
+  "grid": [
+   1.0,
+   2.0,
+   3.0,
+   5.0,
+   8.0,
+   13.0,
+   21.0
+  ],
+  "chosen": 3.0,
+  "disagreements": 5,
+  "tied": [
+   2.0,
+   3.0
+  ],
+  "published": 3.0,
+  "matches_published": true
+ },
+ "band": {
+  "real": {
+   "medians": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    2.0,
+    2.0,
+    2.0,
+    4.0,
+    5.0,
+    5.0,
+    5.0,
+    6.0,
+    6.0,
+    7.0,
+    7.0,
+    10.0,
+    10.0,
+    10.0,
+    12.0,
+    13.0,
+    13.0,
+    14.0,
+    14.0,
+    15.0,
+    17.0,
+    21.0,
+    21.0,
+    22.0,
+    24.0,
+    28.0,
+    28.0,
+    30.0,
+    30.0,
+    31.0,
+    33.0,
+    34.0,
+    37.0,
+    37.0,
+    37.0,
+    38.0,
+    44.0,
+    44.0,
+    46.0,
+    47.0,
+    49.0,
+    57.0,
+    64.0,
+    66.0,
+    71.0,
+    77.0,
+    87.0,
+    92.0,
+    98.0,
+    102.0,
+    103.0,
+    104.0,
+    115.0,
+    141.0,
+    156.0
+   ],
+   "largest_gap": 26.0,
+   "gap_between": [
+    115.0,
+    141.0
+   ],
+   "same_partition": [
+    1.0,
+    2.0,
+    3.0
+   ],
+   "n_rankable": 52,
+   "note": "con 1/2/3 operaciones por ventana sale el MISMO conjunto rankeable en este lado"
+  },
+  "synthetic": {
+   "medians": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    2.0,
+    2.0,
+    2.0,
+    2.0,
+    2.0,
+    4.0,
+    4.0,
+    4.0,
+    7.0,
+    8.0,
+    8.0,
+    11.5,
+    12.0,
+    13.0,
+    15.0,
+    21.0,
+    23.0,
+    24.0,
+    27.0,
+    30.0,
+    30.0,
+    30.0,
+    31.0,
+    32.0,
+    33.5,
+    34.5,
+    35.0,
+    35.0,
+    36.0,
+    39.0,
+    40.0,
+    41.0,
+    50.0,
+    61.5,
+    68.0,
+    70.0,
+    71.0,
+    75.0,
+    77.0,
+    86.5,
+    91.0,
+    94.5,
+    95.0,
+    109.0,
+    110.0,
+    113.0,
+    121.0,
+    123.0,
+    156.0,
+    165.0
+   ],
+   "largest_gap": 33.0,
+   "gap_between": [
+    123.0,
+    156.0
+   ],
+   "same_partition": [
+    3.0
+   ],
+   "n_rankable": 45,
+   "note": "con 3 operaciones por ventana sale el MISMO conjunto rankeable en este lado"
+  }
+ },
+ "reproducibility": {
+  "draws": 300,
+  "seed": 20260811,
+  "sides": {
+   "real": {
+    "all_configs": 0.4502,
+    "rankable_only": 0.4198,
+    "random_same_size_mean": 0.4509,
+    "random_same_size_std": 0.0443,
+    "z_vs_random": -0.7018,
+    "inactivity_inflates_stability": true
+   },
+   "synthetic": {
+    "all_configs": 0.6275,
+    "rankable_only": 0.4325,
+    "random_same_size_mean": 0.6309,
+    "random_same_size_std": 0.0472,
+    "z_vs_random": -4.201,
+    "inactivity_inflates_stability": true
+   }
+  },
+  "used_as_criterion": false,
+  "why_not": "Sale MAS ALTA con las inactivas dentro: una configuracion que no opera puntua 0 en todos los bloques y su puesto no se mueve nunca. Elegir el suelo por estabilidad habria premiado exactamente lo que el suelo quita."
+ },
+ "gate": {
+  "real": {
+   "approved_without_floor": [
+    "attention_ignition#00",
+    "crypto_momentum#00",
+    "crypto_momentum#06",
+    "event_calendar_drift#00",
+    "event_calendar_drift#01",
+    "event_calendar_drift#02",
+    "event_calendar_drift#03",
+    "event_calendar_drift#04",
+    "event_calendar_drift#05",
+    "event_calendar_drift#06",
+    "flow_persistence#00",
+    "flow_persistence#03",
+    "flow_persistence#06",
+    "liquidation_cascade#00",
+    "mean_reversion#00",
+    "mean_reversion#02",
+    "mean_reversion#04",
+    "mean_reversion#05",
+    "mean_reversion#07",
+    "signal_composite#00",
+    "signal_composite#03",
+    "signal_composite#07",
+    "vol_term_structure#00",
+    "vol_term_structure#01",
+    "vol_term_structure#04",
+    "vol_term_structure#05",
+    "vol_term_structure#06"
+   ],
+   "approved_with_floor": [
+    "crypto_momentum#00",
+    "event_calendar_drift#00",
+    "event_calendar_drift#01",
+    "event_calendar_drift#02",
+    "event_calendar_drift#03",
+    "event_calendar_drift#04",
+    "event_calendar_drift#05",
+    "event_calendar_drift#06",
+    "signal_composite#00",
+    "signal_composite#03",
+    "signal_composite#07",
+    "vol_term_structure#00",
+    "vol_term_structure#01",
+    "vol_term_structure#04",
+    "vol_term_structure#05",
+    "vol_term_structure#06"
+   ],
+   "lost": [
+    "attention_ignition#00",
+    "crypto_momentum#06",
+    "flow_persistence#00",
+    "flow_persistence#03",
+    "flow_persistence#06",
+    "liquidation_cascade#00",
+    "mean_reversion#00",
+    "mean_reversion#02",
+    "mean_reversion#04",
+    "mean_reversion#05",
+    "mean_reversion#07"
+   ],
+   "n_lost": 11,
+   "lost_detail": [
+    {
+     "config_id": "attention_ignition#00",
+     "trades_per_window": 2.4,
+     "zero_window_pct": 38.7,
+     "reward": -1.1516,
+     "reasons": [
+      "la ventana mediana tiene 2.00 operaciones (< 3)",
+      "38.7% de ventanas vacias (> 25%)"
+     ]
+    },
+    {
+     "config_id": "crypto_momentum#06",
+     "trades_per_window": 2.53,
+     "zero_window_pct": 36.0,
+     "reward": -1.1276,
+     "reasons": [
+      "la ventana mediana tiene 1.00 operaciones (< 3)",
+      "36.0% de ventanas vacias (> 25%)"
+     ]
+    },
+    {
+     "config_id": "flow_persistence#00",
+     "trades_per_window": 0.0,
+     "zero_window_pct": 100.0,
+     "reward": 0.0,
+     "reasons": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "100.0% de ventanas vacias (> 25%)"
+     ]
+    },
+    {
+     "config_id": "flow_persistence#03",
+     "trades_per_window": 0.13,
+     "zero_window_pct": 86.7,
+     "reward": -0.7092,
+     "reasons": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "86.7% de ventanas vacias (> 25%)"
+     ]
+    },
+    {
+     "config_id": "flow_persistence#06",
+     "trades_per_window": 0.0,
+     "zero_window_pct": 100.0,
+     "reward": 0.0,
+     "reasons": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "100.0% de ventanas vacias (> 25%)"
+     ]
+    },
+    {
+     "config_id": "liquidation_cascade#00",
+     "trades_per_window": 0.8,
+     "zero_window_pct": 66.7,
+     "reward": -1.2873,
+     "reasons": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "66.7% de ventanas vacias (> 25%)"
+     ]
+    },
+    {
+     "config_id": "mean_reversion#00",
+     "trades_per_window": 0.77,
+     "zero_window_pct": 68.0,
+     "reward": -0.8258,
+     "reasons": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "68.0% de ventanas vacias (> 25%)"
+     ]
+    },
+    {
+     "config_id": "mean_reversion#02",
+     "trades_per_window": 0.73,
+     "zero_window_pct": 58.7,
+     "reward": -0.889,
+     "reasons": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "58.7% de ventanas vacias (> 25%)"
+     ]
+    },
+    {
+     "config_id": "mean_reversion#04",
+     "trades_per_window": 0.27,
+     "zero_window_pct": 74.7,
+     "reward": -0.528,
+     "reasons": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "74.7% de ventanas vacias (> 25%)"
+     ]
+    },
+    {
+     "config_id": "mean_reversion#05",
+     "trades_per_window": 2.93,
+     "zero_window_pct": 37.3,
+     "reward": -1.215,
+     "reasons": [
+      "la ventana mediana tiene 2.00 operaciones (< 3)",
+      "37.3% de ventanas vacias (> 25%)"
+     ]
+    },
+    {
+     "config_id": "mean_reversion#07",
+     "trades_per_window": 0.07,
+     "zero_window_pct": 93.3,
+     "reward": 0.0,
+     "reasons": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "93.3% de ventanas vacias (> 25%)"
+     ]
+    }
+   ]
+  },
+  "synthetic": {
+   "approved_without_floor": [
+    "attention_ignition#00",
+    "attention_ignition#02",
+    "attention_ignition#03",
+    "attention_ignition#06",
+    "flow_persistence#00",
+    "flow_persistence#03",
+    "flow_persistence#06",
+    "liquidation_cascade#00"
+   ],
+   "approved_with_floor": [],
+   "lost": [
+    "attention_ignition#00",
+    "attention_ignition#02",
+    "attention_ignition#03",
+    "attention_ignition#06",
+    "flow_persistence#00",
+    "flow_persistence#03",
+    "flow_persistence#06",
+    "liquidation_cascade#00"
+   ],
+   "n_lost": 8,
+   "lost_detail": [
+    {
+     "config_id": "attention_ignition#00",
+     "trades_per_window": 0.12,
+     "zero_window_pct": 87.5,
+     "reward": -0.4543,
+     "reasons": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "87.5% de ventanas vacias (> 25%)"
+     ]
+    },
+    {
+     "config_id": "attention_ignition#02",
+     "trades_per_window": 0.25,
+     "zero_window_pct": 83.3,
+     "reward": -0.6074,
+     "reasons": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "83.3% de ventanas vacias (> 25%)"
+     ]
+    },
+    {
+     "config_id": "attention_ignition#03",
+     "trades_per_window": 0.21,
+     "zero_window_pct": 87.5,
+     "reward": -0.4562,
+     "reasons": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "87.5% de ventanas vacias (> 25%)"
+     ]
+    },
+    {
+     "config_id": "attention_ignition#06",
+     "trades_per_window": 0.5,
+     "zero_window_pct": 83.3,
+     "reward": -0.7899,
+     "reasons": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "83.3% de ventanas vacias (> 25%)"
+     ]
+    },
+    {
+     "config_id": "flow_persistence#00",
+     "trades_per_window": 0.0,
+     "zero_window_pct": 100.0,
+     "reward": 0.0,
+     "reasons": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "100.0% de ventanas vacias (> 25%)"
+     ]
+    },
+    {
+     "config_id": "flow_persistence#03",
+     "trades_per_window": 0.17,
+     "zero_window_pct": 84.2,
+     "reward": -0.0586,
+     "reasons": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "84.2% de ventanas vacias (> 25%)"
+     ]
+    },
+    {
+     "config_id": "flow_persistence#06",
+     "trades_per_window": 0.0,
+     "zero_window_pct": 100.0,
+     "reward": 0.0,
+     "reasons": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "100.0% de ventanas vacias (> 25%)"
+     ]
+    },
+    {
+     "config_id": "liquidation_cascade#00",
+     "trades_per_window": 0.33,
+     "zero_window_pct": 84.2,
+     "reward": -0.9664,
+     "reasons": [
+      "la ventana mediana tiene 0.00 operaciones (< 3)",
+      "84.2% de ventanas vacias (> 25%)"
+     ]
+    }
+   ]
+  }
+ }
+}
