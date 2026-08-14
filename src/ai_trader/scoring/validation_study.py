@@ -104,7 +104,12 @@ STUDY_CONFIGS: tuple[tuple[str, str, dict], ...] = (
     ("flow_default", "flow_persistence", {}),
     ("flow_strict", "flow_persistence", {"min_persistence": 0.70, "pullback_atr": 0.5}),
     ("comp_default", "signal_composite", {}),
-    ("comp_slow", "signal_composite", {"trigger_window": 40, "trend_window": 150}),
+    # `min_bars` NO es decorativo aqui: la familia se niega a construirse si no cubre
+    # trend_window + cross_lookback + atr_window, y con trend_window=150 el suelo sube a
+    # 167. Queda en 170 —por encima del suelo y diez barras por debajo de las 180 de
+    # calentamiento— para que ni reviente ni se quede muda en el borde de la ventana.
+    ("comp_slow", "signal_composite",
+     {"trigger_window": 40, "trend_window": 150, "min_bars": 170}),
 )
 
 

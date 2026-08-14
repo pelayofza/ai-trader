@@ -42,6 +42,7 @@ from ai_trader.backtest.validation import (
 )
 from ai_trader.scoring import validation_study
 from ai_trader.scoring.multiwindow import resolve_purge_days, validate_multiwindow
+from ai_trader.strategies.registry import build_strategy
 from test_backtest_engine import FakeService, make_config, trending_df
 
 START = datetime(2024, 1, 1, tzinfo=timezone.utc)
@@ -484,6 +485,33 @@ class TestMultiWindowAggregation:
         for stats in result.baselines.values():
             assert stats.n == len(result.folds)
         assert "btc_hold" in result.baselines
+
+
+class TestStudyConfigsAreConstructible:
+    """Las 16 configuraciones del estudio se construyen. Parece obvio y no lo es: son
+    diccionarios escritos A MANO que no pasan por `finalize`, asi que nada las obligaba a
+    ser coherentes. El hipercubo tiene quien lo defienda —`test_scoring` exige que todo
+    vector dentro de rango construya— pero estas no venian de ningun vector.
+
+    Y el precio de no tenerlo se pago entero: una variante con `trend_window` subido y
+    `min_bars` sin subir tumbo el estudio a los veinte minutos y en la unidad 9 de 128,
+    despues de que seis workers hubieran hecho su trabajo para nada. El fallo tardaba
+    veinte minutos en aparecer y tarda milisegundos en descartarse."""
+
+    @pytest.mark.parametrize(
+        ("config_id", "family", "params"),
+        [(c[0], c[1], c[2]) for c in validation_study.STUDY_CONFIGS],
+        ids=[c[0] for c in validation_study.STUDY_CONFIGS],
+    )
+    def test_every_study_config_builds(self, config_id, family, params):
+        build_strategy(family, dict(params), strategy_id=config_id)
+
+    def test_every_family_of_the_grid_is_represented(self):
+        # Si alguien anade una familia a la rejilla y se olvida de este estudio, el
+        # esquema de validacion se seguiria publicando sobre las de antes sin avisar.
+        from ai_trader.scoring.weight_study import FAMILIES
+
+        assert {c[1] for c in validation_study.STUDY_CONFIGS} == set(FAMILIES)
 
 
 class TestStudyAnalysis:
