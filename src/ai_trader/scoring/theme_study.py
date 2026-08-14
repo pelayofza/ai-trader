@@ -34,19 +34,26 @@ bloques que contiene el cero con N=12 no dice "la senal no sirve", dice "no se h
 
 EL COSTE, MEDIDO, Y POR QUE ES TAN ALTO
 ---------------------------------------
-**~610 s de CPU por unidad**, es decir unas 27 h de CPU para las 160 unidades de la
-configuracion por defecto (4 familias x 4 configuraciones x 5 ventanas x 2 brazos), o alrededor
-de 6 h de reloj con siete workers sobre cuatro nucleos fisicos. Esta escrito aqui porque lo
-estime tres veces por lo bajo antes de medirlo: **no lances este estudio esperando una hora**.
+Medido unidad a unidad sobre la ventana mas poblada (w5, 24 simbolos): **104 s el brazo ciego
+y 817 s el armado**. Ponderando las cinco ventanas por su universo real (8, 17, 18, 23 y 24
+simbolos) salen ~15 h de CPU para las 160 unidades de la configuracion por defecto (4 familias
+x 4 configuraciones x 5 ventanas x 2 brazos), o alrededor de 3,5 h de reloj con siete workers
+sobre cuatro nucleos fisicos. Esta escrito aqui porque lo estime tres veces por lo bajo antes
+de medirlo: **no lances este estudio esperando una hora**.
 
-De donde sale, que no es donde parece. Frente a las ~88 s/unidad del estudio de transferencia
-hay dos factores y el segundo es el gordo:
+Una medicion anterior daba ~610 s por unidad de media, el doble. Estaba contaminada: aquella
+corrida tenia los workers pidiendo barras al exchange —`--offline` no llegaba hasta ellos— y lo
+que media era la red, no el estudio.
+
+De donde sale el coste que queda, que no es donde parece. Frente a las ~88 s/unidad del estudio
+de transferencia hay dos factores y el segundo es el gordo:
 
 1. El universo es de 24 simbolos y no de 11 (ver `_real_bounds`): ~2,2x.
 2. **El brazo ARMADO reconstruye el radar tematico una vez por fold**, y cada construccion
    normaliza las 21 fuentes del archivo entero (`normalize_features` sobre cada frame). Con 15
    folds de CPCV eso son quince normalizaciones completas por unidad. El estudio de
-   transferencia no lo paga porque corre con el radar VACIO.
+   transferencia no lo paga porque corre con el radar VACIO. Es exactamente el factor 7,9x que
+   se mide entre los dos brazos de la misma unidad (817 s frente a 104 s).
 
 La optimizacion evidente —cachear el radar por (ventana, brazo) en vez de reconstruirlo por
 fold— no esta hecha y es el primer sitio donde mirar si este estudio hay que repetirlo a
@@ -90,7 +97,7 @@ from ai_trader.shared.reports import write_report
 from ai_trader.signals.catalog import CATALOG
 # El cargador de barras reales vive en `fidelity_study` y lo comparten los estudios que tocan
 # mercado: los simbolos que el exchange no sirve se OMITEN y se declaran, no se rellenan.
-from ai_trader.synthetic.fidelity_study import fetch_real_bars
+from ai_trader.synthetic.fidelity_study import DEFAULT_EXCHANGE, build_service, fetch_real_bars
 from ai_trader.signals.feed import load_frames
 
 logger = logging.getLogger("theme_study")
@@ -176,7 +183,13 @@ class StudyPlan:
 _WORKER: dict = {}
 
 
-def _init_worker(config_path: str, raw_root: str | None, symbols: Sequence[str]) -> None:
+def _init_worker(
+    config_path: str,
+    raw_root: str | None,
+    symbols: Sequence[str],
+    offline: bool,
+    exchange: str,
+) -> None:
     logging.getLogger("ai_trader").setLevel(logging.ERROR)
     config = load_config(config_path)
     _WORKER.update(
@@ -185,6 +198,13 @@ def _init_worker(config_path: str, raw_root: str | None, symbols: Sequence[str])
         # que va por otro proveedor y otra sesion de mercado, y pedirsela al servicio de cripto
         # ensuciaria cada unidad con excepciones que no significan nada.
         symbols=tuple(symbols),
+        # `--offline` TIENE que llegar hasta aqui. Sin esto cada worker construia su propio
+        # servicio contra el exchange: siete procesos pidiendo veinticuatro simbolos a la vez,
+        # el exchange contestando vacio a la mitad, y los siete peleandose por renombrar el
+        # mismo `.parquet.tmp`. Lo caro no era la red: era que un simbolo caido se DESCARTA,
+        # asi que el universo de cada unidad acababa dependiendo de como cayera la carrera.
+        offline=bool(offline),
+        exchange=exchange,
         # Los frames se cargan UNA vez por worker: son el archivo entero y releerlos por
         # unidad multiplicaria por cien el coste de I/O del estudio.
         frames=load_frames(raw_root=raw_root or config.signals.raw_root or None),
@@ -201,7 +221,9 @@ def _armed_spec(spec: StrategySpec) -> StrategySpec:
     return dataclasses.replace(spec, params={**spec.params, param: GATE_VALUE_BY_PARAM[param]})
 
 
-def _window_bars(config, label: str, start: datetime, end: datetime) -> dict:
+def _window_bars(
+    config, label: str, start: datetime, end: datetime, symbols: Sequence[str]
+) -> dict:
     """
     Las barras de UNA ventana, cacheadas por worker.
 
@@ -212,16 +234,27 @@ def _window_bars(config, label: str, start: datetime, end: datetime) -> dict:
 
     Se cachea UNA ventana y no todas: son 544 dias por veinticuatro simbolos, y siete workers
     reteniendo las cinco a la vez es memoria que no hace falta.
+
+    El universo llega DECLARADO desde el plan y no se deduce de lo que conteste el proveedor.
+    Es lo que hace que el brazo ciego y el armado se comparen sobre lo mismo: se calcula una
+    vez en el padre, con el mismo criterio de historico que la transferencia, y aqui solo se
+    comprueba. Si falta un simbolo declarado la unidad revienta en vez de correr con menos, que
+    es como se cuela una diferencia pareada entre dos universos distintos.
     """
     cached = _WORKER.get("bars_label")
     if cached == label:
         return _WORKER["bars"]
 
-    from ai_trader.data.market_data import MarketDataService
-
-    service = MarketDataService(config)
-    bars = fetch_real_bars(_WORKER["symbols"], start, end, service)
+    service = build_service(_WORKER["exchange"], offline=_WORKER["offline"])
+    bars = fetch_real_bars(tuple(symbols), start, end, service)
     bars = {s: b for s, b in bars.items() if b is not None and not b.empty}
+    missing = sorted(set(symbols) - set(bars))
+    if missing:
+        raise RuntimeError(
+            f"La ventana {label} no sirve barras para {missing}, y el plan las declara. "
+            "Correr con menos simbolos de los declarados haria que los dos brazos dejaran "
+            "de compararse sobre el mismo universo."
+        )
     _WORKER["bars_label"] = label
     _WORKER["bars"] = bars
     return bars
@@ -235,7 +268,7 @@ def _run_unit(task: tuple) -> dict:
     start = datetime.fromisoformat(window_dict["start"]).replace(tzinfo=timezone.utc)
     end = datetime.fromisoformat(window_dict["end"]).replace(tzinfo=timezone.utc)
 
-    bars = _window_bars(config, window_dict["label"], start, end)
+    bars = _window_bars(config, window_dict["label"], start, end, window_dict["symbols"])
 
     try:
         validation = validate_multiwindow(
@@ -384,8 +417,12 @@ def build_plan(args: argparse.Namespace) -> tuple[StudyPlan, list[StrategySpec],
 
     # El mismo minimo que la transferencia: calentamiento de la estrategia + un grupo de CPCV.
     min_history = config.runner.lookback_days + args.window_days // N_GROUPS
-    symbols, first, last = _real_bounds(config, args.start, args.end, min_history)
-    windows = real_windows(first, last, args.window_days)
+    symbols, first, last, bars = _real_bounds(
+        config, args.start, args.end, min_history,
+        offline=bool(args.offline), exchange=args.exchange,
+    )
+    windows = _windows_with_universe(real_windows(first, last, args.window_days), bars, symbols,
+                                     min_history_days=min_history)
     frames = load_frames(raw_root=config.signals.raw_root or None)
 
     plan = StudyPlan(
@@ -394,7 +431,7 @@ def build_plan(args: argparse.Namespace) -> tuple[StudyPlan, list[StrategySpec],
         families_skipped=tuple(skipped),
         configs_per_family=args.configs_per_family,
         symbols=tuple(symbols),
-        windows=tuple(w.as_dict() for w in windows),
+        windows=tuple(windows),
         themes_evaluable=tuple(sorted(evaluable)),
         themes_blind=tuple(sorted(blind)),
         sources_loaded=tuple(sorted(frames)),
@@ -404,7 +441,56 @@ def build_plan(args: argparse.Namespace) -> tuple[StudyPlan, list[StrategySpec],
     return plan, build_specs(tuple(families), args.configs_per_family), windows
 
 
-def _real_bounds(config, start: str, end: str, min_history_days: int) -> tuple[tuple[str, ...], datetime, datetime]:
+def _windows_with_universe(
+    windows: Sequence[RealWindow],
+    bars: dict,
+    symbols: Sequence[str],
+    *,
+    min_history_days: int,
+) -> list[dict]:
+    """
+    Cada ventana, con el universo que le corresponde DECLARADO dentro.
+
+    El universo global son los simbolos con historia suficiente en TODO el rango, y ese no es
+    el universo de cada sub-ventana: media cripto de hoy no cotizaba en 2019, asi que en la
+    ventana mas antigua faltan los pares jovenes. Que falten es correcto; lo que no vale es que
+    se decida solo, dentro del worker y segun lo que conteste el proveedor. Aqui se resuelve
+    una vez, con el MISMO criterio de `audit_real_symbols` que usa la transferencia, y viaja en
+    la tarea: el brazo ciego y el armado reciben la misma lista por construccion, no por suerte.
+
+    Una ventana sin simbolos se declara y se cae de la muestra; correrla daria un motor sin
+    barras y un cero que parece una medicion.
+    """
+    out: list[dict] = []
+    for window in windows:
+        kept, dropped = audit_real_symbols(
+            bars,
+            symbols,
+            start=pd.Timestamp(window.start),
+            end=pd.Timestamp(window.end),
+            min_history_days=min_history_days,
+        )
+        payload = window.as_dict()
+        payload["symbols"] = [a.symbol for a in kept]
+        payload["symbols_dropped"] = [
+            {"symbol": a.symbol, "reason": a.reason} for a in dropped
+        ]
+        logger.info(
+            "  %s (%s -> %s): %d simbolos de %d",
+            payload["label"], payload["start"], payload["end"], len(kept), len(symbols),
+        )
+        if not kept:
+            logger.warning("  %s se cae: ningun simbolo llega al minimo", payload["label"])
+            continue
+        out.append(payload)
+    if not out:
+        raise ValueError("Ninguna sub-ventana tiene universo: no hay estudio que correr")
+    return out
+
+
+def _real_bounds(
+    config, start: str, end: str, min_history_days: int, *, offline: bool, exchange: str
+) -> tuple[tuple[str, ...], datetime, datetime, dict]:
     """
     Que simbolos hay y que rango cubren, con el MISMO cargador que el resto de estudios.
 
@@ -426,9 +512,7 @@ def _real_bounds(config, start: str, end: str, min_history_days: int) -> tuple[t
     la mitad de la muestra sin motivo. El precio es que cada unidad cuesta aproximadamente el
     doble, y esta contado en el coste del estudio.
     """
-    from ai_trader.data.market_data import MarketDataService
-
-    service = MarketDataService(config)
+    service = build_service(exchange, offline=offline)
     window_start = pd.Timestamp(start, tz="UTC")
     window_end = pd.Timestamp(end, tz="UTC")
     requested = crypto_universe(config)
@@ -452,7 +536,7 @@ def _real_bounds(config, start: str, end: str, min_history_days: int) -> tuple[t
     firsts = [b.index[0].to_pydatetime() for b in usable.values()]
     lasts = [b.index[-1].to_pydatetime() for b in usable.values()]
     logger.info("Universo real: %d de %d simbolos con historico suficiente", len(kept), len(requested))
-    return tuple(sorted(usable)), min(firsts), max(lasts)
+    return tuple(sorted(usable)), min(firsts), max(lasts), usable
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -463,7 +547,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--end", default=DEFAULT_REAL_END)
     parser.add_argument("--window-days", type=int, default=544)
     parser.add_argument("--workers", type=int, default=max(1, (mp.cpu_count() or 2) - 1))
-    parser.add_argument("--offline", action="store_true")
+    parser.add_argument(
+        "--offline", action="store_true",
+        help="No llamar al exchange: usar solo la cache. Llega hasta los workers.",
+    )
+    parser.add_argument("--exchange", default=DEFAULT_EXCHANGE)
     parser.add_argument("--out", default=str(REPORT))
     args = parser.parse_args(argv)
 
@@ -483,7 +571,7 @@ def main(argv: list[str] | None = None) -> int:
     # que con este orden cada worker ve una ventana entera seguida y el cache de barras
     # acierta. Con el orden contrario cambiaba de ventana en cada unidad y no acertaba nunca.
     tasks = [
-        (dataclasses.asdict(spec), window.as_dict(), arm)
+        (dataclasses.asdict(spec), window, arm)
         for window in windows
         for spec in specs
         for arm in (ARM_BLIND, ARM_ARMED)
@@ -492,7 +580,10 @@ def main(argv: list[str] | None = None) -> int:
     with mp.Pool(
         processes=args.workers,
         initializer=_init_worker,
-        initargs=(str(args.config), config.signals.raw_root or None, plan.symbols),
+        initargs=(
+            str(args.config), config.signals.raw_root or None, plan.symbols,
+            bool(args.offline), args.exchange,
+        ),
     ) as pool:
         rows = pool.map(_run_unit, tasks)
 
