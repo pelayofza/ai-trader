@@ -10,6 +10,7 @@ Salida: docs/metodologia.html (autocontenido, CSS print-optimizado; Ctrl+P -> PD
 """
 from __future__ import annotations
 
+import json
 import logging
 import subprocess
 from pathlib import Path
@@ -801,8 +802,52 @@ def collect() -> dict:
     # anadir la novena familia obligaria a tocar este fichero Y las marcas literales de la
     # plantilla, en dos sitios que se desincronizan a la primera.
     facts["themed"] = _themed_families()
+    facts["transfer_extended"] = _transfer_extended()
 
     return facts
+
+
+def _transfer_extended() -> dict | None:
+    """
+    El estudio de transferencia con las OCHO familias, y su control de rejilla.
+
+    Se lee aparte del congelado (`_transfer`, que sigue apuntando a ai_v3 con dos familias)
+    porque son dos evidencias distintas y mezclarlas seria exactamente lo que la separacion
+    aditiva existe para impedir. Si alguno de los dos informes no esta, la seccion se genera
+    sin cifras en vez de inventarlas.
+    """
+    extended = load_transfer_report(ROOT / transfer_report_path("ai_v4"))
+    control = load_transfer_report(
+        ROOT / transfer_report_path("ai_v3", Path("data") / "transfer" / "control_8f")
+    )
+    if not extended:
+        return None
+
+    activity = load_activity_report(ROOT / activity_report_path("ai_v4"))
+    transfer = extended["transfer"]
+    plan = extended["plan"]
+
+    # El residuo del control: cuantos campos del informe difieren aparte de la libreria. Es
+    # la cifra que convierte "el mundo no aporta" en algo comprobado y no argumentado.
+    residue = None
+    if control:
+        residue = sum(
+            1
+            for key in ("transfer", "rankings", "eligibility", "blocks", "baselines")
+            if json.dumps(extended.get(key), sort_keys=True)
+            != json.dumps(control.get(key), sort_keys=True)
+        )
+
+    return {
+        "library": plan["library_id"],
+        "n_configs": plan["grid"]["n_configs"],
+        "n_families": len(plan["grid"]["families"]),
+        "spearman": transfer["spearman"],
+        "verdict": extended["verdict"]["key"],
+        "threshold": extended["verdict"]["threshold"],
+        "control_residue": residue,
+        "activity_floor": (activity or {}).get("floor", {}).get("min_median_trades_per_window"),
+    }
 
 
 # Las seis tematicas, con la prosa que no es derivable —que mira cada una y con que fuentes—

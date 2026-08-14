@@ -1478,6 +1478,52 @@ def _families_phrase(families) -> str:
     return f"las {len(names)} familias ({', '.join(_family_label(n) for n in names)})"
 
 
+def _transfer_extended_block(t) -> str:
+    """Seccion 4.11-bis: la misma pregunta con OCHO familias, y el control que la atribuye."""
+    if not t:
+        return ""
+    residue = t.get("control_residue")
+    control = (
+        "<p><b>El control de rejilla devuelve el informe idéntico campo a campo</b> —las "
+        f"{t['n_configs']} configuraciones, cada score y cada intervalo— salvo el identificador "
+        "de librería: <b>el efecto del mundo es exactamente cero</b> y todo el cambio es de "
+        "rejilla.</p>"
+        if residue == 0
+        else (
+            f"<p>El control de rejilla difiere en {residue} bloques del informe extendido, así "
+            "que parte del cambio SÍ es del sustrato y hay que leerlo con cuidado.</p>"
+            if residue is not None
+            else "<p class=muted>Control de rejilla no disponible: la comparación con el "
+            "estudio congelado <b>no es atribuible</b>.</p>"
+        )
+    )
+    return f"""
+<h3>4.11-bis · La misma pregunta con ocho familias</h3>
+<p>El estudio de §4.11 habla de las dos primitivas de precio. Repetido sobre
+<span class="mono">{t['library']}</span> con las <b>{t['n_families']} familias</b>
+({t['n_configs']} configuraciones), el Spearman sale <b>{_n(t['spearman'], 3)}</b> contra un
+umbral de {_n(t['threshold'], 2)}: <b>sigue sin transferir</b>. Cuadruplicar los candidatos y
+darle al mundo un canal de observación no convierte al sintético en criterio de selección.</p>
+{control}
+<div class="why"><b>Por qué ese cero es el resultado y no un trámite.</b> Era predecible —las
+velas de las dos librerías son idénticas byte a byte y en este estudio la capa de señal está
+inerte en las ocho familias, así que los canales declarados no se emiten ni se consultan—, y eso
+es justo lo que lo hace útil: <b>si el control hubiera dado algo distinto de cero, significaría
+una fuga</b>, algún camino colando los canales en un estudio que no debe verlos. Es un test de
+falsación del diseño aditivo, y lo pasa. Corolario práctico: cualquier estudio que no inyecte un
+proveedor de señales da lo mismo sobre las dos librerías, así que este control no hay que
+repetirlo.</div>
+<p>Con el residuo en cero, lo que cambia es atribuible a la <b>rejilla</b> y no al sustrato. Y lo
+que más cambia es la fila que sostenía una conclusión anterior: el Spearman entre recompensa y
+número de operaciones en el lado <b>real</b> pasa de <b>−0,84</b> con dos familias a
+<b>+0,004</b> con ocho. Aquel −0,84 no describía al mercado de 2018-2025: describía a dos
+primitivas que apenas operaban.</p>
+<p>El suelo de actividad de §4.10, re-derivado sobre las {t['n_configs']} configuraciones, elige
+<b>{_n(t['activity_floor'], 0)} operaciones por ventana</b> — el mismo valor publicado. No se
+adopta nada nuevo: se publica que dos rejillas distintas eligen el mismo número.</p>
+"""
+
+
 def _themed_families_block(families) -> str:
     """
     Las seis tematicas, una tarjeta cada una. Se ITERA sobre lo que el generador publica y no
@@ -1842,6 +1888,7 @@ def render_html(f: dict) -> str:
         "CALIBRATION": _calibration_block(f.get("calibration")),
         "FIDELITY": _fidelity_block(f.get("fidelity")),
         "TRANSFER": _transfer_block(f.get("transfer")),
+        "TRANSFER_EXTENDED": _transfer_extended_block(f.get("transfer_extended")),
         "SIGNALCHANNEL": _signal_channel_block(f.get("signal_channel")),
         "VALIDATION": _validation_block(f.get("validation")),
         "SESSIONS": _sessions_block(f.get("sessions")),
@@ -2483,6 +2530,8 @@ un filtro superado. Lo mismo vale para la actividad: si no se ha medido, no se d
 %%ACTIVITY%%
 
 %%TRANSFER%%
+
+%%TRANSFER_EXTENDED%%
 
 %%SIGNALCHANNEL%%
 

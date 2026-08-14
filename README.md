@@ -402,6 +402,49 @@ certificables (hacen falta 200 observaciones), con 0,25 son tres, y con 0,30 la 
 dirección segura: declarar más cobertura de la que hay hace el mundo *más* favorable a la señal,
 así que el break-even que se publique es una cota optimista.
 
+#### Lo que salió al medirlo: el veredicto no se mueve, y el mundo no aporta nada
+
+```powershell
+.venv\Scripts\python.exe -m ai_trader.scoring.transfer_study --library ai_v4 --offline `
+    --workers 7 --configs-per-family 8 --verify-determinism 4          # -> data/transfer/report_ai_v4.json
+.venv\Scripts\python.exe -m ai_trader.scoring.transfer_study --library ai_v3 --offline `
+    --workers 7 --configs-per-family 8 --out-dir data\transfer\control_8f   # el CONTROL de rejilla
+.venv\Scripts\python.exe -m ai_trader.scoring.activity_study --library ai_v4
+```
+
+**ρ = +0,038**, IC95% por bloques `[−0,117, +0,198]`, p de permutación 0,76 → **sin
+transferencia**, igual que el `−0,038` publicado con dos familias. Cuadruplicar los candidatos
+no convierte al sintético en criterio de selección. Determinismo: 4 comprobaciones, 0
+discrepancias.
+
+**El control de rejilla devuelve el informe IDÉNTICO campo a campo** —las 64 configuraciones,
+cada score y cada intervalo— salvo `plan.library_id`. Así que la descomposición no deja
+residuo: **el efecto del mundo es exactamente cero y todo el cambio es de rejilla.**
+
+Y ese cero era predecible, lo cual es justo lo que lo hace útil como control: `ai_v4` tiene
+barras byte a byte iguales a `ai_v3`, y en este estudio la capa de señal está inerte en las
+ocho familias, así que los canales declarados no se emiten ni se consultan. **Si el control
+hubiera dado algo distinto de cero habría significado una fuga** — algún camino colando
+`spec.signals` en un estudio que no debe verlo. Es un test de falsación del diseño aditivo, y
+lo pasa.
+
+Con eso, las tres cosas que cambian son atribuibles a la rejilla y no al sustrato:
+
+| | 2 familias (`ai_v3`) | 8 familias |
+|---|---|---|
+| Spearman(recompensa, operaciones) en el **real** | −0,84 | **+0,004** |
+| Top-4 del sintético en la mitad buena del real | 1 de 4 | **4 de 4** (azar 2,0; p=0,057) |
+| ρ entre las que operan en ambos mundos | −0,67 (sobre 9) | −0,245 (sobre 43) |
+
+La primera fila es la que más cambia lo que se creía: **aquel −0,84 no describía al mercado de
+2018-2025, describía a dos primitivas que apenas operaban**. Con ocho familias, el real deja de
+premiar no operar.
+
+El **suelo de actividad se corrobora solo**: re-derivado sobre las 64 configuraciones sale
+`T = 3` operaciones por ventana, el mismo valor publicado. No se adopta nada nuevo — se publica
+que dos rejillas distintas eligen el mismo número. La elección del ganador sí cambia con el
+suelo (`flow_persistence#00` → `event_calendar_drift#02`), que es para lo que el suelo está.
+
 #### La limitación, con fechas
 
 De los cinco temas, solo **macro** (3 fuentes con historia medida), **attention** (2) y **flow**
