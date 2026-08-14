@@ -89,6 +89,22 @@ STUDY_CONFIGS: tuple[tuple[str, str, dict], ...] = (
      {"fast_sma_window": 5, "slow_sma_window": 20, "breakout_lookback": 3}),
     ("mr_default", "mean_reversion", {}),
     ("mr_strict", "mean_reversion", {"entry_z": 1.5, "exit_z": 0.2, "lookback": 15}),
+    # Las seis tematicas, dos configuraciones cada una y por el mismo motivo que las dos de
+    # arriba: aqui no se busca la mejor estrategia, se comparan ESQUEMAS DE VALIDACION, y
+    # para eso basta con que las configuraciones sean distinguibles entre si. La variante de
+    # cada familia mueve el mando que define su tesis, no un parametro cualquiera.
+    ("liq_default", "liquidation_cascade", {}),
+    ("liq_deep", "liquidation_cascade", {"entry_stretch_atr": 3.0, "entry_range_atr": 2.0}),
+    ("vol_default", "vol_term_structure", {}),
+    ("vol_tight", "vol_term_structure", {"max_compression": 0.6, "breakout_lookback": 10}),
+    ("cal_default", "event_calendar_drift", {}),
+    ("cal_wide", "event_calendar_drift", {"drift_window": 10, "min_drift_pct": 4.0}),
+    ("att_default", "attention_ignition", {}),
+    ("att_loud", "attention_ignition", {"volume_mult": 4.0, "close_location_min": 0.85}),
+    ("flow_default", "flow_persistence", {}),
+    ("flow_strict", "flow_persistence", {"min_persistence": 0.70, "pullback_atr": 0.5}),
+    ("comp_default", "signal_composite", {}),
+    ("comp_slow", "signal_composite", {"trigger_window": 40, "trend_window": 150}),
 )
 
 

@@ -59,8 +59,10 @@ from ai_trader.scoring.transfer_study import (
     verdict_for,
 )
 from ai_trader.scoring.search_space import SPACES, ParamDim, get_space
+from ai_trader.strategies.registry import build_strategy
 from ai_trader.scoring.weight_calibration import candidate_specs, spearman
-from ai_trader.scoring.weight_study import FAMILIES, STUDY_SEED
+from ai_trader.shared.reports import PublishedGridMismatch, guard_published_grid
+from ai_trader.scoring.weight_study import FAMILIES, FAMILIES_PUBLISHED, STUDY_SEED
 from ai_trader.strategies.attention_ignition import AttentionIgnitionConfig
 from ai_trader.strategies.event_calendar_drift import EventCalendarDriftConfig
 from ai_trader.strategies.flow_persistence import FlowPersistenceConfig
@@ -103,14 +105,93 @@ class TestGrid:
         assert [s.id for s in specs] == [s.id for s in expected]
         assert [s.params for s in specs] == [s.params for s in expected]
 
-    def test_dieciseis_configuraciones_de_dos_familias(self):
-        specs = build_specs(FAMILIES, 8)
+    def test_dieciseis_configuraciones_de_las_dos_primitivas_de_precio(self):
+        specs = build_specs(FAMILIES_PUBLISHED, 8)
         assert len(specs) == 16
-        assert sorted({s.type for s in specs}) == sorted(FAMILIES)
+        assert sorted({s.type for s in specs}) == sorted(FAMILIES_PUBLISHED)
         assert len({s.id for s in specs}) == 16
+
+    def test_sesenta_y_cuatro_configuraciones_de_ocho_familias(self):
+        specs = build_specs(FAMILIES, 8)
+        assert len(specs) == 64
+        assert sorted({s.type for s in specs}) == sorted(FAMILIES)
+        assert len({s.id for s in specs}) == 64
+
+    def test_las_familias_nuevas_van_AL_FINAL_y_eso_preserva_la_huella(self):
+        """
+        EL TEST QUE HACE COMPROBABLE LA ADITIVIDAD, y sin el la promesa no vale nada.
+
+        `build_specs` siembra el hipercubo latino con `STUDY_SEED + indice_de_familia`. Anadir
+        una familia AL FINAL deja intactas las semillas de las anteriores; insertarla en medio
+        re-sortea todo lo que venga detras y SUSTITUYE en silencio las 16 configuraciones
+        publicadas por otras 16 con los mismos nombres. El informe seguiria en disco diciendo
+        lo mismo y ya no seria sobre lo que corre el sistema.
+        """
+        assert FAMILIES[: len(FAMILIES_PUBLISHED)] == FAMILIES_PUBLISHED
+        extended = build_specs(FAMILIES, 8)
+        published = build_specs(FAMILIES_PUBLISHED, 8)
+        assert [s.id for s in extended[: len(published)]] == [s.id for s in published]
+        assert [s.params for s in extended[: len(published)]] == [s.params for s in published]
+
+    def test_toda_familia_de_la_rejilla_tiene_espacio_y_constructor(self):
+        for family in FAMILIES:
+            assert family in SPACES
+            assert build_strategy(family) is not None
 
     def test_determinista(self):
         assert [s.params for s in build_specs()] == [s.params for s in build_specs()]
+
+
+class TestGuardaDeEscritura:
+    """
+    La guarda es lo que convierte "los informes son aditivos" de promesa en propiedad.
+
+    `FAMILIES` es una constante de modulo compartida por cuatro estudios. El dia que crece,
+    un `--library` mal tecleado produce un informe con OTRAS configuraciones y el MISMO
+    nombre de fichero, y la evidencia con la que se decidio que el sintetico no ordena como
+    el mercado se pierde sin que nada avise.
+    """
+
+    def _write(self, path: Path, families: list[str]) -> None:
+        path.write_text(
+            json.dumps({"plan": {"grid": {"families": families, "configs_per_family": 8}}}),
+            encoding="utf-8",
+        )
+
+    def test_un_fichero_que_no_existe_no_estorba(self, tmp_path):
+        guard_published_grid(tmp_path / "nuevo.json", FAMILIES)
+
+    def test_la_misma_rejilla_se_puede_reescribir(self, tmp_path):
+        target = tmp_path / "report.json"
+        self._write(target, list(FAMILIES_PUBLISHED))
+        guard_published_grid(target, FAMILIES_PUBLISHED)
+
+    def test_otra_rejilla_se_niega_a_publicar(self, tmp_path):
+        target = tmp_path / "report.json"
+        self._write(target, list(FAMILIES_PUBLISHED))
+        with pytest.raises(PublishedGridMismatch, match="rejilla distinta"):
+            guard_published_grid(target, FAMILIES)
+
+    def test_la_valvula_es_explicita(self, tmp_path):
+        """Sustituir evidencia publicada tiene que quedar escrito en la linea de comando."""
+        target = tmp_path / "report.json"
+        self._write(target, list(FAMILIES_PUBLISHED))
+        guard_published_grid(target, FAMILIES, overwrite=True)
+
+    def test_un_informe_sin_rejilla_no_bloquea(self, tmp_path):
+        """No todos los informes declaran familias (fidelidad, sesiones). No es su guarda."""
+        target = tmp_path / "report.json"
+        target.write_text(json.dumps({"plan": {"library_id": "ai_v3"}}), encoding="utf-8")
+        guard_published_grid(target, FAMILIES)
+
+    def test_el_informe_publicado_de_ai_v3_sigue_describiendo_dos_familias(self):
+        """La evidencia congelada, comprobada donde vive: si algun dia se sobrescribiera con
+        la rejilla de ocho, este test es el que lo dice."""
+        report = json.loads(
+            (Path("data") / "transfer" / "report_ai_v3.json").read_text(encoding="utf-8")
+        )
+        assert tuple(report["plan"]["grid"]["families"]) == FAMILIES_PUBLISHED
+        assert report["plan"]["grid"]["n_configs"] == 16
 
 
 # --------------------------------------------------- la huella de lo ya publicado ----
@@ -143,7 +224,7 @@ class TestPublishedFingerprint:
 
     def test_las_dieciseis_publicadas_siguen_siendo_las_que_salen_hoy(self):
         published = self._published()
-        specs = build_specs(FAMILIES, 8)
+        specs = build_specs(FAMILIES_PUBLISHED, 8)
 
         assert [c["config_id"] for c in published] == [s.id for s in specs]
         for config, spec in zip(published, specs):

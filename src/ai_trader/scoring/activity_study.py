@@ -552,13 +552,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--library", default=DEFAULT_LIBRARY_ID)
     parser.add_argument("--units-dir", default=str(UNITS_DIR))
     parser.add_argument("--out-dir", default=str(OUT_DIR))
-    parser.add_argument("--configs-per-family", type=int, default=8)
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(message)s")
     units_path = Path(args.units_dir) / f"units_{args.library}.json"
     payload = json.loads(units_path.read_text(encoding="utf-8"))
-    specs = build_specs(per_family=args.configs_per_family)
+
+    # LA REJILLA SALE DEL PROPIO FICHERO DE UNIDADES, no de la constante del modulo. Este
+    # estudio es puro re-analisis: sus filas ya estan calculadas y describen unas
+    # configuraciones concretas. Leer `FAMILIES` en su lugar significaba que el dia que esa
+    # constante creciera se pedirian 64 identificadores sobre unas filas que solo tienen 16,
+    # y el estudio no reventaria: publicaria un suelo de actividad calculado sobre un
+    # conjunto que no existe.
+    grid = payload["plan"]["grid"]
+    specs = build_specs(tuple(grid["families"]), int(grid["configs_per_family"]))
+    logger.info(
+        "Rejilla leida del fichero de unidades: %s familias x %s = %s configuraciones",
+        len(grid["families"]), grid["configs_per_family"], len(specs),
+    )
 
     report = analyze(payload["rows"], payload["plan"], [s.id for s in specs])
     out_dir = Path(args.out_dir)

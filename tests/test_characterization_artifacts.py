@@ -10,8 +10,13 @@ La referencia NO se duplica en `tests/golden/`: el artefacto commiteado (`dashbo
 index.html`, `docs/metodologia.html`) ES la referencia. Son 750 KB que ya estan
 versionados y que el flujo normal regenera; copiarlos seria tener dos verdades.
 
-Los dos son caros (el dashboard ~4,5 min porque corre el ranking entero), asi que van
-marcados `veryslow`: no entran en la vuelta rapida, si en la verificacion completa.
+Los dos son caros (el dashboard corre el ranking de muestra entero), asi que van marcados
+`veryslow`: no entran en la vuelta rapida, si en la verificacion completa. Y el coste hay que
+vigilarlo: al pasar de dos familias a ocho, el ranking de muestra y el barrido de la demo se
+multiplicaron por cuatro y el build se fue a ~25 min, es decir, la verificacion completa de
+~12 a ~40. Se recorto bajando `RANK_N_PATHS` a 1 y el barrido de la demo a dos escenarios, que
+es lo correcto porque las dos vistas son ILUSTRATIVAS —la evidencia vive en `data/`— y esto se
+paga en cada vuelta.
 """
 from __future__ import annotations
 

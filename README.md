@@ -210,7 +210,7 @@ siendo floja o negativa. Documentación completa en §2.8.
 
 Que el generador se **parezca** al mercado no dice que **ordene** las estrategias como él. Un
 generador puede clavar las colas y ordenar al revés, y ninguna métrica de fidelidad lo
-detectaría. `scoring/transfer_study.py` mide justo eso: las mismas 16 configuraciones (la
+detectaría. `scoring/transfer_study.py` mide justo eso: las 16 configuraciones de las dos primitivas de precio (la
 rejilla del estudio de pesos, hipercubo latino con semilla fija) se puntúan **dos veces** y se
 compara el orden de los dos rankings.
 
@@ -253,16 +253,16 @@ Se reproduce con (usa la caché de barras ya descargada; verifica determinismo r
 unidades en procesos nuevos):
 
 ```powershell
-.venv\Scripts\python.exe -m ai_trader.scoring.transfer_study --offline --workers 7 --verify-determinism 4
-.venv\Scripts\python.exe -m ai_trader.scoring.transfer_study --analyze-only   # re-analiza sin backtestear
+.venv\Scripts\python.exe -m ai_trader.scoring.transfer_study --library ai_v3 --offline --workers 7 --verify-determinism 4
+.venv\Scripts\python.exe -m ai_trader.scoring.transfer_study --library ai_v3 --analyze-only   # re-analiza sin backtestear
 ```
 
 Límites declarados en el propio informe, no en una nota al pie: el histórico real es **un solo
 camino** (5 bloques, sin ensemble — de ahí el bootstrap por bloques y no iid), hay **sesgo de
 supervivencia** en el lado real que juega *en contra* de la hipótesis que se quería validar, 13
 pares del universo operable se omiten por histórico insuficiente (se declaran, no se rellenan),
-y 16 configuraciones de dos familias distinguen "ordena como el mercado" de "no ordena", no
-0,35 de 0,45. Evidencia completa en `data/transfer/` y documentación en §2.9.
+y 16 configuraciones de las dos primitivas de precio distinguen "ordena como el mercado" de "no ordena", no
+0,35 de 0,45. Evidencia completa en `data/transfer/report_ai_v3.json` y documentación en §2.9.
 
 ### Un ranking que exige operar (suelo de actividad)
 
@@ -299,7 +299,7 @@ no se razona, se comprueba: de las 1 200 ventanas reales, **307 están vacías y
 exacto**; ninguna ventana con operaciones puntúa 0. Y el **12,2 %** de las ventanas que *fijan*
 la recompensa estaban vacías.
 
-Lo que cambia, medido sobre las mismas 16 configuraciones:
+Lo que cambia, medido sobre esas mismas 16 configuraciones:
 
 | | sin suelo | con suelo |
 |---|---|---|
@@ -327,9 +327,107 @@ como criterio.
 .venv\Scripts\python.exe -m ai_trader.scoring.activity_study    # evidencia -> data/activity/
 ```
 
+### Seis primitivas cuya tesis vive en las señales
+
+Había treinta fuentes cableadas y **cero estrategias cuya tesis viviera en ellas**: el caudal
+llegaba a la decisión colapsado en seis números que dos primitivas de precio usaban solo como
+puerta. Y con seis números el problema es aritmético — cinco estrategias que lean `signal_tone`
+no son cinco apuestas, son una repetida cinco veces.
+
+El radar publica ahora **quince números más**: una terna de tono, intensidad y cobertura por cada
+uno de cinco **temas** (`liquidation`, `vol_surface`, `macro`, `attention`, `flow`). Los seis de
+siempre no cambian ni un dígito, y eso no es una promesa sino una propiedad estructural — el
+proveedor temático es una subclase y `features()` llama a `super()`; hay un test que lo compara
+byte a byte con `float.hex()`.
+
+| familia | tema | núcleo de precio | qué aporta la señal |
+|---|---|---|---|
+| `liquidation_cascade` | liquidation | barra de capitulación (rango ≫ ATR, cierre en el extremo) | dónde queda combustible: distancia al cúmulo × notional, apalancamiento, funding |
+| `vol_term_structure` | vol_surface | compresión de vol realizada + rotura de Donchian | `−z(skew_25d)`: qué está pagando la protección |
+| `event_calendar_drift` | macro | deriva de N días confirmada por una ventana corta | **solo intensidad**: el tema no tiene dirección |
+| `attention_ignition` | attention | volumen ÷ mediana móvil + cierre en máximos (**solo largo**) | Upbit, gap App Store Corea−EE.UU., Naver, prima P2P |
+| `flow_persistence` | flow | retroceso dentro de tendencia persistente | el único tema con tono de calidad: 11 de 12 fuentes con polaridad |
+| `signal_composite` | los cinco | mínimo: piso de ATR + giro de la media corta | **es la tesis**: el agregado de los cinco temas |
+
+Tres decisiones que conviene leer antes que la tabla:
+
+- **La capa de señal es inerte por construcción.** Con los parámetros por defecto no puede
+  cambiar elegibilidad, ni lado, ni tamaño, **con ningún radar** —vacío o lleno—. Los cuatro
+  mandos están en el borde exacto de su rango, y `_signals_active()` devuelve `False`, así que la
+  puerta ni se consulta.
+- **Los umbrales de señal no entran en `search_space`**, y el argumento no es la inercia:
+  dieciséis de las treinta fuentes empezaron a existir el día que arrancó la captura, así que
+  «cobertura de un tema» está correlacionada casi uno a uno con **la fecha**. Un piso sorteable
+  dejaría al optimizador elegir en qué tramo de historia se le permite operar.
+- **La sexta familia existe por la ley fundamental del gestor activo, y su puerta se pasó antes
+  de gastar CPU.** Medido sobre `ai_v4` sin un solo backtest: el tono compuesto correlaciona
+  **0,0390** con el retorno futuro contra **0,0186** del mejor tema solo — ×2,10, cuando √K
+  predice ×1,55. Si no hubiera agregado, la sexta familia no aportaría nada sobre las otras cinco
+  y no habría motivo para pagar su coste en el `n_trials` del DSR.
+
+Y un hallazgo que no estaba previsto: **el radar consume IC**. Lo declarado no llega entero a la
+puerta —0,0390 medido contra 0,0744 declarado— entre la tolerancia a datos rancios y la
+re-normalización causal. `expected_ic` es una **cota superior**, no una predicción.
+
+#### `ai_v4`: el mismo mundo, que además se deja observar
+
+`ai_v4` es `ai_v3` más cinco canales de observación, uno por tema, emitidos con la fórmula de
+siempre `señal_t = ρ·z(r_t→t+h) + √(1−ρ²)·ruido_t`. **Las velas son las mismas**: verificado con
+SHA sobre doce muestras, porque el motor no lee `spec.signals` y la emisión es un pase aparte.
+
+```powershell
+.venv\Scripts\python.exe -m ai_trader.cli synth derive --from ai_v3 --to ai_v4 --enricher v4
+.venv\Scripts\python.exe -m ai_trader.synthetic.fidelity_study --library ai_v4 --offline
+```
+
+| canal | ρ | h | φ | informative | coverage | IC esperado |
+|---|---|---|---|---|---|---|
+| `liquidation` | 0,16 | 2 | 0,55 | 0,25 | 0,50 ⚠ | 0,040 |
+| `vol_surface` | 0,12 | 10 | 0,60 | 0,25 | 0,75 | 0,030 |
+| `macro` | 0,10 | 5 | 0,10 | 0,10 | 0,85 | 0,010 |
+| `attention` | 0,10 | 2 | 0,50 | 0,25 | 0,50 ⚠ | 0,025 |
+| `flow` | 0,12 | 10 | 0,45 | 0,40 | 0,85 | 0,048 |
+
+Agregado (√Σ IC²) = **0,0744**. La libreria pasa su estudio de fidelidad con **19
+comprobaciones** —las 9 de siempre más 2 por canal— y los cinco canales certifican: el IC medido
+cae dentro de la tolerancia y la fuga al pasado queda entre 0,060 y 0,079 contra un límite de
+0,100.
+
+⚠ **El suelo de `coverage = 0,50` es una concesión al estimador, no al mundo.** La cobertura real
+de dos temas es 0 y 1 fuentes backtesteables; declararla literalmente hace que la librería **no
+pueda pasar su propio estudio de fidelidad**, y no porque el mundo esté mal simulado sino porque
+el estimador se queda sin muestra. Medido sobre 36 series: con `coverage` 0,20 son cero las series
+certificables (hacen falta 200 observaciones), con 0,25 son tres, y con 0,30 la fuga al pasado sale
+0,097 contra un límite de 0,100 **sin que se fugue nada** —sigue 1,5/√n—. El sesgo va en la
+dirección segura: declarar más cobertura de la que hay hace el mundo *más* favorable a la señal,
+así que el break-even que se publique es una cota optimista.
+
+#### La limitación, con fechas
+
+De los cinco temas, solo **macro** (3 fuentes con historia medida), **attention** (2) y **flow**
+(8) alcanzan cobertura en un backtest histórico. **liquidation** (1 de 4) y **vol_surface** (1 de
+2) no: sus fuentes empezaron a existir el día que arrancó la captura —Hyperliquid el 2026-08-13,
+los vencimientos de Deribit el 2026-08-14—, y la captura pide 30 días de ventana pero **no compra
+ni un día de pasado**. Esas dos primitivas se miden como núcleo de precio ciego en todo el
+histórico, y su puesto en la tabla es la cota de la versión que no sabe nada.
+
+Criterio para repetir, declarado ahora y no cuando haya cifras que mirar. Manda el segundo:
+
+1. El catálogo exige **365 días medidos** antes de declarar `history_from`: Hyperliquid el
+   **2027-08-13**, Deribit el 2027-08-14.
+2. El estudio de transferencia trocea en sub-ventanas de **544 días** y cada estrategia necesita
+   **180 de calentamiento**: son **724 días de señal capturada** para correr UNA sub-ventana con
+   vista. Primera fecha posible: **2028-08-06**. Las cinco sub-ventanas de la geometría publicada
+   pedirían ~2.900 días, ocho años — esas cifras **no se van a poder reproducir con vista**.
+
+Así que la repetición no será la misma medición con mejores datos: será un estudio más corto y con
+menos bloques, y lo que se leerá de él no es el ranking sino **una comparación pareada** —la misma
+familia, sobre la misma ventana, con la puerta abierta y cerrada—. Para los otros tres temas esa
+comparación **ya se puede hacer hoy**.
+
 ### El break-even del IC: desde qué capacidad predictiva paga una señal
 
-El radar de señales (más abajo) mete veintinueve fuentes en la decisión, y hasta aquí su única
+El radar de señales (más abajo) mete treinta fuentes en la decisión, y hasta aquí su única
 defensa contra el sobreajuste era **negativa**: ninguna feature entra en `search_space`, así que el
 optimizador no puede ajustar umbrales contra el resultado. Eso limita los grados de libertad pero
 **no mide nada**, y era el hueco que la propia evolución del radar dejó escrito. Esto es la
@@ -350,7 +448,7 @@ no son «los mejores parámetros» sino un umbral: una propiedad del **diseño**
 con estos costes, con esta puerta— y no de ningún histórico. No se puede sobreajustar a datos que
 nunca entraron.
 
-Cinco celdas sobre **las mismas barras** (cambiar ρ no mueve ni una vela), las 16 configuraciones
+Cinco celdas sobre **las mismas barras** (cambiar ρ no mueve ni una vela), las 16 configuraciones de las dos primitivas
 publicadas, CPCV de 15 ventanas, 8 muestras: 640 unidades de backtest. La configuración se elige en
 los escenarios de *train* y se puntúa en los de *validación*, que no participaron en la elección.
 
@@ -366,7 +464,7 @@ los escenarios de *train* y se puntúa en los de *validación*, que no participa
 queda a 0,018 puntos. Y eso ya contesta una pregunta que valía una evolución entera, porque un IC
 diario **sostenido** de 0,20 es enorme: la referencia habitual para datos alternativos está un orden
 de magnitud por debajo. Esa referencia es **literatura, no una medición de este repositorio** —el ρ
-de nuestras veintinueve fuentes está sin medir, y medirlo es trabajo del sustrato real—, así que la
+de nuestras treinta fuentes está sin medir, y medirlo es trabajo del sustrato real—, así que la
 comparación se ofrece como escala, no como conclusión. Lo que sí es medición es lo demás, y la
 lectura útil no es «hacen falta señales mejores» sino que el cuello de botella es el **uso**: una
 puerta que cierra o abre tira toda la información salvo un bit.
@@ -636,7 +734,7 @@ tocar una línea de `observation/regime.py`.
 Lo que ese cableado **no** cerraba —limitar los grados de libertad *reduce* el riesgo de sobreajuste,
 pero no lo *mide*— lo cierra el apartado siguiente: el **break-even de ρ**, con ρ = 0 como grupo de
 control. Lo que sigue abierto es el otro lado de la pregunta: cuánto ρ tiene cada una de estas
-veintinueve fuentes, que se mide en el sustrato real y no aquí.
+treinta fuentes, que se mide en el sustrato real y no aquí.
 
 **Toda feature se publica normalizada, con dos varas** (`signals/normalize.py`): `<feature>_z` es la
 z contra la propia historia de la entidad (expansiva y **causal**, mínimo 20 observaciones) y

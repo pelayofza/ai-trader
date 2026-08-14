@@ -247,14 +247,27 @@ class AttentionIgnitionStrategy:
         )
 
 
+# Que fraccion del umbral de volumen, POR ENCIMA de el, satura la conviccion; y que parte
+# del rango que queda sobre el suelo de cierre la satura a ella.
+#
+# Los dos se bajaron despues de medir: con la saturacion en el doble del umbral (x5 el
+# volumen mediano) y en el maximo exacto del dia, la confianza se quedaba tan pegada al suelo
+# que el motor de riesgo rechazaba la MITAD de las senales. El listado de referencia son las
+# dos primitivas de precio, que rechazan el 3% y el 12%. Saturar en valores inalcanzables no
+# hace una estrategia mas exigente: hace que no opere, y entonces su puesto en un ranking
+# mide esta funcion en vez de su tesis.
+VOLUME_SATURATION = 0.5
+LOCATION_SATURATION = 0.6
+
+
 def _confidence(
     *, volume_ratio_value: float, location: float, config: AttentionIgnitionConfig
 ) -> float:
     excess = max(volume_ratio_value - config.volume_mult, 0.0)
-    volume_strength = min(excess / config.volume_mult, 1.0)
+    volume_strength = min(excess / (config.volume_mult * VOLUME_SATURATION), 1.0)
     # Cuanto mas arriba del rango cierra, mas limpia es la ignicion. Se reescala desde el
     # propio umbral para que "justo en el minimo" valga 0 y no un pedazo gratis de score.
-    room = max(1.0 - config.close_location_min, 1e-9)
+    room = max((1.0 - config.close_location_min) * LOCATION_SATURATION, 1e-9)
     location_strength = min(max(location - config.close_location_min, 0.0) / room, 1.0)
     raw = 0.6 * volume_strength + 0.4 * location_strength
     return round(min(max(0.55 + raw * 0.35, 0.55), 0.90), 2)

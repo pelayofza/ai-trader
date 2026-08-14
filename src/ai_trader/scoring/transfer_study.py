@@ -101,7 +101,7 @@ from ai_trader.scoring.baselines import BASELINE_LABELS, BaselineGate, gate
 from ai_trader.scoring.multiwindow import resolve_purge_days, validate_multiwindow
 from ai_trader.scoring.weight_calibration import candidate_specs, spearman
 from ai_trader.scoring.weight_study import FAMILIES, STUDY_SEED
-from ai_trader.shared.reports import load_report
+from ai_trader.shared.reports import guard_published_grid, load_report
 from ai_trader.shared.instruments import AssetClass, detect_asset_class
 from ai_trader.synthetic.fidelity_study import (
     DEFAULT_EXCHANGE,
@@ -1689,7 +1689,7 @@ def build_plan(args: argparse.Namespace) -> tuple[StudyPlan, list[StrategySpec],
         config_path=str(args.config),
         exchange=args.exchange,
         offline=bool(args.offline),
-        families=tuple(FAMILIES),
+        families=tuple(args.families),
         configs_per_family=args.configs_per_family,
         study_seed=STUDY_SEED,
         symbols=symbols,
@@ -1716,7 +1716,7 @@ def build_plan(args: argparse.Namespace) -> tuple[StudyPlan, list[StrategySpec],
         cvar_alpha=DEFAULT_CVAR_ALPHA,
         starting_equity=DEFAULT_STARTING_EQUITY,
     )
-    return plan, build_specs(FAMILIES, args.configs_per_family), windows
+    return plan, build_specs(tuple(args.families), args.configs_per_family), windows
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1727,6 +1727,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--start", default=DEFAULT_REAL_START)
     parser.add_argument("--end", default=DEFAULT_REAL_END)
     parser.add_argument("--configs-per-family", type=int, default=CONFIGS_PER_FAMILY)
+    parser.add_argument(
+        "--families", nargs="+", default=list(FAMILIES),
+        help=(
+            "Familias de la rejilla, EN ORDEN. El orden fija las semillas del hipercubo, asi "
+            "que reordenarlas produce otras configuraciones con los mismos nombres."
+        ),
+    )
     parser.add_argument("--scenarios", type=int, default=8, help="0 = todos")
     parser.add_argument("--paths", type=int, default=1)
     parser.add_argument("--workers", type=int, default=max(1, (mp.cpu_count() or 2) - 1))
@@ -1736,6 +1743,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--analyze-only", action="store_true")
     parser.add_argument("--verify-determinism", type=int, default=0)
     parser.add_argument("--out-dir", default=str(OUT_DIR))
+    parser.add_argument(
+        "--overwrite-published", action="store_true",
+        help="Permite reemplazar un informe publicado con OTRA rejilla. Ver shared/reports.",
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(message)s")
@@ -1746,6 +1757,12 @@ def main(argv: list[str] | None = None) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     units_path = out_dir / f"units_{plan.library_id}.json"
     report_path = transfer_report_path(plan.library_id, out_dir)
+
+    # ANTES de gastar dos horas de CPU: si el fichero de destino publica otra rejilla, este
+    # estudio no lo sustituye. Un `--library` mal tecleado destruiria la evidencia con la que
+    # se decidio que el sintetico no ordena como el mercado.
+    for target in (units_path, report_path):
+        guard_published_grid(target, plan.families, overwrite=args.overwrite_published)
 
     if args.analyze_only:
         payload = json.loads(units_path.read_text(encoding="utf-8"))

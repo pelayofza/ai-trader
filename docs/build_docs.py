@@ -60,8 +60,10 @@ from ai_trader.synthetic.fidelity import (
     load_fidelity_report,
     metric,
 )
+from ai_trader.scoring.weight_study import NEW_FAMILIES
 from ai_trader.strategies.mean_reversion import MeanReversionStrategy
 from ai_trader.strategies.momentum_crypto import CryptoMomentumStrategy
+from ai_trader.strategies.registry import build_strategy
 from ai_trader.synthetic.universe import DEFAULT_UNIVERSE, FACTOR_DESCRIPTIONS
 from ai_trader.synthetic.store import SyntheticStore
 
@@ -297,6 +299,9 @@ def _transfer() -> dict | None:
         "real_end": plan["real"]["window"]["end"][:10],
         "n_samples": plan["synthetic"]["n_samples"],
         "study_seed": plan["grid"]["study_seed"],
+        # Las familias salen del INFORME y no de la constante del modulo: el dia que haya dos
+        # informes con rejillas distintas al lado, cada uno tiene que describir la suya.
+        "families": list(plan["grid"]["families"]),
         "validation": plan["validation"],
         "n_configs": report["transfer"]["n_configs"],
         "rho": report["transfer"]["spearman"],
@@ -792,8 +797,111 @@ def collect() -> dict:
     facts["mr_params"] = _params(MeanReversionStrategy().config)
     facts["space_mom"] = _space("crypto_momentum")
     facts["space_mr"] = _space("mean_reversion")
+    # Las tematicas se ITERAN en vez de tener dos claves cada una: con la forma anterior,
+    # anadir la novena familia obligaria a tocar este fichero Y las marcas literales de la
+    # plantilla, en dos sitios que se desincronizan a la primera.
+    facts["themed"] = _themed_families()
 
     return facts
+
+
+# Las seis tematicas, con la prosa que no es derivable —que mira cada una y con que fuentes—
+# junto a los parametros y el espacio de busqueda, que si lo son. El `raise` de mas abajo es
+# lo que impide publicar una vista que diga "seis" mientras los estudios miden otra cosa.
+THEMED_PROSE: dict[str, dict[str, str]] = {
+    "liquidation_cascade": {
+        "name": "Cascada de liquidaciones",
+        "theme": "liquidation",
+        "idea": (
+            "Cripto no se mueve, se descuelga: el precio entra en un cúmulo de precios de "
+            "liquidación, el flujo forzado acelera el movimiento y, cuando el combustible se "
+            "agota, retrocede. El precio ve el agotamiento —barra de capitulación: rango muy "
+            "por encima del ATR y cierre pegado al extremo—; la señal ve cuánto combustible "
+            "queda debajo, y con eso distingue comprar la última capitulación de comprar la "
+            "primera de tres."
+        ),
+    },
+    "vol_term_structure": {
+        "name": "Estructura temporal de volatilidad",
+        "theme": "vol_surface",
+        "idea": (
+            "La superficie de opciones es lo único del catálogo que cotiza el futuro en vez "
+            "de resumir el pasado. La volatilidad realizada se comprime antes de expandirse "
+            "—y eso lo ve el precio—, pero la dirección de la expansión es lo que el skew "
+            "está pagando, y un vencimiento que concentra el interés abierto es un día con "
+            "gamma en el que el precio tiende a quedarse clavado."
+        ),
+    },
+    "event_calendar_drift": {
+        "name": "Deriva de calendario",
+        "theme": "macro",
+        "idea": (
+            "Hay días que se saben con meses de antelación y el mercado se coloca antes. "
+            "Este tema NO dice hacia dónde —de sus seis fuentes solo una tiene polaridad "
+            "declarada, así que su tono es ~0 por construcción— y por eso esta primitiva no "
+            "declara umbral de tono: la dirección la pone la deriva del precio y la señal "
+            "decide si se opera y cuánto."
+        ),
+    },
+    "attention_ignition": {
+        "name": "Ignición de atención",
+        "theme": "attention",
+        "idea": (
+            "La atención minorista es la demanda de último recurso de cripto: llega tarde, "
+            "lenta e insensible al precio, así que produce continuación y no reversión. El "
+            "precio ve la barra de ignición —volumen múltiplo de su mediana y cierre pegado "
+            "al máximo—; la señal ve el listado en Upbit, el diferencial de visibilidad "
+            "Corea−EE.UU. y las búsquedas en Naver. Solo largo, por tesis."
+        ),
+    },
+    "flow_persistence": {
+        "name": "Persistencia de flujo",
+        "theme": "flow",
+        "idea": (
+            "El tema con mejor materia prima del catálogo —once de doce fuentes con "
+            "polaridad razonada, ocho con historia medida— y lo que mide tiene una propiedad "
+            "que casi ninguna señal tiene: persistencia. Por eso el núcleo correcto no es "
+            "una ruptura sino el retroceso dentro de una tendencia persistente: comprar la "
+            "pausa mientras el dinero sigue entrando."
+        ),
+    },
+    "signal_composite": {
+        "name": "Compuesto de señales",
+        "theme": "los cinco",
+        "idea": (
+            "La única primitiva que ve los cinco temas a la vez, y por tanto la única que "
+            "puede cobrar la raíz de la ley fundamental del gestor activo: el IC agregado de "
+            "los cinco canales declarados vale 0,074 frente a 0,048 del mejor tema solo. Su "
+            "núcleo de precio es deliberadamente pobre —piso de ATR y un giro reciente de la "
+            "media corta—, así que ciega no aporta nada sobre el momentum: toda su tesis "
+            "está en la capa."
+        ),
+    },
+}
+
+
+def _themed_families() -> list[dict]:
+    missing = set(NEW_FAMILIES) - set(THEMED_PROSE)
+    if missing:
+        raise ValueError(
+            f"Familias temáticas sin prosa en docs/build_docs.py: {sorted(missing)}. "
+            "Añadir una familia al grid y olvidar la documentación tiene que romper el build."
+        )
+    out = []
+    for family in NEW_FAMILIES:
+        prose = THEMED_PROSE[family]
+        strategy = build_strategy(family)
+        out.append(
+            {
+                "id": family,
+                "name": prose["name"],
+                "theme": prose["theme"],
+                "idea": prose["idea"],
+                "params": _params(strategy.config),
+                "space": _space(family),
+            }
+        )
+    return out
 
 
 def _params(cfg) -> list[tuple[str, str]]:

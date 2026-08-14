@@ -490,7 +490,7 @@ function renderOverview(){
     ['2','Señales externas','Diecisiete fuentes fuera del precio, normalizadas y con su profundidad histórica medida, no declarada.','signals','Datos'],
     ['3','Mundos sintéticos','Una IA diseña la física de cada escenario macro; un motor determinista la convierte en velas con colas, clustering y estructura serial.','synthetic','Datos'],
     ['4','Observación','Lo que la política ve al decidir: mercado propio, contexto cross-sectional y radar de señales. Solo datos hasta el cierre de ayer.','strategies','Estrategias'],
-    ['5','Señal','Dos primitivas de regímenes opuestos proponen entrada, confianza y salidas.','strategies','Estrategias'],
+    ['5','Señal','Ocho primitivas proponen entrada, confianza y salidas: dos de régimen opuesto que solo miran precio, y seis temáticas con núcleo de precio y capa de señal.','strategies','Estrategias'],
     ['6','Riesgo','Puerta única: tamaño, exposición, confianza mínima, pérdida diaria y propiedad del stop.','trade','Trade'],
     ['7','Ejecución','Se llena al open del día siguiente pagando spread, volatilidad e impacto, con techo de capacidad.','trade','Trade'],
     ['8','Contabilidad','PnL neto de comisiones en las dos patas, equity marcado a diario y rotación medida.','trade','Trade'],
@@ -1284,9 +1284,10 @@ function renderStrategies(){
   host.innerHTML=`
     <p class="crumb">Capítulo 4 · Estrategias</p>
     <h1>Estrategias y espacio de observación</h1>
-    <p class="lead">Dos primitivas paramétricas de regímenes opuestos, y el vector de features con el que
-      deciden. Lo que ven es tan importante como la regla: la ordenación que mide la vista
-      <b>Ordenación real vs sintético</b> se midió con estrategias que solo veían precio y volumen.</p>
+    <p class="lead">Ocho primitivas paramétricas y el vector de features con el que deciden. Lo que ven
+      es tan importante como la regla, y aquí hay <b>dos grupos con evidencia muy distinta</b>: las dos
+      de precio, sobre las que se midió todo lo publicado, y las seis temáticas, cuya capa de señal está
+      inerte en el ranking y cuyos dos temas en vivo no tienen historia que mirar hacia atrás.</p>
     <div class="grid cards">
     ${S.strategies.map(st=>`<div class="card">
       <h3>${esc(st.name)} <span class="chip ${st.regime}">${st.regime}</span></h3>

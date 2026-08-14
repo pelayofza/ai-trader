@@ -70,6 +70,7 @@ from ai_trader.scoring.weight_calibration import (
 from ai_trader.shared import bars as bar_schema
 from ai_trader.shared.clock import HistoricalClock
 from ai_trader.shared.instruments import AssetClass
+from ai_trader.scoring.weight_study import FAMILIES, NEW_FAMILIES
 from ai_trader.strategies import build_strategy
 from ai_trader.strategies.mean_reversion import MeanReversionStrategy
 from ai_trader.strategies.momentum_crypto import CryptoMomentumStrategy
@@ -95,14 +96,49 @@ COMPARE_LIB = "ai_v1"
 # contra el mercado. Se ensenan juntas porque cada una solo significa algo contra la
 # anterior. PRIMARY_LIB sigue siendo ai_v2: es la libreria sobre la que se midieron la
 # calibracion de pesos y la validacion multiventana, y cambiarla obligaria a recorrerlas.
-LIBRARY_LINEAGE = (COMPARE_LIB, PRIMARY_LIB, FIDELITY_LIBRARY)
+# El linaje gana una cuarta generacion: ai_v4 = ai_v3 + cinco canales de observacion, con
+# las MISMAS velas (verificado por SHA). PRIMARY_LIB y RANK_LIB se quedan en ai_v2 por el
+# motivo del comentario de arriba, que sobrevive al cambio.
+CHANNELS_LIB = "ai_v4"
+LIBRARY_LINEAGE = (COMPARE_LIB, PRIMARY_LIB, FIDELITY_LIBRARY, CHANNELS_LIB)
+
+
+def _blind_themes() -> frozenset[str]:
+    """
+    Que temas NO alcanzan cobertura en un backtest historico, DERIVADO y no escrito a mano.
+
+    Un tema se puede evaluar hacia atras si sus fuentes con `history_from` medido llegan al
+    minimo de cobertura. Calcularlo aqui —en vez de listar dos nombres— hace que el dia que
+    una fuente gane profundidad medida, esta vista deje de mentir sola.
+    """
+    from ai_trader.observation.signal_radar import MIN_SIGNAL_COVERAGE
+    from ai_trader.observation.signal_themes import THEMES, effective_denominator
+    from ai_trader.signals.catalog import CATALOG
+
+    backtestable = {s.key for s in CATALOG if s.backtestable}
+    blind = set()
+    for name, spec in THEMES.items():
+        denominator = effective_denominator(len(spec.sources), spec.min_sources)
+        if len(set(spec.sources) & backtestable) / denominator < MIN_SIGNAL_COVERAGE:
+            blind.add(name)
+    return frozenset(blind)
+
+
+BLIND_THEMES = _blind_themes()
 
 # --- scope del ranking de muestra (reducido para que el build sea rapido) -----------
 RANK_LIB = "ai_v2"
 RANK_UNIVERSE = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "SPY", "QQQ", "GLD", "TLT"]
-RANK_N_PATHS = 2
+# Un path por escenario, y no dos, desde que la vista tiene OCHO familias en vez de dos: este
+# ranking es una MUESTRA ilustrativa —la evidencia vive en data/transfer/— y el build se paga
+# en cada `verify.ps1`, que es el bucle de desarrollo diario. Con los valores anteriores el
+# artefacto tardaba ~25 min en regenerarse y la verificacion completa pasaba de ~12 a ~40.
+RANK_N_PATHS = 1
 RANK_N_SCENARIOS = 4
 RANK_WINDOW_DAYS = 300
+# Una entrada por familia y no dos: cada una anade ~40 s al build, y el build se paga DOS
+# veces en cada `verify.ps1` (una la caracterizacion y otra la regeneracion). Las dos de
+# precio conservan ademas su variante, que es lo que hace legible el panel de sobreajuste.
 RANK_CONFIGS = [
     ("Momentum (default)", "crypto_momentum", {}),
     ("Mean-reversion (default)", "mean_reversion", {}),
@@ -110,6 +146,12 @@ RANK_CONFIGS = [
      {"fast_sma_window": 5, "slow_sma_window": 20, "breakout_lookback": 3}),
     ("Mean-reversion (estricto)", "mean_reversion",
      {"entry_z": 1.5, "exit_z": 0.2, "lookback": 15}),
+    ("Liquidacion (default)", "liquidation_cascade", {}),
+    ("Volatilidad (default)", "vol_term_structure", {}),
+    ("Calendario (default)", "event_calendar_drift", {}),
+    ("Atencion (default)", "attention_ignition", {}),
+    ("Flujo (default)", "flow_persistence", {}),
+    ("Compuesta (default)", "signal_composite", {}),
 ]
 
 CHART_SYMBOLS = ["BTC/USDT", "SPY", "GLD"]
@@ -330,8 +372,120 @@ def collect_strategies() -> dict:
                 ],
                 "params": _params_dict(mr),
             },
+            *_themed_strategies(),
         ],
     }
+
+
+# Prosa editorial de las seis tematicas. No es derivable del codigo —que mira cada una y con
+# que fuentes es una decision, no un atributo—, pero SI lo son los parametros y el tema, asi
+# que se derivan. El `raise` de abajo es lo que impide que anadir una familia a la rejilla de
+# scoring y olvidarse del dashboard publique una vista que dice "dos" mientras se miden ocho.
+THEMED_PROSE: dict[str, dict] = {
+    "liquidation_cascade": {
+        "name": "Cascada de liquidaciones",
+        "regime": "capitulacion",
+        "idea": "Compra la capitulacion, salvo que el mapa diga que queda combustible debajo. "
+                "El precio ve el agotamiento; la senal ve cuanto notional revienta y a que "
+                "distancia.",
+        "rules": [
+            "Precio estirado |cierre - media| >= k*ATR respecto de su media.",
+            "Rango verdadero del dia >= m*ATR: la barra de capitulacion.",
+            "Cierre en el extremo del rango (25% inferior para el largo).",
+            "Capa: veto si el tono del tema apunta en contra del lado.",
+        ],
+    },
+    "vol_term_structure": {
+        "name": "Estructura temporal de volatilidad",
+        "regime": "compresion",
+        "idea": "Rompe la compresion en la direccion que se esta pagando. La vol realizada se "
+                "comprime antes de expandirse; el skew dice hacia donde.",
+        "rules": [
+            "rv_corta / rv_larga <= umbral, medido en la barra ANTERIOR a la rotura.",
+            "Cierre fuera del canal de Donchian de N dias (arriba o abajo).",
+            "Stop y objetivo en multiplos de ATR.",
+            "Capa: techo de intensidad = trampa de gamma en vencimiento.",
+        ],
+    },
+    "event_calendar_drift": {
+        "name": "Deriva de calendario",
+        "regime": "deriva",
+        "idea": "Sigue el movimiento entre hitos, dosificando por lo que hay en la agenda. El "
+                "tema NO dice hacia donde —su tono es ~0 por construccion— sino CUANDO.",
+        "rules": [
+            "Deriva de N dias dentro de una banda [minimo, maximo].",
+            "Ventana corta confirmando el mismo sentido.",
+            "Lado = signo de la deriva; la senal no lo toca nunca.",
+            "Capa: SOLO intensidad, como piso y como techo.",
+        ],
+    },
+    "attention_ignition": {
+        "name": "Ignicion de atencion",
+        "regime": "atencion",
+        "idea": "Compra el dia en que el minorista se entera. La atencion llega tarde, lenta e "
+                "insensible al precio, asi que produce continuacion. Solo largo, por tesis.",
+        "rules": [
+            "Volumen del dia >= k veces su MEDIANA movil (mediana, no media: colas).",
+            "Cierre en el 70% superior del rango del dia.",
+            "Precio por encima de su media larga.",
+            "Capa: veto por tono (deslistado) y techo de intensidad (atencion saturada).",
+        ],
+    },
+    "flow_persistence": {
+        "name": "Persistencia de flujo",
+        "regime": "tendencia",
+        "idea": "Compra la pausa mientras el dinero sigue entrando. Es el unico tema con tono "
+                "de calidad: once de sus doce fuentes tienen polaridad razonada.",
+        "rules": [
+            "Pendiente de la media larga en un sentido.",
+            "Fraccion de dias a favor por encima de un minimo (persistencia).",
+            "Precio retrocedido hasta la media sin perderla (<= k ATR).",
+            "Capa: el tono puede decidir el lado; piso de intensidad.",
+        ],
+    },
+    "signal_composite": {
+        "name": "Compuesto de senales",
+        "regime": "senal",
+        "idea": "La unica que ve los cinco temas a la vez, y por tanto la unica que cobra la "
+                "raiz de la ley fundamental. Ciega es un seguidor de tendencia corriente: toda "
+                "su tesis esta en la capa.",
+        "rules": [
+            "Piso de ATR: que el activo sea operable.",
+            "Giro reciente de la media corta: decide CUANDO, no hacia donde.",
+            "No perseguir: estiramiento respecto de esa media acotado en ATRs.",
+            "Capa: tono = media de los temas LEGIBLES; hacen falta dos de cinco.",
+        ],
+    },
+}
+
+
+def _themed_strategies() -> list[dict]:
+    missing = set(NEW_FAMILIES) - set(THEMED_PROSE)
+    if missing:
+        raise ValueError(
+            f"Familias tematicas sin prosa en el dashboard: {sorted(missing)}. Anadir una "
+            "familia a la rejilla y olvidar esta vista tiene que ROMPER el build, no publicar "
+            "una vista que dice dos mientras los estudios miden ocho."
+        )
+    out = []
+    for family in NEW_FAMILIES:
+        prose = THEMED_PROSE[family]
+        strategy = build_strategy(family)
+        out.append(
+            {
+                "id": family,
+                "name": prose["name"],
+                "regime": prose["regime"],
+                "idea": prose["idea"],
+                "rules": prose["rules"],
+                "params": _params_dict(strategy.config),
+                "theme": getattr(strategy, "theme", ""),
+                # Lo que decide si su capa se puede evaluar en un backtest historico. Sale de
+                # la aritmetica del radar, no de una opinion.
+                "blind_in_history": getattr(strategy, "theme", "") in BLIND_THEMES,
+            }
+        )
+    return out
 
 
 def _params_dict(cfg) -> list[dict]:
@@ -377,9 +531,16 @@ def strategy_signals_demo(store: SyntheticStore, synthetic: dict) -> dict:
     scen = synthetic.get("scenarios", [])
     cand_syms = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "GLD", "SPY"]
 
-    for strat_type, want in (("crypto_momentum", "tendencia"), ("mean_reversion", "reversion")):
+    # El regimen preferido de cada primitiva sale del CATALOGO de la vista, no de una tupla
+    # escrita aqui: estaba en dos sitios y con ocho familias eso es una divergencia esperando
+    # a pasar.
+    wanted = {s["id"]: s["regime"] for s in collect_strategies()["strategies"]}
+    for strat_type, want in wanted.items():
         preferred = [s["id"] for s in scen if s["regime"] == want]
-        scan = (preferred or [s["id"] for s in scen])[:4]
+        # Dos escenarios por familia y no cuatro, por el mismo motivo que RANK_N_PATHS: son
+        # ocho familias, el barrido evalua una senal cada dos barras sobre cada (escenario,
+        # simbolo), y el chart es ilustrativo.
+        scan = (preferred or [s["id"] for s in scen])[:2]
         strat = build_strategy(strat_type, {})
         best: dict | None = None
         for sid in scan:
@@ -752,7 +913,11 @@ def collect_kpis(store: SyntheticStore, synthetic: dict) -> dict:
     return {
         **{lib: lib_stats(lib) for lib in LIBRARY_LINEAGE},
         "lineage": list(LIBRARY_LINEAGE),
-        "n_strategies": 2,
+        # Derivado, no literal: un `2` escrito a mano es exactamente el bug que este trabajo
+        # destapa —la vista diciendo "dos primitivas" mientras los estudios miden ocho—.
+        "n_strategies": len(FAMILIES),
+        "n_themed_strategies": len(NEW_FAMILIES),
+        "n_blind_themes": len(BLIND_THEMES),
         "n_own_features": len(OWN_ASSET_FEATURES),
         "n_regime_features": len(REGIME_FEATURES),
         "commit": _git("rev-parse", "--short", "HEAD"),

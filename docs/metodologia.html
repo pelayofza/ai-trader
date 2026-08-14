@@ -64,8 +64,8 @@ figure{margin:14px 0}
 <h1>AI-Trader — Documentación funcional</h1>
 <div class="sub">Cómo funciona la herramienta, con el detalle necesario para replicarla y auditarla.
 Cada decisión de diseño va justificada.</div>
-<div class="meta">Documento vivo · generado desde el commit <span class="mono">032c568</span>
-(98 commits)2026-08-13 · se regenera con <span class="mono">python -m docs.build_docs</span>.
+<div class="meta">Documento vivo · generado desde el commit <span class="mono">2ac88da</span>
+(101 commits)2026-08-14 · se regenera con <span class="mono">python -m docs.build_docs</span>.
 Las cifras marcadas son extraídas del repositorio en el momento de generar este documento.</div>
 
 <div class="toc noprint">
@@ -107,8 +107,9 @@ estructura serial.</td><td>§2.3–2.8</td></tr>
 <tr><td class="n">4</td><td><b>Observación</b></td><td>Lo que la política ve en el momento de decidir:
 mercado propio, contexto cross-sectional y el radar de señales. Sólo datos hasta el cierre de
 ayer.</td><td>§4.2</td></tr>
-<tr><td class="n">5</td><td><b>Señal</b></td><td>Dos primitivas paramétricas de regímenes opuestos
-—momentum y reversión a la media— proponen entrada, confianza y salidas.</td><td>§4.1</td></tr>
+<tr><td class="n">5</td><td><b>Señal</b></td><td>Ocho primitivas paramétricas proponen entrada,
+confianza y salidas: dos de régimen opuesto que solo miran precio —momentum y reversión— y seis
+temáticas con núcleo de precio y capa de señal.</td><td>§4.1, §4.1-bis</td></tr>
 <tr><td class="n">6</td><td><b>Riesgo</b></td><td>Puerta única: tamaño, exposición, confianza mínima,
 pérdida diaria y propiedad del stop. Ninguna señal la esquiva.</td><td>§3.3</td></tr>
 <tr><td class="n">7</td><td><b>Ejecución</b></td><td>Se llena al <i>open</i> del día siguiente, pagando
@@ -834,7 +835,7 @@ reproducible con <span class="mono">python -m ai_trader.synthetic.fidelity_study
 (30 escenarios × 5 caminos; 2026-08-10).</p>
 
 <h3>2.11 · Qué garantizan los tests sobre los datos</h3>
-<p>La base cuenta con <b>1053 tests</b> automatizados y <i>linting</i> (ruff) sobre todo el código.
+<p>La base cuenta con <b>1137 tests</b> automatizados y <i>linting</i> (ruff) sobre todo el código.
 Más allá del número importa <b>qué</b> se garantiza, así que la lista va repartida por capítulos: aquí los
 invariantes del sustrato, en §3.10 los de una operación y en §4.15 los del ranking.</p>
 <ul>
@@ -1100,6 +1101,41 @@ variante no requiere escribir código. Parámetros por defecto:</p>
 <h4>Reversión a la media</h4>
 <table><thead><tr><th>Parámetro</th><th class=n>Valor</th></tr></thead><tbody><tr><td class=mono>lookback</td><td class=n mono>20</td></tr><tr><td class=mono>entry_z</td><td class=n mono>2.0</td></tr><tr><td class=mono>exit_z</td><td class=n mono>0.0</td></tr><tr><td class=mono>stop_atr_mult</td><td class=n mono>2.5</td></tr><tr><td class=mono>atr_window</td><td class=n mono>14</td></tr><tr><td class=mono>min_std_pct</td><td class=n mono>0.1</td></tr><tr><td class=mono>min_bars</td><td class=n mono>30</td></tr><tr><td class=mono>min_breadth</td><td class=n mono>0.0</td></tr><tr><td class=mono>max_relative_strength</td><td class=n mono>1.0</td></tr><tr><td class=mono>min_signal_tone</td><td class=n mono>-4.0</td></tr><tr><td class=mono>max_signal_intensity</td><td class=n mono>4.0</td></tr></tbody></table>
 
+<h3>4.1-bis · Las seis familias temáticas</h3>
+<p>Las dos primitivas de arriba miran precio y volumen, y usan las señales externas solo como
+<b>puerta</b>. Eso bastaba mientras la señal confirmaba o desmentía lo que el precio ya había dicho;
+deja de bastar en cuanto la señal quiere ser <b>la tesis</b>. Y hay un motivo aritmético: el radar
+colapsaba treinta fuentes en seis números, así que cinco estrategias que leyeran
+<span class="mono">signal_tone</span> no serían cinco apuestas sino una repetida cinco veces.</p>
+<p>Por eso el radar publica ahora <b>quince números más</b> —una terna de tono, intensidad y cobertura
+por cada uno de los cinco temas— y encima de ellos viven seis familias nuevas. Todas tienen la misma
+forma: un <b>núcleo de precio</b> que corre solo y una <b>capa de señal</b> que modula lado, tamaño y
+elegibilidad. La capa es <b>inerte por construcción</b> con los parámetros por defecto: no puede
+cambiar nada con ningún radar, vacío o lleno.</p>
+<h4>Cascada de liquidaciones <span class=tag>tema: liquidation</span></h4><p>Cripto no se mueve, se descuelga: el precio entra en un cúmulo de precios de liquidación, el flujo forzado acelera el movimiento y, cuando el combustible se agota, retrocede. El precio ve el agotamiento —barra de capitulación: rango muy por encima del ATR y cierre pegado al extremo—; la señal ve cuánto combustible queda debajo, y con eso distingue comprar la última capitulación de comprar la primera de tres.</p><details><summary>Parámetros por defecto de <span class=mono>liquidation_cascade</span></summary><table><thead><tr><th>Parámetro</th><th class=n>Valor</th></tr></thead><tbody><tr><td class=mono>mean_window</td><td class=n mono>20</td></tr><tr><td class=mono>atr_window</td><td class=n mono>14</td></tr><tr><td class=mono>entry_stretch_atr</td><td class=n mono>2.0</td></tr><tr><td class=mono>entry_range_atr</td><td class=n mono>1.5</td></tr><tr><td class=mono>close_location_max</td><td class=n mono>0.25</td></tr><tr><td class=mono>min_atr_pct</td><td class=n mono>0.5</td></tr><tr><td class=mono>stop_atr_mult</td><td class=n mono>1.5</td></tr><tr><td class=mono>target_atr_mult</td><td class=n mono>2.0</td></tr><tr><td class=mono>min_bars</td><td class=n mono>40</td></tr><tr><td class=mono>allow_short</td><td class=n mono>True</td></tr><tr><td class=mono>min_signal_tone</td><td class=n mono>-4.0</td></tr><tr><td class=mono>max_signal_intensity</td><td class=n mono>4.0</td></tr><tr><td class=mono>signal_side_mode</td><td class=n mono>core</td></tr><tr><td class=mono>signal_tone_threshold</td><td class=n mono>0.0</td></tr><tr><td class=mono>signal_weight</td><td class=n mono>0.0</td></tr></tbody></table></details>
+<h4>Estructura temporal de volatilidad <span class=tag>tema: vol_surface</span></h4><p>La superficie de opciones es lo único del catálogo que cotiza el futuro en vez de resumir el pasado. La volatilidad realizada se comprime antes de expandirse —y eso lo ve el precio—, pero la dirección de la expansión es lo que el skew está pagando, y un vencimiento que concentra el interés abierto es un día con gamma en el que el precio tiende a quedarse clavado.</p><details><summary>Parámetros por defecto de <span class=mono>vol_term_structure</span></summary><table><thead><tr><th>Parámetro</th><th class=n>Valor</th></tr></thead><tbody><tr><td class=mono>rv_fast_window</td><td class=n mono>10</td></tr><tr><td class=mono>rv_slow_window</td><td class=n mono>60</td></tr><tr><td class=mono>max_compression</td><td class=n mono>0.85</td></tr><tr><td class=mono>breakout_lookback</td><td class=n mono>20</td></tr><tr><td class=mono>atr_window</td><td class=n mono>14</td></tr><tr><td class=mono>min_atr_pct</td><td class=n mono>0.1</td></tr><tr><td class=mono>stop_atr_mult</td><td class=n mono>2.0</td></tr><tr><td class=mono>reward_atr_mult</td><td class=n mono>3.0</td></tr><tr><td class=mono>min_bars</td><td class=n mono>90</td></tr><tr><td class=mono>allow_short</td><td class=n mono>True</td></tr><tr><td class=mono>min_signal_tone</td><td class=n mono>-4.0</td></tr><tr><td class=mono>max_signal_intensity</td><td class=n mono>4.0</td></tr><tr><td class=mono>signal_side_mode</td><td class=n mono>core</td></tr><tr><td class=mono>signal_tone_threshold</td><td class=n mono>0.0</td></tr><tr><td class=mono>signal_weight</td><td class=n mono>0.0</td></tr></tbody></table></details>
+<h4>Deriva de calendario <span class=tag>tema: macro</span></h4><p>Hay días que se saben con meses de antelación y el mercado se coloca antes. Este tema NO dice hacia dónde —de sus seis fuentes solo una tiene polaridad declarada, así que su tono es ~0 por construcción— y por eso esta primitiva no declara umbral de tono: la dirección la pone la deriva del precio y la señal decide si se opera y cuánto.</p><details><summary>Parámetros por defecto de <span class=mono>event_calendar_drift</span></summary><table><thead><tr><th>Parámetro</th><th class=n>Valor</th></tr></thead><tbody><tr><td class=mono>drift_window</td><td class=n mono>5</td></tr><tr><td class=mono>confirm_window</td><td class=n mono>2</td></tr><tr><td class=mono>min_drift_pct</td><td class=n mono>2.0</td></tr><tr><td class=mono>max_drift_pct</td><td class=n mono>15.0</td></tr><tr><td class=mono>atr_window</td><td class=n mono>14</td></tr><tr><td class=mono>min_atr_pct</td><td class=n mono>0.2</td></tr><tr><td class=mono>stop_atr_mult</td><td class=n mono>2.0</td></tr><tr><td class=mono>reward_atr_mult</td><td class=n mono>2.0</td></tr><tr><td class=mono>min_bars</td><td class=n mono>40</td></tr><tr><td class=mono>allow_short</td><td class=n mono>True</td></tr><tr><td class=mono>min_signal_intensity</td><td class=n mono>0.0</td></tr><tr><td class=mono>max_signal_intensity</td><td class=n mono>4.0</td></tr><tr><td class=mono>signal_weight</td><td class=n mono>0.0</td></tr></tbody></table></details>
+<h4>Ignición de atención <span class=tag>tema: attention</span></h4><p>La atención minorista es la demanda de último recurso de cripto: llega tarde, lenta e insensible al precio, así que produce continuación y no reversión. El precio ve la barra de ignición —volumen múltiplo de su mediana y cierre pegado al máximo—; la señal ve el listado en Upbit, el diferencial de visibilidad Corea−EE.UU. y las búsquedas en Naver. Solo largo, por tesis.</p><details><summary>Parámetros por defecto de <span class=mono>attention_ignition</span></summary><table><thead><tr><th>Parámetro</th><th class=n>Valor</th></tr></thead><tbody><tr><td class=mono>volume_lookback</td><td class=n mono>20</td></tr><tr><td class=mono>volume_mult</td><td class=n mono>2.5</td></tr><tr><td class=mono>close_location_min</td><td class=n mono>0.7</td></tr><tr><td class=mono>trend_window</td><td class=n mono>50</td></tr><tr><td class=mono>atr_window</td><td class=n mono>14</td></tr><tr><td class=mono>min_atr_pct</td><td class=n mono>0.2</td></tr><tr><td class=mono>stop_atr_mult</td><td class=n mono>2.0</td></tr><tr><td class=mono>reward_atr_mult</td><td class=n mono>3.0</td></tr><tr><td class=mono>min_bars</td><td class=n mono>70</td></tr><tr><td class=mono>allow_short</td><td class=n mono>False</td></tr><tr><td class=mono>min_signal_tone</td><td class=n mono>-4.0</td></tr><tr><td class=mono>max_signal_intensity</td><td class=n mono>4.0</td></tr><tr><td class=mono>signal_side_mode</td><td class=n mono>core</td></tr><tr><td class=mono>signal_tone_threshold</td><td class=n mono>0.0</td></tr><tr><td class=mono>signal_weight</td><td class=n mono>0.0</td></tr></tbody></table></details>
+<h4>Persistencia de flujo <span class=tag>tema: flow</span></h4><p>El tema con mejor materia prima del catálogo —once de doce fuentes con polaridad razonada, ocho con historia medida— y lo que mide tiene una propiedad que casi ninguna señal tiene: persistencia. Por eso el núcleo correcto no es una ruptura sino el retroceso dentro de una tendencia persistente: comprar la pausa mientras el dinero sigue entrando.</p><details><summary>Parámetros por defecto de <span class=mono>flow_persistence</span></summary><table><thead><tr><th>Parámetro</th><th class=n>Valor</th></tr></thead><tbody><tr><td class=mono>trend_window</td><td class=n mono>50</td></tr><tr><td class=mono>slope_window</td><td class=n mono>10</td></tr><tr><td class=mono>persistence_window</td><td class=n mono>20</td></tr><tr><td class=mono>min_persistence</td><td class=n mono>0.55</td></tr><tr><td class=mono>pullback_atr</td><td class=n mono>1.0</td></tr><tr><td class=mono>atr_window</td><td class=n mono>14</td></tr><tr><td class=mono>stop_atr_mult</td><td class=n mono>2.0</td></tr><tr><td class=mono>reward_atr_mult</td><td class=n mono>3.0</td></tr><tr><td class=mono>min_bars</td><td class=n mono>80</td></tr><tr><td class=mono>allow_short</td><td class=n mono>True</td></tr><tr><td class=mono>min_signal_tone</td><td class=n mono>-4.0</td></tr><tr><td class=mono>min_signal_intensity</td><td class=n mono>0.0</td></tr><tr><td class=mono>signal_side_mode</td><td class=n mono>core</td></tr><tr><td class=mono>signal_tone_threshold</td><td class=n mono>0.0</td></tr><tr><td class=mono>signal_weight</td><td class=n mono>0.0</td></tr></tbody></table></details>
+<h4>Compuesto de señales <span class=tag>tema: los cinco</span></h4><p>La única primitiva que ve los cinco temas a la vez, y por tanto la única que puede cobrar la raíz de la ley fundamental del gestor activo: el IC agregado de los cinco canales declarados vale 0,074 frente a 0,048 del mejor tema solo. Su núcleo de precio es deliberadamente pobre —piso de ATR y un giro reciente de la media corta—, así que ciega no aporta nada sobre el momentum: toda su tesis está en la capa.</p><details><summary>Parámetros por defecto de <span class=mono>signal_composite</span></summary><table><thead><tr><th>Parámetro</th><th class=n>Valor</th></tr></thead><tbody><tr><td class=mono>trigger_window</td><td class=n mono>20</td></tr><tr><td class=mono>trend_window</td><td class=n mono>100</td></tr><tr><td class=mono>cross_lookback</td><td class=n mono>3</td></tr><tr><td class=mono>max_stretch_atr</td><td class=n mono>2.5</td></tr><tr><td class=mono>atr_window</td><td class=n mono>14</td></tr><tr><td class=mono>min_atr_pct</td><td class=n mono>0.2</td></tr><tr><td class=mono>stop_atr_mult</td><td class=n mono>2.0</td></tr><tr><td class=mono>reward_atr_mult</td><td class=n mono>3.0</td></tr><tr><td class=mono>min_bars</td><td class=n mono>130</td></tr><tr><td class=mono>allow_short</td><td class=n mono>True</td></tr><tr><td class=mono>min_signal_tone</td><td class=n mono>-4.0</td></tr><tr><td class=mono>min_signal_intensity</td><td class=n mono>0.0</td></tr><tr><td class=mono>max_signal_intensity</td><td class=n mono>4.0</td></tr><tr><td class=mono>signal_side_mode</td><td class=n mono>core</td></tr><tr><td class=mono>signal_tone_threshold</td><td class=n mono>0.0</td></tr><tr><td class=mono>signal_weight</td><td class=n mono>0.0</td></tr></tbody></table></details>
+<div class="why"><b>Los umbrales de señal no entran en el espacio de búsqueda, y el argumento no es la
+inercia.</b> Dieciséis de las treinta fuentes empezaron a existir el día que arrancó la captura, así
+que «cobertura de un tema» está correlacionada casi uno a uno con <b>la fecha</b>. Un piso de tono
+sorteable dejaría al optimizador elegir implícitamente <i>en qué tramo de historia se le permite
+operar</i> a la estrategia, y rankearía por disponibilidad de datos en vez de por criterio. Es el mismo
+fallo que el mínimo de cobertura existe para impedir, y aquí sería peor porque la señal es la primitiva.
+La consecuencia se acepta y se escribe: <b>la capa se afirma, no se optimiza</b>. Si está mal, el
+backtest dirá «esta familia no añade nada sobre su núcleo», que es exactamente la medición que se
+busca.</div>
+<div class="note"><b>Cuatro de las seis se rankean CIEGAS, y dos no pueden dejar de serlo.</b> En el
+estudio de transferencia la capa está inerte en las ocho familias —ninguna dimensión sorteable toca un
+umbral de señal—, así que lo que se ordena es el núcleo de precio con el filtro abierto de par en par.
+Eso es una decisión de diseño y se puede levantar. Lo que no se puede levantar hoy es la profundidad:
+de los cinco temas, solo <b>macro</b> (3 fuentes con historia medida), <b>attention</b> (2) y
+<b>flow</b> (8) alcanzan cobertura en un backtest histórico; <b>liquidation</b> (1 de 4) y
+<b>vol_surface</b> (1 de 2) se quedan por debajo del mínimo y sus dos primitivas se miden como núcleo
+ciego en todo el histórico. El criterio para repetir el análisis está declarado en §6.2, con fechas.</div>
+
 <h3>4.2 · El espacio de observación</h3>
 <p>Se define de forma <b>explícita</b> y con <b>orden estable</b> lo que la política ve en cada momento de
 decisión — el contrato de entrada para el aprendizaje futuro. El cierre de un solo activo no basta.
@@ -1183,7 +1219,8 @@ las cifras de este documento están anualizadas por 365.</div>
 juzga por lo que elige. Se han barrido en rejilla
 (λ ∈ {0,00, 0,25, 0,50, 1,00, 2,00, 4,00} × κ ∈ {0,0, 0,5, 1,0, 2,0, 4,0})
 sobre <b>480 backtests reales</b> de la librería <span class="mono">ai_v2</span>:
-16 configuraciones (hipercubo latino sobre el espacio de búsqueda de las dos primitivas)
+16 configuraciones (hipercubo latino sobre el espacio de búsqueda de las familias
+que ese informe declara)
 × 30 muestras.</p>
 <p>El truco que hace asequible el barrido: los <b>componentes</b> del score (Sharpe, turnover, maxDD)
 <i>no dependen de los pesos</i>. Se corre el backtest una vez por (configuración, muestra), se guardan
@@ -1499,7 +1536,8 @@ No son la misma pregunta —un generador puede clavar las colas y ordenar al rev
 fidelidad lo detectaría—, así que se mide aparte y con su propio umbral.</p>
 <p>El diseño persigue una sola cosa: que entre los dos lados <b>lo único que cambie sea el mundo del que
 salen los precios</b>. Las mismas <b>16</b> configuraciones (la rejilla del estudio de
-pesos de §4.5: hipercubo latino con semilla 20260809 sobre las dos primitivas), el mismo
+pesos de §4.5: hipercubo latino con semilla 20260809 sobre
+las dos primitivas de precio), el mismo
 config, el mismo universo de <b>11</b> pares —los que existen a la vez en el mercado y
 en la librería—, el mismo esquema CPCV con 15 ventanas OOS, la misma purga de
 10 días y el mismo embargo de 5. Y la misma <b>longitud de
@@ -1653,10 +1691,21 @@ gradiente por-paso si se decide extender el contrato de la estrategia.</div>
 <table><thead><tr><th>Parámetro</th><th class=n>Rango CEM</th></tr></thead><tbody><tr><td class=mono>fast_sma_window</td><td class=n mono>[5, 30] entero</td></tr><tr><td class=mono>slow_sma_window</td><td class=n mono>[20, 80] entero</td></tr><tr><td class=mono>breakout_lookback</td><td class=n mono>[2, 20] entero</td></tr><tr><td class=mono>min_atr_pct</td><td class=n mono>[0.05, 2]</td></tr><tr><td class=mono>risk_atr_multiple</td><td class=n mono>[1, 4]</td></tr><tr><td class=mono>reward_atr_multiple</td><td class=n mono>[1.5, 6]</td></tr><tr><td class=mono>min_breadth</td><td class=n mono>[0, 0.8]</td></tr><tr><td class=mono>min_relative_strength</td><td class=n mono>[-1, 0.5]</td></tr></tbody></table>
 <h4>Reversión a la media</h4>
 <table><thead><tr><th>Parámetro</th><th class=n>Rango CEM</th></tr></thead><tbody><tr><td class=mono>lookback</td><td class=n mono>[10, 40] entero</td></tr><tr><td class=mono>entry_z</td><td class=n mono>[1, 3.5]</td></tr><tr><td class=mono>exit_z</td><td class=n mono>[0, 1]</td></tr><tr><td class=mono>stop_atr_mult</td><td class=n mono>[1, 4]</td></tr><tr><td class=mono>min_std_pct</td><td class=n mono>[0.05, 1]</td></tr><tr><td class=mono>min_breadth</td><td class=n mono>[0, 0.8]</td></tr><tr><td class=mono>max_relative_strength</td><td class=n mono>[-0.2, 1]</td></tr></tbody></table>
+<h4>Cascada de liquidaciones</h4><table><thead><tr><th>Parámetro</th><th class=n>Rango CEM</th></tr></thead><tbody><tr><td class=mono>mean_window</td><td class=n mono>[10, 40] entero</td></tr><tr><td class=mono>atr_window</td><td class=n mono>[7, 28] entero</td></tr><tr><td class=mono>entry_stretch_atr</td><td class=n mono>[1, 4]</td></tr><tr><td class=mono>entry_range_atr</td><td class=n mono>[1, 3]</td></tr><tr><td class=mono>close_location_max</td><td class=n mono>[0.05, 0.45]</td></tr><tr><td class=mono>min_atr_pct</td><td class=n mono>[0.1, 2]</td></tr><tr><td class=mono>stop_atr_mult</td><td class=n mono>[1, 4]</td></tr><tr><td class=mono>target_atr_mult</td><td class=n mono>[1, 5]</td></tr></tbody></table>
+<h4>Estructura temporal de volatilidad</h4><table><thead><tr><th>Parámetro</th><th class=n>Rango CEM</th></tr></thead><tbody><tr><td class=mono>rv_fast_window</td><td class=n mono>[5, 20] entero</td></tr><tr><td class=mono>rv_slow_window</td><td class=n mono>[30, 120] entero</td></tr><tr><td class=mono>max_compression</td><td class=n mono>[0.4, 1.2]</td></tr><tr><td class=mono>breakout_lookback</td><td class=n mono>[5, 40] entero</td></tr><tr><td class=mono>atr_window</td><td class=n mono>[7, 28] entero</td></tr><tr><td class=mono>min_atr_pct</td><td class=n mono>[0.05, 2]</td></tr><tr><td class=mono>stop_atr_mult</td><td class=n mono>[1, 4]</td></tr><tr><td class=mono>reward_atr_mult</td><td class=n mono>[1.5, 6]</td></tr></tbody></table>
+<h4>Deriva de calendario</h4><table><thead><tr><th>Parámetro</th><th class=n>Rango CEM</th></tr></thead><tbody><tr><td class=mono>drift_window</td><td class=n mono>[2, 20] entero</td></tr><tr><td class=mono>confirm_window</td><td class=n mono>[1, 10] entero</td></tr><tr><td class=mono>min_drift_pct</td><td class=n mono>[0.5, 8]</td></tr><tr><td class=mono>max_drift_pct</td><td class=n mono>[5, 30]</td></tr><tr><td class=mono>atr_window</td><td class=n mono>[7, 28] entero</td></tr><tr><td class=mono>min_atr_pct</td><td class=n mono>[0.05, 2]</td></tr><tr><td class=mono>stop_atr_mult</td><td class=n mono>[1, 4]</td></tr><tr><td class=mono>reward_atr_mult</td><td class=n mono>[1, 5]</td></tr></tbody></table>
+<h4>Ignición de atención</h4><table><thead><tr><th>Parámetro</th><th class=n>Rango CEM</th></tr></thead><tbody><tr><td class=mono>volume_lookback</td><td class=n mono>[10, 60] entero</td></tr><tr><td class=mono>volume_mult</td><td class=n mono>[1.5, 5]</td></tr><tr><td class=mono>close_location_min</td><td class=n mono>[0.55, 0.95]</td></tr><tr><td class=mono>trend_window</td><td class=n mono>[20, 100] entero</td></tr><tr><td class=mono>atr_window</td><td class=n mono>[7, 28] entero</td></tr><tr><td class=mono>min_atr_pct</td><td class=n mono>[0.05, 2]</td></tr><tr><td class=mono>stop_atr_mult</td><td class=n mono>[1, 4]</td></tr><tr><td class=mono>reward_atr_mult</td><td class=n mono>[1.5, 6]</td></tr></tbody></table>
+<h4>Persistencia de flujo</h4><table><thead><tr><th>Parámetro</th><th class=n>Rango CEM</th></tr></thead><tbody><tr><td class=mono>trend_window</td><td class=n mono>[20, 120] entero</td></tr><tr><td class=mono>slope_window</td><td class=n mono>[3, 30] entero</td></tr><tr><td class=mono>persistence_window</td><td class=n mono>[10, 60] entero</td></tr><tr><td class=mono>min_persistence</td><td class=n mono>[0.5, 0.8]</td></tr><tr><td class=mono>pullback_atr</td><td class=n mono>[0.25, 3]</td></tr><tr><td class=mono>atr_window</td><td class=n mono>[7, 28] entero</td></tr><tr><td class=mono>stop_atr_mult</td><td class=n mono>[1, 4]</td></tr><tr><td class=mono>reward_atr_mult</td><td class=n mono>[1.5, 6]</td></tr></tbody></table>
+<h4>Compuesto de señales</h4><table><thead><tr><th>Parámetro</th><th class=n>Rango CEM</th></tr></thead><tbody><tr><td class=mono>trigger_window</td><td class=n mono>[5, 40] entero</td></tr><tr><td class=mono>trend_window</td><td class=n mono>[30, 150] entero</td></tr><tr><td class=mono>cross_lookback</td><td class=n mono>[1, 10] entero</td></tr><tr><td class=mono>max_stretch_atr</td><td class=n mono>[0.5, 5]</td></tr><tr><td class=mono>atr_window</td><td class=n mono>[7, 28] entero</td></tr><tr><td class=mono>min_atr_pct</td><td class=n mono>[0.05, 2]</td></tr><tr><td class=mono>stop_atr_mult</td><td class=n mono>[1, 4]</td></tr><tr><td class=mono>reward_atr_mult</td><td class=n mono>[1.5, 6]</td></tr></tbody></table>
 <div class="note"><b>Lo que NO entra en el espacio de búsqueda.</b> Ninguna feature de señal, ningún
 umbral de puerta y ningún parámetro del radar (§2.2). Son constantes declaradas en código, y hay un test
 que lo demuestra: añadir una dimensión <b>sustituye</b> el espacio publicado en vez de ampliarlo. Es lo
-que mantiene fija la huella de las 16 configuraciones sobre las que se ha medido todo lo demás.</div>
+que mantiene fija la huella de las 16 configuraciones sobre las que se ha medido todo lo demás — que hoy
+son <b>las 16 primeras de 64</b>: las seis familias temáticas se añadieron <b>al final</b> de la lista de
+familias, y como el hipercubo latino se siembra con <span class="mono">semilla + índice de familia</span>,
+eso preserva byte a byte las configuraciones publicadas. Insertar una familia en medio las habría
+<b>sustituido en silencio</b> por otras dieciséis con los mismos nombres; hay un test que lo congela y una
+guarda que se niega a sobrescribir un informe cuya rejilla no coincide con la que se va a escribir.</div>
 
 <h3>4.14 · Descuento del sobreajuste por múltiples pruebas</h3>
 <p>Buscar sobre un espacio de parámetros garantiza encontrar algo que brilla <i>aunque no haya nada que
@@ -1795,6 +1844,43 @@ diseñador documentada, y el universo operado separado del sintético con el mot
 (§2.1, §2.5, §4.4).</td></tr>
 </tbody></table>
 
+<h3>6.1-bis · Dos temas que no se pueden medir hacia atrás, y desde cuándo se podrá</h3>
+<p>De las seis familias temáticas de §4.1-bis, <b>cuatro</b> descansan sobre temas con archivo real:
+<span class="mono">flow</span> tiene ocho fuentes con historia medida —la más antigua desde
+<b>2011-01-31</b>—, <span class="mono">macro</span> tres desde <b>2015-11-02</b> y
+<span class="mono">attention</span> dos desde <b>2015-07-01</b>. Esas tres, más la compuesta que las
+agrega, se pueden evaluar contra señal capturada de verdad.</p>
+<p>Las otras dos no, y conviene decir por qué con todas las letras. Las fuentes de
+<span class="mono">liquidation</span> y <span class="mono">vol_surface</span> <b>empezaron a existir el
+día que arrancó la captura</b>: Hyperliquid el 2026-08-13, los vencimientos de Deribit el 2026-08-14; y
+<span class="mono">lending_health</span> ni eso, porque su reloj no ha empezado a correr —falta la
+credencial—. La captura pide una ventana de 30 días, lo que perdona una caída de hasta un mes en las
+fuentes con archivo, pero <b>no compra ni un día de pasado</b> en las de captura hacia adelante. En el
+ranking histórico esas dos primitivas se miden como <b>núcleo de precio ciego</b>, y su puesto en la
+tabla es una cota de la clase más engañosa: la de la versión que no sabe nada.</p>
+<p><b>El criterio para repetir el análisis, declarado ahora y no cuando haya cifras que mirar.</b> Son
+dos umbrales, y manda el segundo:</p>
+<ol>
+<li><b>Que la fuente pueda entrar en un backtest.</b> El catálogo exige <b>365 días de calendario</b>
+medidos antes de declarar <span class="mono">history_from</span>. Para Hyperliquid eso cae el
+<b>2027-08-13</b>; para los vencimientos de Deribit el 2027-08-14.</li>
+<li><b>Que quepa una sola sub-ventana del estudio.</b> La transferencia trocea el histórico en
+sub-ventanas de <b>544 días</b> —la longitud de un camino sintético, para que los dos lados comparen
+mundos y no precisiones de estimador— y cada estrategia necesita además <b>180 días</b> de calentamiento:
+son <b>724 días de señal capturada</b> para correr UNA sub-ventana con vista. La primera fecha posible
+para Hyperliquid es el <b>2028-08-06</b>. Las cinco sub-ventanas de la geometría publicada pedirían unos
+2.900 días, ocho años: <b>esas cifras no se van a poder reproducir con vista</b>, y decir lo contrario
+sería prometer un calendario que no depende de nadie.</li>
+</ol>
+<div class="note"><b>La repetición no será la misma medición con mejores datos.</b> Cuando el segundo
+criterio se cumpla, lo publicable es un estudio <b>más corto y con menos bloques</b> —una sub-ventana en
+vez de cinco, con un intervalo por bloques bastante más ancho— y lo que se leerá de él no es el ranking
+sino <b>una comparación pareada</b>: la misma familia, sobre la misma ventana, con la puerta temática
+abierta y cerrada. Esa diferencia sí es atribuible a la señal, y es la única pregunta que hoy no se puede
+contestar para esos dos temas. Hasta entonces, el break-even del IC (§4.12) es lo que hay: no dice si esas
+señales sirven, dice a partir de qué capacidad predictiva <b>podrían</b> servir, y esa cota se midió sobre
+un mundo cuyo futuro está escrito y no puede sobreajustarse a ningún histórico.</div>
+
 <h3>6.2 · Lo que queda abierto, por criticidad</h3>
 <p>El orden responde a una asimetría de coste: una estrategia añadida hoy se re-evalúa gratis cuando el
 juez mejore; un juez malo contamina todo lo que puntúe mientras siga malo. Por eso el sustrato y el juez
@@ -1929,5 +2015,5 @@ agrupamiento de volatilidad, autocorrelación) que un buen simulador debe reprod
 <li><b>Forward capture:</b> fuente cuyo pasado nadie publica: su profundidad histórica sólo crece
 capturando, un día por día real.</li>
 </ul>
-<p class="meta">Fin del documento · AI-Trader · commit <span class="mono">032c568</span>.</p>
+<p class="meta">Fin del documento · AI-Trader · commit <span class="mono">2ac88da</span>.</p>
 </div></body></html>

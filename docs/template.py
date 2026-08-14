@@ -860,7 +860,8 @@ def _calibration_block(c):
 juzga por lo que elige. Se han barrido en rejilla
 (λ ∈ {{{", ".join(_n(x, 2) for x in c["lambdas"])}}} × κ ∈ {{{", ".join(_n(x, 1) for x in c["kappas"])}}})
 sobre <b>{c["n_backtests"]} backtests reales</b> de la librería <span class="mono">{c["library"]}</span>:
-{c["n_configs"]} configuraciones (hipercubo latino sobre el espacio de búsqueda de las dos primitivas)
+{c["n_configs"]} configuraciones (hipercubo latino sobre el espacio de búsqueda de las familias
+que ese informe declara)
 × {c["n_samples"]} muestras.</p>
 <p>El truco que hace asequible el barrido: los <b>componentes</b> del score (Sharpe, turnover, maxDD)
 <i>no dependen de los pesos</i>. Se corre el backtest una vez por (configuración, muestra), se guardan
@@ -1443,6 +1444,71 @@ mismo dato haciendo las dos cosas. Al mercado real le queda por tanto una sola p
 <i>el ρ que mide mi señal, ¿está por encima de este umbral y con margen?</i></div>"""
 
 
+# Etiqueta legible de cada familia. Antes era un ternario dentro de la tabla —"reversión si
+# es mean_reversion, si no momentum"— que con dos familias funcionaba y con tres habria
+# etiquetado en SILENCIO como "momentum" a todo lo demas. Un informe que miente sin fallar es
+# peor que uno que revienta, asi que el fallback es ahora el nombre crudo de la familia.
+FAMILY_LABELS: dict[str, str] = {
+    "crypto_momentum": "momentum",
+    "mean_reversion": "reversión",
+    "liquidation_cascade": "liquidación",
+    "vol_term_structure": "volatilidad",
+    "event_calendar_drift": "calendario",
+    "attention_ignition": "atención",
+    "flow_persistence": "flujo",
+    "signal_composite": "compuesta",
+}
+
+
+def _family_label(family: str) -> str:
+    return FAMILY_LABELS.get(family, family)
+
+
+def _families_phrase(families) -> str:
+    """Como se nombra en prosa la rejilla que un informe DECLARA.
+
+    Se deriva del informe y no se escribe a mano: es la unica forma de que la frase siga
+    siendo cierta cuando se publiquen dos informes con rejillas distintas al lado.
+    """
+    names = list(families or [])
+    if not names:
+        return "las familias declaradas"
+    if len(names) <= 2:
+        return "las dos primitivas de precio"
+    return f"las {len(names)} familias ({', '.join(_family_label(n) for n in names)})"
+
+
+def _themed_families_block(families) -> str:
+    """
+    Las seis tematicas, una tarjeta cada una. Se ITERA sobre lo que el generador publica y no
+    se escriben seis bloques: con seis marcas literales por familia, anadir la septima obliga
+    a tocar dos ficheros que se desincronizan a la primera.
+    """
+    if not families:
+        return "<p class=muted>Sin familias temáticas declaradas.</p>"
+    out = []
+    for fam in families:
+        params = _rows(fam["params"], ["Parámetro", "Valor"])
+        out.append(
+            f"<h4>{fam['name']} <span class=tag>tema: {fam['theme']}</span></h4>"
+            f"<p>{fam['idea']}</p>"
+            f"<details><summary>Parámetros por defecto de "
+            f"<span class=mono>{fam['id']}</span></summary>{params}</details>"
+        )
+    return "\n".join(out)
+
+
+def _themed_spaces_block(families) -> str:
+    """El espacio de busqueda de cada tematica, en §4.13, junto al de las dos de precio."""
+    if not families:
+        return ""
+    out = []
+    for fam in families:
+        rows = _rows(fam["space"], ["Parámetro", "Rango CEM"])
+        out.append(f"<h4>{fam['name']}</h4>{rows}")
+    return "\n".join(out)
+
+
 def _transfer_block(t):
     """Seccion 4.11: ¿ordena el mundo sintetico las estrategias como el real?
 
@@ -1469,7 +1535,7 @@ def _transfer_block(t):
     rows = "".join(
         f"<tr><td class=mono>{r['config_id']}"
         f"{'' if r['active'] else ' <span class=tag>(apenas opera)</span>'}</td>"
-        f"<td>{'reversión' if r['family'] == 'mean_reversion' else 'momentum'}</td>"
+        f"<td>{_family_label(r['family'])}</td>"
         f"<td class='n mono'>{_n(r['reward_real'], 2)}</td>"
         f"<td class='n mono'>{_n(r['reward_synthetic'], 2)}</td>"
         f"<td class='n mono'>{_n(r['trades_real'], 1)}</td>"
@@ -1525,7 +1591,8 @@ No son la misma pregunta —un generador puede clavar las colas y ordenar al rev
 fidelidad lo detectaría—, así que se mide aparte y con su propio umbral.</p>
 <p>El diseño persigue una sola cosa: que entre los dos lados <b>lo único que cambie sea el mundo del que
 salen los precios</b>. Las mismas <b>{t["n_configs"]}</b> configuraciones (la rejilla del estudio de
-pesos de §4.5: hipercubo latino con semilla {t["study_seed"]} sobre las dos primitivas), el mismo
+pesos de §4.5: hipercubo latino con semilla {t["study_seed"]} sobre
+{_families_phrase(t.get("families"))}), el mismo
 config, el mismo universo de <b>{len(t["symbols"])}</b> pares —los que existen a la vez en el mercado y
 en la librería—, el mismo esquema CPCV con {val["n_folds"]} ventanas OOS, la misma purga de
 {val["purge_days"]} días y el mismo embargo de {val["embargo_days"]}. Y la misma <b>longitud de
@@ -1767,6 +1834,8 @@ def render_html(f: dict) -> str:
         "MR_PARAMS": _rows(f.get("mr_params", []), ["Parámetro", "Valor"]),
         "SPACE_MOM": _rows(f.get("space_mom", []), ["Parámetro", "Rango CEM"]),
         "SPACE_MR": _rows(f.get("space_mr", []), ["Parámetro", "Rango CEM"]),
+        "THEMED_FAMILIES": _themed_families_block(f.get("themed", [])),
+        "THEMED_SPACES": _themed_spaces_block(f.get("themed", [])),
         "MARKET": _market_block(f.get("market")),
         "RISKGATE": _risk_gate_block(f.get("trade")),
         "PNL": _pnl_block(f.get("trade")),
@@ -1842,8 +1911,9 @@ estructura serial.</td><td>§2.3–2.8</td></tr>
 <tr><td class="n">4</td><td><b>Observación</b></td><td>Lo que la política ve en el momento de decidir:
 mercado propio, contexto cross-sectional y el radar de señales. Sólo datos hasta el cierre de
 ayer.</td><td>§4.2</td></tr>
-<tr><td class="n">5</td><td><b>Señal</b></td><td>Dos primitivas paramétricas de regímenes opuestos
-—momentum y reversión a la media— proponen entrada, confianza y salidas.</td><td>§4.1</td></tr>
+<tr><td class="n">5</td><td><b>Señal</b></td><td>Ocho primitivas paramétricas proponen entrada,
+confianza y salidas: dos de régimen opuesto que solo miran precio —momentum y reversión— y seis
+temáticas con núcleo de precio y capa de señal.</td><td>§4.1, §4.1-bis</td></tr>
 <tr><td class="n">6</td><td><b>Riesgo</b></td><td>Puerta única: tamaño, exposición, confianza mínima,
 pérdida diaria y propiedad del stop. Ninguna señal la esquiva.</td><td>§3.3</td></tr>
 <tr><td class="n">7</td><td><b>Ejecución</b></td><td>Se llena al <i>open</i> del día siguiente, pagando
@@ -2253,6 +2323,36 @@ variante no requiere escribir código. Parámetros por defecto:</p>
 <h4>Reversión a la media</h4>
 %%MR_PARAMS%%
 
+<h3>4.1-bis · Las seis familias temáticas</h3>
+<p>Las dos primitivas de arriba miran precio y volumen, y usan las señales externas solo como
+<b>puerta</b>. Eso bastaba mientras la señal confirmaba o desmentía lo que el precio ya había dicho;
+deja de bastar en cuanto la señal quiere ser <b>la tesis</b>. Y hay un motivo aritmético: el radar
+colapsaba treinta fuentes en seis números, así que cinco estrategias que leyeran
+<span class="mono">signal_tone</span> no serían cinco apuestas sino una repetida cinco veces.</p>
+<p>Por eso el radar publica ahora <b>quince números más</b> —una terna de tono, intensidad y cobertura
+por cada uno de los cinco temas— y encima de ellos viven seis familias nuevas. Todas tienen la misma
+forma: un <b>núcleo de precio</b> que corre solo y una <b>capa de señal</b> que modula lado, tamaño y
+elegibilidad. La capa es <b>inerte por construcción</b> con los parámetros por defecto: no puede
+cambiar nada con ningún radar, vacío o lleno.</p>
+%%THEMED_FAMILIES%%
+<div class="why"><b>Los umbrales de señal no entran en el espacio de búsqueda, y el argumento no es la
+inercia.</b> Dieciséis de las treinta fuentes empezaron a existir el día que arrancó la captura, así
+que «cobertura de un tema» está correlacionada casi uno a uno con <b>la fecha</b>. Un piso de tono
+sorteable dejaría al optimizador elegir implícitamente <i>en qué tramo de historia se le permite
+operar</i> a la estrategia, y rankearía por disponibilidad de datos en vez de por criterio. Es el mismo
+fallo que el mínimo de cobertura existe para impedir, y aquí sería peor porque la señal es la primitiva.
+La consecuencia se acepta y se escribe: <b>la capa se afirma, no se optimiza</b>. Si está mal, el
+backtest dirá «esta familia no añade nada sobre su núcleo», que es exactamente la medición que se
+busca.</div>
+<div class="note"><b>Cuatro de las seis se rankean CIEGAS, y dos no pueden dejar de serlo.</b> En el
+estudio de transferencia la capa está inerte en las ocho familias —ninguna dimensión sorteable toca un
+umbral de señal—, así que lo que se ordena es el núcleo de precio con el filtro abierto de par en par.
+Eso es una decisión de diseño y se puede levantar. Lo que no se puede levantar hoy es la profundidad:
+de los cinco temas, solo <b>macro</b> (3 fuentes con historia medida), <b>attention</b> (2) y
+<b>flow</b> (8) alcanzan cobertura en un backtest histórico; <b>liquidation</b> (1 de 4) y
+<b>vol_surface</b> (1 de 2) se quedan por debajo del mínimo y sus dos primitivas se miden como núcleo
+ciego en todo el histórico. El criterio para repetir el análisis está declarado en §6.2, con fechas.</div>
+
 <h3>4.2 · El espacio de observación</h3>
 <p>Se define de forma <b>explícita</b> y con <b>orden estable</b> lo que la política ve en cada momento de
 decisión — el contrato de entrada para el aprendizaje futuro. El cierre de un solo activo no basta.
@@ -2398,10 +2498,16 @@ gradiente por-paso si se decide extender el contrato de la estrategia.</div>
 %%SPACE_MOM%%
 <h4>Reversión a la media</h4>
 %%SPACE_MR%%
+%%THEMED_SPACES%%
 <div class="note"><b>Lo que NO entra en el espacio de búsqueda.</b> Ninguna feature de señal, ningún
 umbral de puerta y ningún parámetro del radar (§2.2). Son constantes declaradas en código, y hay un test
 que lo demuestra: añadir una dimensión <b>sustituye</b> el espacio publicado en vez de ampliarlo. Es lo
-que mantiene fija la huella de las 16 configuraciones sobre las que se ha medido todo lo demás.</div>
+que mantiene fija la huella de las 16 configuraciones sobre las que se ha medido todo lo demás — que hoy
+son <b>las 16 primeras de 64</b>: las seis familias temáticas se añadieron <b>al final</b> de la lista de
+familias, y como el hipercubo latino se siembra con <span class="mono">semilla + índice de familia</span>,
+eso preserva byte a byte las configuraciones publicadas. Insertar una familia en medio las habría
+<b>sustituido en silencio</b> por otras dieciséis con los mismos nombres; hay un test que lo congela y una
+guarda que se niega a sobrescribir un informe cuya rejilla no coincide con la que se va a escribir.</div>
 
 <h3>4.14 · Descuento del sobreajuste por múltiples pruebas</h3>
 <p>Buscar sobre un espacio de parámetros garantiza encontrar algo que brilla <i>aunque no haya nada que
@@ -2539,6 +2645,43 @@ publicados no se movieron (§2.2).</td></tr>
 diseñador documentada, y el universo operado separado del sintético con el motivo escrito
 (§2.1, §2.5, §4.4).</td></tr>
 </tbody></table>
+
+<h3>6.1-bis · Dos temas que no se pueden medir hacia atrás, y desde cuándo se podrá</h3>
+<p>De las seis familias temáticas de §4.1-bis, <b>cuatro</b> descansan sobre temas con archivo real:
+<span class="mono">flow</span> tiene ocho fuentes con historia medida —la más antigua desde
+<b>2011-01-31</b>—, <span class="mono">macro</span> tres desde <b>2015-11-02</b> y
+<span class="mono">attention</span> dos desde <b>2015-07-01</b>. Esas tres, más la compuesta que las
+agrega, se pueden evaluar contra señal capturada de verdad.</p>
+<p>Las otras dos no, y conviene decir por qué con todas las letras. Las fuentes de
+<span class="mono">liquidation</span> y <span class="mono">vol_surface</span> <b>empezaron a existir el
+día que arrancó la captura</b>: Hyperliquid el 2026-08-13, los vencimientos de Deribit el 2026-08-14; y
+<span class="mono">lending_health</span> ni eso, porque su reloj no ha empezado a correr —falta la
+credencial—. La captura pide una ventana de 30 días, lo que perdona una caída de hasta un mes en las
+fuentes con archivo, pero <b>no compra ni un día de pasado</b> en las de captura hacia adelante. En el
+ranking histórico esas dos primitivas se miden como <b>núcleo de precio ciego</b>, y su puesto en la
+tabla es una cota de la clase más engañosa: la de la versión que no sabe nada.</p>
+<p><b>El criterio para repetir el análisis, declarado ahora y no cuando haya cifras que mirar.</b> Son
+dos umbrales, y manda el segundo:</p>
+<ol>
+<li><b>Que la fuente pueda entrar en un backtest.</b> El catálogo exige <b>365 días de calendario</b>
+medidos antes de declarar <span class="mono">history_from</span>. Para Hyperliquid eso cae el
+<b>2027-08-13</b>; para los vencimientos de Deribit el 2027-08-14.</li>
+<li><b>Que quepa una sola sub-ventana del estudio.</b> La transferencia trocea el histórico en
+sub-ventanas de <b>544 días</b> —la longitud de un camino sintético, para que los dos lados comparen
+mundos y no precisiones de estimador— y cada estrategia necesita además <b>180 días</b> de calentamiento:
+son <b>724 días de señal capturada</b> para correr UNA sub-ventana con vista. La primera fecha posible
+para Hyperliquid es el <b>2028-08-06</b>. Las cinco sub-ventanas de la geometría publicada pedirían unos
+2.900 días, ocho años: <b>esas cifras no se van a poder reproducir con vista</b>, y decir lo contrario
+sería prometer un calendario que no depende de nadie.</li>
+</ol>
+<div class="note"><b>La repetición no será la misma medición con mejores datos.</b> Cuando el segundo
+criterio se cumpla, lo publicable es un estudio <b>más corto y con menos bloques</b> —una sub-ventana en
+vez de cinco, con un intervalo por bloques bastante más ancho— y lo que se leerá de él no es el ranking
+sino <b>una comparación pareada</b>: la misma familia, sobre la misma ventana, con la puerta temática
+abierta y cerrada. Esa diferencia sí es atribuible a la señal, y es la única pregunta que hoy no se puede
+contestar para esos dos temas. Hasta entonces, el break-even del IC (§4.12) es lo que hay: no dice si esas
+señales sirven, dice a partir de qué capacidad predictiva <b>podrían</b> servir, y esa cota se midió sobre
+un mundo cuyo futuro está escrito y no puede sobreajustarse a ningún histórico.</div>
 
 <h3>6.2 · Lo que queda abierto, por criticidad</h3>
 <p>El orden responde a una asimetría de coste: una estrategia añadida hoy se re-evalúa gratis cuando el

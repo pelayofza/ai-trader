@@ -504,6 +504,129 @@ class TestValidacion:
             build_strategy("liquidation_cascade", {"close_location_max": 0.7})
 
 
+class TestCalibracionDeLaConfianza:
+    """
+    La confianza ES el mando de tamano y el riesgo corta por debajo de
+    `min_confidence_per_trade`. Una primitiva cuya confianza vive pegada a su suelo no es
+    estricta: es una que NO OPERA, y entonces su puesto en un ranking mide la calibracion de
+    su formula y no su tesis.
+
+    Esto no es hipotetico: la primera version de `flow_persistence` median sus DOS terminos
+    desde la propia puerta de entrada, asi que en el margen —que es donde cae la mayoria de
+    las entradas— los dos valian casi cero y el riesgo rechazaba el **71%** de sus senales.
+    Las dos primitivas publicadas rechazan el 3% y el 12%.
+    """
+
+    @staticmethod
+    def _noisy_bars(n: int = 900):
+        rng = np.random.default_rng(11)
+        closes = 100 * np.exp(np.cumsum(rng.normal(0.0008, 0.028, n)))
+        return build_bars(
+            list(closes),
+            highs=list(closes * (1 + np.abs(rng.normal(0, 0.012, n)))),
+            lows=list(closes * (1 - np.abs(rng.normal(0, 0.012, n)))),
+            volumes=list(rng.lognormal(7, 0.5, n)),
+        )
+
+    @pytest.mark.slow
+    @pytest.mark.parametrize("family", sorted(THEMED_FAMILIES))
+    def test_la_confianza_no_vive_pegada_al_suelo_del_riesgo(self, family):
+        from ai_trader.risk.engine import RiskLimits
+
+        floor = RiskLimits().min_confidence_per_trade
+        bars = self._noisy_bars()
+        confidences = []
+        for t in range(250, len(bars)):
+            signal = build_strategy(family).generate_signal("BTC/USDT", bars.iloc[: t + 1])
+            if signal is not None:
+                confidences.append(signal.confidence)
+
+        assert confidences, f"{family} no emitio una sola senal sobre 650 barras"
+        rejected = float(np.mean([c < floor for c in confidences]))
+        # El listado son las dos primitivas de precio: 3% y 12%. Un tercio es holgado y sigue
+        # siendo una senal clara de que la formula esta mal escalada.
+        assert rejected <= 0.35, (
+            f"{family} pierde el {rejected:.0%} de sus senales en el suelo de riesgo "
+            f"({floor}); mediana {np.median(confidences):.2f}"
+        )
+
+    def test_toda_confianza_vive_en_el_rango_declarado(self):
+        """[0,55, 0,90] es el rango que producen las dos publicadas por construccion, y del
+        que el resto del sistema —el tamano, el gate— depende."""
+        bars = self._noisy_bars(n=400)
+        for family in THEMED_FAMILIES:
+            for t in range(250, len(bars), 7):
+                signal = build_strategy(family).generate_signal("BTC/USDT", bars.iloc[: t + 1])
+                if signal is not None:
+                    assert 0.55 <= signal.confidence <= 0.90, family
+
+
+class TestMedicionContraSenalReal:
+    """
+    Fase 5-bis: lo que SI se puede medir hoy contra el archivo capturado.
+
+    El ranking mide las seis familias con la capa inerte —ninguna dimension sorteable toca un
+    umbral de senal—, asi que lo unico atribuible a la capa es la comparacion pareada de
+    `scoring/theme_study.py`. Estos tests congelan quien puede entrar en ella y quien no.
+    """
+
+    def test_que_temas_se_pueden_evaluar_hacia_atras(self):
+        """
+        Fragil A PROPOSITO, y es el test que hace la limitacion comprobable en vez de
+        prosaica: `macro`, `attention` y `flow` tienen profundidad; `liquidation` y
+        `vol_surface` no, porque sus fuentes empezaron a existir el dia de la captura.
+        """
+        from ai_trader.scoring.theme_study import evaluable_themes
+
+        evaluable, blind = evaluable_themes()
+        assert evaluable == {"macro", "attention", "flow"}
+        assert blind == {"liquidation", "vol_surface"}
+        assert evaluable | blind == set(THEME_NAMES)
+
+    def test_las_familias_de_temas_ciegos_se_declaran_no_se_borran(self):
+        """Un hueco declarado es un dato; un hueco silencioso convierte el informe en una
+        medicion sobre un conjunto desconocido."""
+        from ai_trader.scoring.theme_study import evaluable_themes
+
+        _, blind = evaluable_themes()
+        skipped = {
+            family
+            for family, theme in THEMED_FAMILIES.items()
+            if theme in blind
+        }
+        assert skipped == {"liquidation_cascade", "vol_term_structure"}
+
+    def test_el_compuesto_entra_aunque_dos_de_sus_temas_no(self):
+        """Lee los cinco y le bastan DOS legibles: con tres con profundidad, cumple."""
+        from ai_trader.scoring.theme_study import evaluable_themes
+
+        evaluable, _ = evaluable_themes()
+        assert len(evaluable) >= 2
+
+    def test_cada_familia_arma_su_puerta_por_el_eje_que_tiene(self):
+        """
+        `event_calendar_drift` no declara `min_signal_tone`, asi que inyectarselo reventaria
+        el estudio entero. El mapa por familia es lo que lo impide, y este test es lo que
+        impide que el mapa se quede corto cuando llegue la septima.
+        """
+        from ai_trader.scoring.signal_study import GATE_VALUE_BY_PARAM, gate_param_for
+
+        for family in THEMED_FAMILIES:
+            param = gate_param_for(family)
+            fields = {f.name for f in dataclasses.fields(build_strategy(family).config)}
+            assert param in fields, f"{family} no declara '{param}'"
+            # Y el valor inyectado tiene que ENCENDER la puerta: el borde inerte no vale.
+            armed = build_strategy(family, {param: GATE_VALUE_BY_PARAM[param]})
+            assert armed._signals_active() is True, family
+
+    def test_el_valor_inyectado_en_intensidad_no_es_su_borde_inerte(self):
+        """0,0 es el valor INERTE de un piso de intensidad: inyectarlo no encenderia nada, y
+        el estudio mediria dos corridas identicas creyendo que compara dos brazos."""
+        from ai_trader.scoring.signal_study import GATE_VALUE_BY_PARAM
+
+        assert GATE_VALUE_BY_PARAM["min_signal_intensity"] > INERT_MIN_INTENSITY
+
+
 # ----------------------------------------------------- el corto, de punta a punta ------
 
 

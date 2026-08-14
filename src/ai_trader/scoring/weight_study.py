@@ -53,7 +53,26 @@ logger = logging.getLogger("weight_study")
 
 OUT_DIR = Path("data") / "calibration"
 STUDY_SEED = 20260809  # seed del hipercubo latino; fija la identidad del conjunto
-FAMILIES = ("crypto_momentum", "mean_reversion")
+
+# LAS DOS PRIMITIVAS DE PRECIO SOBRE LAS QUE SE MIDIO TODO LO PUBLICADO. No es un duplicado
+# de `FAMILIES`: es el nombre de la HUELLA congelada, y es contra lo que asertan los tests de
+# evidencia publicada (`tests/test_transfer.py::TestPublishedFingerprint`).
+FAMILIES_PUBLISHED = ("crypto_momentum", "mean_reversion")
+
+# Las seis tematicas, EN ESTE ORDEN Y AL FINAL. El orden no es cosmetico: `build_specs` siembra
+# el hipercubo con `STUDY_SEED + indice_de_familia`, asi que anadir al final preserva las 16
+# configuraciones publicadas byte a byte, e insertar en medio las SUSTITUYE en silencio por
+# otras 16. Hay un test que lo congela.
+NEW_FAMILIES = (
+    "liquidation_cascade",
+    "vol_term_structure",
+    "event_calendar_drift",
+    "attention_ignition",
+    "flow_persistence",
+    "signal_composite",
+)
+
+FAMILIES = FAMILIES_PUBLISHED + NEW_FAMILIES  # 8 familias x 8 = 64 configuraciones
 # Umbral de "configuracion que opera de verdad" para el chequeo de robustez: por debajo
 # de ~1 operacion cada dos semanas de ventana OOS, el score mide inactividad, no criterio.
 ACTIVE_MIN_MEDIAN_TRADES = 20

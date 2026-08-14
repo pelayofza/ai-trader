@@ -250,6 +250,7 @@ def validate_multiwindow(
     block_cache: dict | None = None,
     baseline_cache: dict | None = None,
     signal_provider_factory: Callable[..., object] | None = None,
+    signals: dict | None = None,
 ) -> MultiWindowValidation:
     """
     Corre UNA muestra por el plan de validacion pedido y agrega sus ventanas.
@@ -270,6 +271,12 @@ def validate_multiwindow(
     None —el caso normal— deja el radar de siempre. Los BASELINES no la reciben y no es un
     olvido: son carteras pasivas que no consultan ninguna senal, y darles una las
     convertiria en otra cosa que el liston.
+
+    `signals` son los FRAMES del archivo real (lo que devuelve `signals/feed.py::load_frames`).
+    Existe porque el motor los aceptaba desde siempre y esta capa no los propagaba, asi que
+    ningun estudio podia mirar senal capturada de verdad: el lado real era ciego POR CABLEADO
+    y no por falta de datos. `signal_provider_factory` gana, si se pasan las dos: una es el
+    canal simulado y la otra el archivo, y mezclarlos no significaria nada.
     """
     config = base_config if spec is None else dataclasses.replace(base_config, strategies=[spec])
     purge = resolve_purge_days(base_config) if purge_days is None else purge_days
@@ -283,6 +290,7 @@ def validate_multiwindow(
         config, bars,
         starting_equity=starting_equity,
         headline_weights=headline_weights,
+        signals=signals,
         signal_provider_factory=signal_provider_factory,
     )
     results = engine.run_folds(folds, run_train=run_train, block_cache=block_cache)
@@ -321,6 +329,7 @@ def validate_multiwindow(
         single = _single_split_score(
             config, bars, start, end,
             starting_equity=starting_equity, headline_weights=headline_weights,
+            signals=signals,
             signal_provider_factory=signal_provider_factory,
         )
 
@@ -386,6 +395,7 @@ def _single_split_score(
     *,
     starting_equity: float,
     headline_weights: HeadlineWeights,
+    signals: dict | None = None,
     signal_provider_factory: Callable[..., object] | None = None,
 ) -> float | None:
     """El headline del corte unico 70/30, para poder medir cuanto optimismo aportaba.
@@ -395,6 +405,7 @@ def _single_split_score(
             config, bars,
             starting_equity=starting_equity,
             headline_weights=headline_weights,
+            signals=signals,
             signal_provider_factory=signal_provider_factory,
         ).run(start, end)
     except Exception as exc:  # noqa: BLE001

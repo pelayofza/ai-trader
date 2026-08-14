@@ -222,6 +222,7 @@ class FlowPersistenceStrategy:
         base = _confidence(
             up_fraction=up_fraction if core_side is Side.BUY else 1.0 - up_fraction,
             distance=distance,
+            atr_pct=latest_atr / latest_close * 100.0,
             config=cfg,
         )
         confidence = resolve_confidence(base, reading, core_side, weight=cfg.signal_weight)
@@ -254,11 +255,43 @@ class FlowPersistenceStrategy:
         )
 
 
-def _confidence(*, up_fraction: float, distance: float, config: FlowPersistenceConfig) -> float:
-    """Mas conviccion cuanto mas persistente la tendencia y mas profundo el retroceso."""
-    room = max(1.0 - config.min_persistence, 1e-9)
+# Cuanto por encima del umbral hace falta para dar por SATURADA la persistencia.
+#
+# El primer intento saturaba en `up_fraction = 1.0` —veinte dias seguidos al alza— y eso no
+# es exigente, es inalcanzable: con el umbral en 0,55 y una fraccion tipica de 0,60, el
+# termino aportaba 0,11 de un maximo de 1, la confianza se quedaba clavada cerca del suelo y
+# el motor de riesgo rechazaba el 71% de las senales por `min_confidence_per_trade`. Una
+# familia que no llega al liston de riesgo no es una familia estricta: es una que no opera,
+# y su puesto en un ranking mediria la calibracion de esta funcion y no su tesis.
+#
+# Es el mismo criterio con el que momentum satura su fuerza de tendencia en un 5% y su
+# ruptura en un 3%: valores ALCANZABLES, no extremos teoricos. 0,15 sobre el umbral son
+# tres dias de veinte por encima de lo exigido.
+PERSISTENCE_SATURATION = 0.15
+
+
+def _confidence(
+    *, up_fraction: float, distance: float, atr_pct: float, config: FlowPersistenceConfig
+) -> float:
+    """
+    Mas conviccion cuanto mas persistente la tendencia, mas profundo el retroceso y mas
+    volatilidad haya que capturar.
+
+    LOS TRES TERMINOS, Y POR QUE HACEN FALTA TRES. La primera version tenia solo dos, y los
+    dos se median DESDE LA PROPIA PUERTA de entrada: en el margen —que es donde cae la mayoria
+    de las entradas, porque la puerta esta puesta justo ahi— los dos valen casi cero, la
+    confianza se quedaba pegada a su suelo de 0,55 y el motor de riesgo rechazaba el 71% de
+    las senales por `min_confidence_per_trade`.
+
+    Las dos primitivas publicadas no tienen ese problema, y al mirarlas se ve por que: las dos
+    llevan un termino de VOLATILIDAD que no se mide desde ninguna puerta —`atr_pct/4` en
+    momentum, `std_pct/4` en reversion— y que por tanto levanta la base incluso en una entrada
+    marginal. Este es el mismo termino, con el mismo peso que en momentum.
+    """
+    room = max(min(PERSISTENCE_SATURATION, 1.0 - config.min_persistence), 1e-9)
     persistence_strength = min(max(up_fraction - config.min_persistence, 0.0) / room, 1.0)
     # Un retroceso que toca la media vale mas que uno que apenas se aparto de maximos.
     pullback_strength = min(max(config.pullback_atr - abs(distance), 0.0) / config.pullback_atr, 1.0)
-    raw = 0.6 * persistence_strength + 0.4 * pullback_strength
+    volatility_strength = min(max(atr_pct / 4.0, 0.0), 1.0)
+    raw = 0.45 * persistence_strength + 0.35 * pullback_strength + 0.20 * volatility_strength
     return round(min(max(0.55 + raw * 0.35, 0.55), 0.90), 2)

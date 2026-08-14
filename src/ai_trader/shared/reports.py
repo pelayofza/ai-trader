@@ -21,6 +21,7 @@ existiendo y delegan aqui: los importan `dashboard/` y `docs/` por su nombre.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -55,4 +56,61 @@ def write_report(
     return target
 
 
-__all__ = ["load_report", "write_report"]
+class PublishedGridMismatch(RuntimeError):
+    """Se iba a sobrescribir un informe publicado con otra rejilla. Ver `guard_published_grid`."""
+
+
+def _grid_families(report: Any) -> tuple[str, ...] | None:
+    """Las familias que describe un informe, mire donde mire cada estudio."""
+    if not isinstance(report, dict):
+        return None
+    plan = report.get("plan")
+    if not isinstance(plan, dict):
+        return None
+    grid = plan.get("grid")
+    families = (grid or {}).get("families") if isinstance(grid, dict) else plan.get("families")
+    return tuple(families) if isinstance(families, list) else None
+
+
+def guard_published_grid(
+    path: Path | str, families: Sequence[str], *, overwrite: bool = False
+) -> None:
+    """
+    Se NIEGA a sobrescribir un informe cuya rejilla no es la que se va a escribir.
+
+    Es lo que convierte "los informes son aditivos" de promesa en propiedad. `FAMILIES` es
+    una constante de modulo compartida por cuatro estudios: el dia que crece, cualquier
+    re-ejecucion despistada contra una libreria antigua produce un informe con OTRAS
+    configuraciones y el mismo nombre de fichero, y la evidencia publicada se pierde sin que
+    nada avise. Un `--library` mal tecleado basta.
+
+    La disciplina no es nueva, solo faltaba aqui: `signal_study` ya devuelve 1 si su celda de
+    control se ensucia y `fidelity_study` si la aceptacion falla. **Un estudio se niega a
+    publicar cuando lo que iba a publicar no significa lo que dice.**
+
+    `overwrite=True` es la valvula explicita, para cuando la sustitucion SI es lo que se
+    quiere; entonces la decision queda escrita en la linea de comando y no en un descuido.
+    """
+    existing = load_report(path)
+    if existing is None:
+        return
+    published = _grid_families(existing)
+    if published is None or published == tuple(families):
+        return
+    if overwrite:
+        return
+    raise PublishedGridMismatch(
+        f"{path} ya publica una rejilla distinta.\n"
+        f"  publicada: {list(published)}\n"
+        f"  se iba a escribir: {list(families)}\n"
+        "Escribe en otro --out-dir, usa otra libreria, o pasa --overwrite-published si de "
+        "verdad quieres reemplazar la evidencia publicada."
+    )
+
+
+__all__ = [
+    "PublishedGridMismatch",
+    "guard_published_grid",
+    "load_report",
+    "write_report",
+]

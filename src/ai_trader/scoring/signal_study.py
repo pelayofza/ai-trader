@@ -106,7 +106,8 @@ from ai_trader.scoring.transfer_study import (
     build_specs,
     crypto_universe,
 )
-from ai_trader.scoring.weight_study import STUDY_SEED
+from ai_trader.scoring.weight_study import FAMILIES, STUDY_SEED
+from ai_trader.shared.reports import guard_published_grid
 from ai_trader.shared import bars as bar_schema
 from ai_trader.synthetic.fidelity import CHANNEL_MAX_LAG, channel_facts
 from ai_trader.synthetic.scenarios import SignalChannel
@@ -121,7 +122,23 @@ DEFAULT_LIBRARY_ID = "ai_v3"
 DEFAULT_CONFIG = Path("config") / "default.toml"
 
 # Filas crudas del estudio de transferencia, contra las que la celda `off` se reproduce.
-TRANSFER_UNITS = Path("data") / "transfer" / "units_ai_v3.json"
+def transfer_units_path(library_id: str) -> Path:
+    """
+    Las unidades de transferencia de UNA libreria, que es contra lo que reproduce la celda
+    de control.
+
+    Se deriva de `--library` y no es una constante, y el motivo no es de estilo: la celda
+    `off` compara score a score contra unidades producidas con las BARRAS de la libreria que
+    se este corriendo. Apuntar siempre a ai_v3 hacia que correr el barrido sobre otro mundo
+    fallara la reproduccion por el mundo y no por la costura, que es exactamente el rojo mas
+    dificil de leer. Para `ai_v3` la ruta derivada es literalmente la de siempre, asi que el
+    control publicado sigue siendo byte a byte el mismo.
+    """
+    return Path("data") / "transfer" / f"units_{library_id}.json"
+
+
+# El nombre de siempre, que la prosa de `CRITERION` cita y varios tests importan.
+TRANSFER_UNITS = transfer_units_path("ai_v3")
 
 # --- la rejilla que se barre ---------------------------------------------------------
 #
@@ -162,8 +179,30 @@ CHANNEL_CORR_GROUP = "sweep"
 # optimizacion de la puerta y el break-even dejaria de ser una propiedad del diseno.
 GATE_MIN_TONE = 0.0
 # El unico parametro que se inyecta. Existe con este nombre y el mismo significado —un
-# PISO de tono— en las dos familias publicadas.
+# PISO de tono— en las dos familias publicadas y en cinco de las seis tematicas.
 GATE_PARAM = "min_signal_tone"
+
+# La excepcion, y no es un caso especial arbitrario: `event_calendar_drift` NO DECLARA
+# `min_signal_tone`, porque de las seis fuentes de su tema solo `ofac_sdn` tiene polaridad y
+# el tono sale ~0 por construccion. Un piso de tono ahi seria un mando que parece hacer algo
+# y no puede. Su equivalente —"solo opero si hay catalizador cerca"— es un piso de INTENSIDAD.
+GATE_PARAM_BY_FAMILY: dict[str, str] = {
+    "event_calendar_drift": "min_signal_intensity",
+}
+
+# Con que valor se abre cada puerta. El de intensidad no puede ser 0,0: ese es su valor
+# INERTE (el borde inferior del rango), asi que inyectarlo no encenderia nada. Se usa la
+# mediana del rango util, que es el analogo de "la senal apunta arriba" para un eje sin signo:
+# "esta pasando algo por encima de lo normal".
+GATE_VALUE_BY_PARAM: dict[str, float] = {
+    "min_signal_tone": GATE_MIN_TONE,
+    "min_signal_intensity": 0.5,
+}
+
+
+def gate_param_for(strategy_type: str) -> str:
+    """El parametro con el que se arma la puerta de una familia."""
+    return GATE_PARAM_BY_FAMILY.get(strategy_type, GATE_PARAM)
 
 DETERMINISM_CHECKS = 6
 
@@ -246,11 +285,16 @@ class Cell:
         )
 
     def spec_for(self, spec: StrategySpec) -> StrategySpec:
-        """La configuracion publicada con —y solo con— el umbral de la puerta inyectado."""
+        """La configuracion publicada con —y solo con— el umbral de la puerta inyectado.
+
+        El PARAMETRO depende de la familia (ver `GATE_PARAM_BY_FAMILY`), pero el valor sigue
+        sin tener un grado de libertad que ajustar: es el corte declarado de su eje.
+        """
         if self.is_off:
             return spec
+        param = gate_param_for(spec.type)
         return dataclasses.replace(
-            spec, params={**spec.params, GATE_PARAM: GATE_MIN_TONE}
+            spec, params={**spec.params, param: GATE_VALUE_BY_PARAM[param]}
         )
 
     def as_dict(self) -> dict:
@@ -391,7 +435,7 @@ def build_plan(args: argparse.Namespace) -> tuple[StudyPlan, list[StrategySpec]]
         scenario_ids = scenario_ids[: args.scenarios]
     split = split_scenarios(list(scenario_ids), seed=args.split_seed)
 
-    specs = build_specs(per_family=args.configs_per_family)
+    specs = build_specs(tuple(args.families), args.configs_per_family)
     cells = build_cells(args.rho, args.lead)
 
     plan = StudyPlan(
@@ -1089,7 +1133,10 @@ def _round(value, decimals: int = 4):
 
 
 def build_report(
-    plan: StudyPlan, specs: Sequence[StrategySpec], rows: Sequence[dict]
+    plan: StudyPlan,
+    specs: Sequence[StrategySpec],
+    rows: Sequence[dict],
+    units_path: Path | str | None = None,
 ) -> dict:
     config_ids = [s.id for s in specs]
     split = ScenarioSplit(
@@ -1111,7 +1158,9 @@ def build_report(
         "value_of_information": value_of_information(verdicts),
         "gate_cost": gate_cost(verdicts, config_ids),
         "channel_certification": certify_channels(plan),
-        "reproduction": reproduction_check(plan, rows),
+        "reproduction": reproduction_check(
+            plan, rows, units_path or transfer_units_path(plan.library_id)
+        ),
         "baseline_invariance": baseline_invariance(cells),
         "n_failed_units": sum(1 for r in rows if r["failed"]),
     }
@@ -1188,6 +1237,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--paths", type=int, default=1)
     parser.add_argument("--configs-per-family", type=int, default=CONFIGS_PER_FAMILY)
     parser.add_argument(
+        "--families", nargs="+", default=list(FAMILIES),
+        help="Familias de la rejilla, EN ORDEN (el orden fija las semillas del hipercubo).",
+    )
+    parser.add_argument(
+        "--transfer-units", default=None,
+        help=(
+            "Unidades contra las que reproduce la celda de control. Por defecto, las de la "
+            "misma libreria (data/transfer/units_<library>.json)."
+        ),
+    )
+    parser.add_argument(
+        "--overwrite-published", action="store_true",
+        help="Permite reemplazar un informe publicado con OTRA rejilla. Ver shared/reports.",
+    )
+    parser.add_argument(
         "--rho", type=float, nargs="+", default=list(DEFAULT_RHO_GRID),
         help="Rejilla de capacidad predictiva. Tiene que incluir 0: es el control.",
     )
@@ -1216,6 +1280,11 @@ def main(argv: list[str] | None = None) -> int:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     units_file = units_path(args.library, out_dir)
+    target = report_path(args.library, out_dir)
+    if not args.analyze_only:
+        # Antes de gastar cinco horas: no se sustituye un informe que publica otra rejilla.
+        for path in (units_file, target):
+            guard_published_grid(path, plan.families, overwrite=args.overwrite_published)
 
     if args.analyze_only:
         if not units_file.exists():
@@ -1231,7 +1300,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         logger.info("Unidades -> %s", units_file)
 
-    report = build_report(plan, specs, rows)
+    report = build_report(plan, specs, rows, args.transfer_units)
     if args.verify_determinism and not args.analyze_only:
         report["determinism"] = verify_determinism(plan, specs, rows, DETERMINISM_CHECKS)
     report["generated_at"] = datetime.now(timezone.utc).isoformat()
