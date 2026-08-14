@@ -31,6 +31,27 @@ EL VEREDICTO PUEDE SER "SIN POTENCIA", Y ESO ES UN RESULTADO
 Igual que en `backtest/divergence_study.py`: si los dias con cobertura no dan muestra, la
 respuesta correcta es decirlo y no publicar una diferencia que el ruido explica. Un intervalo por
 bloques que contiene el cero con N=12 no dice "la senal no sirve", dice "no se ha medido".
+
+EL COSTE, MEDIDO, Y POR QUE ES TAN ALTO
+---------------------------------------
+**~610 s de CPU por unidad**, es decir unas 27 h de CPU para las 160 unidades de la
+configuracion por defecto (4 familias x 4 configuraciones x 5 ventanas x 2 brazos), o alrededor
+de 6 h de reloj con siete workers sobre cuatro nucleos fisicos. Esta escrito aqui porque lo
+estime tres veces por lo bajo antes de medirlo: **no lances este estudio esperando una hora**.
+
+De donde sale, que no es donde parece. Frente a las ~88 s/unidad del estudio de transferencia
+hay dos factores y el segundo es el gordo:
+
+1. El universo es de 24 simbolos y no de 11 (ver `_real_bounds`): ~2,2x.
+2. **El brazo ARMADO reconstruye el radar tematico una vez por fold**, y cada construccion
+   normaliza las 21 fuentes del archivo entero (`normalize_features` sobre cada frame). Con 15
+   folds de CPCV eso son quince normalizaciones completas por unidad. El estudio de
+   transferencia no lo paga porque corre con el radar VACIO.
+
+La optimizacion evidente —cachear el radar por (ventana, brazo) en vez de reconstruirlo por
+fold— no esta hecha y es el primer sitio donde mirar si este estudio hay que repetirlo a
+menudo. Mientras tanto, para una pasada rapida: `--configs-per-family 2` lo deja en la mitad,
+con el intervalo por bloques mas ancho.
 """
 from __future__ import annotations
 
@@ -44,6 +65,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 from ai_trader.backtest.engine import DEFAULT_STARTING_EQUITY
 from ai_trader.config import DEFAULT_CONFIG_PATH, StrategySpec, load_config
@@ -53,9 +75,12 @@ from ai_trader.scoring.aggregate import DEFAULT_CVAR_ALPHA
 from ai_trader.scoring.multiwindow import SCHEME_CPCV, validate_multiwindow
 from ai_trader.scoring.signal_study import GATE_VALUE_BY_PARAM, gate_param_for
 from ai_trader.scoring.transfer_study import (
+    DEFAULT_REAL_END,
+    DEFAULT_REAL_START,
     N_GROUPS,
     N_TEST_GROUPS,
     RealWindow,
+    audit_real_symbols,
     build_specs,
     crypto_universe,
     real_windows,
@@ -63,6 +88,9 @@ from ai_trader.scoring.transfer_study import (
 from ai_trader.scoring.weight_study import NEW_FAMILIES
 from ai_trader.shared.reports import write_report
 from ai_trader.signals.catalog import CATALOG
+# El cargador de barras reales vive en `fidelity_study` y lo comparten los estudios que tocan
+# mercado: los simbolos que el exchange no sirve se OMITEN y se declaran, no se rellenan.
+from ai_trader.synthetic.fidelity_study import fetch_real_bars
 from ai_trader.signals.feed import load_frames
 
 logger = logging.getLogger("theme_study")
@@ -148,11 +176,15 @@ class StudyPlan:
 _WORKER: dict = {}
 
 
-def _init_worker(config_path: str, raw_root: str | None) -> None:
+def _init_worker(config_path: str, raw_root: str | None, symbols: Sequence[str]) -> None:
     logging.getLogger("ai_trader").setLevel(logging.ERROR)
     config = load_config(config_path)
     _WORKER.update(
         config=config,
+        # El universo del PLAN, no `config.runner.symbols`: ese trae ademas la renta variable,
+        # que va por otro proveedor y otra sesion de mercado, y pedirsela al servicio de cripto
+        # ensuciaria cada unidad con excepciones que no significan nada.
+        symbols=tuple(symbols),
         # Los frames se cargan UNA vez por worker: son el archivo entero y releerlos por
         # unidad multiplicaria por cien el coste de I/O del estudio.
         frames=load_frames(raw_root=raw_root or config.signals.raw_root or None),
@@ -169,6 +201,32 @@ def _armed_spec(spec: StrategySpec) -> StrategySpec:
     return dataclasses.replace(spec, params={**spec.params, param: GATE_VALUE_BY_PARAM[param]})
 
 
+def _window_bars(config, label: str, start: datetime, end: datetime) -> dict:
+    """
+    Las barras de UNA ventana, cacheadas por worker.
+
+    Sin esto cada unidad releia el historico de los simbolos del universo, y como las tareas
+    llegan agrupadas por ventana eso multiplicaba por treinta y dos el trabajo de lectura: la
+    unidad pasaba de segundos a MINUTOS. Es el mismo patron que `transfer_study._real_bars`,
+    y su ausencia aqui fue un descuido con un coste medible, no una diferencia de diseno.
+
+    Se cachea UNA ventana y no todas: son 544 dias por veinticuatro simbolos, y siete workers
+    reteniendo las cinco a la vez es memoria que no hace falta.
+    """
+    cached = _WORKER.get("bars_label")
+    if cached == label:
+        return _WORKER["bars"]
+
+    from ai_trader.data.market_data import MarketDataService
+
+    service = MarketDataService(config)
+    bars = fetch_real_bars(_WORKER["symbols"], start, end, service)
+    bars = {s: b for s, b in bars.items() if b is not None and not b.empty}
+    _WORKER["bars_label"] = label
+    _WORKER["bars"] = bars
+    return bars
+
+
 def _run_unit(task: tuple) -> dict:
     spec_dict, window_dict, arm = task
     spec = StrategySpec(**spec_dict)
@@ -177,19 +235,16 @@ def _run_unit(task: tuple) -> dict:
     start = datetime.fromisoformat(window_dict["start"]).replace(tzinfo=timezone.utc)
     end = datetime.fromisoformat(window_dict["end"]).replace(tzinfo=timezone.utc)
 
-    from ai_trader.data.market_data import MarketDataService
-
-    service = MarketDataService(config)
-    bars = {
-        symbol: service.get_daily_bars(symbol, start, end)
-        for symbol in config.runner.symbols
-    }
-    bars = {s: b for s, b in bars.items() if b is not None and not b.empty}
+    bars = _window_bars(config, window_dict["label"], start, end)
 
     try:
         validation = validate_multiwindow(
-            config, bars, start, end,
-            spec=_armed_spec(spec) if arm == ARM_ARMED else spec,
+            config,
+            # `spec` es el SEGUNDO posicional, no una kwarg detras de las fechas.
+            _armed_spec(spec) if arm == ARM_ARMED else spec,
+            bars,
+            start,
+            end,
             scheme=SCHEME_CPCV,
             n_groups=N_GROUPS,
             n_test_groups=N_TEST_GROUPS,
@@ -327,7 +382,9 @@ def build_plan(args: argparse.Namespace) -> tuple[StudyPlan, list[StrategySpec],
                 }
             )
 
-    symbols, first, last = _real_bounds(config)
+    # El mismo minimo que la transferencia: calentamiento de la estrategia + un grupo de CPCV.
+    min_history = config.runner.lookback_days + args.window_days // N_GROUPS
+    symbols, first, last = _real_bounds(config, args.start, args.end, min_history)
     windows = real_windows(first, last, args.window_days)
     frames = load_frames(raw_root=config.signals.raw_root or None)
 
@@ -347,42 +404,63 @@ def build_plan(args: argparse.Namespace) -> tuple[StudyPlan, list[StrategySpec],
     return plan, build_specs(tuple(families), args.configs_per_family), windows
 
 
-def _real_bounds(config) -> tuple[tuple[str, ...], datetime, datetime]:
+def _real_bounds(config, start: str, end: str, min_history_days: int) -> tuple[tuple[str, ...], datetime, datetime]:
     """
-    Que simbolos hay en cache y que rango cubren.
+    Que simbolos hay y que rango cubren, con el MISMO cargador que el resto de estudios.
 
-    Se resuelve aqui y no con `transfer_study.audit_real_symbols` porque esa funcion audita
-    una cobertura MINIMA de historia por simbolo para que los dos lados de la transferencia
-    sean comparables, y este estudio no compara dos lados: compara dos brazos sobre las MISMAS
-    barras. Pedirle prestado el criterio traeria una restriccion que aqui no significa nada.
+    El rango se pide explicito y no se deduce del cache: `get_daily_bars` necesita fechas
+    reales —con `None` revienta con un `NaTType`— y ademas la ventana tiene que ser la misma
+    con la que se publicaron los demas estudios, o las sub-ventanas no caerian en los mismos
+    sitios y las cifras dejarian de ser comparables sin que nada avise.
+
+    Y el universo se audita con el MISMO criterio que el estudio de transferencia
+    (`audit_real_symbols`): un simbolo con menos historia que el calentamiento de la estrategia
+    mas un grupo de CPCV no puede llegar a operarse en una sola ventana OOS, asi que no aporta
+    nada y si ruido.
+
+    OJO CON UNA DIFERENCIA QUE PARECE UN BUG Y NO LO ES: aqui el universo sale mas grande que
+    en la transferencia (24 frente a 11). Los 11 de alli no son los que tienen historia, son
+    los que ademas EXISTEN EN LA LIBRERIA SINTETICA, porque aquel estudio compara dos mundos y
+    necesita contraparte en los dos. Este no toca el sintetico: compara dos brazos sobre las
+    mismas barras reales, asi que no hay contraparte que exigir y quedarse con 11 seria tirar
+    la mitad de la muestra sin motivo. El precio es que cada unidad cuesta aproximadamente el
+    doble, y esta contado en el coste del estudio.
     """
     from ai_trader.data.market_data import MarketDataService
 
     service = MarketDataService(config)
-    symbols, firsts, lasts = [], [], []
-    for symbol in crypto_universe(config):
-        try:
-            bars = service.get_daily_bars(symbol, None, None)
-        except Exception as exc:  # noqa: BLE001
-            logger.info("  %s sin barras en cache (%s)", symbol, exc)
-            continue
-        if bars is None or bars.empty:
-            continue
-        symbols.append(symbol)
-        firsts.append(bars.index[0].to_pydatetime())
-        lasts.append(bars.index[-1].to_pydatetime())
-    if not symbols:
+    window_start = pd.Timestamp(start, tz="UTC")
+    window_end = pd.Timestamp(end, tz="UTC")
+    requested = crypto_universe(config)
+    bars = fetch_real_bars(
+        requested, window_start.to_pydatetime(), window_end.to_pydatetime(), service
+    )
+    if not bars:
         raise ValueError(
             "No hay barras reales en cache. Corre una vez sin --offline (o el estudio de "
             "transferencia, que llena la misma cache) antes de este."
         )
-    return tuple(symbols), min(firsts), max(lasts)
+    kept, dropped = audit_real_symbols(
+        bars, requested, start=window_start, end=window_end, min_history_days=min_history_days
+    )
+    if not kept:
+        raise ValueError("Ningun simbolo real supera el minimo de historico")
+    for audit in dropped:
+        logger.info("  omitido %s: %s", audit.symbol, audit.reason)
+
+    usable = {a.symbol: bars[a.symbol] for a in kept}
+    firsts = [b.index[0].to_pydatetime() for b in usable.values()]
+    lasts = [b.index[-1].to_pydatetime() for b in usable.values()]
+    logger.info("Universo real: %d de %d simbolos con historico suficiente", len(kept), len(requested))
+    return tuple(sorted(usable)), min(firsts), max(lasts)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[1])
     parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH))
     parser.add_argument("--configs-per-family", type=int, default=CONFIGS_PER_FAMILY)
+    parser.add_argument("--start", default=DEFAULT_REAL_START)
+    parser.add_argument("--end", default=DEFAULT_REAL_END)
     parser.add_argument("--window-days", type=int, default=544)
     parser.add_argument("--workers", type=int, default=max(1, (mp.cpu_count() or 2) - 1))
     parser.add_argument("--offline", action="store_true")
@@ -401,17 +479,20 @@ def main(argv: list[str] | None = None) -> int:
     for skip in plan.families_skipped:
         logger.info("  OMITIDA %s: %s", skip["family"], skip["reason"])
 
+    # Agrupadas POR VENTANA y no por configuracion: `pool.map` reparte trozos contiguos, asi
+    # que con este orden cada worker ve una ventana entera seguida y el cache de barras
+    # acierta. Con el orden contrario cambiaba de ventana en cada unidad y no acertaba nunca.
     tasks = [
         (dataclasses.asdict(spec), window.as_dict(), arm)
-        for spec in specs
         for window in windows
+        for spec in specs
         for arm in (ARM_BLIND, ARM_ARMED)
     ]
     config = load_config(args.config)
     with mp.Pool(
         processes=args.workers,
         initializer=_init_worker,
-        initargs=(str(args.config), config.signals.raw_root or None),
+        initargs=(str(args.config), config.signals.raw_root or None, plan.symbols),
     ) as pool:
         rows = pool.map(_run_unit, tasks)
 
