@@ -570,11 +570,16 @@ class TestMedicionContraSenalReal:
     `scoring/theme_study.py`. Estos tests congelan quien puede entrar en ella y quien no.
     """
 
-    def test_que_temas_se_pueden_evaluar_hacia_atras(self):
+    def test_que_temas_DECLARA_el_catalogo_evaluables(self):
         """
-        Fragil A PROPOSITO, y es el test que hace la limitacion comprobable en vez de
-        prosaica: `macro`, `attention` y `flow` tienen profundidad; `liquidation` y
-        `vol_surface` no, porque sus fuentes empezaron a existir el dia de la captura.
+        Fragil A PROPOSITO. Congela lo que el catalogo DECLARA, que no es lo que el archivo
+        MIDE: al sondear el radar de verdad, `vol_surface` alcanza 0,333 de cobertura desde
+        2021 —`deribit_volatility` publica desde 2021-03-24 y el catalogo aun no le ha
+        certificado los 365 dias que exige `depth.MIN_MEASURED_DAYS`—, asi que la frase "sus
+        fuentes empezaron a existir el dia de la captura" era FALSA para ese tema.
+
+        Quien decide que familias entran en el estudio es `measured_themes`. Esta funcion se
+        conserva porque el desacuerdo entre declaracion y medicion se publica en el informe.
         """
         from ai_trader.scoring.theme_study import evaluable_themes
 
@@ -582,6 +587,24 @@ class TestMedicionContraSenalReal:
         assert evaluable == {"macro", "attention", "flow"}
         assert blind == {"liquidation", "vol_surface"}
         assert evaluable | blind == set(THEME_NAMES)
+
+    def test_la_medicion_manda_sobre_la_declaracion(self):
+        """Un tema cuyas fuentes no producen NINGUNA lectura es ciego, lo diga el catalogo o
+        no. Se comprueba con un archivo vacio, que es el caso extremo y no depende de datos."""
+        from datetime import datetime, timezone
+
+        from ai_trader.scoring.theme_study import measured_themes
+
+        evaluable, blind, detail = measured_themes(
+            {}, ("BTC/USDT",),
+            start=datetime(2020, 1, 1, tzinfo=timezone.utc),
+            end=datetime(2021, 1, 1, tzinfo=timezone.utc),
+            probes=2,
+        )
+        assert evaluable == frozenset()
+        assert blind == frozenset(THEME_NAMES)
+        assert all(d["max_coverage"] == 0.0 for d in detail.values())
+        assert all(d["readable_share"] == 0.0 for d in detail.values())
 
     def test_las_familias_de_temas_ciegos_se_declaran_no_se_borran(self):
         """Un hueco declarado es un dato; un hueco silencioso convierte el informe en una

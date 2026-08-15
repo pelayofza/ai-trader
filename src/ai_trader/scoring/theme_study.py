@@ -77,7 +77,13 @@ import pandas as pd
 from ai_trader.backtest.engine import DEFAULT_STARTING_EQUITY
 from ai_trader.config import DEFAULT_CONFIG_PATH, StrategySpec, load_config
 from ai_trader.observation.signal_radar import MIN_SIGNAL_COVERAGE
-from ai_trader.observation.signal_themes import THEMES, effective_denominator
+from ai_trader.observation.signal_themes import (
+    THEMES,
+    ThemedSignalRadarProvider,
+    effective_denominator,
+    theme_features,
+)
+from ai_trader.shared.clock import HistoricalClock
 from ai_trader.scoring.aggregate import DEFAULT_CVAR_ALPHA
 from ai_trader.scoring.multiwindow import SCHEME_CPCV, validate_multiwindow
 from ai_trader.scoring.signal_study import GATE_VALUE_BY_PARAM, gate_param_for
@@ -126,10 +132,14 @@ VERDICT_FLAT = "indistinguible"
 
 def evaluable_themes() -> tuple[frozenset[str], frozenset[str]]:
     """
-    Que temas alcanzan cobertura en un backtest historico y cuales no. DERIVADO del catalogo.
+    Lo que el CATALOGO DECLARA sobre que temas se pueden evaluar hacia atras.
 
     Se calcula y no se escribe a mano para que el dia que una fuente gane profundidad medida,
     este estudio deje de excluir a su familia sin que nadie tenga que acordarse.
+
+    OJO: esto es la declaracion, no la medicion, y las dos NO coinciden. Quien decide que
+    familias entran en el estudio es `measured_themes`, que sondea el radar de verdad. Esta
+    funcion se conserva porque el desacuerdo entre ambas es un dato que el informe publica.
     """
     backtestable = {source.key for source in CATALOG if source.backtestable}
     evaluable, blind = set(), set()
@@ -138,6 +148,74 @@ def evaluable_themes() -> tuple[frozenset[str], frozenset[str]]:
         covered = len(set(spec.sources) & backtestable) / denominator
         (evaluable if covered >= MIN_SIGNAL_COVERAGE else blind).add(name)
     return frozenset(evaluable), frozenset(blind)
+
+
+# Sondas del radar para medir la cobertura real a lo largo del rango del estudio. Ocho porque
+# la construccion del radar es lo caro y las consultas no: se construye UNA vez y se mueve el
+# reloj, que es exactamente lo que hace `HistoricalClock.set`.
+THEME_PROBES = 8
+
+
+def measured_themes(
+    frames,
+    symbols: Sequence[str],
+    *,
+    start: datetime,
+    end: datetime,
+    probes: int = THEME_PROBES,
+) -> tuple[frozenset[str], frozenset[str], dict]:
+    """
+    Que temas alcanzan cobertura DE VERDAD en el archivo. MEDIDO sondeando el radar.
+
+    Existe porque la derivacion del catalogo (`evaluable_themes`) se equivoca en los DOS
+    sentidos, y las dos veces con consecuencias caras:
+
+    - Cuenta fuentes que no cubren al simbolo que se opera. `cex_listings` es backtestable y
+      esta en el tema `attention`, pero es un calendario de LISTADOS y BTC no se lista: no
+      produce lectura. Medido, `attention` cubre 0,143 (una fuente de siete declaradas, solo
+      `wikipedia_pageviews`) en todos los anyos del historico, por debajo del 0,25 de la
+      puerta. La familia entro en el estudio y no pudo mover nada: cuarenta unidades tiradas.
+    - Descarta fuentes con archivo profundo que el catalogo aun no ha certificado.
+      `deribit_volatility` publica desde 2021-03-24, pero su profundidad medida todavia no
+      llega a los 365 dias que exige `depth.MIN_MEASURED_DAYS`, asi que figura como no
+      backtestable. `vol_surface` se excluyo diciendo que "sus fuentes empezaron a existir el
+      dia que arranco la captura", y eso es FALSO.
+
+    El criterio de exclusion es el minimo defendible: se descarta un tema solo si NUNCA
+    alcanza el umbral de cobertura en ninguna sonda, porque entonces la puerta no puede atar
+    y medirlo es gastar CPU en un cero conocido. Todo lo demas entra y se mide, aunque su
+    cuota de sondas legibles sea baja: para eso esta `MIN_PAIRED_WINDOWS`, que convierte la
+    falta de muestra en `sin_potencia` en vez de en una diferencia inventada.
+    """
+    clock = HistoricalClock(start)
+    provider = ThemedSignalRadarProvider(frames, clock)
+    step = (end - start) / max(1, probes - 1)
+
+    seen = {name: 0 for name in THEMES}
+    best = {name: 0.0 for name in THEMES}
+    total = 0
+    for i in range(probes):
+        clock.set(start + step * i)
+        for symbol in symbols:
+            feats = provider.features(symbol)
+            total += 1
+            for name in THEMES:
+                cov = feats.get(theme_features(name)[2], 0.0)
+                best[name] = max(best[name], cov)
+                if cov >= MIN_SIGNAL_COVERAGE:
+                    seen[name] += 1
+
+    evaluable = frozenset(name for name in THEMES if seen[name] > 0)
+    blind = frozenset(THEMES) - evaluable
+    detail = {
+        name: {
+            "max_coverage": round(best[name], 4),
+            "readable_share": round(seen[name] / total, 4) if total else 0.0,
+            "threshold": MIN_SIGNAL_COVERAGE,
+        }
+        for name in sorted(THEMES)
+    }
+    return evaluable, blind, detail
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,6 +228,8 @@ class StudyPlan:
     windows: tuple[dict, ...]
     themes_evaluable: tuple[str, ...]
     themes_blind: tuple[str, ...]
+    themes_declared_evaluable: tuple[str, ...]
+    themes_measured: dict
     sources_loaded: tuple[str, ...]
     starting_equity: float
     cvar_alpha: float
@@ -168,6 +248,14 @@ class StudyPlan:
             "themes": {
                 "evaluable": list(self.themes_evaluable),
                 "blind": list(self.themes_blind),
+                # Lo que el catalogo DECLARA, al lado de lo medido. Los dos, y no solo el que
+                # manda, porque el desacuerdo entre ambos es el dato: el catalogo cuenta
+                # fuentes backtestables y el radar lee las que de verdad cubren al simbolo.
+                "declared_evaluable": list(self.themes_declared_evaluable),
+                "measured": dict(self.themes_measured),
+                "disagreement": sorted(
+                    set(self.themes_declared_evaluable) ^ set(self.themes_evaluable)
+                ),
             },
             "sources_loaded": list(self.sources_loaded),
             "arms": {
@@ -380,8 +468,10 @@ def analyze(rows: Sequence[dict], plan: StudyPlan) -> dict:
             "de senales llega al motor.",
             "Los umbrales no se optimizan: se inyectan desde fuera del espacio de busqueda con "
             "el valor declarado de su eje, igual que en el barrido de rho.",
-            "Las familias de temas sin profundidad medida NO se evaluan, y se declaran en "
-            "`plan.families_skipped` con el motivo en vez de desaparecer de la tabla.",
+            "Las familias cuyo tema NUNCA alcanza cobertura no se evaluan, y se declaran en "
+            "`plan.families_skipped` con su cobertura maxima medida en vez de desaparecer de "
+            "la tabla. El criterio es la cobertura MEDIDA sobre el archivo, no el flag "
+            "`backtestable` del catalogo: `plan.themes.disagreement` lista donde difieren.",
             f"Por debajo de {MIN_PAIRED_WINDOWS} ventanas en las que la capa cambie algo, el "
             "veredicto es 'sin_potencia': no se publica una diferencia que el ruido explica.",
         ],
@@ -390,30 +480,6 @@ def analyze(rows: Sequence[dict], plan: StudyPlan) -> dict:
 
 def build_plan(args: argparse.Namespace) -> tuple[StudyPlan, list[StrategySpec], list[RealWindow]]:
     config = load_config(args.config)
-    evaluable, blind = evaluable_themes()
-
-    families, skipped = [], []
-    from ai_trader.strategies.registry import build_strategy
-
-    for family in NEW_FAMILIES:
-        theme = getattr(build_strategy(family), "theme", "")
-        # El compuesto lee los CINCO temas, asi que le basta con que dos sean legibles; eso
-        # se cumple con los tres que tienen profundidad.
-        readable = theme == "composite" or theme in evaluable
-        if readable:
-            families.append(family)
-        else:
-            skipped.append(
-                {
-                    "family": family,
-                    "theme": theme,
-                    "reason": (
-                        f"el tema '{theme}' no alcanza {MIN_SIGNAL_COVERAGE:.2f} de cobertura "
-                        "en historico: sus fuentes empezaron a existir el dia que arranco la "
-                        "captura, asi que su capa no se puede evaluar hacia atras todavia"
-                    ),
-                }
-            )
 
     # El mismo minimo que la transferencia: calentamiento de la estrategia + un grupo de CPCV.
     min_history = config.runner.lookback_days + args.window_days // N_GROUPS
@@ -425,6 +491,53 @@ def build_plan(args: argparse.Namespace) -> tuple[StudyPlan, list[StrategySpec],
                                      min_history_days=min_history)
     frames = load_frames(raw_root=config.signals.raw_root or None)
 
+    # La cobertura se MIDE sobre el archivo y el universo reales, no se deduce del catalogo.
+    declared, _ = evaluable_themes()
+    evaluable, blind, measured = measured_themes(frames, symbols, start=first, end=last)
+    for name in sorted(set(declared) ^ set(evaluable)):
+        logger.info(
+            "  DESACUERDO en '%s': catalogo dice %s, medido dice %s (cobertura maxima %.3f)",
+            name,
+            "evaluable" if name in declared else "ciego",
+            "evaluable" if name in evaluable else "ciego",
+            measured[name]["max_coverage"],
+        )
+
+    families, skipped = [], []
+    from ai_trader.strategies.registry import build_strategy
+
+    # Correr un subconjunto es LEGITIMO aqui y no lo seria en el ranking: este estudio compara
+    # cada familia CONSIGO MISMA (ciega contra armada, misma configuracion, misma ventana), asi
+    # que ninguna cifra depende de que otras familias esten en la corrida. Por eso una familia
+    # admitida despues se puede medir sola, sin repetir las que ya estan medidas.
+    requested = tuple(args.families) if getattr(args, "families", None) else NEW_FAMILIES
+    unknown = [f for f in requested if f not in NEW_FAMILIES]
+    if unknown:
+        raise SystemExit(f"Familias que no son tematicas: {unknown}")
+
+    for family in requested:
+        theme = getattr(build_strategy(family), "theme", "")
+        # El compuesto lee los CINCO temas, asi que le basta con que dos sean legibles.
+        readable = theme == "composite" or theme in evaluable
+        if readable:
+            families.append(family)
+        else:
+            stat = measured.get(theme, {})
+            skipped.append(
+                {
+                    "family": family,
+                    "theme": theme,
+                    "reason": (
+                        f"el tema '{theme}' NUNCA alcanza {MIN_SIGNAL_COVERAGE:.2f} de "
+                        f"cobertura en el archivo: su maximo medido sobre {len(symbols)} "
+                        f"simbolos y {THEME_PROBES} sondas es "
+                        f"{stat.get('max_coverage', 0.0):.3f}, asi que su puerta no puede "
+                        "atar y medirla seria gastar CPU en un cero conocido"
+                    ),
+                    "max_coverage": stat.get("max_coverage"),
+                }
+            )
+
     plan = StudyPlan(
         config_path=str(args.config),
         families=tuple(families),
@@ -434,6 +547,8 @@ def build_plan(args: argparse.Namespace) -> tuple[StudyPlan, list[StrategySpec],
         windows=tuple(windows),
         themes_evaluable=tuple(sorted(evaluable)),
         themes_blind=tuple(sorted(blind)),
+        themes_declared_evaluable=tuple(sorted(declared)),
+        themes_measured=measured,
         sources_loaded=tuple(sorted(frames)),
         starting_equity=DEFAULT_STARTING_EQUITY,
         cvar_alpha=DEFAULT_CVAR_ALPHA,
@@ -543,6 +658,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[1])
     parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH))
     parser.add_argument("--configs-per-family", type=int, default=CONFIGS_PER_FAMILY)
+    parser.add_argument(
+        "--families", nargs="+", default=None,
+        help=(
+            "Subconjunto de familias tematicas. Legitimo porque cada familia se compara "
+            "consigo misma: ninguna cifra depende de quien mas corra."
+        ),
+    )
     parser.add_argument("--start", default=DEFAULT_REAL_START)
     parser.add_argument("--end", default=DEFAULT_REAL_END)
     parser.add_argument("--window-days", type=int, default=544)
