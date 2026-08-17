@@ -107,6 +107,7 @@ from ai_trader.scoring.transfer_study import (
     crypto_universe,
 )
 from ai_trader.scoring.weight_study import FAMILIES, STUDY_SEED
+from ai_trader.shared.checkpoint import UnitCheckpoint, fingerprint
 from ai_trader.shared.reports import guard_published_grid
 from ai_trader.shared import bars as bar_schema
 from ai_trader.synthetic.fidelity import CHANNEL_MAX_LAG, channel_facts
@@ -595,32 +596,62 @@ def build_tasks(plan: StudyPlan, config_ids: Sequence[str]) -> list[tuple[str, s
     ]
 
 
-def run_units(plan: StudyPlan, specs: Sequence[StrategySpec], workers: int) -> list[dict]:
+def run_units(
+    plan: StudyPlan,
+    specs: Sequence[StrategySpec],
+    workers: int,
+    checkpoint: UnitCheckpoint | None = None,
+) -> list[dict]:
     payload = {"plan": plan, "specs": list(specs)}
     tasks = build_tasks(plan, [s.id for s in specs])
     total = len(tasks)
+
+    # Lo ya corrido en un intento anterior. Reanudar es exacto y no una aproximacion: cada
+    # unidad es independiente y determinista, y las filas se ordenan al final, asi que el
+    # fichero de unidades sale identico se haya corrido de una vez o en cinco tramos.
+    done = checkpoint.load() if checkpoint is not None else {}
+    pending = [t for t in tasks if tuple(t) not in done]
+
     logger.info(
         "Evaluando %d configuraciones x %d celdas x %d muestras = %d unidades de %d folds "
-        "| workers=%d",
+        "| workers=%d%s",
         len(specs), len(plan.cells), plan.n_samples, total, plan.n_folds, workers,
+        f" | {len(done)} ya corridas, quedan {len(pending)}" if done else "",
     )
+    if not pending:
+        logger.info("No queda ninguna unidad por correr: todo estaba en el punto de guardado")
+        return sorted(
+            done.values(),
+            key=lambda r: (r["cell_id"], r["scenario_id"], r["path_index"], r["config_id"]),
+        )
 
     started = time.time()
-    rows: list[dict] = []
+    rows: list[dict] = list(done.values())
+    fresh = 0
     chunksize = max(1, len(specs) // 2)
     # `imap_unordered` y no `imap`: las filas se ordenan igualmente al final, y con el
     # ordenado el contador solo avanza cuando termina el PREFIJO completo, asi que con
     # siete workers el progreso que se imprime va muy por detras del real y su ETA es
     # falsa por un factor de dos o tres.
+    #
+    # `pending` conserva el orden de `build_tasks` —es una subsecuencia filtrada—, asi que la
+    # localidad que hace que el worker reutilice las barras y el canal emitido para las 16
+    # configuraciones se mantiene al reanudar.
     with mp.Pool(workers, initializer=_init_worker, initargs=(payload,)) as pool:
-        for row in pool.imap_unordered(_run_task, tasks, chunksize=chunksize):
+        for row in pool.imap_unordered(_run_task, pending, chunksize=chunksize):
             rows.append(row)
-            if len(rows) % 16 == 0 or len(rows) == total:
+            fresh += 1
+            if checkpoint is not None:
+                checkpoint.append(
+                    (row["config_id"], row["cell_id"], row["scenario_id"], row["path_index"]),
+                    row,
+                )
+            if fresh % 16 == 0 or fresh == len(pending):
                 elapsed = time.time() - started
                 logger.info(
                     "  %d/%d (%.0f%%) | %.1f min | ETA %.0f min",
                     len(rows), total, 100.0 * len(rows) / total, elapsed / 60.0,
-                    elapsed / len(rows) * (total - len(rows)) / 60.0,
+                    elapsed / fresh * (len(pending) - fresh) / 60.0,
                 )
     logger.info("Unidades corridas en %.1f min", (time.time() - started) / 60.0)
     return sorted(
@@ -1265,6 +1296,10 @@ def main(argv: list[str] | None = None) -> int:
         help="Re-analiza las unidades ya guardadas, sin correr backtests.",
     )
     parser.add_argument("--verify-determinism", action="store_true")
+    parser.add_argument(
+        "--no-resume", action="store_true",
+        help="Ignora el punto de guardado y corre las unidades desde cero.",
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
@@ -1293,12 +1328,26 @@ def main(argv: list[str] | None = None) -> int:
         rows = stored["rows"]
         logger.info("Re-analizando %d unidades de %s", len(rows), units_file)
     else:
-        rows = run_units(plan, specs, args.workers)
+        # El punto de guardado va al lado de las unidades y lleva la huella del plan y de las
+        # configuraciones: reanudar sobre otro plan mezclaria dos estudios en un informe que
+        # dice ser uno, asi que un fichero con otra huella se aparta en vez de reutilizarse.
+        checkpoint = None
+        if not args.no_resume:
+            checkpoint = UnitCheckpoint(
+                units_file.with_name(f"progress_{args.library}.jsonl"),
+                fingerprint(plan.as_dict(), [s.id for s in specs],
+                            [dataclasses.asdict(s) for s in specs]),
+            )
+        rows = run_units(plan, specs, args.workers, checkpoint)
         units_file.write_text(
             json.dumps({"plan": plan.as_dict(), "rows": rows}, indent=1, ensure_ascii=False),
             encoding="utf-8",
         )
         logger.info("Unidades -> %s", units_file)
+        # A partir de aqui el fichero bueno es el de unidades: dejar el punto de guardado solo
+        # invita a reanudar un barrido que ya termino.
+        if checkpoint is not None:
+            checkpoint.discard()
 
     report = build_report(plan, specs, rows, args.transfer_units)
     if args.verify_determinism and not args.analyze_only:

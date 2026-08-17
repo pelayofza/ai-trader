@@ -4,20 +4,22 @@
 
 ## Lo que falta, en orden
 
-### 1. `signal_study` — se perdió el 30% y hay que relanzarlo entero
+### 1. `signal_study` — ya REANUDA, así que una pausa cuesta una unidad
 
 ```powershell
 .venv\Scripts\python.exe -m ai_trader.scoring.signal_study --library ai_v4 `
     --workers 7 --configs-per-family 8 --verify-determinism
 ```
 
-Iba por **768 de 2.560 unidades (30%) tras 271 minutos**, con ETA de ~633 min para lo que
-quedaba. **No hay reanudación parcial**: `run_units` sólo escribe `units_ai_v4.json` cuando
-termina el barrido entero, así que las 4,5 horas corridas no dejaron nada en disco. Si esto se
-va a repetir, lo barato es hacer que escriba las unidades por lotes; sin eso, cualquier
-interrupción cuesta la corrida completa.
+Escribe cada unidad a `data\signal_channel\progress_ai_v4.jsonl` según sale, y al arrancar
+salta las que ya estén: se puede parar cuando haga falta y el mismo comando continúa. Con
+`--no-resume` empieza de cero.
 
-Coste total desde cero: **~15 h de reloj** (medido: 271 min para el 30%).
+Reanudar es **exacto y no una aproximación**: cada unidad es independiente y determinista, y
+las filas se ordenan al final. Comprobado por el camino real de `run_units` sobre un plan de 8
+unidades — de un tirón contra correr 4, pausar y reanudar: **idénticas fila a fila**.
+
+Coste total desde cero: **~15 h de reloj** (medido: 271 min para el 30% en el intento anterior).
 
 ### 2. `theme_study` para `vol_term_structure` — 40 unidades, ~1,6 h
 
