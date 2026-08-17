@@ -36,6 +36,11 @@ data/signals_raw/
 # un conflicto de merge permanente. Pero SÍ es un activo del proyecto y no se puede
 # regenerar -- ver "Operación continua" en el README para la copia de seguridad.
 data/live/
+# Puntos de guardado de los barridos largos (data/*/progress_*.jsonl). Es estado TRANSITORIO:
+# el estudio lo borra al publicar sus unidades, y mientras existe solo sirve para reanudar en
+# esta máquina. Lo que se versiona es el fichero de unidades, que es el resultado.
+data/*/progress_*.jsonl
+data/*/progress_*.jsonl.stale
 
 # VS Code
 .vscode/
