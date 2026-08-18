@@ -1,0 +1,401 @@
+{
+ "plan": {
+  "config_path": "config\\default.toml",
+  "grid": {
+   "families": [
+    "vol_term_structure"
+   ],
+   "configs_per_family": 4,
+   "n_configs": 4
+  },
+  "families_skipped": [],
+  "symbols": [
+   "AAVE/USDT",
+   "ADA/USDT",
+   "APT/USDT",
+   "ARB/USDT",
+   "ATOM/USDT",
+   "AVAX/USDT",
+   "BNB/USDT",
+   "BTC/USDT",
+   "DOGE/USDT",
+   "DOT/USDT",
+   "ETC/USDT",
+   "ETH/USDT",
+   "FIL/USDT",
+   "INJ/USDT",
+   "LINK/USDT",
+   "LTC/USDT",
+   "NEAR/USDT",
+   "OP/USDT",
+   "SEI/USDT",
+   "SOL/USDT",
+   "SUI/USDT",
+   "TIA/USDT",
+   "UNI/USDT",
+   "XRP/USDT"
+  ],
+  "windows": [
+   {
+    "label": "w1",
+    "start": "2018-07-21",
+    "end": "2020-01-15",
+    "days": 544,
+    "symbols": [
+     "ADA/USDT",
+     "BNB/USDT",
+     "BTC/USDT",
+     "ETC/USDT",
+     "ETH/USDT",
+     "LINK/USDT",
+     "LTC/USDT",
+     "XRP/USDT"
+    ],
+    "symbols_dropped": [
+     {
+      "symbol": "AAVE/USDT",
+      "reason": "0 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     },
+     {
+      "symbol": "APT/USDT",
+      "reason": "0 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     },
+     {
+      "symbol": "ARB/USDT",
+      "reason": "0 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     },
+     {
+      "symbol": "ATOM/USDT",
+      "reason": "262 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     },
+     {
+      "symbol": "AVAX/USDT",
+      "reason": "0 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     },
+     {
+      "symbol": "DOGE/USDT",
+      "reason": "195 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     },
+     {
+      "symbol": "DOT/USDT",
+      "reason": "0 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     },
+     {
+      "symbol": "FIL/USDT",
+      "reason": "0 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     },
+     {
+      "symbol": "INJ/USDT",
+      "reason": "0 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     },
+     {
+      "symbol": "NEAR/USDT",
+      "reason": "0 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     },
+     {
+      "symbol": "OP/USDT",
+      "reason": "0 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     },
+     {
+      "symbol": "SEI/USDT",
+      "reason": "0 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     },
+     {
+      "symbol": "SOL/USDT",
+      "reason": "0 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     },
+     {
+      "symbol": "SUI/USDT",
+      "reason": "0 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     },
+     {
+      "symbol": "TIA/USDT",
+      "reason": "0 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     },
+     {
+      "symbol": "UNI/USDT",
+      "reason": "0 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     }
+    ]
+   },
+   {
+    "label": "w2",
+    "start": "2020-01-16",
+    "end": "2021-07-12",
+    "days": 544,
+    "symbols": [
+     "AAVE/USDT",
+     "ADA/USDT",
+     "ATOM/USDT",
+     "AVAX/USDT",
+     "BNB/USDT",
+     "BTC/USDT",
+     "DOGE/USDT",
+     "DOT/USDT",
+     "ETC/USDT",
+     "ETH/USDT",
+     "FIL/USDT",
+     "LINK/USDT",
+     "LTC/USDT",
+     "NEAR/USDT",
+     "SOL/USDT",
+     "UNI/USDT",
+     "XRP/USDT"
+    ],
+    "symbols_dropped": [
+     {
+      "symbol": "APT/USDT",
+      "reason": "0 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     },
+     {
+      "symbol": "ARB/USDT",
+      "reason": "0 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     },
+     {
+      "symbol": "INJ/USDT",
+      "reason": "265 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     },
+     {
+      "symbol": "OP/USDT",
+      "reason": "0 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     },
+     {
+      "symbol": "SEI/USDT",
+      "reason": "0 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     },
+     {
+      "symbol": "SUI/USDT",
+      "reason": "0 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     },
+     {
+      "symbol": "TIA/USDT",
+      "reason": "0 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     }
+    ]
+   },
+   {
+    "label": "w3",
+    "start": "2021-07-13",
+    "end": "2023-01-07",
+    "days": 544,
+    "symbols": [
+     "AAVE/USDT",
+     "ADA/USDT",
+     "ATOM/USDT",
+     "AVAX/USDT",
+     "BNB/USDT",
+     "BTC/USDT",
+     "DOGE/USDT",
+     "DOT/USDT",
+     "ETC/USDT",
+     "ETH/USDT",
+     "FIL/USDT",
+     "INJ/USDT",
+     "LINK/USDT",
+     "LTC/USDT",
+     "NEAR/USDT",
+     "SOL/USDT",
+     "UNI/USDT",
+     "XRP/USDT"
+    ],
+    "symbols_dropped": [
+     {
+      "symbol": "APT/USDT",
+      "reason": "81 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     },
+     {
+      "symbol": "ARB/USDT",
+      "reason": "0 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     },
+     {
+      "symbol": "OP/USDT",
+      "reason": "221 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     },
+     {
+      "symbol": "SEI/USDT",
+      "reason": "0 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     },
+     {
+      "symbol": "SUI/USDT",
+      "reason": "0 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     },
+     {
+      "symbol": "TIA/USDT",
+      "reason": "0 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     }
+    ]
+   },
+   {
+    "label": "w4",
+    "start": "2023-01-08",
+    "end": "2024-07-04",
+    "days": 544,
+    "symbols": [
+     "AAVE/USDT",
+     "ADA/USDT",
+     "APT/USDT",
+     "ARB/USDT",
+     "ATOM/USDT",
+     "AVAX/USDT",
+     "BNB/USDT",
+     "BTC/USDT",
+     "DOGE/USDT",
+     "DOT/USDT",
+     "ETC/USDT",
+     "ETH/USDT",
+     "FIL/USDT",
+     "INJ/USDT",
+     "LINK/USDT",
+     "LTC/USDT",
+     "NEAR/USDT",
+     "OP/USDT",
+     "SEI/USDT",
+     "SOL/USDT",
+     "SUI/USDT",
+     "UNI/USDT",
+     "XRP/USDT"
+    ],
+    "symbols_dropped": [
+     {
+      "symbol": "TIA/USDT",
+      "reason": "248 barras < 270 exigidas (calentamiento + un grupo de CPCV)"
+     }
+    ]
+   },
+   {
+    "label": "w5",
+    "start": "2024-07-05",
+    "end": "2025-12-30",
+    "days": 544,
+    "symbols": [
+     "AAVE/USDT",
+     "ADA/USDT",
+     "APT/USDT",
+     "ARB/USDT",
+     "ATOM/USDT",
+     "AVAX/USDT",
+     "BNB/USDT",
+     "BTC/USDT",
+     "DOGE/USDT",
+     "DOT/USDT",
+     "ETC/USDT",
+     "ETH/USDT",
+     "FIL/USDT",
+     "INJ/USDT",
+     "LINK/USDT",
+     "LTC/USDT",
+     "NEAR/USDT",
+     "OP/USDT",
+     "SEI/USDT",
+     "SOL/USDT",
+     "SUI/USDT",
+     "TIA/USDT",
+     "UNI/USDT",
+     "XRP/USDT"
+    ],
+    "symbols_dropped": []
+   }
+  ],
+  "themes": {
+   "evaluable": [
+    "attention",
+    "flow",
+    "macro",
+    "vol_surface"
+   ],
+   "blind": [
+    "liquidation"
+   ],
+   "declared_evaluable": [
+    "attention",
+    "flow",
+    "macro"
+   ],
+   "measured": {
+    "attention": {
+     "max_coverage": 0.2857,
+     "readable_share": 0.1927,
+     "threshold": 0.25
+    },
+    "flow": {
+     "max_coverage": 0.5833,
+     "readable_share": 0.9115,
+     "threshold": 0.25
+    },
+    "liquidation": {
+     "max_coverage": 0.1667,
+     "readable_share": 0.0,
+     "threshold": 0.25
+    },
+    "macro": {
+     "max_coverage": 0.8333,
+     "readable_share": 1.0,
+     "threshold": 0.25
+    },
+    "vol_surface": {
+     "max_coverage": 0.3333,
+     "readable_share": 0.0417,
+     "threshold": 0.25
+    }
+   },
+   "disagreement": [
+    "vol_surface"
+   ]
+  },
+  "sources_loaded": [
+   "btc_difficulty",
+   "cex_listings",
+   "cftc_cot",
+   "courtlistener_dockets",
+   "defillama_fees",
+   "defillama_hacks",
+   "defillama_stablecoins",
+   "defillama_volumes",
+   "deribit_expiries",
+   "deribit_volatility",
+   "etf_flows",
+   "federal_register",
+   "funding_dispersion",
+   "github_activity",
+   "hyperliquid_leverage",
+   "hyperliquid_liqmap",
+   "macro_calendar",
+   "ofac_sdn",
+   "p2p_premium",
+   "sec_edgar_fts",
+   "wikipedia_pageviews"
+  ],
+  "arms": {
+   "ciega": "capa de senal en sus valores inertes",
+   "armada": "umbral de puerta inyectado desde fuera del espacio de busqueda"
+  },
+  "min_paired_windows": 12,
+  "starting_equity": 10000.0,
+  "cvar_alpha": 0.25
+ },
+ "families": [
+  {
+   "family": "vol_term_structure",
+   "gate_param": "min_signal_tone",
+   "n_pairs": 20,
+   "n_windows_where_the_layer_moved": 0,
+   "blind_mean": 0.1232,
+   "armed_mean": 0.1232,
+   "paired_difference": {
+    "mean": 0.0,
+    "lo": 0.0,
+    "hi": 0.0,
+    "n": 20
+   },
+   "verdict": "sin_potencia"
+  }
+ ],
+ "n_failed_units": 0,
+ "caveats": [
+  "La diferencia es PAREADA: misma configuracion, misma ventana, mismas barras. Lo unico que cambia entre las dos piernas es el umbral de la puerta y si el archivo de senales llega al motor.",
+  "Los umbrales no se optimizan: se inyectan desde fuera del espacio de busqueda con el valor declarado de su eje, igual que en el barrido de rho.",
+  "Las familias cuyo tema NUNCA alcanza cobertura no se evaluan, y se declaran en `plan.families_skipped` con su cobertura maxima medida en vez de desaparecer de la tabla. El criterio es la cobertura MEDIDA sobre el archivo, no el flag `backtestable` del catalogo: `plan.themes.disagreement` lista donde difieren.",
+  "Por debajo de 12 ventanas en las que la capa cambie algo, el veredicto es 'sin_potencia': no se publica una diferencia que el ruido explica."
+ ],
+ "generated_at": "2026-08-18T21:51:12.503193+00:00"
+}
