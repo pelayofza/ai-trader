@@ -44,6 +44,7 @@ from ai_trader.scoring.transfer_study import (
     transfer_report_path,
 )
 from ai_trader.scoring.validation_study import VALIDATION_REPORT, load_validation_report
+from ai_trader.shared.reports import load_report
 from ai_trader.scoring.weight_calibration import (
     CALIBRATION_REPORT,
     grid_point,
@@ -803,8 +804,160 @@ def collect() -> dict:
     # plantilla, en dos sitios que se desincronizan a la primera.
     facts["themed"] = _themed_families()
     facts["transfer_extended"] = _transfer_extended()
+    facts["themes_real"] = _themes_real()
+    facts["extended_grid"] = _extended_grid()
 
     return facts
+
+
+THEMES_REPORT = Path("data") / "themes" / "report.json"
+THEMES_EXTRA = (Path("data") / "themes" / "report_vol_term_structure.json",)
+
+
+def _merge_skipped(loaded, measured_families: set, coverage: dict) -> list[dict]:
+    """Las familias declaradas NO evaluables, de todos los informes y con su numero.
+
+    Se acumulan de todos y no se toman del mas nuevo porque un informe de una sola familia no
+    declara omitidas —no evaluo a las demas—, y quedarse con su lista vacia borraria la unica
+    exclusion real del estudio. Y se enriquecen con la cobertura MEDIDA porque el informe mas
+    antiguo se genero antes de que se midiera: declaraba la exclusion con una frase derivada del
+    catalogo, sin cifra que comprobar.
+    """
+    out: dict[str, dict] = {}
+    for _, rep in loaded:
+        for skip in rep["plan"]["families_skipped"]:
+            if skip["family"] in measured_families:
+                continue  # se acabo midiendo en otra corrida: ya no es una exclusion
+            entry = dict(skip)
+            stat = coverage.get(entry.get("theme", ""))
+            if stat and entry.get("max_coverage") is None:
+                entry["max_coverage"] = stat["max_coverage"]
+                entry["readable_share"] = stat["readable_share"]
+                entry["reason"] = (
+                    f"el tema '{entry['theme']}' NUNCA alcanza {stat['threshold']:.2f} de "
+                    f"cobertura en el archivo: su maximo medido es "
+                    f"{stat['max_coverage']:.3f} y es legible en el "
+                    f"{100 * stat['readable_share']:.1f}% de las sondas"
+                )
+            # Gana la entrada CON numero: la que trae medicion describe mejor el mismo hueco.
+            if entry["family"] not in out or entry.get("max_coverage") is not None:
+                out[entry["family"]] = entry
+    return list(out.values())
+
+
+def _themes_real() -> dict | None:
+    """
+    La capa tematica medida contra ARCHIVO REAL, que es la unica evidencia del sistema donde
+    la senal se enciende sobre mercado y no sobre un canal sintetico.
+
+    Se funden varios informes porque `vol_term_structure` se admitio despues —cuando la
+    cobertura medida contradijo al catalogo— y se corrio aparte. Fundir en vez de repetir las
+    160 unidades ya medidas es correcto porque cada veredicto es INTERNO a su familia: la
+    comparacion es ciega-contra-armada dentro de la misma configuracion, asi que ninguna cifra
+    depende de que otras familias corran.
+
+    Los metadatos del tema se toman del informe mas nuevo que traiga cobertura MEDIDA. El
+    primero se genero antes de que la evaluabilidad se midiera y declara sus exclusiones con un
+    motivo derivado del catalogo que, para `vol_surface`, resulto ser falso.
+    """
+    loaded = []
+    for path in (THEMES_REPORT, *THEMES_EXTRA):
+        rep = load_report(ROOT / path)
+        if rep:
+            loaded.append((path, rep))
+    if not loaded:
+        return None
+
+    families, seen = [], set()
+    for _, rep in loaded:
+        for fam in rep["families"]:
+            if fam["family"] not in seen:
+                families.append(fam)
+                seen.add(fam["family"])
+
+    measured = [(path, rep) for path, rep in loaded if rep["plan"]["themes"].get("measured")]
+    meta_path, meta = (measured or loaded)[-1]
+    plan = meta["plan"]
+    return {
+        "families": families,
+        "families_skipped": _merge_skipped(
+            loaded, seen, plan["themes"].get("measured") or {}
+        ),
+        "n_helps": sum(1 for f in families if f["verdict"] == "la_capa_ayuda"),
+        "n_moved": sum(1 for f in families if f["n_windows_where_the_layer_moved"] > 0),
+        "themes": plan["themes"],
+        "windows": plan["windows"],
+        "n_symbols": len(plan["symbols"]),
+        "min_paired_windows": plan["min_paired_windows"],
+        "n_failed_units": sum(rep["n_failed_units"] for _, rep in loaded),
+        "metadata_from": str(meta_path).replace("\\", "/"),
+        "coverage_is_measured": bool(plan["themes"].get("measured")),
+    }
+
+
+def _extended_grid() -> dict | None:
+    """Los tres estudios que se re-corrieron sobre la rejilla de OCHO familias.
+
+    Van juntos porque cuentan una sola cosa: que cambia al pasar de 16 candidatos a 64. Cada
+    uno se lee de su informe y ninguno sustituye al congelado, que sigue publicandose al lado.
+    """
+    signal = load_signal_report(ROOT / signal_report_path("ai_v4"))
+    frozen_signal = load_signal_report(ROOT / signal_report_path(SIGNAL_LIBRARY))
+    validation = load_validation_report(ROOT / VALIDATION_REPORT.with_name("report_ai_v4.json"))
+    frozen_validation = load_validation_report(ROOT / VALIDATION_REPORT)
+    calib = load_calibration_report(ROOT / CALIBRATION_REPORT.with_name("report_ai_v4.json"))
+    frozen_calib = load_calibration_report(ROOT / CALIBRATION_REPORT)
+    if not (signal and validation and calib):
+        return None
+
+    def best(report):
+        pts = report["active_subset"]["points"]
+        top = max(pts, key=lambda x: x["rank_ic_mean"])
+        base = next(x for x in pts
+                    if x["lambda_turnover"] == 0.0 and x["kappa_maxdd"] == 0.0)
+        return top, base
+
+    top, base = best(calib)
+    ftop, fbase = best(frozen_calib) if frozen_calib else (None, None)
+
+    return {
+        "signal": {
+            "verdict": signal["break_even"]["verdict"],
+            "margins": signal["break_even"]["by_lead"][0]["margins"],
+            "identical_to_frozen": (
+                frozen_signal is not None
+                and json.dumps(signal["break_even"], sort_keys=True)
+                == json.dumps(frozen_signal["break_even"], sort_keys=True)
+            ),
+            "n_configs": len(signal["configs"]),
+            "gate_cost": signal["gate_cost"]["delta_validation"],
+            "reproduction": signal["reproduction"]["identical"],
+            "determinism": len(signal["determinism"]["mismatches"]) == 0,
+        },
+        "validation": {
+            "n_configs": len(validation["plan"]["config_ids"]),
+            "vs_tail": validation["optimism"]["vs_tail"]["median"],
+            "frozen_vs_tail": (frozen_validation or {}).get("optimism", {})
+                .get("vs_tail", {}).get("median"),
+            "flips": validation["decision_flips"],
+            "frozen_flips": (frozen_validation or {}).get("decision_flips"),
+            "leakage_clean": validation["leakage"]["clean"],
+            "folds_audited": validation["leakage"]["folds_audited"],
+        },
+        "weights": {
+            "n_active": len(calib["active_subset"]["configs"]),
+            "n_configs": len(calib["configs"]["kept"]),
+            "best": (top["lambda_turnover"], top["kappa_maxdd"]),
+            "best_ic": top["rank_ic_mean"],
+            "base_ic": base["rank_ic_mean"],
+            "gain": top["rank_ic_gain"],
+            "gain_se": top["rank_ic_gain_se"],
+            "frozen_best": (ftop["lambda_turnover"], ftop["kappa_maxdd"]) if ftop else None,
+            "implied_lambda": calib["cost_audit_active"]["implied_lambda_median"],
+            "frozen_implied_lambda": (frozen_calib or {}).get("cost_audit_active", {})
+                .get("implied_lambda_median"),
+        },
+    }
 
 
 def _transfer_extended() -> dict | None:

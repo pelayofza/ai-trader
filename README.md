@@ -445,28 +445,71 @@ El **suelo de actividad se corrobora solo**: re-derivado sobre las 64 configurac
 que dos rejillas distintas eligen el mismo número. La elección del ganador sí cambia con el
 suelo (`flow_persistence#00` → `event_calendar_drift#02`), que es para lo que el suelo está.
 
-#### La limitación, con fechas
+#### La limitación, medida — y más pequeña de lo que se anunció
 
-De los cinco temas, solo **macro** (3 fuentes con historia medida), **attention** (2) y **flow**
-(8) alcanzan cobertura en un backtest histórico. **liquidation** (1 de 4) y **vol_surface** (1 de
-2) no: sus fuentes empezaron a existir el día que arrancó la captura —Hyperliquid el 2026-08-13,
-los vencimientos de Deribit el 2026-08-14—, y la captura pide 30 días de ventana pero **no compra
-ni un día de pasado**. Esas dos primitivas se miden como núcleo de precio ciego en todo el
-histórico, y su puesto en la tabla es la cota de la versión que no sabe nada.
+Esta sección decía que la capa de señal no se podía evaluar hacia atrás en dos de las seis
+familias, y repartía los temas usando el flag `backtestable` del catálogo. **Al medirlo, ese
+reparto falla en los dos sentidos**, y la limitación real es más pequeña y más precisa.
 
-Criterio para repetir, declarado ahora y no cuando haya cifras que mirar. Manda el segundo:
+La evaluabilidad ahora **se mide** sondeando el radar sobre el archivo (`measured_themes`), no se
+deriva del catálogo:
 
-1. El catálogo exige **365 días medidos** antes de declarar `history_from`: Hyperliquid el
-   **2027-08-13**, Deribit el 2027-08-14.
-2. El estudio de transferencia trocea en sub-ventanas de **544 días** y cada estrategia necesita
-   **180 de calentamiento**: son **724 días de señal capturada** para correr UNA sub-ventana con
-   vista. Primera fecha posible: **2028-08-06**. Las cinco sub-ventanas de la geometría publicada
-   pedirían ~2.900 días, ocho años — esas cifras **no se van a poder reproducir con vista**.
+| tema | cobertura máx. | sondas legibles | medido | declaraba el catálogo |
+|---|---|---|---|---|
+| `macro` | 0,833 | 100,0 % | evaluable | evaluable |
+| `flow` | 0,583 | 91,1 % | evaluable | evaluable |
+| `vol_surface` | 0,333 | 4,2 % | **evaluable** | ciego ← **no coinciden** |
+| `attention` | 0,286 | 19,3 % | evaluable | evaluable |
+| `liquidation` | 0,167 | 0,0 % | ciego | ciego |
 
-Así que la repetición no será la misma medición con mejores datos: será un estudio más corto y con
-menos bloques, y lo que se leerá de él no es el ranking sino **una comparación pareada** —la misma
-familia, sobre la misma ventana, con la puerta abierta y cerrada—. Para los otros tres temas esa
-comparación **ya se puede hacer hoy**.
+`vol_surface` **se lee**: `deribit_volatility` publica desde **2021-03-24** y el tema supera el
+0,25 que exige la puerta. El catálogo lo daba por no backtestable solo porque su profundidad
+*medida* aún no llega a los 365 días de `depth.MIN_MEASURED_DAYS`. La frase «sus fuentes
+empezaron a existir el día que arrancó la captura» era cierta para `liquidation` y **falsa** para
+`vol_surface`. En sentido contrario, `cex_listings` es backtestable y está en `attention`, pero es
+un calendario de listados y BTC no se lista: sobre ese símbolo no aporta lectura.
+
+**El único tema que de verdad no llega es `liquidation`** (0,167 máximo, legible el 0,0 % de las
+sondas). Su familia es la única declarada no evaluable, y ahora con ese número al lado.
+
+#### Lo que se midió al final
+
+La comparación pareada que esta sección prometía para «cuando haya datos» **ya está medida** sobre
+cinco de las seis familias (`theme_study`, informe en `data/themes/`). Misma familia, misma
+ventana, mismas barras; lo único que cambia es el umbral de la puerta y si el archivo llega al
+motor:
+
+| familia | ciego → armado | intervalo por bloques | movió en | veredicto |
+|---|---|---|---|---|
+| `signal_composite` | 0,319 → **0,630** | [+0,126, +0,505] | 20/20 | **la capa ayuda** |
+| `flow_persistence` | −0,057 → **+0,090** | [+0,013, +0,292] | 14/20 | **la capa ayuda** |
+| `event_calendar_drift` | 0,160 → 0,096 | [−0,420, +0,303] | 20/20 | indistinguible |
+| `attention_ignition` | −0,014 → −0,014 | [0, 0] | 0/20 | sin potencia |
+| `vol_term_structure` | 0,123 → 0,123 | [0, 0] | 0/20 | sin potencia |
+| `liquidation_cascade` | — | — | — | no evaluable |
+
+Es la primera evidencia del proyecto en la que una señal externa mueve una decisión sobre mercado
+real, y hay que leerla con cuatro reservas que no son menores: **no hay corrección por
+comparaciones múltiples** —el intervalo de `flow_persistence` empieza en +0,013 y no sobreviviría
+a una—; los 20 pares son 4 configuraciones × 5 ventanas y las de una misma familia están
+correlacionadas, así que el **N efectivo es menor que 20** y el intervalo por bloques es
+**optimista**; el compuesto, ciego, es un seguidor de tendencia corriente, de modo que *que su
+capa ayude* es casi su definición y lo medido es la magnitud, no la dirección; y las cinco
+ventanas no comparten universo (de 8 símbolos en la más antigua a 24 en la última).
+
+**Lo que queda abierto es distinto de lo que se anunciaba: medir no es tener potencia.** Dos
+familias salieron `sin_potencia` porque la puerta no llegó a atar en ninguna pareja — no porque
+el tema fuera ciego, sino por la intersección de tres cosas raras: que el tema sea legible ese día
+(`attention` lo es el 19,3 % de las sondas, `vol_surface` el 4,2 %), que el núcleo quiera entrar, y
+que el tono cruce el umbral. Eso no lo arregla que una fuente cumpla 365 días: lo arregla **más
+archivo**.
+
+Criterio para repetirlo, que no cambia. El estudio de transferencia trocea en sub-ventanas de
+**544 días** y cada estrategia necesita **180 de calentamiento**: son **724 días de señal
+capturada** para correr UNA sub-ventana con vista. Primera fecha posible para Hyperliquid:
+**2028-08-06**. Las cinco sub-ventanas de la geometría publicada pedirían ~2.900 días, ocho años —
+esas cifras **no se van a poder reproducir con vista**, y decir lo contrario sería prometer un
+calendario que no depende de nadie.
 
 ### El break-even del IC: desde qué capacidad predictiva paga una señal
 
@@ -569,6 +612,56 @@ real el de verificación, nunca el mismo dato haciendo las dos cosas); con `info
 es **un** canal, así que la *breadth* del grupo de correlación queda declarada y sin medir; y se
 barre una sola geometría de adelanto (h = 1), que es la más favorable a la señal. Evidencia completa
 en `data/signal_channel/` y documentación en §4.12.
+
+#### Y con ocho familias: nada se mueve
+
+El barrido se repitió sobre las **64 configuraciones** de las ocho familias (2.560 unidades,
+16,4 h). El bloque de break-even sale **idéntico campo a campo** al de arriba: mismo veredicto,
+mismos márgenes, misma puerta costando 1,025 puntos. Las 48 candidatas nuevas están en el desglose
+por configuración y **no mueven ni un margen**.
+
+Y no es que no compitieran, que fue lo primero que sospeché y es falso: ninguna fue descartada, y
+las temáticas **operan más** que las publicadas — `event_calendar_drift` abre ~108 operaciones por
+ventana frente a las 48 de momentum y las 7 de reversión. Compitieron en igualdad y **ninguna gana
+una sola celda**.
+
+Lo único que responde a la señal es el compuesto: `signal_composite#06` no aparece en el top-10 de
+la celda ciega y sube al **puesto 2** en la celda de ρ = 0,20 (0,323 con 73,5 operaciones por
+ventana). Su posición se mueve con la fuerza de la señal, que es lo que su diseño predice — y aun
+así no basta. De hecho **ninguna de las 64 bate al baseline en ninguna celda**, y en la celda ciega
+los puestos 2 a 5 los ocupan configuraciones con **0,00 operaciones por ventana**: un cero por no
+operar le gana a cualquiera que opere y pierda, que es exactamente para lo que existe el suelo de
+actividad.
+
+Comprobaciones: determinismo limpio, control ρ = 0 limpio, baselines idénticos entre celdas, y la
+celda ciega reproduce **una a una** las 512 unidades que el estudio de transferencia calculó días
+antes. Esa última importa por un motivo extra: esta corrida se **pausó a mitad y se reanudó** desde
+su punto de guardado, así que la reproducción exacta de evidencia previa e independiente es la
+validación más fuerte del mecanismo de pausa.
+
+#### Los otros dos estudios sobre la misma rejilla
+
+**Validación temporal** (16 configuraciones, 2.560 folds auditados sin fuga). El optimismo del
+corte único frente a la **cola** sale **+1,327**, contra el +1,355 publicado con cuatro
+configuraciones: que no se mueva al cuadruplicar la rejilla es la corroboración más fuerte que ese
+estudio podía dar. Lo que sí crece es la arbitrariedad de la elección: el ganador del corte único
+deja de serlo en **6 de 8** escenarios con walk-forward (antes 4) y en **7 de 8** con CPCV
+(antes 5). Comprobado que no son empates: hay 20 filas de 128 con todos los folds a cero, y
+excluyéndolas los vuelcos salen **idénticos** y el hueco contra la cola sube a **+1,72**.
+
+**Pesos del headline** (64 configuraciones, 34 activas, 11,3 h). Aquí **se cae una conclusión
+publicada**. Sobre el subconjunto activo el mejor punto es **λ = 4, κ = 4** con rank IC **0,194**
+frente a 0,146 sin penalizar: ganancia **+0,0475 ± 0,0189**. Lo publicado con dos familias decía
+que penalizar *no estabiliza*, y allí todas las penalizaciones empeoraban el rank IC.
+
+Tres reservas, y la primera es seria: el óptimo cae en la **esquina** de la rejilla probada, así que
+no está acotado — lo medido es «más penalización es mejor que menos dentro de lo probado», no que el
+óptimo sea 4. Segunda: penalizar **cambia la elección** hacia un candidato con Sharpe de validación
+*menor* (1,49 frente a 1,72), o sea que los pesos que más estabilizan el orden no eligen mejor.
+Tercera: **no se adopta**; mover λ cambiaría retroactivamente quién es rankeable en informes ya
+publicados. Una coherencia que antes no existía: el λ implícito de los costes es **5,96** sobre las
+activas, casi el mismo 6,27 publicado — con dos familias el óptimo empírico era 0 y el implícito
+6,3, y se contradecían; con ocho, el empírico se acerca al que los costes ya imponen.
 
 ### Dentro de la barra diaria: sesiones y la ventana ciega
 

@@ -1478,6 +1478,176 @@ def _families_phrase(families) -> str:
     return f"las {len(names)} familias ({', '.join(_family_label(n) for n in names)})"
 
 
+VERDICT_LABEL = {
+    "la_capa_ayuda": "la capa ayuda",
+    "la_capa_resta": "la capa resta",
+    "indistinguible": "indistinguible",
+    "sin_potencia": "sin potencia",
+}
+
+
+def _themes_real_block(t) -> str:
+    """Seccion 4.16: la capa de senal encendida sobre ARCHIVO REAL, comparacion pareada."""
+    if not t:
+        return ('<h3>4.16 · La capa temática contra señal real</h3>\n'
+                '<p class="muted">Sin informe publicado. Se genera con '
+                '<span class="mono">python -m ai_trader.scoring.theme_study --offline</span>.</p>')
+
+    filas = []
+    for fam in t["families"]:
+        d = fam["paired_difference"]
+        banda = ("sin muestra" if d["lo"] is None
+                 else f"[{_n(d['lo'], 3)}, {_n(d['hi'], 3)}]")
+        filas.append(
+            f"<tr><td class=\"mono\">{fam['family']}</td>"
+            f"<td class=\"mono\">{fam.get('gate_param', '—')}</td>"
+            f"<td class=\"n\">{_n(fam['blind_mean'], 3)}</td>"
+            f"<td class=\"n\">{_n(fam['armed_mean'], 3)}</td>"
+            f"<td class=\"n mono\">{banda}</td>"
+            f"<td class=\"n\">{fam['n_windows_where_the_layer_moved']}/{fam['n_pairs']}</td>"
+            f"<td><b>{VERDICT_LABEL.get(fam['verdict'], fam['verdict'])}</b></td></tr>"
+        )
+    for skip in t["families_skipped"]:
+        filas.append(
+            f"<tr><td class=\"mono\">{skip['family']}</td>"
+            f"<td colspan=\"5\">{skip['reason']}</td>"
+            f"<td><b>no evaluable</b></td></tr>"
+        )
+
+    cob = []
+    for name, m in sorted((t["themes"].get("measured") or {}).items()):
+        ev = name in (t["themes"].get("evaluable") or [])
+        de = name in (t["themes"].get("declared_evaluable") or [])
+        dis = name in (t["themes"].get("disagreement") or [])
+        cob.append(
+            f"<tr><td class=\"mono\">{name}</td>"
+            f"<td class=\"n\">{_n(m['max_coverage'], 3)}</td>"
+            f"<td class=\"n\">{_n(100 * m['readable_share'], 1)}%</td>"
+            f"<td>{'evaluable' if ev else 'ciego'}</td>"
+            f"<td>{'evaluable' if de else 'ciego'}"
+            f"{' <b>← no coinciden</b>' if dis else ''}</td></tr>"
+        )
+
+    ventanas = "".join(
+        f"<tr><td class=\"mono\">{w['label']}</td><td>{w['start']}</td><td>{w['end']}</td>"
+        f"<td class=\"n\">{len(w.get('symbols', []))}</td></tr>"
+        for w in t["windows"]
+    )
+
+    return f"""
+<h3>4.16 · La capa temática contra señal real</h3>
+<p>Todo lo demás que este documento mide sobre señales lo mide en un canal <b>sintético</b>, donde la
+capacidad predictiva se fija por construcción. Este estudio no: enciende la capa temática sobre el
+<b>archivo real capturado</b> y compara cada familia <b>consigo misma</b>. La diferencia es pareada
+—misma configuración, misma ventana, mismas barras— y lo único que cambia entre las dos piernas es el
+umbral de la puerta y si el archivo llega al motor. Por eso mide la capa y no la elección de estrategia.
+{t['n_failed_units']} unidades fallidas.</p>
+<table><thead><tr><th>familia</th><th>puerta</th><th class="n">ciego</th><th class="n">armado</th>
+<th class="n">intervalo por bloques</th><th class="n">movió en</th><th>veredicto</th></tr></thead>
+<tbody>{''.join(filas)}</tbody></table>
+<p class="muted">«Movió en» cuenta las parejas en las que armar la puerta cambió algo. Por debajo de
+{t['min_paired_windows']} el veredicto es <b>sin potencia</b>: no se publica una diferencia que el
+ruido explica, exactamente como en el estudio de divergencia.</p>
+
+<div class="why"><b>Las cuatro reservas van aquí, no en una nota al pie.</b> Se contrastan
+{len(t['families'])} familias y <b>no hay corrección por comparaciones múltiples</b>: el intervalo de
+<span class="mono">flow_persistence</span> empieza en +0,013 y no sobreviviría a una. Los pares son
+4 configuraciones × 5 ventanas y las configuraciones de una misma familia están correlacionadas, así que
+el <b>N efectivo es menor que 20</b> y el intervalo por bloques resulta <b>optimista</b>. El compuesto,
+ciego, es un seguidor de tendencia corriente —su núcleo de precio es deliberadamente mínimo—, de modo
+que <i>que su capa ayude</i> es casi su definición: lo medido es la magnitud, no la dirección. Y las
+cinco ventanas no comparten universo, de 8 símbolos en la más antigua a {t['n_symbols']} en la última,
+así que las parejas no pesan igual.</div>
+
+<h4>Qué temas se pueden leer hacia atrás, medido y no declarado</h4>
+<p>La evaluabilidad se <b>mide sondeando el radar sobre el archivo</b> en vez de derivarse del flag
+<span class="mono">backtestable</span> del catálogo. No es una distinción teórica: el catálogo se
+equivoca en los dos sentidos, y las dos veces con consecuencias.</p>
+<table><thead><tr><th>tema</th><th class="n">cobertura máxima</th><th class="n">sondas legibles</th>
+<th>medido</th><th>declarado</th></tr></thead><tbody>{''.join(cob)}</tbody></table>
+<div class="note"><b>El desacuerdo es el dato.</b> <span class="mono">vol_surface</span> figura como
+ciego en el catálogo y <b>se lee</b>: <span class="mono">deribit_volatility</span> publica desde
+<b>2021-03-24</b> y el tema alcanza 0,333 de cobertura, por encima del 0,25 que exige la puerta. El
+catálogo lo da por no backtestable solo porque su profundidad <i>medida</i> aún no llega a los 365 días
+que exige <span class="mono">depth.MIN_MEASURED_DAYS</span>. En sentido contrario,
+<span class="mono">cex_listings</span> es backtestable y pertenece a <span class="mono">attention</span>,
+pero es un calendario de listados y BTC no se lista: sobre ese símbolo no produce lectura. Publicar la
+derivación del catálogo como si fuera una medición es lo que llevó a excluir una familia con un motivo
+que resultó falso.</div>
+
+<h4>Las ventanas y su universo</h4>
+<p>El universo de cada sub-ventana se resuelve <b>una vez</b> antes de repartir el trabajo, con el mismo
+criterio de histórico que §4.11, y viaja declarado dentro de la tarea. Que en la ventana más antigua
+falten los pares jóvenes es correcto; lo que no valdría es que lo decidiera la disponibilidad del
+proveedor dentro de cada proceso, porque entonces las dos piernas de una comparación pareada podrían
+correr sobre universos distintos sin que nada avisara.</p>
+<table><thead><tr><th>ventana</th><th>desde</th><th>hasta</th><th class="n">símbolos</th></tr></thead>
+<tbody>{ventanas}</tbody></table>
+"""
+
+
+def _extended_grid_block(e) -> str:
+    """Seccion 4.17: que cambia al pasar de 16 candidatos a 64."""
+    if not e:
+        return ""
+    sig, val, w = e["signal"], e["validation"], e["weights"]
+    igual = ("<b>idéntico campo a campo</b> al del informe congelado"
+             if sig["identical_to_frozen"] else "distinto del congelado")
+    return f"""
+<h3>4.17 · Qué cambia al pasar de 16 candidatos a 64</h3>
+<p>Los tres estudios que dependen de la rejilla se repitieron con las ocho familias. Ninguno sustituye
+al congelado: se publican al lado, porque lo medido con dos primitivas sigue siendo cierto sobre lo que
+midió y borrarlo haría imposible ver qué se mueve al ampliar.</p>
+
+<h4>Break-even del IC: no se mueve nada</h4>
+<p>Con {sig['n_configs']} configuraciones, el bloque de break-even sale {igual}. El veredicto sigue
+siendo <b>{sig['verdict'].replace('_', ' ')}</b> y la puerta binaria sigue costando
+<b>{_n(sig['gate_cost'], 3)}</b> puntos de recompensa por sí sola. Las 48 candidatas nuevas están en el
+desglose por configuración y <b>no mueven ni un margen</b>.</p>
+<div class="why"><b>Y no es que no compitieran.</b> Ninguna fue descartada, y las temáticas
+<i>operan más</i> que las publicadas: <span class="mono">event_calendar_drift</span> abre unas 108
+operaciones por ventana frente a las 48 de momentum y las 7 de reversión. Compitieron en igualdad y
+ninguna gana una sola celda. Lo único que responde a la señal es el compuesto, que no aparece en el
+top-10 de la celda ciega y sube al <b>puesto 2</b> en la celda de ρ = 0,20: su posición se mueve con la
+fuerza de la señal, que es exactamente lo que su diseño predice. No basta para batir al baseline —de
+hecho <b>ninguna de las 64 lo bate en ninguna celda</b>—. Comprobaciones: determinismo limpio, control
+ρ = 0 limpio, y la celda ciega reproduce {'' if sig['reproduction'] else 'NO reproduce '}las 512
+unidades del estudio de transferencia una a una.</div>
+
+<h4>Validación temporal: la conclusión aguanta, la arbitrariedad crece</h4>
+<p>Con {val['n_configs']} configuraciones, el optimismo del corte único frente a la <b>cola</b> sale
+<b>{_n(val['vs_tail'], 3)}</b>, contra el <b>{_n(val['frozen_vs_tail'], 3)}</b> publicado con cuatro.
+Que ese número no se mueva al cuadruplicar la rejilla es la corroboración más fuerte que este estudio
+podía dar. Lo que sí crece es la arbitrariedad de la elección: el ganador del corte único deja de serlo
+en <b>{val['flips']['walk_forward']} de {val['flips']['n_samples']}</b> escenarios con walk-forward
+(antes {val['frozen_flips']['walk_forward']}) y en <b>{val['flips']['cpcv']} de
+{val['flips']['n_samples']}</b> con CPCV (antes {val['frozen_flips']['cpcv']}).
+{val['folds_audited']:,} folds auditados sin fuga.</p>
+<div class="why"><b>Comprobado que no son empates.</b> Hay 20 filas de 128 con todos los folds a cero
+—configuraciones que no abren una sola operación— y un vuelco entre estrategias que no operan no es un
+vuelco. Rehecho el cálculo excluyéndolas, los vuelcos salen <b>idénticos</b> y el hueco contra la cola
+sube a +1,72: el efecto es real y, restringido a lo que de verdad opera, mayor.</div>
+
+<h4>Pesos del headline: aquí sí se cae una conclusión publicada</h4>
+<p>Sobre el subconjunto activo ({w['n_active']} de {w['n_configs']} configuraciones con actividad
+suficiente), el mejor punto es <b>λ = {_n(w['best'][0], 2)}, κ = {_n(w['best'][1], 2)}</b> con un rank IC
+de <b>{_n(w['best_ic'], 4)}</b> frente a {_n(w['base_ic'], 4)} sin penalizar: una ganancia de
+<b>{_n(w['gain'], 4)} ± {_n(w['gain_se'], 4)}</b>. Lo publicado con dos familias decía que penalizar
+<i>no estabiliza</i>, y allí todas las penalizaciones empeoraban el rank IC (su óptimo era
+λ = {_n(w['frozen_best'][0], 2)}, κ = {_n(w['frozen_best'][1], 2)}).</p>
+<div class="note"><b>Tres reservas, y la primera es seria.</b> El óptimo cae en la <b>esquina</b> de la
+rejilla probada, así que no está acotado: lo medido es «más penalización es mejor que menos dentro de lo
+probado», no que el óptimo sea 4. Segunda: penalizar <b>cambia la elección</b> hacia un candidato con
+Sharpe de validación <i>menor</i> (1,49 frente a 1,72), de modo que los pesos que más estabilizan el
+orden no eligen mejor. Tercera: <b>no se adopta</b>. Mover λ cambiaría retroactivamente quién es
+rankeable en informes ya publicados, y eso es su propia evolución con su propio coste.</div>
+<p>Una coherencia que antes no existía: la auditoría de costes da un λ implícito de
+<b>{_n(w['implied_lambda'], 2)}</b> sobre las activas, prácticamente el mismo
+{_n(w['frozen_implied_lambda'], 2)} publicado. Con dos familias el óptimo empírico era 0 y el implícito
+6,3 —se contradecían—; con ocho, el óptimo empírico se acerca al que los costes ya imponen.</p>
+"""
+
+
 def _transfer_extended_block(t) -> str:
     """Seccion 4.11-bis: la misma pregunta con OCHO familias, y el control que la atribuye."""
     if not t:
@@ -1889,6 +2059,8 @@ def render_html(f: dict) -> str:
         "FIDELITY": _fidelity_block(f.get("fidelity")),
         "TRANSFER": _transfer_block(f.get("transfer")),
         "TRANSFER_EXTENDED": _transfer_extended_block(f.get("transfer_extended")),
+        "THEMES_REAL": _themes_real_block(f.get("themes_real")),
+        "EXTENDED_GRID": _extended_grid_block(f.get("extended_grid")),
         "SIGNALCHANNEL": _signal_channel_block(f.get("signal_channel")),
         "VALIDATION": _validation_block(f.get("validation")),
         "SESSIONS": _sessions_block(f.get("sessions")),
@@ -2533,6 +2705,10 @@ un filtro superado. Lo mismo vale para la actividad: si no se ha medido, no se d
 
 %%TRANSFER_EXTENDED%%
 
+%%THEMES_REAL%%
+
+%%EXTENDED_GRID%%
+
 %%SIGNALCHANNEL%%
 
 <h3>4.13 · El optimizador: Cross-Entropy Method</h3>
@@ -2695,42 +2871,56 @@ diseñador documentada, y el universo operado separado del sintético con el mot
 (§2.1, §2.5, §4.4).</td></tr>
 </tbody></table>
 
-<h3>6.1-bis · Dos temas que no se pueden medir hacia atrás, y desde cuándo se podrá</h3>
-<p>De las seis familias temáticas de §4.1-bis, <b>cuatro</b> descansan sobre temas con archivo real:
-<span class="mono">flow</span> tiene ocho fuentes con historia medida —la más antigua desde
-<b>2011-01-31</b>—, <span class="mono">macro</span> tres desde <b>2015-11-02</b> y
-<span class="mono">attention</span> dos desde <b>2015-07-01</b>. Esas tres, más la compuesta que las
-agrega, se pueden evaluar contra señal capturada de verdad.</p>
-<p>Las otras dos no, y conviene decir por qué con todas las letras. Las fuentes de
-<span class="mono">liquidation</span> y <span class="mono">vol_surface</span> <b>empezaron a existir el
-día que arrancó la captura</b>: Hyperliquid el 2026-08-13, los vencimientos de Deribit el 2026-08-14; y
-<span class="mono">lending_health</span> ni eso, porque su reloj no ha empezado a correr —falta la
-credencial—. La captura pide una ventana de 30 días, lo que perdona una caída de hasta un mes en las
-fuentes con archivo, pero <b>no compra ni un día de pasado</b> en las de captura hacia adelante. En el
-ranking histórico esas dos primitivas se miden como <b>núcleo de precio ciego</b>, y su puesto en la
-tabla es una cota de la clase más engañosa: la de la versión que no sabe nada.</p>
-<p><b>El criterio para repetir el análisis, declarado ahora y no cuando haya cifras que mirar.</b> Son
-dos umbrales, y manda el segundo:</p>
-<ol>
-<li><b>Que la fuente pueda entrar en un backtest.</b> El catálogo exige <b>365 días de calendario</b>
-medidos antes de declarar <span class="mono">history_from</span>. Para Hyperliquid eso cae el
-<b>2027-08-13</b>; para los vencimientos de Deribit el 2027-08-14.</li>
-<li><b>Que quepa una sola sub-ventana del estudio.</b> La transferencia trocea el histórico en
-sub-ventanas de <b>544 días</b> —la longitud de un camino sintético, para que los dos lados comparen
-mundos y no precisiones de estimador— y cada estrategia necesita además <b>180 días</b> de calentamiento:
-son <b>724 días de señal capturada</b> para correr UNA sub-ventana con vista. La primera fecha posible
-para Hyperliquid es el <b>2028-08-06</b>. Las cinco sub-ventanas de la geometría publicada pedirían unos
+<h3>6.1-bis · Lo que no se podía medir hacia atrás, y qué se midió al final</h3>
+<p>Cuando se diseñaron las seis familias temáticas, esta sección decía que la capa de señal no se podía
+evaluar hacia atrás y declaraba la fecha en que se podría. <b>Esa afirmación era demasiado pesimista y ya
+está medida</b>: §4.16 publica la comparación pareada —misma familia, misma ventana, mismas barras, la
+puerta abierta y cerrada— sobre <b>cinco</b> de las seis. Lo que queda como limitación es más pequeño y
+más preciso que lo que se anunció, y conviene separar las tres cosas que se confundían.</p>
+
+<p><b>Primero: la evaluabilidad se mide, no se declara.</b> La versión anterior de este documento repartía
+las familias entre «con archivo real» y «sin él» usando el flag <span class="mono">backtestable</span> del
+catálogo. Al sondear el radar sobre el archivo, ese reparto falla en los dos sentidos.
+<span class="mono">vol_surface</span> figuraba como ciego y <b>se lee</b>: alcanza 0,333 de cobertura
+porque <span class="mono">deribit_volatility</span> publica desde <b>2021-03-24</b>, y el catálogo solo lo
+daba por no backtestable porque su profundidad <i>medida</i> aún no llega a los 365 días que exige
+<span class="mono">depth.MIN_MEASURED_DAYS</span>. La frase «sus fuentes empezaron a existir el día que
+arrancó la captura» era cierta para <span class="mono">liquidation</span> y <b>falsa</b> para
+<span class="mono">vol_surface</span>. En sentido contrario, <span class="mono">cex_listings</span> es
+backtestable y pertenece a <span class="mono">attention</span>, pero es un calendario de listados y BTC no
+se lista: sobre ese símbolo no aporta lectura ninguna.</p>
+
+<p><b>Segundo: el único tema que de verdad no llega es <span class="mono">liquidation</span></b>, con una
+cobertura máxima medida de <b>0,167</b> frente al 0,25 que exige la puerta, y legible en el <b>0,0 %</b>
+de las sondas. Su familia —<span class="mono">liquidation_cascade</span>— es la única que se declara no
+evaluable, y ahora con ese número al lado en vez de con una frase. Sus fuentes (Hyperliquid, el 2026-08-13)
+sí empezaron a existir el día de la captura, y <span class="mono">lending_health</span> ni eso, porque su
+reloj no ha arrancado por falta de credencial.</p>
+
+<p><b>Tercero, y es lo que sí queda abierto: medir no es tener potencia.</b> De las cinco medidas, dos
+—<span class="mono">attention_ignition</span> y <span class="mono">vol_term_structure</span>— salieron
+<b>sin potencia</b>: la puerta no llegó a atar en ninguna de las 20 parejas, así que armado y ciego dan el
+mismo número exacto. El motivo no es que el tema sea ciego, sino la intersección de tres cosas raras: que
+el tema sea legible ese día (<span class="mono">attention</span> lo es en el 19,3 % de las sondas,
+<span class="mono">vol_surface</span> en el 4,2 %), que el núcleo de precio quiera entrar, y que el tono
+cruce el umbral. Eso no se arregla esperando a que una fuente cumpla 365 días: se arregla con
+<b>más archivo</b>, y el calendario de esa espera es el que ya estaba escrito.</p>
+
+<p><b>El criterio para repetirlo, que no cambia.</b> La transferencia trocea el histórico en sub-ventanas
+de <b>544 días</b> —la longitud de un camino sintético, para que los dos lados comparen mundos y no
+precisiones de estimador— y cada estrategia necesita además <b>180 días</b> de calentamiento: son
+<b>724 días de señal capturada</b> para correr UNA sub-ventana con vista. Para Hyperliquid la primera
+fecha posible es el <b>2028-08-06</b>. Las cinco sub-ventanas de la geometría publicada pedirían unos
 2.900 días, ocho años: <b>esas cifras no se van a poder reproducir con vista</b>, y decir lo contrario
-sería prometer un calendario que no depende de nadie.</li>
-</ol>
-<div class="note"><b>La repetición no será la misma medición con mejores datos.</b> Cuando el segundo
-criterio se cumpla, lo publicable es un estudio <b>más corto y con menos bloques</b> —una sub-ventana en
-vez de cinco, con un intervalo por bloques bastante más ancho— y lo que se leerá de él no es el ranking
-sino <b>una comparación pareada</b>: la misma familia, sobre la misma ventana, con la puerta temática
-abierta y cerrada. Esa diferencia sí es atribuible a la señal, y es la única pregunta que hoy no se puede
-contestar para esos dos temas. Hasta entonces, el break-even del IC (§4.12) es lo que hay: no dice si esas
-señales sirven, dice a partir de qué capacidad predictiva <b>podrían</b> servir, y esa cota se midió sobre
-un mundo cuyo futuro está escrito y no puede sobreajustarse a ningún histórico.</div>
+sería prometer un calendario que no depende de nadie.</p>
+
+<div class="note"><b>Lo que sí se puede afirmar hoy, y no es poco.</b> En dos familias
+—<span class="mono">flow_persistence</span> y <span class="mono">signal_composite</span>— el intervalo por
+bloques de la diferencia pareada <b>excluye el cero</b>: la capa ayuda. Con las reservas de §4.16, que son
+serias y están escritas allí: sin corrección por comparaciones múltiples, con N efectivo menor que el
+nominal, y con el compuesto en la posición incómoda de que su tesis <i>entera</i> vive en la capa, de modo
+que lo medido en su caso es la magnitud y no la dirección. Es la primera evidencia del proyecto en la que
+una señal externa mueve una decisión sobre mercado real, y es deliberadamente modesta.</div>
 
 <h3>6.2 · Lo que queda abierto, por criticidad</h3>
 <p>El orden responde a una asimetría de coste: una estrategia añadida hoy se re-evalúa gratis cuando el

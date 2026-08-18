@@ -69,6 +69,7 @@ from ai_trader.scoring.weight_calibration import (
 )
 from ai_trader.shared import bars as bar_schema
 from ai_trader.shared.clock import HistoricalClock
+from ai_trader.shared.reports import load_report
 from ai_trader.shared.instruments import AssetClass
 from ai_trader.scoring.weight_study import FAMILIES, NEW_FAMILIES
 from ai_trader.strategies import build_strategy
@@ -926,12 +927,12 @@ def collect_kpis(store: SyntheticStore, synthetic: dict) -> dict:
     }
 
 
-def collect_calibration() -> dict | None:
+def collect_calibration(path: Path = CALIBRATION_REPORT) -> dict | None:
     """Evidencia del estudio que fija lambda y kappa (data/calibration).
 
     Se LEE del informe publicado; no se recalcula. El estudio son cientos de backtests
     reales y el dashboard debe seguir siendo regenerable en minutos."""
-    report = load_calibration_report(ROOT / CALIBRATION_REPORT)
+    report = load_calibration_report(ROOT / path)
     if not report:
         logger.warning("Sin informe de calibracion: el panel de pesos saldra vacio")
         return None
@@ -1037,14 +1038,112 @@ def collect_fidelity() -> dict | None:
     }
 
 
-def collect_transfer() -> dict | None:
+THEMES_REPORT = Path("data") / "themes" / "report.json"
+# La familia que se admitio DESPUES, medida aparte. Correrla sola es legitimo porque el estudio
+# compara cada familia CONSIGO MISMA: ninguna cifra depende de que otras familias corran.
+THEMES_EXTRA = (Path("data") / "themes" / "report_vol_term_structure.json",)
+
+
+def _merge_skipped(loaded, measured_families: set, coverage: dict) -> list[dict]:
+    """Las familias declaradas NO evaluables, de todos los informes y con su numero.
+
+    Se acumulan de todos y no se toman del mas nuevo porque un informe de una sola familia no
+    declara omitidas —no evaluo a las demas—, y quedarse con su lista vacia borraria la unica
+    exclusion real del estudio. Y se enriquecen con la cobertura MEDIDA porque el informe mas
+    antiguo se genero antes de que se midiera: declaraba la exclusion con una frase derivada del
+    catalogo, sin cifra que comprobar.
+    """
+    out: dict[str, dict] = {}
+    for _, rep in loaded:
+        for skip in rep["plan"]["families_skipped"]:
+            if skip["family"] in measured_families:
+                continue  # se acabo midiendo en otra corrida: ya no es una exclusion
+            entry = dict(skip)
+            stat = coverage.get(entry.get("theme", ""))
+            if stat and entry.get("max_coverage") is None:
+                entry["max_coverage"] = stat["max_coverage"]
+                entry["readable_share"] = stat["readable_share"]
+                entry["reason"] = (
+                    f"el tema '{entry['theme']}' NUNCA alcanza {stat['threshold']:.2f} de "
+                    f"cobertura en el archivo: su maximo medido es "
+                    f"{stat['max_coverage']:.3f} y es legible en el "
+                    f"{100 * stat['readable_share']:.1f}% de las sondas"
+                )
+            # Gana la entrada CON numero: la que trae medicion describe mejor el mismo hueco.
+            if entry["family"] not in out or entry.get("max_coverage") is not None:
+                out[entry["family"]] = entry
+    return list(out.values())
+
+
+def collect_themes() -> dict | None:
+    """La capa de senal contra ARCHIVO REAL capturado (data/themes).
+
+    Es la unica evidencia del sistema donde la capa tematica se enciende sobre datos de
+    mercado de verdad y no sobre un canal sintetico. La comparacion es PAREADA —misma
+    configuracion, misma ventana, mismas barras, y lo unico que cambia es el umbral de la
+    puerta y si el archivo llega al motor—, asi que la diferencia no arrastra el efecto de
+    haber elegido otra estrategia.
+
+    SE FUNDEN VARIOS INFORMES, y hay que explicar las dos mitades de por que:
+
+    - Las FAMILIAS se acumulan y no se recalculan. `vol_term_structure` se admitio despues,
+      cuando la cobertura medida contradijo al catalogo, y se corrio aparte. Fundir en vez de
+      repetir las 160 unidades ya medidas es correcto por lo mismo que permite correr una
+      familia sola: cada veredicto es interno a su familia, y ninguna cifra depende de que
+      otras corran.
+    - Los METADATOS del tema (cobertura medida, temas ciegos, familias omitidas) se toman del
+      informe MAS NUEVO que los traiga, no del primero. El primero se genero antes de que la
+      evaluabilidad se midiera, asi que declara sus exclusiones con un motivo derivado del
+      catalogo —y para `vol_surface` ese motivo resulto ser FALSO—. Publicar la lista vieja
+      seria publicar esa frase otra vez.
+    """
+    sources = [THEMES_REPORT, *THEMES_EXTRA]
+    loaded = [(path, load_report(ROOT / path)) for path in sources]
+    loaded = [(path, rep) for path, rep in loaded if rep]
+    if not loaded:
+        logger.warning("Sin informe tematico: el panel de la capa de senal saldra vacio")
+        return None
+
+    families: list[dict] = []
+    seen: set[str] = set()
+    for _, rep in loaded:
+        for fam in rep["families"]:
+            if fam["family"] not in seen:
+                families.append(fam)
+                seen.add(fam["family"])
+
+    # El informe que MIDE la cobertura manda sobre el que la derivaba del catalogo.
+    measured = [(path, rep) for path, rep in loaded
+                if rep["plan"]["themes"].get("measured")]
+    meta_path, meta = (measured or loaded)[-1]
+    plan = meta["plan"]
+    skipped = _merge_skipped(loaded, seen, plan["themes"].get("measured") or {})
+
+    return {
+        "report_path": str(THEMES_REPORT).replace("\\", "/"),
+        "metadata_from": str(meta_path).replace("\\", "/"),
+        "coverage_is_measured": bool(plan["themes"].get("measured")),
+        "families": families,
+        "families_skipped": skipped,
+        "symbols": plan["symbols"],
+        "windows": plan["windows"],
+        "themes": plan["themes"],
+        "sources_loaded": plan["sources_loaded"],
+        "min_paired_windows": plan["min_paired_windows"],
+        "arms": plan["arms"],
+        "n_failed_units": sum(rep["n_failed_units"] for _, rep in loaded),
+        "caveats": meta["caveats"],
+    }
+
+
+def collect_transfer(library: str = TRANSFER_LIBRARY) -> dict | None:
     """¿Ordena el mundo sintetico las estrategias como el real? (data/transfer).
 
     Es la pregunta que la fidelidad NO responde: un generador puede clavar las colas y
     ordenar al reves. Se LEE del informe publicado; no se recalcula. Son 208 unidades de
     15 ventanas de backtest real cada una y el dashboard tiene que seguir siendo
     regenerable en minutos."""
-    report = load_transfer_report(ROOT / transfer_report_path(TRANSFER_LIBRARY))
+    report = load_transfer_report(ROOT / transfer_report_path(library))
     if not report:
         logger.warning("Sin informe de transferencia: el panel de ranking saldra vacio")
         return None
@@ -1141,14 +1240,14 @@ def _fold_geometry(plan: dict) -> dict:
     }
 
 
-def collect_validation() -> dict | None:
+def collect_validation(path: Path = VALIDATION_REPORT) -> dict | None:
     """Comparacion medida entre el corte unico 70/30 y la validacion multiventana
     (data/validation).
 
     Se LEE del informe publicado; no se recalcula. Cada unidad del estudio son ~20
     ventanas de backtest real y el dashboard tiene que seguir siendo regenerable en
     minutos."""
-    report = load_validation_report(ROOT / VALIDATION_REPORT)
+    report = load_validation_report(ROOT / path)
     if not report:
         logger.warning("Sin informe de validacion: el panel multiventana saldra vacio")
         return None
@@ -1255,14 +1354,14 @@ def _session_label(sessions: list[dict], key: str) -> str:
     return next((s["label"] for s in sessions if s["key"] == key), key)
 
 
-def collect_activity() -> dict | None:
+def collect_activity(library: str = TRANSFER_LIBRARY) -> dict | None:
     """El suelo de actividad y la evidencia con la que se eligio (data/activity).
 
     Se LEE del informe publicado; no se recalcula. El estudio se apoya en las 208 unidades
     del estudio de transferencia (15 ventanas de backtest real cada una) y el dashboard
     tiene que seguir siendo regenerable en minutos. El informe ya trae la regla aplicada y
     el umbral elegido: aqui no se decide nada, se reempaqueta para el render."""
-    report = load_activity_report(ROOT / activity_report_path(TRANSFER_LIBRARY))
+    report = load_activity_report(ROOT / activity_report_path(library))
     if not report:
         logger.warning("Sin informe de actividad: el panel del suelo saldra vacio")
         return None
@@ -1299,14 +1398,14 @@ def collect_activity() -> dict | None:
     }
 
 
-def collect_signal_channel() -> dict | None:
+def collect_signal_channel(library: str = SIGNAL_LIBRARY) -> dict | None:
     """El break-even del IC: ¿desde que capacidad predictiva paga una senal? (data/signal_channel).
 
     Se LEE del informe publicado; no se recalcula. Son 640 unidades de 15 ventanas de
     backtest cada una —tres horas de CPU— y el dashboard tiene que seguir siendo
     regenerable en minutos. Aqui no se decide nada: el criterio de lectura viene declarado
     en el propio informe (`criterion`), escrito en el codigo ANTES de correrlo."""
-    report = load_signal_report(ROOT / signal_report_path(SIGNAL_LIBRARY))
+    report = load_signal_report(ROOT / signal_report_path(library))
     if not report:
         logger.warning("Sin informe del canal sintetico: el panel de break-even saldra vacio")
         return None
@@ -1830,6 +1929,15 @@ def build() -> None:
         "sessions": collect_sessions(),
         "activity": collect_activity(),
         "signal_channel": collect_signal_channel(),
+        # La rejilla de OCHO familias, AL LADO de la congelada de dos y no en su lugar: lo
+        # publicado con dos primitivas sigue siendo cierto sobre lo que midio, y sustituirlo
+        # haria imposible ver que cambio al ampliar la rejilla y que cambio al ampliar el mundo.
+        "themes": collect_themes(),
+        "calibration_v4": collect_calibration(CALIBRATION_REPORT.with_name("report_ai_v4.json")),
+        "validation_v4": collect_validation(VALIDATION_REPORT.with_name("report_ai_v4.json")),
+        "transfer_v4": collect_transfer(CHANNELS_LIB),
+        "activity_v4": collect_activity(CHANNELS_LIB),
+        "signal_channel_v4": collect_signal_channel(CHANNELS_LIB),
         "signals_platform": signals_platform,
         "paper": collect_paper(),
         "divergence": collect_divergence(),

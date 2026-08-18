@@ -2964,11 +2964,128 @@ function renderSignals(){
       era: la fuerza relativa no está acotada y un −1.0 es alcanzable.</div>`;
 }
 
+function renderThemes(){
+  const host=$('#themes'),T=D.themes;
+  if(!T){
+    host.innerHTML=`<h1>La capa de señal contra archivo real</h1>
+      <div class="card"><p class="tag">No hay informe publicado. Genéralo con
+      <span class="mono">python -m ai_trader.scoring.theme_study --offline</span>.</p></div>`;
+    return;
+  }
+  const VERD={la_capa_ayuda:['ok','la capa ayuda'],la_capa_resta:['bad','la capa resta'],
+              indistinguible:['warn','indistinguible'],sin_potencia:['warn','sin potencia']};
+  const ayudan=T.families.filter(f=>f.verdict==='la_capa_ayuda').length;
+  const movieron=T.families.filter(f=>f.n_windows_where_the_layer_moved>0).length;
+  const M=T.themes.measured||{};
+  const K=Object.keys(M).sort();
+  const umbral=K.length?M[K[0]].threshold:0.25;
+  const tiles=[
+    ['Familias medidas',T.families.length+'/'+(T.families.length+T.families_skipped.length),
+      T.families_skipped.length?'omitida la que nunca alcanza cobertura':'todas'],
+    ['La capa ayuda en',ayudan+'/'+T.families.length,'intervalo por bloques que excluye el cero'],
+    ['La puerta llegó a atar en',movieron+'/'+T.families.length,
+      'en las demás, armado y ciego son el mismo número'],
+    ['Unidades fallidas',T.n_failed_units,'de la comparación pareada completa'],
+  ];
+  host.innerHTML=`
+    <p class="crumb">Capítulo 4 · Estrategias</p>
+    <h1>La capa de señal, encendida sobre archivo real</h1>
+    <p class="lead">Todo lo demás que mide señales en este proyecto lo hace sobre un canal
+      <b>sintético</b>. Esto no: aquí la capa temática lee el <b>archivo real capturado</b> y se compara
+      consigo misma. La diferencia es <b>pareada</b> —misma configuración, misma ventana, mismas barras—
+      y lo único que cambia entre las dos piernas es el umbral de la puerta y si el archivo llega al
+      motor. Por eso la diferencia no arrastra el efecto de haber elegido otra estrategia.</p>
+    <div class="grid tiles">${tiles.map(t=>`<div class="card tile"><div class="k">${t[0]}</div>
+      <div class="v">${t[1]}</div><div class="s">${t[2]}</div></div>`).join('')}</div>
+
+    <h2>El resultado, familia a familia</h2>
+    <div class="card"><div class="tblwrap"><table>
+      <thead><tr><th>familia</th><th>puerta</th><th class="num">ciego</th><th class="num">armado</th>
+        <th class="num">intervalo por bloques</th><th class="num">movió en</th>
+        <th>veredicto</th></tr></thead><tbody>
+      ${T.families.map(f=>{const d=f.paired_difference,v=VERD[f.verdict]||['warn',f.verdict];
+        return `<tr>
+        <td class="mono">${esc(f.family)}</td>
+        <td class="mono">${esc(f.gate_param||'—')}</td>
+        <td class="num">${fmt(f.blind_mean,3)}</td>
+        <td class="num">${fmt(f.armed_mean,3)}</td>
+        <td class="num">${d.lo===null?'sin muestra':'['+fmt(d.lo,3)+', '+fmt(d.hi,3)+']'}</td>
+        <td class="num">${f.n_windows_where_the_layer_moved}/${f.n_pairs}</td>
+        <td><span class="pill ${v[0]}">${v[1]}</span></td></tr>`;}).join('')}
+      ${T.families_skipped.map(s=>`<tr>
+        <td class="mono">${esc(s.family)}</td><td colspan="5">${esc(s.reason)}</td>
+        <td><span class="pill">no evaluable</span></td></tr>`).join('')}
+      </tbody></table></div>
+      <p class="tag">«Movió en» es cuántas parejas cambiaron algo al armar la puerta. Por debajo de
+        <b>${T.min_paired_windows}</b> el veredicto es <b>sin potencia</b>: no se publica una diferencia
+        que el ruido explica.</p></div>
+
+    <div class="note"><b>Léelo con estas cuatro reservas, que van aquí y no en una nota al pie.</b>
+      Se contrastan ${T.families.length} familias y <b>no hay corrección por comparaciones múltiples</b>:
+      el intervalo de <span class="mono">flow_persistence</span> empieza en +0,013 y no sobreviviría a
+      una. Los pares son 4 configuraciones × 5 ventanas y las configuraciones de una misma familia están
+      correlacionadas, así que el <b>N efectivo es menor que 20</b> y el intervalo por bloques es
+      <b>optimista</b>. El compuesto, ciego, es un seguidor de tendencia corriente: que su capa ayude es
+      casi su definición, y lo medido es la <i>magnitud</i>, no la dirección. Y las cinco ventanas no
+      tienen el mismo universo —de 8 símbolos en la más antigua a 24 en la última—, así que las parejas
+      no pesan igual.</div>
+
+    <h2>Qué temas se pueden leer hacia atrás, medido y no declarado</h2>
+    <p class="lead">La evaluabilidad <b>se mide sondeando el radar sobre el archivo</b>, no se deriva del
+      flag <span class="mono">backtestable</span> del catálogo. La diferencia no es teórica: el catálogo
+      se equivoca en los dos sentidos.</p>
+    <div class="card"><div class="tblwrap"><table>
+      <thead><tr><th>tema</th><th class="num">cobertura máxima</th><th class="num">sondas legibles</th>
+        <th>medido</th><th>declarado por el catálogo</th></tr></thead><tbody>
+      ${K.map(k=>{const m=M[k],
+        ev=(T.themes.evaluable||[]).includes(k),
+        de=(T.themes.declared_evaluable||[]).includes(k),
+        dis=(T.themes.disagreement||[]).includes(k);
+        return `<tr>
+        <td class="mono">${esc(k)}</td>
+        <td class="num">${fmt(m.max_coverage,3)}</td>
+        <td class="num">${fmt(100*m.readable_share,1)}%</td>
+        <td><span class="pill ${ev?'ok':''}">${ev?'evaluable':'ciego'}</span></td>
+        <td><span class="pill ${de?'ok':''}">${de?'evaluable':'ciego'}</span>${
+          dis?' <b>← no coinciden</b>':''}</td></tr>`;}).join('')}
+      </tbody></table></div>
+      <p class="tag">Umbral de la puerta: <b>${fmt(umbral,2)}</b> de cobertura. Metadatos leídos de
+        <span class="mono">${esc(T.metadata_from)}</span>.</p></div>
+
+    <div class="note"><b>El desacuerdo es el dato, no un detalle de implementación.</b>
+      <span class="mono">vol_surface</span> figura como ciego en el catálogo y <b>se lee</b>:
+      <span class="mono">deribit_volatility</span> publica desde <b>2021-03-24</b> y el tema alcanza
+      0,333 de cobertura, por encima del 0,25 que exige la puerta. El catálogo lo da por no
+      backtestable solo porque su profundidad <i>medida</i> aún no llega a los 365 días que exige
+      <span class="mono">depth.MIN_MEASURED_DAYS</span>. Una versión anterior de este informe excluyó esa
+      familia diciendo que «sus fuentes empezaron a existir el día que arrancó la captura», y para ese
+      tema <b>era falso</b>. Se corrió aparte y salió <b>sin potencia</b>: el tema es legible en solo el
+      4,2% de las sondas, así que la intersección de «tema legible ese día» con «el núcleo quiere
+      entrar» con «el tono cruza el umbral» no ocurre en la muestra que hay. Un veredicto medido en vez
+      de supuesto, que es toda la diferencia.</div>
+
+    <h2>Las ventanas y su universo</h2>
+    <p class="lead">El universo de cada sub-ventana se resuelve <b>una vez</b> antes de repartir el
+      trabajo y viaja declarado dentro de la tarea, con el mismo criterio de histórico que el estudio de
+      transferencia. Que en la ventana más antigua falten los pares jóvenes es correcto; lo que no
+      valdría es que lo decidiera la suerte dentro de cada worker, porque entonces las dos piernas de la
+      comparación pareada podrían correr sobre universos distintos.</p>
+    <div class="card"><div class="tblwrap"><table>
+      <thead><tr><th>ventana</th><th>desde</th><th>hasta</th><th class="num">símbolos</th>
+        <th class="num">del universo</th></tr></thead><tbody>
+      ${T.windows.map(w=>`<tr><td class="mono">${esc(w.label)}</td><td>${esc(w.start)}</td>
+        <td>${esc(w.end)}</td><td class="num">${(w.symbols||[]).length}</td>
+        <td class="num">${T.symbols.length}</td></tr>`).join('')}
+      </tbody></table></div>
+      <p class="tag">${T.sources_loaded.length} fuentes del archivo cargadas en cada worker.</p></div>`;
+}
+
 function main(){
   initTheme();initNav();
   renderOverview();renderMarket();renderSignals();renderSynthetic();renderFidelity();
   renderTrade();renderSessions();renderStrategies();renderRanking();renderActivity();
-  renderValidation();renderTransfer();renderSignalChannel();renderPaper();renderRoadmap();
+  renderValidation();renderTransfer();renderSignalChannel();renderThemes();
+  renderPaper();renderRoadmap();
   addEventListener('resize',()=>{clearTimeout(window._rt);window._rt=setTimeout(rerenderCharts,150);});
 }
 main();
@@ -2996,6 +3113,7 @@ SHELL = """
       <li><button data-sec="validation">Validación temporal</button></li>
       <li><button data-sec="transfer">Ordenación real vs sintético</button></li>
       <li><button data-sec="signalchannel">Break-even del IC</button></li>
+      <li><button data-sec="themes">Capa de señal sobre real</button></li>
       <li class="chap"><b>5 · Resultados</b></li>
       <li><button data-sec="paper">Paper trading</button></li>
       <li class="chap"><b>6 · Limitaciones</b></li>
@@ -3017,6 +3135,7 @@ SHELL = """
     <section id="validation" class="section"></section>
     <section id="transfer" class="section"></section>
     <section id="signalchannel" class="section"></section>
+    <section id="themes" class="section"></section>
     <section id="paper" class="section"></section>
     <section id="roadmap" class="section"></section>
   </main>
