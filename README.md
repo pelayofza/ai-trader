@@ -663,6 +663,16 @@ publicados. Una coherencia que antes no existía: el λ implícito de los costes
 activas, casi el mismo 6,27 publicado — con dos familias el óptimo empírico era 0 y el implícito
 6,3, y se contradecían; con ocho, el empírico se acerca al que los costes ya imponen.
 
+Y un efecto secundario que conviene no esconder: **DSR y PBO no son aditivos**. El Sharpe
+deflactado se calcula sobre la distribución del propio conjunto probado —`deflated_sharpe_ratio`
+usa `n_trials = len(trials)` y la dispersión de esos Sharpe para estimar el máximo esperado por
+azar—, así que **ampliar la rejilla cambia el DSR de las configuraciones que ya estaban**, sin que
+nadie haya tocado esas estrategias: pasar de 16 candidatos a 64 endurece el listón para todos. O se
+publican dos conjuntos separados —y entonces no hay un DSR del sistema, hay dos— o se publica el
+número que sale y se explica. Se hace lo segundo, porque separarlos sería usar la partición para no
+pagar el descuento. Afecta al camino del optimizador (`run_optimization`), que es el único que
+calcula DSR y PBO; los estudios de arriba publican recompensa y márgenes.
+
 ### Dentro de la barra diaria: sesiones y la ventana ciega
 
 La convención de arriba —decidir con la barra cerrada, llenar al open del día siguiente,

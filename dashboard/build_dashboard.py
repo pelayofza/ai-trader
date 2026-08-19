@@ -2686,56 +2686,8 @@ ROADMAP = [
         ),
     },
     {
-        "id": "new-crypto-strategies",
-        "rank": 12,
-        "group": "no-prioritario",
-        "priority": "baja",
-        "title": "Nuevas estrategias cripto (deliberadamente NO priorizada)",
-        "line": "Estrategias", "status": "pendiente", "impact": "medio", "effort": "alto",
-        "depends": 1,
-        "evidence": "Solo 6 de 32 filas aprueban el gate bajo CPCV. Eso admite dos lecturas -las "
-                    "estrategias son flojas, o el juez es ruidoso- y hasta saber cual, añadir "
-                    "candidatos multiplica el problema de múltiples pruebas.",
-        "why": "Aparece en la lista porque es trabajo real y acordado, pero NO se aborda todavía, "
-               "y la razón es una asimetría de coste, no una preferencia: una estrategia añadida "
-               "hoy se re-evalúa GRATIS cuando el juez mejore; un juez malo contamina todo lo que "
-               "puntúe hoy. Las estrategias son la cosecha; el juez es el suelo. Además cada "
-               "candidato nuevo sube el n_trials del DSR, o sea que añadir sin ganar edge "
-               "empeora activamente el veredicto de todo lo demás.",
-        "prompt": (
-            "Proyecto ai-trader (Python). ANTES DE EMPEZAR: comprueba que el juez esta arreglado "
-            "-CPCV en dos etapas dentro de run_optimization y libreria ai_v3 con la fidelidad "
-            "aceptada. Si no lo esta, no anadas estrategias: solo 6 de 32 filas aprueban el gate "
-            "bajo CPCV, y hasta saber si eso es culpa de las estrategias o del juez, cada "
-            "candidato nuevo multiplica el problema de multiples pruebas sobre un juez en el que "
-            "aun no se confia (y sube el n_trials que deflacta el DSR de todos los demas).\n"
-            "\n"
-            "TAREA (cuando toque): amplia el catalogo de primitivas CRIPTO. Hoy hay dos "
-            "operables (src/ai_trader/strategies/: crypto_momentum y mean_reversion; "
-            "polymarket_threshold no entra en el backtest). Candidatas con edge plausible en el "
-            "timescale diario de pares cripto de segunda fila, que es donde el sistema tiene "
-            "alguna probabilidad: (a) momentum TRANSVERSAL (rankear el universo y operar los "
-            "extremos, no cada simbolo contra si mismo -es la unica que aprovecha de verdad las "
-            "features cross-sectional de observation/); (b) breakout con filtro de regimen, "
-            "usando las features de regimen ya existentes; (c) volatility targeting sobre una "
-            "senal existente, que cambia el perfil de riesgo sin cambiar la senal; (d) pares "
-            "cointegrados dentro del universo.\n"
-            "\n"
-            "REQUISITOS por estrategia: clase con config tipada en src/ai_trader/strategies/, "
-            "registro en strategies/registry.py::STRATEGY_REGISTRY, ParamSpace en el modulo de "
-            "espacios del scoring para que el CEM pueda optimizarla, tests unitarios de la senal "
-            "sobre casos construidos a mano (no solo 'no revienta'), y coste de ejecucion "
-            "pagado por el modelo de microestructura real -nada de suponer fills gratis. "
-            "Evaluacion OBLIGATORIA con el juez validado: CPCV en dos etapas, gate contra los "
-            "tres baselines pasivos con los mismos costes, y DSR/PBO reportados con el n_trials "
-            "actualizado. Una estrategia que no bate el gate no entra en el catalogo operable: "
-            "se publica su resultado negativo y se archiva. Determinismo + "
-            ".venv\\Scripts\\python.exe (poetry run esta roto) + ruff. Regenera dashboard y docs."
-        ),
-    },
-    {
         "id": "weights-recalibrate-power",
-        "rank": 13,
+        "rank": 12,
         "group": "no-prioritario",
         "priority": "baja",
         "title": "Re-medir lambda y kappa con los costes nuevos y más potencia estadística",
@@ -2780,7 +2732,7 @@ ROADMAP = [
     },
     {
         "id": "designer-model-in-manifest",
-        "rank": 14,
+        "rank": 13,
         "group": "no-prioritario",
         "priority": "baja",
         "title": "Anotar el modelo de IA en el manifiesto de cada librería",
@@ -2812,7 +2764,7 @@ ROADMAP = [
     },
     {
         "id": "operational-symbol-guard",
-        "rank": 15,
+        "rank": 14,
         "group": "no-prioritario",
         "priority": "baja",
         "title": "Guarda operativa por símbolo (sanciones, deslistado, halt): lo que deja abierto no tener veto",
@@ -2876,7 +2828,7 @@ ROADMAP = [
     },
     {
         "id": "equities-parked",
-        "rank": 16,
+        "rank": 15,
         "group": "segundo-plano",
         "priority": "aparcada",
         "title": "Renta variable: aparcada a propósito (no se activa la clase de activo)",
@@ -2923,7 +2875,7 @@ ROADMAP = [
     },
     {
         "id": "polymarket-parked",
-        "rank": 17,
+        "rank": 16,
         "group": "segundo-plano",
         "priority": "aparcada",
         "title": "Polymarket en el backtest: aparcado hasta tener histórico propio",

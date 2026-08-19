@@ -1641,6 +1641,18 @@ probado», no que el óptimo sea 4. Segunda: penalizar <b>cambia la elección</b
 Sharpe de validación <i>menor</i> (1,49 frente a 1,72), de modo que los pesos que más estabilizan el
 orden no eligen mejor. Tercera: <b>no se adopta</b>. Mover λ cambiaría retroactivamente quién es
 rankeable en informes ya publicados, y eso es su propia evolución con su propio coste.</div>
+<div class="note"><b>Un efecto secundario que no se puede esconder: DSR y PBO no son
+aditivos.</b> El Sharpe deflactado del ganador se calcula <i>sobre la distribución del propio
+conjunto probado</i> —<span class="mono">deflated_sharpe_ratio</span> toma
+<span class="mono">n_trials = len(trials)</span> y la dispersión de esos mismos Sharpe para estimar
+el máximo esperado por azar—, así que <b>ampliar la rejilla cambia el DSR de las configuraciones
+que ya estaban</b>, sin que nadie haya tocado esas estrategias. Pasar de 16 candidatos a 64
+endurece el listón para todos. Había dos salidas: publicar dos conjuntos separados —y entonces no
+hay un DSR del sistema, hay dos— o publicar el número que sale y explicarlo. Se hace lo segundo,
+porque separarlos sería usar la partición para no pagar el descuento. Nota de alcance: esto afecta
+al camino del <b>optimizador</b> (<span class="mono">run_optimization</span>), que es el único que
+calcula DSR y PBO; los estudios de esta sección publican recompensa y márgenes, no DSR.</div>
+
 <p>Una coherencia que antes no existía: la auditoría de costes da un λ implícito de
 <b>{_n(w['implied_lambda'], 2)}</b> sobre las activas, prácticamente el mismo
 {_n(w['frozen_implied_lambda'], 2)} publicado. Con dos familias el óptimo empírico era 0 y el implícito
