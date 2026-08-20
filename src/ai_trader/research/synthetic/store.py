@@ -10,7 +10,7 @@ from typing import Iterator
 import pandas as pd
 
 from ai_trader.shared.bars import OHLCV_COLUMNS
-from ai_trader.synthetic.scenarios import ScenarioSpec
+from ai_trader.research.synthetic.scenarios import ScenarioSpec
 
 logger = logging.getLogger(__name__)
 

@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 
 from ai_trader.shared.bars import CLOSE, HIGH, LOW, OPEN, VOLUME
-from ai_trader.synthetic.scenarios import ScenarioSpec
-from ai_trader.synthetic.universe import SyntheticUniverse
+from ai_trader.research.synthetic.scenarios import ScenarioSpec
+from ai_trader.research.synthetic.universe import SyntheticUniverse
 
 # Anclaje temporal por defecto de las series sinteticas. Las fechas son solo
 # etiquetas (los datos no son reales); lo que importa es la longitud y el orden.

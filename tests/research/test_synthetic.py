@@ -11,19 +11,19 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from ai_trader.synthetic.designer import (
+from ai_trader.research.synthetic.designer import (
     DEFAULT_MODEL,
     ClaudeScenarioDesigner,
     TemplateScenarioDesigner,
     normalize_spec,
     parse_scenarios,
 )
-from ai_trader.synthetic.engine import PathEngine, generate_paths
-from ai_trader.synthetic.retrofit import enrich_phase, enrich_spec
-from ai_trader.synthetic.scenarios import FactorPhase, FactorShock, ScenarioSpec
-from ai_trader.synthetic.service import SyntheticDataService, sample_window
-from ai_trader.synthetic.store import SyntheticStore
-from ai_trader.synthetic.universe import DEFAULT_UNIVERSE, EQUITY
+from ai_trader.research.synthetic.engine import PathEngine, generate_paths
+from ai_trader.research.synthetic.retrofit import enrich_phase, enrich_spec
+from ai_trader.research.synthetic.scenarios import FactorPhase, FactorShock, ScenarioSpec
+from ai_trader.research.synthetic.service import SyntheticDataService, sample_window
+from ai_trader.research.synthetic.store import SyntheticStore
+from ai_trader.research.synthetic.universe import DEFAULT_UNIVERSE, EQUITY
 
 
 def _spec(phases, shocks=(), tilts=None, id="sc", horizon_name="test"):
@@ -334,7 +334,7 @@ class TestGarchNewsShare:
     def test_zero_news_falls_back_to_the_engine_default_exactly(self):
         """0 es "sin override", como tail_dof=0 es "gaussiano": tiene que reproducir el
         reparto con el que se genero ai_v2, byte a byte."""
-        from ai_trader.synthetic.engine import DEFAULT_NEWS_SHARE
+        from ai_trader.research.synthetic.engine import DEFAULT_NEWS_SHARE
 
         engine = PathEngine(DEFAULT_UNIVERSE)
         implicit = engine.generate(self._spec(0.0), seed=1)["BTC/USDT"]
@@ -376,7 +376,7 @@ class TestEngineByteIdentity:
         return digest.hexdigest()
 
     def _phases(self, **micro):
-        from ai_trader.synthetic.universe import CRYPTO
+        from ai_trader.research.synthetic.universe import CRYPTO
 
         return [
             FactorPhase(length_days=120, drift={EQUITY: 0.0005}, vol={EQUITY: 0.008, CRYPTO: 0.02},
@@ -553,7 +553,7 @@ class TestParseScenarios:
             parse_scenarios('{"foo": 1}', DEFAULT_UNIVERSE, horizon_days=50)
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def _config_universe(name: str) -> list[str]:
@@ -587,7 +587,7 @@ class TestUniverseConsistency:
     def test_the_reason_is_written_down_where_the_symbol_lives(self):
         """Mantener un simbolo muerto solo es defendible si el motivo esta escrito: sin
         esta nota, el siguiente que lo lea lo borra o lo deja por inercia."""
-        source = (ROOT / "src" / "ai_trader" / "synthetic" / "universe.py").read_text(
+        source = (ROOT / "src" / "ai_trader" / "research" / "synthetic" / "universe.py").read_text(
             encoding="utf-8"
         )
         config = (ROOT / "config" / "synthetic.toml").read_text(encoding="utf-8")
@@ -818,7 +818,7 @@ class TestStoreRoundTrip:
 
 class TestUniverseReconstruction:
     def test_summary_is_self_contained_round_trip(self):
-        from ai_trader.synthetic.universe import universe_from_summary, universe_summary
+        from ai_trader.research.synthetic.universe import universe_from_summary, universe_summary
 
         summary = universe_summary(DEFAULT_UNIVERSE)
         assert all("start_price" in item for item in summary)
@@ -833,7 +833,7 @@ class TestUniverseReconstruction:
             assert clone.adv_usd == original.adv_usd
 
     def test_missing_start_price_raises(self):
-        from ai_trader.synthetic.universe import universe_from_summary
+        from ai_trader.research.synthetic.universe import universe_from_summary
 
         bad = [{"symbol": "X", "asset_class": "crypto", "loadings": {}, "idio_vol": 0.01}]
         with pytest.raises(KeyError):
@@ -842,7 +842,7 @@ class TestUniverseReconstruction:
     def test_manifests_without_liquidity_fall_back_to_the_code_universe(self):
         """`adv_usd` es posterior a las primeras librerias: regenerar una antigua debe
         recuperar la liquidez del codigo, no tumbar la reconstruccion ni dejarla plana."""
-        from ai_trader.synthetic.universe import DEFAULT_ADV_USD, universe_from_summary
+        from ai_trader.research.synthetic.universe import DEFAULT_ADV_USD, universe_from_summary
 
         old_style = [
             {"symbol": "BTC/USDT", "asset_class": "crypto", "start_price": 40_000.0,
@@ -887,7 +887,7 @@ class TestLiquidityAxis:
         por activo NO puede moverla, y por tanto no cambia ninguna senal ya calibrada."""
         from dataclasses import replace
 
-        from ai_trader.synthetic.universe import SyntheticUniverse
+        from ai_trader.research.synthetic.universe import SyntheticUniverse
 
         asset = DEFAULT_UNIVERSE.asset("BTC/USDT")
         thin = SyntheticUniverse(assets=(replace(asset, adv_usd=1_000.0),))
@@ -977,8 +977,8 @@ class TestRetrofit:
     def test_every_phase_declares_the_calibrated_news_share(self):
         """El reparto news/inercia va en el SPEC, no en una constante del motor: asi las
         velas las sigue determinando (spec, semilla) y ai_v2 se regenera identica."""
-        from ai_trader.synthetic.engine import DEFAULT_NEWS_SHARE
-        from ai_trader.synthetic.retrofit import NEWS_SHARE
+        from ai_trader.research.synthetic.engine import DEFAULT_NEWS_SHARE
+        from ai_trader.research.synthetic.retrofit import NEWS_SHARE
 
         phase = enrich_phase(FactorPhase(length_days=100, drift={}, vol={EQUITY: 0.008}))
         assert phase.vol_news == NEWS_SHARE

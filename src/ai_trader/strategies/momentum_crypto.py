@@ -60,7 +60,7 @@ class CryptoMomentumConfig:
     # en el tono las dos ponen un PISO (ver mean_reversion.py).
     #
     # NINGUNO ENTRA EN `scoring/search_space.py`: son constantes de configuracion, no
-    # dimensiones sorteables. Ver el test que lo congela en tests/test_transfer.py.
+    # dimensiones sorteables. Ver el test que lo congela en tests/research/test_transfer.py.
     min_signal_tone: float = INERT_MIN_TONE
     min_signal_intensity: float = INERT_MIN_INTENSITY
 

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from ai_trader.synthetic.scenarios import FactorPhase, ScenarioSpec
-from ai_trader.synthetic.universe import COMMODITY, CRYPTO, EQUITY
+from ai_trader.research.synthetic.scenarios import FactorPhase, ScenarioSpec
+from ai_trader.research.synthetic.universe import COMMODITY, CRYPTO, EQUITY
 
 # Retrofit DETERMINISTA: enriquece specs de ai_v1 (sin microestructura) con carga serial,
 # colas, clustering y saltos DERIVADOS de la semantica de cada fase. No llama a la IA:
@@ -26,7 +26,7 @@ DEFAULT_SHOCK_JITTER_DAYS = 15
 # --- constantes calibradas contra el informe de fidelidad ---------------------------
 #
 # Los tres numeros de abajo NO son opinion: salen de iterar el propio harness
-# (`ai_trader.synthetic.fidelity_study --library ai_v3`) hasta que la mediana real de
+# (`ai_trader.research.fidelity_study --library ai_v3`) hasta que la mediana real de
 # cripto cae dentro del [p10, p90] del ensemble sintetico en curtosis, clustering y
 # exceedances. El estudio publica esos umbrales y falla si dejan de cumplirse.
 

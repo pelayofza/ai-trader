@@ -192,7 +192,7 @@ class BacktestEngine:
         # reloj de la ventana y devuelve un proveedor con `features(symbol)`.
         #
         # Existe por una sola razon y conviene que se lea: el canal de observacion
-        # SINTETICO (`synthetic/signal_channel.py`) no trae fuentes del catalogo real, sino
+        # SINTETICO (`research/synthetic/signal_channel.py`) no trae fuentes del catalogo real, sino
         # las suyas, y con ellas su denominador de cobertura y su tabla de polaridad. Sin
         # esta costura habria que elegir entre dos males: declarar las fuentes simuladas en
         # el CATALOGO real, o construirle a la estrategia un camino paralelo al que corre

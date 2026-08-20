@@ -13,7 +13,7 @@ de la lista SDN de hace tres meses. Y la otra mitad es `archive_revisable`, que 
 lo que suena —el proveedor devuelve algo, pero no necesariamente lo que devolvia aquel
 dia—. En los dos casos, lo que se descarto no vuelve.
 
-Es exactamente el principio de `synthetic/designer.py:227-233`: el `spec.json` de un
+Es exactamente el principio de `research/synthetic/designer.py:227-233`: el `spec.json` de un
 escenario se GUARDA porque una llamada a la IA no es reproducible, y todo lo determinista
 que va detras (caminos, barras, metricas) se puede borrar y rehacer bit a bit. Aqui la
 frontera cae en el mismo sitio: el payload del proveedor se guarda, y el frame diario que

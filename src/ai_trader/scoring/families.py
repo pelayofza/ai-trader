@@ -27,7 +27,7 @@ STUDY_SEED = 20260809  # seed del hipercubo latino; fija la identidad del conjun
 
 # LAS DOS PRIMITIVAS DE PRECIO SOBRE LAS QUE SE MIDIO TODO LO PUBLICADO. No es un duplicado
 # de `FAMILIES`: es el nombre de la HUELLA congelada, y es contra lo que asertan los tests de
-# evidencia publicada (`tests/test_transfer.py::TestPublishedFingerprint`).
+# evidencia publicada (`tests/research/test_transfer.py::TestPublishedFingerprint`).
 FAMILIES_PUBLISHED = ("crypto_momentum", "mean_reversion")
 
 # Las seis tematicas, EN ESTE ORDEN Y AL FINAL. El orden no es cosmetico: `build_specs` siembra

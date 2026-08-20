@@ -6,9 +6,9 @@ Descarga el historico diario de cripto via CCXT (cacheado en disco por
 hechos estilizados sobre el mundo real y sobre la libreria sintetica, y publica el
 informe que consumen el dashboard y la documentacion.
 
-    .venv\\Scripts\\python.exe -m ai_trader.synthetic.fidelity_study
-    .venv\\Scripts\\python.exe -m ai_trader.synthetic.fidelity_study --offline
-    .venv\\Scripts\\python.exe -m ai_trader.synthetic.fidelity_study --verify-determinism
+    .venv\\Scripts\\python.exe -m ai_trader.research.fidelity_study
+    .venv\\Scripts\\python.exe -m ai_trader.research.fidelity_study --offline
+    .venv\\Scripts\\python.exe -m ai_trader.research.fidelity_study --verify-determinism
 
 Salida: data/fidelity/report_<lib>.json
 
@@ -60,7 +60,7 @@ from ai_trader.data.real_history import (
 )
 from ai_trader.shared import bars as bar_schema
 from ai_trader.shared.instruments import AssetClass
-from ai_trader.synthetic.fidelity import (
+from ai_trader.research.synthetic.fidelity import (
     DEFAULT_MAX_LAG,
     DEFAULT_SIGMA,
     FIDELITY_DIR,
@@ -84,7 +84,7 @@ from ai_trader.synthetic.fidelity import (
     pair_correlations,
     series_facts,
 )
-from ai_trader.synthetic.store import SyntheticStore
+from ai_trader.research.synthetic.store import SyntheticStore
 
 logger = logging.getLogger("fidelity_study")
 
@@ -266,12 +266,12 @@ def measure_channels(
 
     Devuelve (declarado, medido). Vacio si ningun escenario declara canales, que es el caso
     de todas las librerias publicadas hasta hoy: los canales del barrido de rho
-    (`scoring/signal_study.py`) se emiten POR CELDA sobre estas mismas barras y se
+    (`research/signal_study.py`) se emiten POR CELDA sobre estas mismas barras y se
     certifican alli, sin escribir quince librerias identicas salvo la senal.
     """
     # Import local: `fidelity.py` es numerico y puro, y este estudio no puede depender del
     # emisor mas que cuando hay algo que emitir.
-    from ai_trader.synthetic.signal_channel import emit_signals
+    from ai_trader.research.synthetic.signal_channel import emit_signals
 
     specs = {s.id: s for s in store.load_specs(library_id)}
     channels = {

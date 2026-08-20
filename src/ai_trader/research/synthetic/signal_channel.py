@@ -28,7 +28,7 @@ TRES PROPIEDADES QUE NO SON DE ADORNO
    `PathEngine.generate`. El emisor recibe barras ya cerradas y trae su propio generador
    aleatorio, asi que "no interfiere con la secuencia RNG del motor" no es una promesa que
    haya que auditar leyendo codigo: es imposible por construccion. Las dos SHA que congela
-   `tests/test_synthetic.py::TestEngineByteIdentity` no pueden moverse desde aqui.
+   `tests/research/test_synthetic.py::TestEngineByteIdentity` no pueden moverse desde aqui.
 
 3. LAS SENALES ENTRAN POR EL CONTRATO DE PRODUCCION. No hay un canal paralelo hacia la
    estrategia: se construye un `ThemedSignalRadarProvider` —la MISMA clase que corre en
@@ -42,7 +42,7 @@ TRES PROPIEDADES QUE NO SON DE ADORNO
 LO QUE ESTE MODULO NO SABE
 --------------------------
 Ni que es un backtest, ni que es una estrategia, ni que es rho "bueno". Produce senales y
-las envuelve en un proveedor. Quien barre y quien decide es `scoring/signal_study.py`.
+las envuelve en un proveedor. Quien barre y quien decide es `research/signal_study.py`.
 """
 from __future__ import annotations
 
@@ -70,8 +70,8 @@ from ai_trader.signals.catalog import (
     SignalFeature,
     SignalSource,
 )
-from ai_trader.synthetic.engine import ar1_series
-from ai_trader.synthetic.scenarios import SignalChannel
+from ai_trader.research.synthetic.engine import ar1_series
+from ai_trader.research.synthetic.scenarios import SignalChannel
 
 logger = logging.getLogger(__name__)
 

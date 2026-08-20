@@ -2,7 +2,7 @@
 ¿Se parece el mundo sintetico al mercado REAL?
 
 El generador se construyo para tener colas gruesas, clustering de volatilidad y estructura
-serial (ver synthetic/retrofit.py). Que esas propiedades EXISTAN se comprueba comparando
+serial (ver research/synthetic/retrofit.py). Que esas propiedades EXISTAN se comprueba comparando
 una libreria con la anterior; lo que no se puede comprobar asi es que esten en la MAGNITUD
 del mercado real. Este modulo es la parte medible de esa pregunta: dado un conjunto de
 series de retornos sinteticas y otro de series reales, calcula los mismos stylized-facts

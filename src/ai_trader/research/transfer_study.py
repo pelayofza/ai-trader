@@ -12,8 +12,8 @@ Este estudio mide exactamente eso: la MISMA rejilla de 16 configuraciones se pun
 veces —contra el historico real de Binance y contra la libreria sintetica— y se compara
 el orden de los dos rankings.
 
-    .venv\\Scripts\\python.exe -m ai_trader.scoring.transfer_study --offline --workers 7
-    .venv\\Scripts\\python.exe -m ai_trader.scoring.transfer_study --analyze-only
+    .venv\\Scripts\\python.exe -m ai_trader.research.transfer_study --offline --workers 7
+    .venv\\Scripts\\python.exe -m ai_trader.research.transfer_study --analyze-only
 
 Salida: data/transfer/report_<lib>.json
 
@@ -123,8 +123,8 @@ from ai_trader.data.real_history import (
     build_service,
     fetch_real_bars,
 )
-from ai_trader.synthetic.service import study_window
-from ai_trader.synthetic.store import SyntheticStore
+from ai_trader.research.synthetic.service import study_window
+from ai_trader.research.synthetic.store import SyntheticStore
 
 logger = logging.getLogger("transfer_study")
 

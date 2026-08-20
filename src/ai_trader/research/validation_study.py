@@ -12,7 +12,7 @@ y publica la comparacion pareada. Las tres comparten la misma particion del cale
 (walk-forward usa 5+1 grupos y CPCV 6), de modo que el cacheo de tramos del motor evita
 volver a correr lo ya corrido.
 
-    .venv\\Scripts\\python.exe -m ai_trader.scoring.validation_study --workers 7
+    .venv\\Scripts\\python.exe -m ai_trader.research.validation_study --workers 7
 
 Salida (data/validation/):
     report_<lib>.json   plan, resultados por (config, muestra) y agregados
@@ -64,11 +64,14 @@ from ai_trader.scoring.multiwindow import (
     SCHEME_WALK_FORWARD,
     validate_multiwindow,
 )
-from ai_trader.scoring.optimize import DEFAULT_LIBRARY_ID, DEFAULT_SYNTHETIC_CONFIG
+from ai_trader.research.synthetic_source import (
+    DEFAULT_LIBRARY_ID,
+    DEFAULT_SYNTHETIC_CONFIG,
+)
 from ai_trader.scoring.weight_calibration import spearman
 from ai_trader.shared.reports import load_report
-from ai_trader.synthetic.service import study_window
-from ai_trader.synthetic.store import SyntheticStore
+from ai_trader.research.synthetic.service import study_window
+from ai_trader.research.synthetic.store import SyntheticStore
 
 logger = logging.getLogger("validation_study")
 

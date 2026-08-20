@@ -6,8 +6,8 @@ componentes crudos y despues barre la rejilla (lambda, kappa) en memoria. Los
 componentes no dependen de los pesos, asi que la rejilla sale gratis y el fichero de
 componentes permite re-analizar sin volver a backtestear.
 
-    .venv\\Scripts\\python.exe -m ai_trader.scoring.weight_study --workers 7
-    .venv\\Scripts\\python.exe -m ai_trader.scoring.weight_study --analyze-only
+    .venv\\Scripts\\python.exe -m ai_trader.research.weight_study --workers 7
+    .venv\\Scripts\\python.exe -m ai_trader.research.weight_study --analyze-only
 
 Salidas (data/calibration/):
     components_<lib>.json  evidencia cruda: metricas train/test por (config, muestra)
@@ -34,7 +34,10 @@ from ai_trader.backtest.metrics import HeadlineWeights
 from ai_trader.config import AppConfig, StrategySpec, load_config
 from ai_trader.scoring.aggregate import DEFAULT_CVAR_ALPHA
 from ai_trader.scoring.families import FAMILIES, STUDY_SEED
-from ai_trader.scoring.optimize import DEFAULT_LIBRARY_ID, DEFAULT_SYNTHETIC_CONFIG
+from ai_trader.research.synthetic_source import (
+    DEFAULT_LIBRARY_ID,
+    DEFAULT_SYNTHETIC_CONFIG,
+)
 from ai_trader.scoring.scenario_split import DEFAULT_VALIDATION_FRACTION, split_scenarios
 from ai_trader.scoring.weight_calibration import (
     DEFAULT_KAPPA_GRID,
@@ -47,8 +50,8 @@ from ai_trader.scoring.weight_calibration import (
     sweep_weights,
     turnover_cost_audit,
 )
-from ai_trader.synthetic.service import study_window
-from ai_trader.synthetic.store import SyntheticStore
+from ai_trader.research.synthetic.service import study_window
+from ai_trader.research.synthetic.store import SyntheticStore
 
 logger = logging.getLogger("weight_study")
 

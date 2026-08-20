@@ -31,19 +31,19 @@ from ai_trader.backtest.session_study import (
 )
 from ai_trader.observation.features import OWN_ASSET_FEATURES
 from ai_trader.observation.regime import REGIME_FEATURES
-from ai_trader.scoring.activity_study import activity_report_path, load_activity_report
-from ai_trader.scoring.signal_study import (
+from ai_trader.research.activity_study import activity_report_path, load_activity_report
+from ai_trader.research.signal_study import (
     DEFAULT_LIBRARY_ID as SIGNAL_LIBRARY,
     load_signal_report,
     report_path as signal_report_path,
 )
 from ai_trader.scoring.search_space import get_space
-from ai_trader.scoring.transfer_study import (
+from ai_trader.research.transfer_study import (
     DEFAULT_LIBRARY_ID as TRANSFER_LIBRARY,
     load_transfer_report,
     transfer_report_path,
 )
-from ai_trader.scoring.validation_study import VALIDATION_REPORT, load_validation_report
+from ai_trader.research.validation_study import VALIDATION_REPORT, load_validation_report
 from ai_trader.shared.reports import load_report
 from ai_trader.scoring.weight_calibration import (
     CALIBRATION_REPORT,
@@ -53,7 +53,7 @@ from ai_trader.scoring.weight_calibration import (
 from ai_trader.config import load_config
 from ai_trader.shared import bars as bar_schema
 from ai_trader.shared.entities import ENTITY_OVERRIDES
-from ai_trader.synthetic.fidelity import (
+from ai_trader.research.synthetic.fidelity import (
     CROSS_CORR_KEY,
     FIDELITY_BASELINE_LIBRARY,
     FIDELITY_LIBRARY,
@@ -66,8 +66,8 @@ from ai_trader.scoring.families import NEW_FAMILIES
 from ai_trader.strategies.mean_reversion import MeanReversionStrategy
 from ai_trader.strategies.momentum_crypto import CryptoMomentumStrategy
 from ai_trader.strategies.registry import build_strategy
-from ai_trader.synthetic.universe import DEFAULT_UNIVERSE, FACTOR_DESCRIPTIONS
-from ai_trader.synthetic.store import SyntheticStore
+from ai_trader.research.synthetic.universe import DEFAULT_UNIVERSE, FACTOR_DESCRIPTIONS
+from ai_trader.research.synthetic.store import SyntheticStore
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logging.getLogger("ai_trader").setLevel(logging.WARNING)

@@ -16,12 +16,12 @@ Arquitectura:
 - Todo se persiste en disco (SyntheticStore) para no re-ejecutar la IA.
 """
 
-from ai_trader.synthetic.scenarios import (
+from ai_trader.research.synthetic.scenarios import (
     FactorPhase,
     FactorShock,
     ScenarioSpec,
 )
-from ai_trader.synthetic.universe import (
+from ai_trader.research.synthetic.universe import (
     DEFAULT_FACTORS,
     DEFAULT_UNIVERSE,
     SyntheticAsset,

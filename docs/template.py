@@ -495,7 +495,7 @@ def _activity_block(a):
             "<div class=\"note\"><b>Suelo de actividad sin evidencia publicada.</b> El informe "
             "(<span class=\"mono\">data/activity/</span>) no está en este árbol, así que este "
             "documento no puede citar de dónde sale el umbral. Regenéralo con "
-            "<span class=\"mono\">python -m ai_trader.scoring.activity_study</span>.</div>"
+            "<span class=\"mono\">python -m ai_trader.research.activity_study</span>.</div>"
         )
     f, dec, m = a["floor"], a["decision"], a["mechanism"]["sides"]["real"]
     g, rep, band = a["gate"]["real"], a["reproducibility"]["sides"]["real"], a["band"]["real"]
@@ -576,7 +576,7 @@ exactamente donde la inactividad estaba ganando.</div>
 <th class=n>vacías</th><th>rankeable</th></tr></thead><tbody>{rows}</tbody></table>
 <p class="meta">Evidencia: <span class="mono">data/activity/report_{a["library"]}.json</span> ·
 código: <span class="mono">scoring/activity.py</span> y
-<span class="mono">scoring/activity_study.py</span>.</p>"""
+<span class="mono">research/activity_study.py</span>.</p>"""
 
 
 def _divergence_block(d):
@@ -852,7 +852,7 @@ def _calibration_block(c):
             "<div class=\"note\"><b>Limitación declarada.</b> El informe de calibración "
             "(<span class=\"mono\">data/calibration/</span>) no está disponible en este árbol, así "
             "que este documento no puede citar las cifras que fijan λ y κ. Regenéralo con "
-            "<span class=\"mono\">python -m ai_trader.scoring.weight_study</span>.</div>"
+            "<span class=\"mono\">python -m ai_trader.research.weight_study</span>.</div>"
         )
     return f"""
 <h3>4.5 · De dónde salen λ y κ (calibración medida)</h3>
@@ -1017,7 +1017,7 @@ def _validation_block(v):
             "(<span class=\"mono\">data/validation/</span>) no está disponible en este árbol, "
             "así que este documento no puede citar cuánto optimismo llevaba el corte único. "
             "Regenéralo con "
-            "<span class=\"mono\">python -m ai_trader.scoring.validation_study</span>.</div>"
+            "<span class=\"mono\">python -m ai_trader.research.validation_study</span>.</div>"
         )
     o, tail, std = v["opt_wf"], v["opt_tail"], v["std"]
     return f"""
@@ -1148,7 +1148,7 @@ def _fidelity_block(f):
             "(<span class=\"mono\">data/fidelity/</span>) no está disponible en este árbol, así "
             "que este documento no puede citar las cifras que comparan el mundo sintético con el "
             "histórico real. Regenéralo con "
-            "<span class=\"mono\">python -m ai_trader.synthetic.fidelity_study</span>.</div>"
+            "<span class=\"mono\">python -m ai_trader.research.fidelity_study</span>.</div>"
         )
     kurt, exc = f["kurtosis"], f["exceed"]
     clus, ac, vol, cross = f["clustering"], f["autocorr"], f["vol"], f["cross"]
@@ -1201,7 +1201,7 @@ real: tiene que poder <b>producirlo</b> como una realización plausible.</li>
 {_fidelity_table(f["rows"], b["library"] if b else None)}
 {f'''<h4>El test de aceptación: umbrales que el estudio puede fallar</h4>
 <p>Un estudio que no puede salir mal no es evidencia. El harness contrasta cada medición con umbrales
-declarados en el código (<span class="mono">synthetic/fidelity.py</span>) y <b>devuelve error</b> si no
+declarados en el código (<span class="mono">research/synthetic/fidelity.py</span>) y <b>devuelve error</b> si no
 se cumplen, de modo que una regresión en el generador rompe el comando en vez de pasar desapercibida.
 Son dos familias: <b>cobertura</b> —el valor real de cada activo cae dentro del [p10, p90] del ensemble
 en al menos {_n(acc["min_coverage_pct"], 0)}% de los activos— y <b>mediana de mercado</b> —la mediana
@@ -1290,7 +1290,7 @@ ciclos de 2018-2025), mientras que el lado sintético son {f["n_synthetic_sample
 la comparación es entre "lo que pasó" y "lo que podría pasar", y esa asimetría no se puede eliminar,
 solo declarar.{" Sin contraparte real: " + ", ".join(f["missing"]) + "." if f["missing"] else ""}</div>
 <p class="tag">Evidencia completa: <span class="mono">data/fidelity/report_{f["library"]}.json</span> ·
-reproducible con <span class="mono">python -m ai_trader.synthetic.fidelity_study</span>
+reproducible con <span class="mono">python -m ai_trader.research.fidelity_study</span>
 ({f["n_scenarios"]} escenarios × {f["n_paths"]} caminos; {f["generated_at"]}).</p>"""
 
 
@@ -1310,7 +1310,7 @@ def _signal_channel_block(s):
             "así que este documento <b>no puede afirmar</b> desde qué capacidad predictiva una "
             "señal externa paga sus costes. Mientras no exista, el radar de señales entra en la "
             "decisión sin ningún test de falsación. Genéralo con "
-            "<span class=\"mono\">python -m ai_trader.scoring.signal_study</span>.</div>"
+            "<span class=\"mono\">python -m ai_trader.research.signal_study</span>.</div>"
         )
 
     be = s["break_even"]
@@ -1752,7 +1752,7 @@ def _transfer_block(t):
             "este documento <b>no puede afirmar</b> que el mundo sintético ordene las estrategias "
             "como el mercado. Mientras no exista, la regla vigente es la conservadora: el sintético "
             "no se usa como criterio de selección. Genéralo con "
-            "<span class=\"mono\">python -m ai_trader.scoring.transfer_study --offline</span>.</div>"
+            "<span class=\"mono\">python -m ai_trader.research.transfer_study --offline</span>.</div>"
         )
 
     v, b, cb = t["verdict"], t["boot"], t["boot_configs"]
@@ -1877,7 +1877,7 @@ merece. {t["leakage"]["folds_audited"]} folds auditados,
 {"sin fuga temporal" if t["leakage"]["clean"] else "<b>CON FUGA</b>"}.</p>
 <div class="note"><b>Lo que esta cifra no es.</b><ul>{caveats}</ul></div>
 <p class="tag">Evidencia completa: <span class="mono">data/transfer/report_{t["library"]}.json</span> ·
-reproducible con <span class="mono">python -m ai_trader.scoring.transfer_study --offline</span>
+reproducible con <span class="mono">python -m ai_trader.research.transfer_study --offline</span>
 ({t["n_sub_windows"]} sub-ventanas reales + {t["n_samples"]} muestras de
 <span class="mono">{t["library"]}</span>{" <b>(librería de reserva: la pedida no existía)</b>"
 if t["is_fallback"] else ""}; {t["generated_at"]}).</p>"""

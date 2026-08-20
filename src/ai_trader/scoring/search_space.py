@@ -148,7 +148,7 @@ def _mean_reversion_space() -> ParamSpace:
 # Consecuencia aceptada y declarada: la capa de senal de estas seis SE AFIRMA, no se optimiza.
 # Si esta mal, el backtest dira "esta familia no anade nada sobre su nucleo", que es
 # exactamente la medicion que se busca. La via para encenderla es la que ya existe:
-# `scoring/signal_study.py` inyecta el umbral desde FUERA del espacio de busqueda.
+# `research/signal_study.py` inyecta el umbral desde FUERA del espacio de busqueda.
 
 
 def _finalize_liquidation_cascade(raw: dict) -> dict:

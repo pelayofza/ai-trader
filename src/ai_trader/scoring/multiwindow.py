@@ -19,7 +19,7 @@ Que aporta, en concreto:
   propiedad: medido sobre ai_v2 la diferencia frente a la MEDIANA de las ventanas es
   ~0 —el corte unico no esta sesgado al alza, esta arbitrario— y donde si hay brecha
   sistematica es frente a la COLA, por la razon del parrafo anterior. Ver
-  `scoring.validation_study` y `data/validation/`.
+  `research.validation_study` y `data/validation/`.
 - **El gate sobrevive.** Los baselines pasivos se evaluan en LAS MISMAS ventanas (mismo
   encadenado de tramos, mismos costes), asi que "batir a no hacer nada" se sigue
   pudiendo decidir, ahora fold a fold.
@@ -146,7 +146,7 @@ class MultiWindowValidation:
     # Series CRUDAS de los baselines, un valor por fold y en el mismo orden que `folds`.
     # `baselines` ya trae su agregado, pero agregar dos veces (CVaR de CVaR) compone dos
     # conservadurismos: quien junte varias validaciones en una sola distribucion necesita
-    # los scores fold a fold, no su cola. Ver `scoring.transfer_study`.
+    # los scores fold a fold, no su cola. Ver `research.transfer_study`.
     baseline_scores: dict[str, tuple[float, ...]] = dataclasses.field(default_factory=dict)
     baseline_gate: BaselineGate | None = None
     single_split_score: float | None = None

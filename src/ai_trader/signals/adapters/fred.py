@@ -3,7 +3,7 @@ FRED: las series macro que el generador sintetico ya modela como FACTORES.
 
 EL MAPEO EXPLICITO, QUE ES EL MOTIVO DE QUE ESTA FUENTE MEREZCA LA PENA
 -----------------------------------------------------------------------
-`synthetic/universe.py` genera precios con cinco factores: EQUITY, RATES, USD, COMMODITY y
+`research/synthetic/universe.py` genera precios con cinco factores: EQUITY, RATES, USD, COMMODITY y
 CRYPTO. Los cuatro primeros son observables y tienen serie publica y gratuita; el quinto no
 es macro. `FACTOR_OF` mapea cada serie de FRED sobre su factor, uno a uno y por escrito:
 
@@ -60,7 +60,7 @@ logger = logging.getLogger(__name__)
 FRED_BASE = "https://api.stlouisfed.org"
 OBSERVATIONS_PATH = "/fred/series/observations"
 
-# Serie -> factor del generador sintetico (`synthetic/universe.py`).
+# Serie -> factor del generador sintetico (`research/synthetic/universe.py`).
 FACTOR_OF: dict[str, str] = {
     "DTWEXBGS": "USD",
     "DFII10": "RATES",

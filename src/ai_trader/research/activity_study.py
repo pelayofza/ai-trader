@@ -30,7 +30,7 @@ configuracion que no opera puntua 0 en todos los bloques, asi que su puesto no s
 jamas— y es una trampa perfecta: usar la estabilidad para elegir el suelo habria premiado
 justo lo que el suelo existe para quitar.
 
-    .venv\\Scripts\\python.exe -m ai_trader.scoring.activity_study
+    .venv\\Scripts\\python.exe -m ai_trader.research.activity_study
 
 Entrada: `data/transfer/units_<lib>.json` (las unidades crudas del estudio de
 transferencia, con sus operaciones fold a fold). Salida: `data/activity/report_<lib>.json`.
@@ -57,7 +57,7 @@ from ai_trader.scoring.activity import (
     ActivityFloor,
     ActivityStats,
 )
-from ai_trader.scoring.transfer_study import (
+from ai_trader.research.transfer_study import (
     DEFAULT_LIBRARY_ID,
     SIDE_REAL,
     SIDE_SYNTHETIC,
@@ -163,7 +163,7 @@ def _stats(side: SideScores, config_id: str) -> ActivityStats:
     if stats is None:
         raise ValueError(
             f"Las unidades no traen operaciones ventana a ventana para {config_id} "
-            f"({side.side}). Re-corre `ai_trader.scoring.transfer_study`: sin ese detalle "
+            f"({side.side}). Re-corre `ai_trader.research.transfer_study`: sin ese detalle "
             "no se puede medir la fraccion de ventanas vacias, que es la mitad del suelo."
         )
     return stats

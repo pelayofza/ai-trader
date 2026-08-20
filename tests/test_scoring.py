@@ -21,11 +21,11 @@ from ai_trader.scoring.baselines import (
     gate,
 )
 from ai_trader.scoring.cem import CEMConfig, maximize
-from ai_trader.scoring.optimize import (
+from ai_trader.research.synthetic_source import (
     DEFAULT_LIBRARY_ID,
     SyntheticSampleSource,
-    run_optimization,
 )
+from ai_trader.scoring.optimize import run_optimization
 from ai_trader.scoring.overfit import (
     deflated_sharpe_ratio,
     probability_of_backtest_overfitting,

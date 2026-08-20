@@ -42,7 +42,7 @@ from ai_trader.observation.signal_themes import (
     theme_reading,
     themed_gate_reason,
 )
-from ai_trader.scoring.signal_study import (
+from ai_trader.research.signal_study import (
     ARM_OFF,
     CONFIGS_PER_FAMILY,
     CRITERION,
@@ -58,23 +58,23 @@ from ai_trader.shared.signals import DAY, ENTITY
 from ai_trader.signals.catalog import CATALOG
 from ai_trader.signals.normalize import Z_CLIP
 from ai_trader.strategies.momentum_crypto import CryptoMomentumConfig, CryptoMomentumStrategy
-from ai_trader.synthetic.engine import PathEngine, ar1_series
+from ai_trader.research.synthetic.engine import PathEngine, ar1_series
 from ai_trader.strategies.signal_layer import composite_reading
-from ai_trader.synthetic.fidelity import channel_checks, channel_facts, correlation
-from ai_trader.synthetic.observation_worlds import (
+from ai_trader.research.synthetic.fidelity import channel_checks, channel_facts, correlation
+from ai_trader.research.synthetic.observation_worlds import (
     ENRICHERS,
     MIN_DECLARED_COVERAGE,
     V4_CHANNELS,
     aggregate_expected_ic,
     enrich_spec_v4,
 )
-from ai_trader.synthetic.scenarios import (
+from ai_trader.research.synthetic.scenarios import (
     SIGNAL_CHANNEL_FIELDS,
     FactorPhase,
     ScenarioSpec,
     SignalChannel,
 )
-from ai_trader.synthetic.signal_channel import (
+from ai_trader.research.synthetic.signal_channel import (
     SOURCE_PREFIX,
     channel_source,
     channel_values,
@@ -83,7 +83,7 @@ from ai_trader.synthetic.signal_channel import (
     forward_z,
     source_key,
 )
-from ai_trader.synthetic.universe import CRYPTO, EQUITY, DEFAULT_UNIVERSE
+from ai_trader.research.synthetic.universe import CRYPTO, EQUITY, DEFAULT_UNIVERSE
 
 ANCHOR = datetime(2015, 1, 1, tzinfo=timezone.utc)
 
@@ -347,7 +347,7 @@ class TestDeterminism:
     def test_the_stream_seed_does_not_depend_on_the_process(self):
         """`hash()` de Python esta salado por proceso: con varios workers cada uno emitiria
         un canal distinto. Este valor congelado es lo que lo impide."""
-        from ai_trader.synthetic.signal_channel import _stream_seed
+        from ai_trader.research.synthetic.signal_channel import _stream_seed
 
         assert _stream_seed(1, "g", "BTC/USDT") == 2054724163262324413
 
@@ -774,7 +774,7 @@ class TestSweepReading:
 
 
 def _fake_plan():
-    from ai_trader.scoring.signal_study import StudyPlan
+    from ai_trader.research.signal_study import StudyPlan
 
     return StudyPlan(
         library_id="ai_v3", config_path="config/default.toml", symbols=("BTC/USDT",),

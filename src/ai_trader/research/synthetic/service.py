@@ -4,11 +4,11 @@ import logging
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 
-from ai_trader.synthetic.designer import ScenarioDesigner
-from ai_trader.synthetic.engine import DEFAULT_ANCHOR, generate_paths
-from ai_trader.synthetic.scenarios import ScenarioSpec
-from ai_trader.synthetic.store import LibraryManifest, SyntheticStore
-from ai_trader.synthetic.universe import (
+from ai_trader.research.synthetic.designer import ScenarioDesigner
+from ai_trader.research.synthetic.engine import DEFAULT_ANCHOR, generate_paths
+from ai_trader.research.synthetic.scenarios import ScenarioSpec
+from ai_trader.research.synthetic.store import LibraryManifest, SyntheticStore
+from ai_trader.research.synthetic.universe import (
     DEFAULT_UNIVERSE,
     SyntheticUniverse,
     universe_from_summary,

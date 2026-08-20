@@ -484,7 +484,7 @@ def filter_active_configs(
     cambia entre uno y otro, la conclusion no es solida.
 
     NO es el suelo de elegibilidad del sistema. Ese vive en `scoring.activity`, se midio
-    aparte (`scoring.activity_study`, evidencia en `data/activity/`) y decide quien puede
+    aparte (`research.activity_study`, evidencia en `data/activity/`) y decide quien puede
     ganar un ranking o aprobar el gate. Este filtro responde otra pregunta —"¿la conclusion
     del estudio de pesos aguanta si quito las inactivas?"— sobre otra unidad (la muestra
     entera, no la ventana de un fold) y con un umbral distinto elegido para ese uso. Se

@@ -28,7 +28,7 @@ que hace el OBSERVADOR. Es exactamente el argumento por el que `POLARITY` vive e
 
 Hay ademas tres razones mecanicas: un campo nuevo en un dataclass frozen cambia `as_dict()`
 y con el los goldens del catalogo, a cambio de nada; un `theme: str` forzaria UN tema por
-fuente y `deribit_volatility` esta legitimamente en dos; y `synthetic/signal_channel.py`
+fuente y `deribit_volatility` esta legitimamente en dos; y `research/synthetic/signal_channel.py`
 construye `SignalSource` al vuelo para los canales simulados, a los que habria que exigirles
 declarar un tema del catalogo real.
 

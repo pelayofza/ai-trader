@@ -21,7 +21,7 @@ en milisegundos.
 
 Es la misma logica que ya sostiene el resto del repo: el `spec.json` de un escenario
 sintetico se GUARDA porque no se puede re-derivar, y todo lo determinista que va detras se
-puede borrar y rehacer (`synthetic/designer.py`). Aqui el crudo es el spec.
+puede borrar y rehacer (`research/synthetic/designer.py`). Aqui el crudo es el spec.
 
 EL REGISTRO, QUE ES LA UNICA RESPUESTA HONESTA A "QUE FUENTES EXISTEN"
 ---------------------------------------------------------------------

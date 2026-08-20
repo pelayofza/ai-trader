@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from ai_trader.synthetic.fidelity import (
+from ai_trader.research.synthetic.fidelity import (
     FIDELITY_BASELINE_LIBRARY,
     FIDELITY_LIBRARY,
     MEDIAN_BAND_KEYS,
@@ -38,7 +38,7 @@ from ai_trader.synthetic.fidelity import (
     series_facts,
 )
 from ai_trader.data.real_history import CachedBarsProvider
-from ai_trader.synthetic.fidelity_study import (
+from ai_trader.research.fidelity_study import (
     FactsCollector,
     StudyPlan,
     build_report,
@@ -261,7 +261,7 @@ class TestAcceptance:
         return Estimate(median=(low + high) / 2, p10=low, p90=high, n=100)
 
     def _all_good(self, coverage=90.0):
-        from ai_trader.synthetic.fidelity import CROSS_CORR_KEY, TARGET_METRIC_KEYS
+        from ai_trader.research.synthetic.fidelity import CROSS_CORR_KEY, TARGET_METRIC_KEYS
 
         comparisons = [
             self._comparison(key, coverage) for key in (*TARGET_METRIC_KEYS, CROSS_CORR_KEY)
@@ -455,9 +455,9 @@ class TestStudyEndToEnd:
 
     @pytest.fixture
     def workspace(self, tmp_path):
-        from ai_trader.synthetic.designer import TemplateScenarioDesigner
-        from ai_trader.synthetic.service import SyntheticDataService
-        from ai_trader.synthetic.store import SyntheticStore
+        from ai_trader.research.synthetic.designer import TemplateScenarioDesigner
+        from ai_trader.research.synthetic.service import SyntheticDataService
+        from ai_trader.research.synthetic.store import SyntheticStore
 
         root = tmp_path / "synthetic"
         service = SyntheticDataService(TemplateScenarioDesigner(), store=SyntheticStore(root))
@@ -486,7 +486,7 @@ class TestStudyEndToEnd:
         }
         service = FakeBarsService(bars)
         monkeypatch.setattr(
-            "ai_trader.synthetic.fidelity_study.build_service",
+            "ai_trader.research.fidelity_study.build_service",
             lambda exchange, *, offline: service,
         )
         return service
@@ -525,7 +525,7 @@ class TestStudyEndToEnd:
         assert json.dumps(first, sort_keys=True) == json.dumps(second, sort_keys=True)
 
     def _cli(self, root, out_dir, *extra):
-        from ai_trader.synthetic import fidelity_study
+        from ai_trader.research import fidelity_study
 
         return fidelity_study.main([
             "--library", self.LIBRARY, "--synthetic-root", str(root),
@@ -573,10 +573,10 @@ class TestPublishedReports:
     estudio (que exige la libreria de 900 MB y ocho anos de historico cacheados).
     """
 
-    ROOT = Path(__file__).resolve().parents[1]
+    ROOT = Path(__file__).resolve().parents[2]
 
     def _report(self, library_id: str) -> dict:
-        from ai_trader.synthetic.fidelity import fidelity_report_path
+        from ai_trader.research.synthetic.fidelity import fidelity_report_path
 
         report = load_fidelity_report(self.ROOT / fidelity_report_path(library_id))
         if report is None:
@@ -664,7 +664,7 @@ class TestReportPlumbing:
         assert load_fidelity_report(tmp_path / "nope.json") is None
 
     def test_metric_comparisons_cover_every_declared_metric(self):
-        from ai_trader.synthetic.fidelity import METRIC_KEYS
+        from ai_trader.research.synthetic.fidelity import METRIC_KEYS
 
         facts = {"A": aggregate_facts([series_facts(_iid(400, seed=81), min_observations=200)])}
         comparisons = compare_metrics(facts, facts)

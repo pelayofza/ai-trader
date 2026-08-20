@@ -40,7 +40,7 @@ from ai_trader.backtest.validation import (
     subtract,
     walk_forward_folds,
 )
-from ai_trader.scoring import validation_study
+from ai_trader.research import validation_study
 from ai_trader.scoring.multiwindow import resolve_purge_days, validate_multiwindow
 from ai_trader.strategies.registry import build_strategy
 from test_backtest_engine import FakeService, make_config, trending_df

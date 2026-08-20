@@ -144,7 +144,7 @@ INERT_MAX_INTENSITY = Z_CLIP
 #
 # ES EL DEFAULT DEL PROVEEDOR, NO UN GLOBAL. `SignalRadarProvider` acepta otra tabla junto
 # con otro catalogo de fuentes, y hay exactamente un caso que la usa: el canal de
-# observacion SINTETICO (`synthetic/signal_channel.py`), cuya polaridad es +1 por
+# observacion SINTETICO (`research/synthetic/signal_channel.py`), cuya polaridad es +1 por
 # construccion —el canal se emite correlacionado con el retorno futuro, asi que su signo lo
 # fija el generador y no una hipotesis sobre el mundo—. Se inyecta en vez de escribirse
 # aqui para que ninguna fuente simulada pueda aparecer en la tabla de las reales.

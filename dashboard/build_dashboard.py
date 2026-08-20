@@ -43,22 +43,22 @@ from ai_trader.scoring.overfit import (
     deflated_sharpe_ratio,
     probability_of_backtest_overfitting,
 )
-from ai_trader.scoring.activity_study import (
+from ai_trader.research.activity_study import (
     activity_report_path,
     load_activity_report,
 )
 from ai_trader.scoring.sample_eval import evaluate_baselines, evaluate_sample_detailed
-from ai_trader.scoring.signal_study import (
+from ai_trader.research.signal_study import (
     DEFAULT_LIBRARY_ID as SIGNAL_LIBRARY,
     load_signal_report,
     report_path as signal_report_path,
 )
-from ai_trader.scoring.transfer_study import (
+from ai_trader.research.transfer_study import (
     DEFAULT_LIBRARY_ID as TRANSFER_LIBRARY,
     load_transfer_report,
     transfer_report_path,
 )
-from ai_trader.scoring.validation_study import (
+from ai_trader.research.validation_study import (
     VALIDATION_REPORT,
     load_validation_report,
 )
@@ -75,7 +75,7 @@ from ai_trader.scoring.families import FAMILIES, NEW_FAMILIES
 from ai_trader.strategies import build_strategy
 from ai_trader.strategies.mean_reversion import MeanReversionStrategy
 from ai_trader.strategies.momentum_crypto import CryptoMomentumStrategy
-from ai_trader.synthetic.fidelity import (
+from ai_trader.research.synthetic.fidelity import (
     FIDELITY_BASELINE_LIBRARY,
     FIDELITY_LIBRARY,
     TARGET_METRIC_KEYS,
@@ -83,7 +83,7 @@ from ai_trader.synthetic.fidelity import (
     load_fidelity_report,
     metric,
 )
-from ai_trader.synthetic.store import SyntheticStore
+from ai_trader.research.synthetic.store import SyntheticStore
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logging.getLogger("ai_trader").setLevel(logging.WARNING)  # silencia el chatter de estrategias
@@ -723,7 +723,7 @@ def collect_market() -> dict:
     como si el dato real no existiera, cuando toda la evidencia externa sale de el."""
     from ai_trader.data.cache import CACHE_DIR
     from ai_trader.data.providers.ccxt_crypto import CCXTCryptoConfig
-    from ai_trader.synthetic.universe import DEFAULT_UNIVERSE
+    from ai_trader.research.synthetic.universe import DEFAULT_UNIVERSE
 
     config = load_config(ROOT / "config" / "default.toml")
     ccxt_config = CCXTCryptoConfig()
@@ -1694,7 +1694,7 @@ Declara estas tres cosas POR ESCRITO, en tu respuesta, antes de tocar el primer 
      Mira siempre estos cuatro, que es donde vive lo reutilizable:
        src/ai_trader/shared/        barras, indicadores, reloj, instrumentos, senales
        src/ai_trader/backtest/metrics.py     metricas de resultado
-       src/ai_trader/synthetic/fidelity.py   stylized facts, autocorrelacion, colas
+       src/ai_trader/research/research/synthetic/fidelity.py   stylized facts, autocorrelacion, colas
        src/ai_trader/scoring/aggregate.py    la recompensa (CVaR)
      Di que encontraste, aunque no encaje. "No busque" no es una respuesta valida.
 
@@ -1711,8 +1711,8 @@ la prueba de que lo fue.
 POR QUE ESTA REGLA: la auditoria del 2026-08-12 (ver DEBT_AUDIT.md y DEBT_BACKLOG.md)
 encontro 21 grupos de funciones con el cuerpo IDENTICO, ~135 lineas. Los peores no eran
 utilidades sino calculo publicado: el CVaR que DEFINE LA RECOMPENSA esta escrito tres
-veces (scoring/aggregate.py:103, scoring/activity_study.py:104,
-scoring/transfer_study.py:654) y el cargador de informes, seis. Ninguna de esas copias la
+veces (scoring/aggregate.py:103, research/activity_study.py:104,
+research/transfer_study.py:654) y el cargador de informes, seis. Ninguna de esas copias la
 detecta un test, porque cada una tiene los suyos: corregir una y no las otras deja al
 sistema puntuando con dos definiciones distintas de la misma metrica."""
 
@@ -1870,7 +1870,7 @@ def collect_roadmap() -> list[dict]:
     entrada para que la regla exista UNA sola vez en el repo; y sobre copias
     (`{**r, ...}`) para no mutar `ROADMAP`, que si no acumularia la regla en cada llamada.
     """
-    from ai_trader.synthetic import retrofit  # noqa: F401  (asegura que el modulo existe)
+    from ai_trader.research.synthetic import retrofit  # noqa: F401  (asegura que el modulo existe)
     ranks = [r["rank"] for r in ROADMAP]
     if sorted(ranks) != list(range(1, len(ROADMAP) + 1)):
         raise ValueError(f"Los rangos del roadmap deben ser 1..N sin huecos: {sorted(ranks)}")
@@ -2009,7 +2009,7 @@ def build() -> None:
 #
 # ACTUALIZACION 2026-08-13: EL BREAK-EVEN DEL IC YA ESTA MEDIDO, y con el se cierra el unico
 # hueco que el radar de senales dejo declarado por escrito: hoy el sistema SI puede falsar
-# que una feature este aportando algo. `scoring/signal_study.py` barre la capacidad
+# que una feature este aportando algo. `research/signal_study.py` barre la capacidad
 # predictiva de un canal de observacion sintetico -no la senal, el CANAL: cinco numeros
 # interpretables- sobre las MISMAS barras, con las 16 configuraciones publicadas y CPCV de
 # 15 ventanas. 640 unidades, 3,1 horas, cero fallidas, evidencia en data/signal_channel/.
@@ -2198,11 +2198,11 @@ ROADMAP = [
         "title": "Que el generador emita las señales, y re-medir la transferencia de forma pareada",
         "line": "B/D", "status": "pendiente", "impact": "alto", "effort": "alto",
         "evidence": "Los FactorShock del generador YA son eventos con día, factor y magnitud "
-                    "(synthetic/scenarios.py), descritos como 'un anuncio de la Fed, un "
+                    "(research/synthetic/scenarios.py), descritos como 'un anuncio de la Fed, un "
                     "default, un ataque'. El generador ya sabe QUE pasa y CUANDO: las señales "
                     "sintéticas serían la emisión observable de un estado latente que ya existe. "
                     "Y la mitad barata del problema ya está construida y medida (2026-08-13): el "
-                    "canal de observación existe (synthetic/signal_channel.py), se emite en un "
+                    "canal de observación existe (research/synthetic/signal_channel.py), se emite en un "
                     "pase aparte y entra por el contrato de producción, así que esta evolución "
                     "hereda toda esa fontanería y sólo tiene que ACOPLAR la emisión al estado "
                     "latente. Lo que el break-even ya contestó: con una PUERTA BINARIA hace falta "
@@ -2226,10 +2226,10 @@ ROADMAP = [
             "(a) EMISION EN UN PASE APARTE, no dentro de PathEngine.generate. Motivo decisivo: "
             "asi la no interferencia con la secuencia RNG no es una promesa que haya que auditar "
             "leyendo el codigo, es una IMPOSIBILIDAD ESTRUCTURAL -- el emisor recibe las barras ya "
-            "cerradas. tests/test_synthetic.py::TestEngineByteIdentity congela dos SHA de "
+            "cerradas. tests/research/test_synthetic.py::TestEngineByteIdentity congela dos SHA de "
             "librerias publicadas y su docstring avisa de que ponerlos en rojo significa que una "
             "libreria ha dejado de ser reproducible.\n"
-            "(b) CAMPOS DE SPEC via MICROSTRUCTURE_FIELDS (synthetic/scenarios.py:12-20, punto de "
+            "(b) CAMPOS DE SPEC via MICROSTRUCTURE_FIELDS (research/synthetic/scenarios.py:12-20, punto de "
             "extension ya declarado: solo se serializa lo NO neutro, asi que los spec.json "
             "existentes no cambian ni un byte). Regla dura: 0 = MENOS edge, nunca mas. Parametriza "
             "en positivo (informative_share, coverage) y no en negativo (false_positive_rate), "
@@ -2349,7 +2349,7 @@ ROADMAP = [
                "observaciones suficientes.",
         "prompt": (
             "Proyecto ai-trader (Python). El estudio de validacion "
-            "(src/ai_trader/scoring/validation_study.py, informe en "
+            "(src/ai_trader/research/validation_study.py, informe en "
             "data/validation/report_ai_v2.json, vista 'Validacion' del dashboard) se corrio con "
             "--paths 1: 8 escenarios x 4 configuraciones = 32 muestras. Sus conclusiones "
             "(el corte unico es arbitrario y no optimista; la brecha sistematica esta contra la "
@@ -2498,7 +2498,7 @@ ROADMAP = [
                "sustrato.",
         "prompt": (
             "Proyecto ai-trader (Python). El estudio de fidelidad "
-            "(src/ai_trader/synthetic/fidelity_study.py, informes en data/fidelity/) ya acepta la "
+            "(src/ai_trader/research/fidelity_study.py, informes en data/fidelity/) ya acepta la "
             "libreria ai_v3: cobertura media 98,3% y las medianas reales de curtosis, clustering "
             "y exceedances dentro de la banda sintetica. Queda UN eje medido y no arreglado: la "
             "ORDENACION entre activos. rank_corr (Spearman de la seccion cruzada real contra la "
@@ -2509,9 +2509,9 @@ ROADMAP = [
             "mercado real los activos con mas ruido propio son los que mas cola y mas "
             "agrupamiento tienen (DOGE: idio_vol 0,055 en el universo, curtosis real 17,8, "
             "clustering 0,308; XRP: 13,9 y 0,245; frente a BTC: 3,9 y 0,152). En el motor "
-            "(src/ai_trader/synthetic/engine.py) el componente idiosincratico se dibuja con colas "
+            "(src/ai_trader/research/research/synthetic/engine.py) el componente idiosincratico se dibuja con colas "
             "y GARCH pero DESPUES pasa por `_ar1_idio`, un AR(1) con phi por fase que en las "
-            "fases de rango es negativo (-0,30, ver `_idio_ar_for` en synthetic/retrofit.py). Un "
+            "fases de rango es negativo (-0,30, ver `_idio_ar_for` en research/synthetic/retrofit.py). Un "
             "AR(1) mezcla dias adyacentes: baja la curtosis y BLANQUEA la autocorrelacion de |r| "
             "de ese componente, y lo hace MAS en los activos donde el idio pesa mas. Eso "
             "invertiria la ordenacion. Compruebalo midiendo, con el mismo `series_facts` del "
@@ -2527,10 +2527,10 @@ ROADMAP = [
             "harness antes de quedarte con ninguna.\n"
             "\n"
             "REGLAS DEL SITIO, no negociables: (1) La aceptacion actual NO puede empeorar: "
-            "'.venv\\Scripts\\python.exe -m ai_trader.synthetic.fidelity_study --library ai_v4 "
+            "'.venv\\Scripts\\python.exe -m ai_trader.research.fidelity_study --library ai_v4 "
             "--offline' tiene que seguir devolviendo 0 y la cobertura media quedarse en >= 95%, "
             "con el nivel de volatilidad en ratio 0,9-1,1. (2) Neutralidad EXACTA de los defaults: "
-            "tests/test_synthetic.py::TestEngineByteIdentity congela con un hash que ai_v1 y ai_v2 "
+            "tests/research/test_synthetic.py::TestEngineByteIdentity congela con un hash que ai_v1 y ai_v2 "
             "se regeneran byte a byte desde sus spec.json; si se pone rojo, el cambio esta mal "
             "hecho, no el test. (3) Libreria nueva (ai_v4) derivada de ai_v1 con "
             "`SyntheticDataService.derive_library`, sin tocar las anteriores, y su informe "
@@ -2567,7 +2567,7 @@ ROADMAP = [
                "transfiere, y eso no deja de ser cierto mientras se prueba la alternativa.",
         "prompt": (
             "Proyecto ai-trader (Python). El estudio de transferencia "
-            "(src/ai_trader/scoring/transfer_study.py, informe en "
+            "(src/ai_trader/research/transfer_study.py, informe en "
             "data/transfer/report_ai_v3.json, vista 'Transferencia' del dashboard) ya respondio la "
             "pregunta que decidia la arquitectura, y la respuesta fue NO: el Spearman entre el "
             "ranking real y el sintetico es -0,04 (IC95% por bloques [-0,44, +0,49], p = 0,89), el "
@@ -2703,7 +2703,7 @@ ROADMAP = [
             "Proyecto ai-trader (Python). Los pesos del headline score "
             "(src/ai_trader/backtest/metrics.py::DEFAULT_HEADLINE_WEIGHTS, hoy lambda=0.25, "
             "kappa=0.0) estan calibrados con evidencia: estudio en "
-            "src/ai_trader/scoring/weight_study.py, informe en "
+            "src/ai_trader/research/weight_study.py, informe en "
             "data/calibration/report_ai_v2.json, 480 backtests. Resultado: la superficie "
             "(lambda, kappa) es PLANA en rank IC y en gap train-validation, y la auditoria de "
             "costes dice que el slippage ya cobrado dentro del Sharpe equivale a un lambda "
@@ -2745,11 +2745,11 @@ ROADMAP = [
                "son indistinguibles en disco.",
         "prompt": (
             "Proyecto ai-trader (Python). El disenador con IA "
-            "(src/ai_trader/synthetic/designer.py, ClaudeScenarioDesigner) produce escenarios NO "
+            "(src/ai_trader/research/research/synthetic/designer.py, ClaudeScenarioDesigner) produce escenarios NO "
             "reproducibles por diseno: los modelos actuales retiraron temperature/top_p/top_k, "
             "asi que no hay ninguna palanca de determinismo. La mitigacion vigente es guardar el "
             "spec.json. Falta la trazabilidad: SyntheticDataService "
-            "(src/ai_trader/synthetic/service.py) escribe en el manifiesto "
+            "(src/ai_trader/research/research/synthetic/service.py) escribe en el manifiesto "
             "`designer=type(self.designer).__name__`, es decir solo la clase.\n"
             "TAREA: haz que el manifiesto registre tambien el identificador del modelo y la fecha "
             "de generacion del diseno, sin romper las librerias ya publicadas (ai_v1, ai_v2, "

@@ -7,8 +7,8 @@ import re
 from dataclasses import replace
 from typing import Protocol
 
-from ai_trader.synthetic.scenarios import FactorPhase, ScenarioSpec
-from ai_trader.synthetic.universe import (
+from ai_trader.research.synthetic.scenarios import FactorPhase, ScenarioSpec
+from ai_trader.research.synthetic.universe import (
     FACTOR_DESCRIPTIONS,
     SyntheticUniverse,
     universe_summary,

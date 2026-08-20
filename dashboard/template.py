@@ -866,7 +866,7 @@ function renderFidelity(){
   if(!F){
     host.innerHTML=`<h1>Fidelidad contra el mercado real</h1>
       <div class="card"><p class="tag">No hay informe publicado. Genéralo con
-      <span class="mono">python -m ai_trader.synthetic.fidelity_study</span>.</p></div>`;
+      <span class="mono">python -m ai_trader.research.fidelity_study</span>.</p></div>`;
     return;
   }
   const S=F.summary, all=[...F.metrics,F.cross], M=k=>all.find(r=>r.key===k);
@@ -1023,7 +1023,7 @@ function renderFidelity(){
       Y las librerías anterior y actual se miden contra <b>la misma</b> ventana real y el mismo harness, que
       es lo único que hace comparable el antes con el después.</div>
     <p class="tag">Evidencia completa: <span class="mono">data/fidelity/report_${esc(F.library)}.json</span> ·
-      reproducible con <span class="mono">python -m ai_trader.synthetic.fidelity_study</span>
+      reproducible con <span class="mono">python -m ai_trader.research.fidelity_study</span>
       (${F.n_scenarios} escenarios × ${F.n_paths} caminos; ${esc(F.generated_at)}).</p>`;
 
   const selectable=[...F.metrics.filter(m=>m.is_target),F.cross];
@@ -1060,7 +1060,7 @@ function renderTransfer(){
   if(!T){
     host.innerHTML=`<h1>Transferencia de ranking</h1>
       <div class="card"><p class="tag">No hay informe publicado. Genéralo con
-      <span class="mono">python -m ai_trader.scoring.transfer_study --offline</span>.</p></div>`;
+      <span class="mono">python -m ai_trader.research.transfer_study --offline</span>.</p></div>`;
     return;
   }
   const X=T.transfer, V=T.verdict, B=X.bootstrap_blocks, CB=X.bootstrap_configs,
@@ -1270,7 +1270,7 @@ function renderTransfer(){
     ${T.caveats.map(c=>`<div class="note"><b>${esc(c.title)}.</b> ${esc(c.text)}</div>`).join('')}
     <p class="tag">Evidencia completa:
       <span class="mono">data/transfer/report_${esc(T.library)}.json</span> · reproducible con
-      <span class="mono">python -m ai_trader.scoring.transfer_study --offline</span>
+      <span class="mono">python -m ai_trader.research.transfer_study --offline</span>
       (${T.sub_windows.length} sub-ventanas reales × ${n} configs + ${T.n_samples} muestras de
       ${esc(T.library)}${T.is_fallback?' <b>(librería de reserva: la pedida no existía)</b>':''};
       ${esc(T.generated_at)}).</p>`;
@@ -1370,7 +1370,7 @@ function calibrationPanel(C){
       sustrato de rotación baja. Sirve para descartar que penalizar fuerte ayude; no para afinar decimales ni para extrapolar a costes más
       duros. Cuando aterrice la línea C, hay que repetirlo: re-analizar cuesta segundos porque los componentes están cacheados.</div>
     <p class="tag">Evidencia completa: <span class="mono">data/calibration/report_${esc(C.library)}.json</span> ·
-      reproducible con <span class="mono">python -m ai_trader.scoring.weight_study</span> (${esc(C.generated_at)}).</p>`;
+      reproducible con <span class="mono">python -m ai_trader.research.weight_study</span> (${esc(C.generated_at)}).</p>`;
 }
 
 function renderRanking(){
@@ -1488,7 +1488,7 @@ function renderValidation(){
   if(!V){
     host.innerHTML=`<h1>Validación temporal</h1>
       <p class="lead">El estudio comparativo aún no está publicado.</p>
-      <div class="note">Genéralo con <span class="mono">python -m ai_trader.scoring.validation_study</span>.</div>`;
+      <div class="note">Genéralo con <span class="mono">python -m ai_trader.research.validation_study</span>.</div>`;
     return;
   }
   const o=V.optimism,dsp=V.dispersion,ra=V.rank_agreement,fl=V.flips,g=V.geometry,svn=V.svn;
@@ -1598,7 +1598,7 @@ function renderValidation(){
       No es una comprobación de adorno: el motor la corre <b>antes</b> de gastar cómputo y aborta el plan entero si falla.</div>
 
     <p class="tag">Evidencia completa: <span class="mono">data/validation/report_${esc(V.library)}.json</span> ·
-      reproducible con <span class="mono">python -m ai_trader.scoring.validation_study</span> (${esc(V.generated_at)}) ·
+      reproducible con <span class="mono">python -m ai_trader.research.validation_study</span> (${esc(V.generated_at)}) ·
       un backtest suelto: <span class="mono">ai-trader backtest --validation cpcv</span>.</p>`;
 
   foldStrip($('#geo_single'),g.single_split);
@@ -1624,7 +1624,7 @@ function renderActivity(){
   if(!A){
     host.innerHTML=`<h1>Actividad: quién puede ganar el ranking</h1>
       <div class="card"><p class="tag">No hay informe publicado. Genéralo con
-      <span class="mono">python -m ai_trader.scoring.activity_study</span>.</p></div>`;
+      <span class="mono">python -m ai_trader.research.activity_study</span>.</p></div>`;
     return;
   }
   const F=A.floor, M=A.mechanism.sides.real, DEC=A.decision, G=A.gate.real,
@@ -1773,7 +1773,7 @@ function renderActivity(){
     <p class="tag">Evidencia completa: <span class="mono">data/activity/report_${esc(A.library)}.json</span> ·
       unidades: <span class="mono">${esc(A.source.units)}</span> ·
       código: <span class="mono">scoring/activity.py</span>,
-      <span class="mono">scoring/activity_study.py</span> · ${esc(A.generated_at)}</p>`;
+      <span class="mono">research/activity_study.py</span> · ${esc(A.generated_at)}</p>`;
 }
 
 // Un color por sesión, estable en las dos vistas donde aparecen (descomposición y
@@ -2202,7 +2202,7 @@ function renderSignalChannel(){
     host.innerHTML=`<p class="crumb">Capítulo 4 · Estrategias</p>
       <h1>Break-even del IC</h1>
       <div class="card"><p class="tag">No hay informe publicado. Genéralo con
-      <span class="mono">python -m ai_trader.scoring.signal_study</span>.</p></div>`;
+      <span class="mono">python -m ai_trader.research.signal_study</span>.</p></div>`;
     return;
   }
   const BE=S.break_even, LEAD=BE.by_lead[0]||{}, CH=S.sweep.channel_fixed, REP=S.reproduction;

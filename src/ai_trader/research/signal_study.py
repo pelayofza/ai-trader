@@ -19,8 +19,8 @@ propiedad del DISENO: de esta estrategia, con estos costes, con esta puerta. No 
 sobreajustar a datos que nunca se usaron. Al mundo real le queda despues una sola pregunta,
 binaria: el rho que mide mi senal, ¿esta por encima del break-even, y con margen?
 
-    .venv\\Scripts\\python.exe -m ai_trader.scoring.signal_study --workers 7
-    .venv\\Scripts\\python.exe -m ai_trader.scoring.signal_study --analyze-only
+    .venv\\Scripts\\python.exe -m ai_trader.research.signal_study --workers 7
+    .venv\\Scripts\\python.exe -m ai_trader.research.signal_study --analyze-only
 
 Salida: data/signal_channel/report_<lib>.json (+ units_<lib>.json con las filas crudas)
 
@@ -62,7 +62,7 @@ SEIS DECISIONES QUE SON LAS QUE HACEN QUE LA CIFRA SIGNIFIQUE ALGO
 
 LO QUE ESTE ESTUDIO NO ES
 -------------------------
-No mide transferencia de ranking (eso es `scoring/transfer_study.py`) ni toca datos reales.
+No mide transferencia de ranking (eso es `research/transfer_study.py`) ni toca datos reales.
 El sustrato sintetico es el de SELECCION y el real el de VERIFICACION, y nunca el mismo
 dato haciendo las dos cosas. Medir el rho de una senal de verdad es la otra mitad del
 trabajo, y va en el sustrato real.
@@ -115,11 +115,11 @@ from ai_trader.scoring.families import (
 from ai_trader.shared.checkpoint import UnitCheckpoint, fingerprint
 from ai_trader.shared.reports import guard_published_grid
 from ai_trader.shared import bars as bar_schema
-from ai_trader.synthetic.fidelity import CHANNEL_MAX_LAG, channel_facts
-from ai_trader.synthetic.scenarios import SignalChannel
-from ai_trader.synthetic.service import study_window
-from ai_trader.synthetic.signal_channel import DEFAULT_EMISSION_SEED, emit_signals
-from ai_trader.synthetic.store import SyntheticStore
+from ai_trader.research.synthetic.fidelity import CHANNEL_MAX_LAG, channel_facts
+from ai_trader.research.synthetic.scenarios import SignalChannel
+from ai_trader.research.synthetic.service import study_window
+from ai_trader.research.synthetic.signal_channel import DEFAULT_EMISSION_SEED, emit_signals
+from ai_trader.research.synthetic.store import SyntheticStore
 
 logger = logging.getLogger("signal_study")
 

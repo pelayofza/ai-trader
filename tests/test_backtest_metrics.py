@@ -151,7 +151,7 @@ class TestDefaultWeightsAreCalibrated:
         published = load_calibration_report(ROOT / CALIBRATION_REPORT)
         assert published is not None, (
             f"Falta la evidencia de calibracion en {CALIBRATION_REPORT}. "
-            "Regenerala con: python -m ai_trader.scoring.weight_study"
+            "Regenerala con: python -m ai_trader.research.weight_study"
         )
         return published
 

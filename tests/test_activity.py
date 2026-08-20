@@ -30,7 +30,7 @@ from ai_trader.scoring.activity import (
     eligibility_dict,
     measure_activity,
 )
-from ai_trader.scoring.activity_study import (
+from ai_trader.research.activity_study import (
     THRESHOLD_GRID,
     activity_report_path,
     choose_threshold,
@@ -217,7 +217,7 @@ class TestElSueloEstaAtadoASuEvidencia:
         published = load_activity_report(ROOT / activity_report_path(ACTIVITY_LIBRARY))
         assert published is not None, (
             "Falta la evidencia del suelo de actividad en data/activity/. "
-            "Regenerala con: python -m ai_trader.scoring.activity_study"
+            "Regenerala con: python -m ai_trader.research.activity_study"
         )
         return published
 

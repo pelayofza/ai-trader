@@ -28,7 +28,7 @@ import pytest
 
 from ai_trader.scoring.aggregate import DEFAULT_CVAR_ALPHA, aggregate_reward
 from ai_trader.scoring.multiwindow import validate_multiwindow
-from ai_trader.scoring.transfer_study import (
+from ai_trader.research.transfer_study import (
     FLOW_NONE,
     FLOW_TRANSFERS,
     RHO_ACCEPT,
@@ -288,7 +288,7 @@ class TestPublishedFingerprint:
 
         from ai_trader.backtest.validation import SCHEME_CPCV
         from ai_trader.config import load_config
-        from ai_trader.scoring.transfer_study import N_GROUPS, N_TEST_GROUPS
+        from ai_trader.research.transfer_study import N_GROUPS, N_TEST_GROUPS
         from ai_trader.data.real_history import build_service, fetch_real_bars
 
         base = load_config(plan["config_path"])

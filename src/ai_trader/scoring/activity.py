@@ -37,7 +37,7 @@ EL SUELO, Y DE DONDE SALE. `ActivityFloor` tiene dos condiciones y las dos son n
    operaciones. Esta condicion esta MEDIDA, y se calibra contra la primera en vez de
    inventarse.
 
-El 3 sale de `scoring.activity_study` (informe en `data/activity/`), sobre los 32 pares
+El 3 sale de `research.activity_study` (informe en `data/activity/`), sobre los 32 pares
 (configuracion, mundo) de la rejilla de transferencia:
 
 - Regla declarada antes de mirar, con la misma disciplina que `transfer_study.RHO_ACCEPT`:

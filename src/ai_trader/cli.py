@@ -12,12 +12,20 @@ from ai_trader.config import DEFAULT_CONFIG_PATH, load_config
 from ai_trader.data.market_data import MarketDataService
 from ai_trader.main import build_runner
 from ai_trader.notifications.base import NullNotifier
-# Las claves de los enriquecedores se importan arriba, y no de forma perezosa como el resto
-# de `synth`, porque son las `choices` de un argumento: el parser las necesita al
-# construirse. `observation_worlds` solo importa de `synthetic/`, asi que no arrastra nada.
-from ai_trader.synthetic.observation_worlds import ENRICHERS as _ENRICHERS
 
-ENRICHER_KEYS: tuple[str, ...] = tuple(_ENRICHERS)
+
+def _enricher_keys() -> tuple[str, ...]:
+    """Las `choices` de `synth derive`, resueltas al construir el parser.
+
+    Perezosa como el resto de `synth`, y ademas TOLERANTE a que no este: la linea
+    sintetica esta aparcada en `ai_trader/research/`, y el CLI que opera no puede dejar
+    de arrancar porque esa carpeta falte. Sin ella el subcomando sigue existiendo y no
+    acepta ningun valor, que es exactamente lo que hay."""
+    try:
+        from ai_trader.research.synthetic.observation_worlds import ENRICHERS
+    except ImportError:  # pragma: no cover - la carpeta archivada no esta
+        return ()
+    return tuple(ENRICHERS)
 
 logger = logging.getLogger(__name__)
 
@@ -107,8 +115,8 @@ def _synthetic_bars(config, args):
     """Muestra sintetica almacenada: LIBRERIA:ESCENARIO:PATH.
 
     La ventana se deriva del manifiesto dejando calentamiento para el lookback."""
-    from ai_trader.synthetic.service import sample_window
-    from ai_trader.synthetic.store import SyntheticStore
+    from ai_trader.research.synthetic.service import sample_window
+    from ai_trader.research.synthetic.store import SyntheticStore
 
     parts = args.synthetic.split(":")
     if len(parts) != 3:
@@ -193,9 +201,9 @@ def _run_multiwindow(config, bars, start, end, args: argparse.Namespace) -> int:
 
 
 def cmd_synth_generate(args: argparse.Namespace) -> int:
-    from ai_trader.synthetic.designer import ClaudeScenarioDesigner, TemplateScenarioDesigner
-    from ai_trader.synthetic.service import SyntheticDataService
-    from ai_trader.synthetic.store import SyntheticStore
+    from ai_trader.research.synthetic.designer import ClaudeScenarioDesigner, TemplateScenarioDesigner
+    from ai_trader.research.synthetic.service import SyntheticDataService
+    from ai_trader.research.synthetic.store import SyntheticStore
 
     designer = ClaudeScenarioDesigner() if args.ai else TemplateScenarioDesigner()
     store = SyntheticStore(args.synthetic_root) if args.synthetic_root else SyntheticStore()
@@ -218,9 +226,9 @@ def cmd_synth_generate(args: argparse.Namespace) -> int:
 
 
 def cmd_synth_add_paths(args: argparse.Namespace) -> int:
-    from ai_trader.synthetic.designer import TemplateScenarioDesigner
-    from ai_trader.synthetic.service import SyntheticDataService
-    from ai_trader.synthetic.store import SyntheticStore
+    from ai_trader.research.synthetic.designer import TemplateScenarioDesigner
+    from ai_trader.research.synthetic.service import SyntheticDataService
+    from ai_trader.research.synthetic.store import SyntheticStore
 
     store = SyntheticStore(args.synthetic_root) if args.synthetic_root else SyntheticStore()
     # El disenador no se usa al regenerar (los escenarios ya estan en disco); se pasa
@@ -245,10 +253,10 @@ def cmd_synth_derive(args: argparse.Namespace) -> int:
     puede repetir. `--enricher` toma sus opciones del registro, asi que `--help` lista los
     mundos derivables y esa lista no se puede desincronizar del codigo.
     """
-    from ai_trader.synthetic.designer import TemplateScenarioDesigner
-    from ai_trader.synthetic.observation_worlds import ENRICHERS
-    from ai_trader.synthetic.service import SyntheticDataService
-    from ai_trader.synthetic.store import SyntheticStore
+    from ai_trader.research.synthetic.designer import TemplateScenarioDesigner
+    from ai_trader.research.synthetic.observation_worlds import ENRICHERS
+    from ai_trader.research.synthetic.service import SyntheticDataService
+    from ai_trader.research.synthetic.store import SyntheticStore
 
     store = SyntheticStore(args.synthetic_root) if args.synthetic_root else SyntheticStore()
     # El disenador no se usa al derivar (los escenarios ya estan en disco); se pasa uno
@@ -268,7 +276,7 @@ def cmd_synth_derive(args: argparse.Namespace) -> int:
 
 
 def cmd_synth_list(args: argparse.Namespace) -> int:
-    from ai_trader.synthetic.store import SyntheticStore
+    from ai_trader.research.synthetic.store import SyntheticStore
 
     store = SyntheticStore(args.synthetic_root) if args.synthetic_root else SyntheticStore()
     libraries = store.list_libraries()
@@ -818,7 +826,7 @@ def main(argv: list[str] | None = None) -> int:
     der.add_argument("--from", dest="source", required=True, help="Source library id.")
     der.add_argument("--to", dest="target", required=True, help="Library id to create/overwrite.")
     der.add_argument(
-        "--enricher", required=True, choices=sorted(ENRICHER_KEYS),
+        "--enricher", required=True, choices=sorted(_enricher_keys()),
         help=(
             "Declared enricher: 'v2' = microstructure (made ai_v2/ai_v3); "
             "'v4' = microstructure + the five thematic observation channels."

@@ -287,7 +287,7 @@ class ScenarioSpec:
       aunque la bolsa caiga"). Honra el "la IA analiza la respuesta de CADA activo".
     - signals: canales de OBSERVACION del escenario. Vacio (el default) = mundo sin
       senales externas, que es como se genero todo lo publicado. No los produce el motor
-      de paths sino un pase aparte (`synthetic/signal_channel.py`), por una razon que no
+      de paths sino un pase aparte (`research/synthetic/signal_channel.py`), por una razon que no
       es de gusto: al emitirse DESPUES, sobre barras ya cerradas, la no interferencia con
       la secuencia RNG del motor no es una promesa que haya que auditar leyendo codigo,
       es imposible por construccion.

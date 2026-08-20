@@ -88,8 +88,8 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import replace
 
-from ai_trader.synthetic.retrofit import enrich_spec
-from ai_trader.synthetic.scenarios import ScenarioSpec, SignalChannel
+from ai_trader.research.synthetic.retrofit import enrich_spec
+from ai_trader.research.synthetic.scenarios import ScenarioSpec, SignalChannel
 
 # Suelo de cobertura declarada. Ver el docstring: es una concesion al ESTIMADOR (la muestra
 # minima que `fidelity.channel_facts` necesita para certificar un canal), no una afirmacion

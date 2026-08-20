@@ -82,7 +82,7 @@ class HeadlineWeights:
     CALIBRACION MEDIDA (no razonada): 480 backtests reales sobre la libreria ai_v2
     (16 configuraciones de un hipercubo latino x 30 escenarios), barriendo
     lambda ∈ {0, .25, .5, 1, 2, 4} x kappa ∈ {0, .5, 1, 2, 4}. Evidencia completa y
-    reproducible en `data/calibration/` (ver ai_trader.scoring.weight_study). Tres
+    reproducible en `data/calibration/` (ver ai_trader.research.weight_study). Tres
     resultados, y los tres empujan hacia pesos PEQUENOS:
 
     1. Los pesos NO cambian la decision. La misma configuracion gana en los 30 puntos de

@@ -106,7 +106,7 @@ y razonadas en codigo, no parametros sorteables. Eso limita los grados de libert
 es un test.
 
 EL TEST YA EXISTE (2026-08-12), y conviene saber que contesta y que no.
-`scoring/signal_study.py` barre la capacidad predictiva de un canal de observacion
+`research/signal_study.py` barre la capacidad predictiva de un canal de observacion
 SINTETICO —con rho=0 como grupo de control— y publica el rho de BREAK-EVEN: a partir de
 que IC una senal hace que la estrategia bata al baseline despues de costes (evidencia en
 `data/signal_channel/`). Es una propiedad del DISENO, no de los datos, y por eso no se
