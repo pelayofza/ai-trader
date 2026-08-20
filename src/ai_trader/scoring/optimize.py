@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import Protocol
 
 import pandas as pd
 
@@ -46,10 +47,12 @@ DEFAULT_LIBRARY_ID = "ai_v2"
 @dataclass(slots=True)
 class OptimizationResult:
     """
-    Resultado de optimizar los params de una primitiva por CEM sobre la libreria
-    sintetica. Reporta train Y validation (hold-out de escenarios enteros) para hacer
-    visible el gap de overfitting: la unidad de evaluacion es la distribucion, y la
-    validacion son arquetipos que el CEM nunca vio.
+    Resultado de optimizar los params de una primitiva por CEM sobre un sustrato.
+
+    Reporta train Y validation (hold-out de UNIDADES enteras) para hacer visible el gap de
+    overfitting: la unidad de evaluacion es la distribucion, y la validacion son unidades
+    que el CEM nunca vio. `substrate` dice sobre que se optimizo -- sin eso las cifras no
+    son auditables, porque el mismo numero significa cosas distintas segun el sustrato.
 
     Tres capas de honestidad ademas del hold-out:
     - `gate`: la estrategia solo APRUEBA si bate al mejor baseline pasivo en validation Y
@@ -65,8 +68,7 @@ class OptimizationResult:
     train: RewardStats
     validation: RewardStats
     split: ScenarioSplit
-    n_paths_per_scenario: int
-    total_paths_available: int
+    substrate: dict
     gate: BaselineGate
     pbo: PBOResult
     dsr: DeflatedSharpe
@@ -101,15 +103,51 @@ class OptimizationResult:
                 "n_validation": self.split.n_validation,
                 "seed": self.split.seed,
             },
-            "n_paths_per_scenario": self.n_paths_per_scenario,
-            "total_paths_available": self.total_paths_available,
+            "substrate": self.substrate,
         }
 
 
-class _SampleEvaluator:
-    """Evalua specs sobre muestras (escenario, path), cacheando las barras cargadas
-    para no releer parquet en cada iteracion del CEM. Los baselines de cada muestra no
-    dependen de la estrategia, asi que se calculan una vez y se cachean tambien."""
+class SampleSource(Protocol):
+    """
+    De donde salen las muestras sobre las que se puntua una configuracion.
+
+    El optimizador no sabe -y no debe saber- si detras hay caminos de una libreria
+    sintetica o folds de una sub-ventana del historico real. Solo pide dos cosas: que
+    UNIDADES hay a cada lado del hold-out, y como se evalua una spec sobre unas unidades.
+
+    Una unidad es la unidad de HOLD-OUT (un escenario entero, una sub-ventana entera), no
+    una muestra suelta: si una muestra de validacion pudiera pertenecer a una unidad ya
+    vista en train, el gap de sobreajuste quedaria enmascarado.
+    """
+
+    @property
+    def train_units(self) -> tuple[str, ...]:
+        ...
+
+    @property
+    def validation_units(self) -> tuple[str, ...]:
+        ...
+
+    def evaluations(
+        self, spec: StrategySpec, units: tuple[str, ...]
+    ) -> list[SampleEvaluation]:
+        ...
+
+    def baseline_scores(self, units: tuple[str, ...]) -> dict[str, list[float]]:
+        ...
+
+    def describe(self) -> dict:
+        """El sustrato, serializado junto al resultado: sin esto las cifras no son
+        auditables, porque no se sabria sobre QUE se optimizo."""
+        ...
+
+
+class SyntheticSampleSource:
+    """Muestras = (escenario, path) de una libreria sintetica almacenada.
+
+    Cachea las barras cargadas para no releer parquet en cada iteracion del CEM. Los
+    baselines de cada muestra no dependen de la estrategia, asi que se calculan una vez
+    y se cachean tambien."""
 
     def __init__(
         self,
@@ -119,6 +157,8 @@ class _SampleEvaluator:
         start: datetime,
         end: datetime,
         n_paths: int,
+        split: ScenarioSplit,
+        total_paths: int,
         *,
         split_ratio: float,
         starting_equity: float,
@@ -130,11 +170,78 @@ class _SampleEvaluator:
         self._start = start
         self._end = end
         self._n_paths = n_paths
+        self.split = split
+        self.total_paths = total_paths
         self._split_ratio = split_ratio
         self._starting_equity = starting_equity
         self._headline_weights = headline_weights
         self._cache: dict[tuple[str, int], dict[str, pd.DataFrame]] = {}
         self._baseline_cache: dict[tuple[str, int], dict[str, float]] = {}
+
+    @classmethod
+    def build(
+        cls,
+        *,
+        library_id: str = DEFAULT_LIBRARY_ID,
+        store: SyntheticStore | None = None,
+        base_config: AppConfig | None = None,
+        warmup_days: int | None = None,
+        n_paths: int | None = None,
+        validation_fraction: float = DEFAULT_VALIDATION_FRACTION,
+        split_seed: int = 0,
+        split_ratio: float = 0.7,
+        starting_equity: float = DEFAULT_STARTING_EQUITY,
+        headline_weights: HeadlineWeights = DEFAULT_HEADLINE_WEIGHTS,
+    ) -> SyntheticSampleSource:
+        """Resuelve libreria, particion de escenarios y ventana desde el manifiesto.
+
+        El hold-out es de ESCENARIOS ENTEROS: los arquetipos macro reservados aqui son los
+        que el CEM no vera nunca. `n_paths` acota el coste subsampleando caminos por
+        escenario y AVISA por log si recorta (nada de recortes silenciosos)."""
+        store = store or SyntheticStore()
+        base_config = base_config or load_config(DEFAULT_SYNTHETIC_CONFIG)
+        manifest = store.load_manifest(library_id)
+        scenario_ids = [s["id"] for s in manifest.scenarios]
+        split = split_scenarios(
+            scenario_ids, validation_fraction=validation_fraction, seed=split_seed
+        )
+        warmup = (
+            warmup_days if warmup_days is not None else base_config.runner.lookback_days + 5
+        )
+        start, end = sample_window(manifest, warmup)
+
+        total_paths = manifest.n_paths
+        used_paths = total_paths if n_paths is None else min(n_paths, total_paths)
+        if used_paths < total_paths:
+            logger.warning(
+                "Subsampling %d/%d paths per scenario (speed vs variance tradeoff)",
+                used_paths, total_paths,
+            )
+        return cls(
+            store, library_id, base_config, start, end, used_paths, split, total_paths,
+            split_ratio=split_ratio, starting_equity=starting_equity,
+            headline_weights=headline_weights,
+        )
+
+    @property
+    def train_units(self) -> tuple[str, ...]:
+        return self.split.train
+
+    @property
+    def validation_units(self) -> tuple[str, ...]:
+        return self.split.validation
+
+    def describe(self) -> dict:
+        return {
+            "substrate": "sintetico",
+            "library_id": self._library_id,
+            "n_paths_per_unit": self._n_paths,
+            "total_paths_available": self.total_paths,
+            "window": {
+                "start": self._start.date().isoformat(),
+                "end": self._end.date().isoformat(),
+            },
+        }
 
     def _bars(self, scenario_id: str, path_index: int) -> dict[str, pd.DataFrame]:
         key = (scenario_id, path_index)
@@ -144,13 +251,13 @@ class _SampleEvaluator:
             self._cache[key] = cached
         return cached
 
-    def _samples(self, scenario_ids: tuple[str, ...]):
-        for scenario_id in scenario_ids:
+    def _samples(self, units: tuple[str, ...]):
+        for scenario_id in units:
             for path_index in range(self._n_paths):
                 yield scenario_id, path_index
 
     def evaluations(
-        self, spec: StrategySpec, scenario_ids: tuple[str, ...]
+        self, spec: StrategySpec, units: tuple[str, ...]
     ) -> list[SampleEvaluation]:
         return [
             evaluate_sample_detailed(
@@ -163,18 +270,18 @@ class _SampleEvaluator:
                 starting_equity=self._starting_equity,
                 headline_weights=self._headline_weights,
             )
-            for scenario_id, path_index in self._samples(scenario_ids)
+            for scenario_id, path_index in self._samples(units)
         ]
 
-    def scores(self, spec: StrategySpec, scenario_ids: tuple[str, ...]) -> list[float]:
-        return [e.score for e in self.evaluations(spec, scenario_ids)]
+    def scores(self, spec: StrategySpec, units: tuple[str, ...]) -> list[float]:
+        return [e.score for e in self.evaluations(spec, units)]
 
-    def baseline_scores(self, scenario_ids: tuple[str, ...]) -> dict[str, list[float]]:
+    def baseline_scores(self, units: tuple[str, ...]) -> dict[str, list[float]]:
         """Scores de los baselines por muestra, en el mismo orden que `scores`. Un
         baseline solo entra si esta disponible en TODAS las muestras: comparar contra
         una serie con huecos seria comparar contra otra cosa."""
         per_sample: list[dict[str, float]] = []
-        for scenario_id, path_index in self._samples(scenario_ids):
+        for scenario_id, path_index in self._samples(units):
             key = (scenario_id, path_index)
             cached = self._baseline_cache.get(key)
             if cached is None:
@@ -203,6 +310,7 @@ class _SampleEvaluator:
 def run_optimization(
     strategy_type: str,
     *,
+    source: SampleSource | None = None,
     library_id: str = DEFAULT_LIBRARY_ID,
     store: SyntheticStore | None = None,
     base_config: AppConfig | None = None,
@@ -217,48 +325,38 @@ def run_optimization(
     split_seed: int = 0,
 ) -> OptimizationResult:
     """
-    Optimiza por CEM los parametros de una primitiva sobre la libreria sintetica.
+    Optimiza por CEM los parametros de una primitiva sobre el sustrato que se le de.
 
-    - Sustrato: `library_id`, por defecto DEFAULT_LIBRARY_ID ('ai_v2', la libreria
-      realista). Pasa el id explicitamente para optimizar sobre otra libreria.
+    - Sustrato: `source`. Es lo unico que decide sobre QUE se optimiza, y por eso viaja
+      dentro del resultado (`substrate`). Los argumentos `library_id`, `store`, `n_paths`,
+      `validation_fraction` y `split_seed` solo se usan para construir la fuente sintetica
+      por omision, y no significan nada con una `source` explicita.
     - Score por muestra: `Sharpe - lambda*turnover - kappa*maxDD` OUT-OF-SAMPLE.
     - Recompensa: CVaR@`cvar_alpha` de esos scores sobre las muestras de TRAIN, o sea
       la media del peor cuartil: se optimiza la cola mala, no el centro.
-    - Hold-out: escenarios enteros reservados como validation (nunca vistos por el CEM).
+    - Hold-out: unidades enteras reservadas como validation (nunca vistas por el CEM).
     - Gate: en validation, la estrategia debe batir al MEJOR baseline pasivo para
       aprobar. Sin baseline disponible no hay aprobado.
     - Sobreajuste por multiples pruebas: se reportan PBO (sobre la matriz muestras x
       configuraciones que el CEM genero) y DSR (Sharpe del ganador deflactado).
-    - Subsampling: `n_paths` limita paths por escenario para acotar el coste; si es
-      menor que el total disponible, se AVISA por log (nada de recortes silenciosos).
     - Determinista de punta a punta (split_seed + cem_config.seed + backtest).
     """
-    store = store or SyntheticStore()
-    base_config = base_config or load_config(DEFAULT_SYNTHETIC_CONFIG)
     space: ParamSpace = get_space(strategy_type)
 
-    manifest = store.load_manifest(library_id)
-    scenario_ids = [s["id"] for s in manifest.scenarios]
-    split = split_scenarios(
-        scenario_ids, validation_fraction=validation_fraction, seed=split_seed
-    )
-
-    warmup = warmup_days if warmup_days is not None else base_config.runner.lookback_days + 5
-    start, end = sample_window(manifest, warmup)
-
-    total_paths = manifest.n_paths
-    used_paths = total_paths if n_paths is None else min(n_paths, total_paths)
-    if used_paths < total_paths:
-        logger.warning(
-            "Subsampling %d/%d paths per scenario (speed vs variance tradeoff)",
-            used_paths, total_paths,
-        )
-
-    evaluator = _SampleEvaluator(
-        store, library_id, base_config, start, end, used_paths,
-        split_ratio=split_ratio, starting_equity=starting_equity,
+    source = source or SyntheticSampleSource.build(
+        library_id=library_id,
+        store=store,
+        base_config=base_config,
+        warmup_days=warmup_days,
+        n_paths=n_paths,
+        validation_fraction=validation_fraction,
+        split_seed=split_seed,
+        split_ratio=split_ratio,
+        starting_equity=starting_equity,
         headline_weights=headline_weights,
     )
+    split = source.split
+    train_units, validation_units = source.train_units, source.validation_units
 
     def make_spec(vector) -> StrategySpec:
         params = space.to_params(vector)
@@ -271,23 +369,24 @@ def run_optimization(
     trial_sharpes: list[float] = []
 
     def objective(vector) -> float:
-        evaluations = evaluator.evaluations(make_spec(vector), split.train)
+        evaluations = source.evaluations(make_spec(vector), train_units)
         scores = [e.score for e in evaluations]
         trial_scores.append(scores)
         trial_sharpes.append(_mean([e.sharpe for e in evaluations]))
         return aggregate_reward(scores, alpha=cvar_alpha).reward
 
     logger.info(
-        "Optimizing '%s' | train=%d scenarios x %d paths | validation=%d scenarios",
-        strategy_type, split.n_train, used_paths, split.n_validation,
+        "Optimizing '%s' | train=%d unidades | validation=%d unidades | sustrato=%s",
+        strategy_type, len(train_units), len(validation_units),
+        source.describe().get("substrate", "?"),
     )
     cem_result = maximize(objective, space.lows, space.highs, cem_config or CEMConfig())
 
     best_params = space.to_params(cem_result.best_vector)
     best_spec = StrategySpec(type=strategy_type, id=f"{strategy_type}_cem", params=best_params)
 
-    train_evals = evaluator.evaluations(best_spec, split.train)
-    validation_evals = evaluator.evaluations(best_spec, split.validation)
+    train_evals = source.evaluations(best_spec, train_units)
+    validation_evals = source.evaluations(best_spec, validation_units)
     # La actividad acompana a la recompensa desde el primer sitio en el que se calcula: una
     # muestra sin operaciones puntua 0 EXACTO y ese 0 es indistinguible de "no perdio" si
     # no se publica al lado cuantas veces se opero. Ver `scoring.activity`.
@@ -302,7 +401,7 @@ def run_optimization(
 
     # El gate se juega en VALIDATION: batir baselines en los escenarios que el CEM ya vio
     # no probaria nada.
-    baseline_scores = evaluator.baseline_scores(split.validation)
+    baseline_scores = source.baseline_scores(validation_units)
     baseline_gate = gate(
         [e.score for e in validation_evals],
         baseline_scores,
@@ -342,8 +441,7 @@ def run_optimization(
         train=train_stats,
         validation=validation_stats,
         split=split,
-        n_paths_per_scenario=used_paths,
-        total_paths_available=total_paths,
+        substrate=source.describe(),
         gate=baseline_gate,
         pbo=pbo,
         dsr=dsr,

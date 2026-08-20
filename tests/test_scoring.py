@@ -571,8 +571,9 @@ class TestRunOptimizationEndToEnd:
         # Train = 2 escenarios x 2 paths; validation = 1 escenario x 2 paths.
         assert result.train.n == result.split.n_train * 2
         assert result.validation.n == result.split.n_validation * 2
-        assert result.n_paths_per_scenario == 2
-        assert result.total_paths_available == 3
+        assert result.substrate["n_paths_per_unit"] == 2
+        assert result.substrate["total_paths_available"] == 3
+        assert result.substrate["substrate"] == "sintetico"
         assert len(result.history) == 2
         assert isinstance(result.overfit_gap, float)
 
