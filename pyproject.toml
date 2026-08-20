@@ -38,6 +38,13 @@ markers = [
 [tool.ruff]
 line-length = 100
 src = ["src", "tests"]
+# `tools/` no es codigo del paquete: son los scripts de la tarea diaria externa (Claude
+# Cowork) que escribe en data/signals_raw/ai_reports/. No sigue el estilo del repo y no
+# tiene por que -- pero si entra en el linter, `verify.ps1` da rojo por algo que no es una
+# regresion. `extend-exclude` y no `exclude` a secas: el segundo SUSTITUYE la lista de
+# exclusiones por defecto de ruff, y entonces que .venv/ no se escanee pasaria a depender
+# de que siga en .gitignore.
+extend-exclude = ["tools"]
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
