@@ -62,10 +62,10 @@ from ai_trader.scoring.transfer_study import (
     SIDE_REAL,
     SIDE_SYNTHETIC,
     SideScores,
-    build_specs,
     collect_side,
     pooled_gate,
 )
+from ai_trader.scoring.families import build_specs
 from ai_trader.scoring.weight_calibration import spearman
 from ai_trader.shared.reports import load_report
 

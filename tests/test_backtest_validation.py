@@ -509,7 +509,7 @@ class TestStudyConfigsAreConstructible:
     def test_every_family_of_the_grid_is_represented(self):
         # Si alguien anade una familia a la rejilla y se olvida de este estudio, el
         # esquema de validacion se seguiria publicando sobre las de antes sin avisar.
-        from ai_trader.scoring.weight_study import FAMILIES
+        from ai_trader.scoring.families import FAMILIES
 
         assert {c[1] for c in validation_study.STUDY_CONFIGS} == set(FAMILIES)
 

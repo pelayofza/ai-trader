@@ -71,7 +71,7 @@ from ai_trader.shared import bars as bar_schema
 from ai_trader.shared.clock import HistoricalClock
 from ai_trader.shared.reports import load_report
 from ai_trader.shared.instruments import AssetClass
-from ai_trader.scoring.weight_study import FAMILIES, NEW_FAMILIES
+from ai_trader.scoring.families import FAMILIES, NEW_FAMILIES
 from ai_trader.strategies import build_strategy
 from ai_trader.strategies.mean_reversion import MeanReversionStrategy
 from ai_trader.strategies.momentum_crypto import CryptoMomentumStrategy

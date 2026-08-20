@@ -86,7 +86,7 @@ from ai_trader.observation.signal_themes import (
 from ai_trader.shared.clock import HistoricalClock
 from ai_trader.scoring.aggregate import DEFAULT_CVAR_ALPHA
 from ai_trader.scoring.multiwindow import SCHEME_CPCV, validate_multiwindow
-from ai_trader.scoring.signal_study import GATE_VALUE_BY_PARAM, gate_param_for
+from ai_trader.scoring.signal_gate import GATE_VALUE_BY_PARAM, gate_param_for
 from ai_trader.scoring.real_substrate import (
     N_GROUPS,
     N_TEST_GROUPS,
@@ -95,8 +95,7 @@ from ai_trader.scoring.real_substrate import (
     crypto_universe,
     real_windows,
 )
-from ai_trader.scoring.transfer_study import build_specs
-from ai_trader.scoring.weight_study import NEW_FAMILIES
+from ai_trader.scoring.families import NEW_FAMILIES, build_specs
 from ai_trader.shared.reports import write_report
 from ai_trader.signals.catalog import CATALOG
 # El cargador de barras reales lo comparten todos los estudios que tocan mercado: los

@@ -62,7 +62,7 @@ from ai_trader.scoring.search_space import SPACES, ParamDim, get_space
 from ai_trader.strategies.registry import build_strategy
 from ai_trader.scoring.weight_calibration import candidate_specs, spearman
 from ai_trader.shared.reports import PublishedGridMismatch, guard_published_grid
-from ai_trader.scoring.weight_study import FAMILIES, FAMILIES_PUBLISHED, STUDY_SEED
+from ai_trader.scoring.families import FAMILIES, FAMILIES_PUBLISHED, STUDY_SEED
 from ai_trader.strategies.attention_ignition import AttentionIgnitionConfig
 from ai_trader.strategies.event_calendar_drift import EventCalendarDriftConfig
 from ai_trader.strategies.flow_persistence import FlowPersistenceConfig

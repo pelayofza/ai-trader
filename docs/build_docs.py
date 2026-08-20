@@ -62,7 +62,7 @@ from ai_trader.synthetic.fidelity import (
     load_fidelity_report,
     metric,
 )
-from ai_trader.scoring.weight_study import NEW_FAMILIES
+from ai_trader.scoring.families import NEW_FAMILIES
 from ai_trader.strategies.mean_reversion import MeanReversionStrategy
 from ai_trader.strategies.momentum_crypto import CryptoMomentumStrategy
 from ai_trader.strategies.registry import build_strategy

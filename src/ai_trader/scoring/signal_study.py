@@ -45,7 +45,7 @@ SEIS DECISIONES QUE SON LAS QUE HACEN QUE LA CIFRA SIGNIFIQUE ALGO
    que opera menos, y confundir "operar menos" con "saber algo" es justo el error que este
    estudio existe para no cometer.
 
-4. LAS 16 CONFIGURACIONES SON LAS PUBLICADAS. Se importan de `transfer_study.build_specs`
+4. LAS 16 CONFIGURACIONES SON LAS PUBLICADAS. Se importan de `scoring.families.build_specs`
    y lo unico que se les inyecta —con `dataclasses.replace`— es el umbral de la puerta de
    senales. Ningun `config_id` es nuevo: el barrido se lee contra el ranking ya publicado.
 
@@ -99,9 +99,19 @@ from ai_trader.scoring.aggregate import DEFAULT_CVAR_ALPHA, aggregate_reward
 from ai_trader.scoring.baselines import BASELINE_LABELS
 from ai_trader.scoring.multiwindow import resolve_purge_days, validate_multiwindow
 from ai_trader.scoring.scenario_split import ScenarioSplit, split_scenarios
+from ai_trader.scoring.signal_gate import (
+    GATE_MIN_TONE,
+    GATE_PARAM,
+    GATE_VALUE_BY_PARAM,
+    gate_param_for,
+)
 from ai_trader.scoring.real_substrate import N_GROUPS, N_TEST_GROUPS, crypto_universe
-from ai_trader.scoring.transfer_study import CONFIGS_PER_FAMILY, build_specs
-from ai_trader.scoring.weight_study import FAMILIES, STUDY_SEED
+from ai_trader.scoring.families import (
+    CONFIGS_PER_FAMILY,
+    FAMILIES,
+    STUDY_SEED,
+    build_specs,
+)
 from ai_trader.shared.checkpoint import UnitCheckpoint, fingerprint
 from ai_trader.shared.reports import guard_published_grid
 from ai_trader.shared import bars as bar_schema
@@ -168,37 +178,6 @@ CHANNEL_NOISE_AR = 0.30
 CHANNEL_INFORMATIVE_SHARE = 1.0
 CHANNEL_COVERAGE = 1.0
 CHANNEL_CORR_GROUP = "sweep"
-
-# Umbral con el que se abre la puerta: opera solo si el tono es positivo. CERO, y no un
-# numero sorteado: es la mediana de una z, o sea "la senal apunta arriba", el corte que no
-# tiene ningun grado de libertad que ajustar. Sortearlo convertiria el barrido en una
-# optimizacion de la puerta y el break-even dejaria de ser una propiedad del diseno.
-GATE_MIN_TONE = 0.0
-# El unico parametro que se inyecta. Existe con este nombre y el mismo significado —un
-# PISO de tono— en las dos familias publicadas y en cinco de las seis tematicas.
-GATE_PARAM = "min_signal_tone"
-
-# La excepcion, y no es un caso especial arbitrario: `event_calendar_drift` NO DECLARA
-# `min_signal_tone`, porque de las seis fuentes de su tema solo `ofac_sdn` tiene polaridad y
-# el tono sale ~0 por construccion. Un piso de tono ahi seria un mando que parece hacer algo
-# y no puede. Su equivalente —"solo opero si hay catalizador cerca"— es un piso de INTENSIDAD.
-GATE_PARAM_BY_FAMILY: dict[str, str] = {
-    "event_calendar_drift": "min_signal_intensity",
-}
-
-# Con que valor se abre cada puerta. El de intensidad no puede ser 0,0: ese es su valor
-# INERTE (el borde inferior del rango), asi que inyectarlo no encenderia nada. Se usa la
-# mediana del rango util, que es el analogo de "la senal apunta arriba" para un eje sin signo:
-# "esta pasando algo por encima de lo normal".
-GATE_VALUE_BY_PARAM: dict[str, float] = {
-    "min_signal_tone": GATE_MIN_TONE,
-    "min_signal_intensity": 0.5,
-}
-
-
-def gate_param_for(strategy_type: str) -> str:
-    """El parametro con el que se arma la puerta de una familia."""
-    return GATE_PARAM_BY_FAMILY.get(strategy_type, GATE_PARAM)
 
 DETERMINISM_CHECKS = 6
 

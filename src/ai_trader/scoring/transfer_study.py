@@ -98,6 +98,12 @@ from ai_trader.scoring.activity import (
 )
 from ai_trader.scoring.aggregate import DEFAULT_CVAR_ALPHA, aggregate_reward
 from ai_trader.scoring.baselines import BASELINE_LABELS, BaselineGate, gate
+from ai_trader.scoring.families import (
+    CONFIGS_PER_FAMILY,
+    FAMILIES,
+    STUDY_SEED,
+    build_specs,
+)
 from ai_trader.scoring.multiwindow import resolve_purge_days, validate_multiwindow
 from ai_trader.scoring.real_substrate import (
     N_GROUPS,
@@ -107,8 +113,7 @@ from ai_trader.scoring.real_substrate import (
     crypto_universe,
     real_windows,
 )
-from ai_trader.scoring.weight_calibration import candidate_specs, spearman
-from ai_trader.scoring.weight_study import FAMILIES, STUDY_SEED
+from ai_trader.scoring.weight_calibration import spearman
 from ai_trader.shared.reports import guard_published_grid, load_report
 from ai_trader.shared.instruments import AssetClass, detect_asset_class
 from ai_trader.data.real_history import (
@@ -133,8 +138,6 @@ FALLBACK_LIBRARY_ID = "ai_v2"
 # El config del universo OPERABLE (cripto puro): fija anualizacion 365, no 252, y ademas
 # es el unico universo con contraparte real que se pueda descargar.
 DEFAULT_CONFIG = Path("config") / "default.toml"
-
-CONFIGS_PER_FAMILY = 8  # x 2 familias = 16 configuraciones rankeadas
 
 # Regla de decision (ver docstring). Se declara aqui, en el codigo, y no en la prosa del
 # informe: un umbral que se elige despues de ver el resultado no es un umbral.
@@ -174,24 +177,6 @@ def load_transfer_report(path: Path | str) -> dict | None:
     """Lee el informe publicado. Devuelve None si no esta, para que los generadores de
     dashboard y documentacion degraden a prosa sin cifras en vez de romperse."""
     return load_report(path)
-
-
-# ------------------------------------------------------------------ la rejilla -------
-
-
-def build_specs(
-    families: Sequence[str] = FAMILIES, per_family: int = CONFIGS_PER_FAMILY
-) -> list[StrategySpec]:
-    """Las 16 configuraciones a rankear: EXACTAMENTE las del estudio de pesos.
-
-    Misma funcion (`candidate_specs`), misma semilla base y mismo desplazamiento por
-    familia. Cambiar cualquiera de las tres cosas romperia la comparabilidad entre los dos
-    estudios sin avisar, asi que las tres viven en `weight_study` y aqui solo se importan.
-    """
-    specs: list[StrategySpec] = []
-    for i, family in enumerate(families):
-        specs.extend(candidate_specs(family, per_family, seed=STUDY_SEED + i))
-    return specs
 
 
 # ------------------------------------------------------------------- el plan ---------

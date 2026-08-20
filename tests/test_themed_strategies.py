@@ -632,7 +632,7 @@ class TestMedicionContraSenalReal:
         el estudio entero. El mapa por familia es lo que lo impide, y este test es lo que
         impide que el mapa se quede corto cuando llegue la septima.
         """
-        from ai_trader.scoring.signal_study import GATE_VALUE_BY_PARAM, gate_param_for
+        from ai_trader.scoring.signal_gate import GATE_VALUE_BY_PARAM, gate_param_for
 
         for family in THEMED_FAMILIES:
             param = gate_param_for(family)
@@ -645,7 +645,7 @@ class TestMedicionContraSenalReal:
     def test_el_valor_inyectado_en_intensidad_no_es_su_borde_inerte(self):
         """0,0 es el valor INERTE de un piso de intensidad: inyectarlo no encenderia nada, y
         el estudio mediria dos corridas identicas creyendo que compara dos brazos."""
-        from ai_trader.scoring.signal_study import GATE_VALUE_BY_PARAM
+        from ai_trader.scoring.signal_gate import GATE_VALUE_BY_PARAM
 
         assert GATE_VALUE_BY_PARAM["min_signal_intensity"] > INERT_MIN_INTENSITY
 

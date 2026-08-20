@@ -712,7 +712,7 @@ class TestSweepReading:
         assert cells[1].channel.rho == 0.0  # el control existe siempre
 
     def test_only_the_gate_threshold_is_injected(self):
-        from ai_trader.scoring.transfer_study import build_specs
+        from ai_trader.scoring.families import build_specs
 
         spec = build_specs()[0]
         cell = Cell(cell_id="c", arm="on", rho=0.1, lead_days=1)
