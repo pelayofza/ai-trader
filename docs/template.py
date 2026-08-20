@@ -1143,7 +1143,7 @@ def _fidelity_block(f):
     """Seccion 2.10: ¿se parece este mundo al real? Con la evidencia que lo responde."""
     if not f:
         return (
-            "<h3>2.10 · Fidelidad contra el mercado real</h3>"
+            "<h3>7.8 · Fidelidad contra el mercado real</h3>"
             "<div class=\"note\"><b>Limitación declarada.</b> El informe de fidelidad "
             "(<span class=\"mono\">data/fidelity/</span>) no está disponible en este árbol, así "
             "que este documento no puede citar las cifras que comparan el mundo sintético con el "
@@ -1162,7 +1162,7 @@ def _fidelity_block(f):
         return "—" if row is None else _n(row[field], decimals)
 
     return f"""
-<h3>2.10 · Fidelidad contra el mercado real: el test que el generador puede fallar</h3>
+<h3>7.8 · Fidelidad contra el mercado real: el test que el generador puede fallar</h3>
 <p>Las secciones anteriores comparan el mundo sintético <b>consigo mismo</b>: una librería tiene colas
 y agrupamiento donde otra no los tenía. Eso no dice que los tenga <b>en la magnitud del mercado</b>.
 Esta sección responde esa pregunta contra el histórico diario real de
@@ -1304,7 +1304,7 @@ def _signal_channel_block(s):
     saberlo."""
     if not s:
         return (
-            "<h3>4.12 · Break-even del IC: cuándo paga una señal</h3>"
+            "<h3>7.12 · Break-even del IC: cuándo paga una señal</h3>"
             "<div class=\"note\"><b>Limitación declarada.</b> El informe del canal sintético "
             "(<span class=\"mono\">data/signal_channel/</span>) no está disponible en este árbol, "
             "así que este documento <b>no puede afirmar</b> desde qué capacidad predictiva una "
@@ -1375,7 +1375,7 @@ def _signal_channel_block(s):
         "no la señal."
     )
     return f"""
-<h3>4.12 · Break-even del IC: desde qué capacidad predictiva paga una señal</h3>
+<h3>7.12 · Break-even del IC: desde qué capacidad predictiva paga una señal</h3>
 <p>El radar del §2.2 mete diecisiete fuentes en la decisión, y hasta aquí su única defensa contra el
 sobreajuste era <b>negativa</b>: ninguna feature entra en el espacio de búsqueda, así que el optimizador
 no puede ajustar umbrales contra el resultado. Eso limita los grados de libertad pero <b>no mide
@@ -1489,7 +1489,7 @@ VERDICT_LABEL = {
 def _themes_real_block(t) -> str:
     """Seccion 4.16: la capa de senal encendida sobre ARCHIVO REAL, comparacion pareada."""
     if not t:
-        return ('<h3>4.16 · La capa temática contra señal real</h3>\n'
+        return ('<h3>4.11 · La capa temática contra señal real</h3>\n'
                 '<p class="muted">Sin informe publicado. Se genera con '
                 '<span class="mono">python -m ai_trader.scoring.theme_study --offline</span>.</p>')
 
@@ -1535,7 +1535,7 @@ def _themes_real_block(t) -> str:
     )
 
     return f"""
-<h3>4.16 · La capa temática contra señal real</h3>
+<h3>4.11 · La capa temática contra señal real</h3>
 <p>Todo lo demás que este documento mide sobre señales lo mide en un canal <b>sintético</b>, donde la
 capacidad predictiva se fija por construcción. Este estudio no: enciende la capa temática sobre el
 <b>archivo real capturado</b> y compara cada familia <b>consigo misma</b>. La diferencia es pareada
@@ -1594,7 +1594,7 @@ def _extended_grid_block(e) -> str:
     igual = ("<b>idéntico campo a campo</b> al del informe congelado"
              if sig["identical_to_frozen"] else "distinto del congelado")
     return f"""
-<h3>4.17 · Qué cambia al pasar de 16 candidatos a 64</h3>
+<h3>4.12 · Qué cambia al pasar de 16 candidatos a 64</h3>
 <p>Los tres estudios que dependen de la rejilla se repitieron con las ocho familias. Ninguno sustituye
 al congelado: se publican al lado, porque lo medido con dos primitivas sigue siendo cierto sobre lo que
 midió y borrarlo haría imposible ver qué se mueve al ampliar.</p>
@@ -1680,7 +1680,7 @@ def _transfer_extended_block(t) -> str:
         )
     )
     return f"""
-<h3>4.11-bis · La misma pregunta con ocho familias</h3>
+<h3>7.11 · La misma pregunta con ocho familias</h3>
 <p>El estudio de §4.11 habla de las dos primitivas de precio. Repetido sobre
 <span class="mono">{t['library']}</span> con las <b>{t['n_families']} familias</b>
 ({t['n_configs']} configuraciones), el Spearman sale <b>{_n(t['spearman'], 3)}</b> contra un
@@ -1746,7 +1746,7 @@ def _transfer_block(t):
     producto le pide al generador."""
     if not t:
         return (
-            "<h3>4.11 · Transferencia de ranking</h3>"
+            "<h3>7.10 · Transferencia de ranking</h3>"
             "<div class=\"note\"><b>Limitación declarada.</b> El informe de transferencia "
             "(<span class=\"mono\">data/transfer/</span>) no está disponible en este árbol, así que "
             "este documento <b>no puede afirmar</b> que el mundo sintético ordene las estrategias "
@@ -1812,7 +1812,7 @@ sintética sigue siendo válida para lo que sí está medido —fidelidad de los
 banco de estrés y regresión determinista— pero <b>no</b> como juez que ordena candidatas.</div>"""
 
     return f"""
-<h3>4.11 · Ordenación en datos reales y sintéticos: ¿ordena el sintético como el mercado?</h3>
+<h3>7.10 · Ordenación en datos reales y sintéticos: ¿ordena el sintético como el mercado?</h3>
 <p>§2.10 responde si el mundo sintético <b>se parece</b> al mercado. No responde lo único que el producto
 le pide de verdad: que si una configuración es mejor que otra ahí, <b>tienda a serlo también aquí</b>.
 No son la misma pregunta —un generador puede clavar las colas y ordenar al revés, y ninguna métrica de
@@ -2107,11 +2107,12 @@ Las cifras marcadas son extraídas del repositorio en el momento de generar este
 <b>Contenido</b>
 <ol>
 <li><a href="#s1">Resumen ejecutivo</a></li>
-<li><a href="#s2">Datos</a> — captura real, señales externas, generación sintética y sus tests</li>
+<li><a href="#s2">Datos</a> — captura real y señales externas</li>
 <li><a href="#s3">Trade</a> — cómo se ejecuta una operación, qué cuesta y cómo se contabiliza</li>
 <li><a href="#s4">Estrategias</a> — recompensa, ordenación y validación</li>
 <li><a href="#s5">Resultados</a></li>
 <li><a href="#s6">Limitaciones y evoluciones</a></li>
+<li><a href="#s7">Investigación archivada</a> — el mundo sintético: qué se midió y por qué se aparcó</li>
 </ol>
 <b>Anexos</b>
 <ol type="A">
@@ -2136,9 +2137,9 @@ cripto, cacheadas en disco para que cualquier estudio se pueda repetir sin red.<
 <tr><td class="n">2</td><td><b>Señales externas</b></td><td>Diecisiete fuentes fuera del precio —flujos de
 ETF, macro, cadena, atención, oferta desbloqueada— normalizadas y con su profundidad histórica
 <i>medida</i>, no declarada.</td><td>§2.2</td></tr>
-<tr><td class="n">3</td><td><b>Mundos sintéticos</b></td><td>Una IA diseña la física de cada escenario
-macro y un motor determinista la convierte en velas con colas gruesas, agrupamiento de volatilidad y
-estructura serial.</td><td>§2.3–2.8</td></tr>
+<tr><td class="n">3</td><td><b>Sub-ventanas reales</b></td><td>El histórico cerrado se trocea en
+sub-ventanas disjuntas; dentro de cada una, folds CPCV con purga y embargo. Las más recientes se reservan
+y el optimizador no las ve nunca.</td><td>§4.7–4.8</td></tr>
 <tr><td class="n">4</td><td><b>Observación</b></td><td>Lo que la política ve en el momento de decidir:
 mercado propio, contexto cross-sectional y el radar de señales. Sólo datos hasta el cierre de
 ayer.</td><td>§4.2</td></tr>
@@ -2157,8 +2158,8 @@ marcado a mercado a diario y rotación medida.</td><td>§3.9</td></tr>
 <tr><td class="n">10</td><td><b>Validación</b></td><td>Arquetipos macro enteros reservados como hold-out,
 y varias ventanas temporales por muestra con purga y embargo.</td><td>§4.7–4.8</td></tr>
 <tr><td class="n">11</td><td><b>Veredicto</b></td><td>Aprueba quien bate al mejor rival pasivo <i>y</i>
-supera el suelo de actividad. Y se comprueba si el orden sintético se parece al real.</td>
-<td>§4.9–4.11</td></tr>
+supera el suelo de actividad. Las dos condiciones, y el informe dice cuál falló.</td>
+<td>§4.9–4.10</td></tr>
 <tr><td class="n">12</td><td><b>Búsqueda</b></td><td>Optimización de caja negra (CEM) sobre los
 parámetros, con el resultado descontado por el número de intentos (DSR/PBO).</td><td>§4.13–4.14</td></tr>
 <tr><td class="n">13</td><td><b>En vivo</b></td><td>El mismo camino, con reloj real y dinero de papel.
@@ -2171,9 +2172,10 @@ orquestador que operaría con dinero (§3.1). Lo que se optimiza es, literalment
 
 <h3>1.2 · Qué es y qué no es (todavía)</h3>
 <ul>
-<li><b>Es:</b> un banco de pruebas honesto para diseñar, evaluar y optimizar estrategias contra un
-universo de %%NASSETS%% activos y una batería de regímenes macro sintéticos, ejecutando exactamente el
-mismo camino que se usaría en vivo.</li>
+<li><b>Es:</b> un banco de pruebas honesto para diseñar, evaluar y optimizar estrategias contra el
+<b>histórico real</b> del universo cripto operado, ejecutando exactamente el mismo camino que se usaría en
+vivo. Durante buena parte de su desarrollo lo fue contra mundos generados; esa línea está aparcada y
+documentada en el capítulo 7, con lo que se midió y por qué se cerró.</li>
 <li><b>No es (aún):</b> no mueve dinero real; no hay estrategia de renta variable ni de mercados de
 predicción; la «inteligencia» de optimización está en fase de <b>caja negra</b> (CEM sobre parámetros), no
 de aprendizaje por refuerzo por gradiente de política; y no hay todavía un historial en vivo con el que
@@ -2226,191 +2228,12 @@ ocurrió.</p>
 
 %%SIGNALS%%
 
-<h3>2.3 · Por qué además datos sintéticos</h3>
-<p>El desarrollo y buena parte de la evaluación se hacen sobre mercados <b>sintéticos</b>. Las razones, y
-sus contrapartidas, son explícitas:</p>
-<ul>
-<li><b>Independencia temporal por diseño.</b> Al no solaparse con ningún periodo histórico real, se
-elimina el <i>data-snooping</i> sobre eventos ya conocidos: no se puede, ni sin querer, ajustar a la
-crisis de 2008 o al COVID.</li>
-<li><b>Control del régimen.</b> Podemos generar a voluntad crisis, rangos laterales, tendencias,
-shocks de tipos o inviernos cripto, y en la proporción que necesitemos para estresar una estrategia.</li>
-<li><b>Volumen ilimitado y hold-out honesto.</b> Generamos tantas muestras como haga falta para una
-estadística robusta, y podemos reservar <b>arquetipos macro enteros</b> como validación (§4.7).</li>
-</ul>
-<div class="note"><b>Las dos contrapartidas, y la segunda resultó mayor que la primera.</b> La conocida:
-un mercado sintético sólo es útil si se parece al real en sus propiedades estadísticas, y por eso existen
-la validación interna de §2.9 y sobre todo la externa contra el histórico real de §2.10. La que no se
-había previsto: parecerse no basta. Lo que el sistema le pide al generador es que <b>ordene</b> las
-estrategias como el mercado, se midió aparte (§4.11) y la respuesta fue que <b>no</b>. Las tres razones de
-arriba siguen valiendo para lo que el sintético hace bien —cubrir regímenes que la historia no dio,
-estresar, dar hold-out de arquetipos y regresión determinista— pero ya no para decidir qué configuración
-es mejor.</div>
-
-<h3>2.4 · El modelo de factores</h3>
-<p>El retorno diario de cada activo se construye con un modelo de factores:</p>
-<div class="formula">r_i(t) = tilt_i + Σ_k β_ik · f_k(t) + idio_i · ε_i(t)</div>
-<p>Las correlaciones entre activos <b>emergen</b> de que comparten exposición (β) a un puñado de
-factores macro comunes f_k; no se imponen con una matriz.</p>
-<div class="why"><b>Por qué un modelo de factores y no una matriz de correlación N×N.</b> La
-covarianza resultante es <b>siempre definida positiva por construcción</b> — no existe matriz que
-pueda degenerar, el problema clásico de las correlaciones impuestas. Además, el diseñador (la IA) solo
-tiene que razonar sobre "qué hacen cinco factores" en cada escenario, no sobre cientos de
-correlaciones sueltas.</div>
-<p>Los cinco factores y su interpretación:</p>
 %%FACTOR_TABLE%%
 <p>Las <b>betas son fijas</b> por activo (estructura estable que no cambia entre escenarios); los
 <b>tilts</b> son deriva extra por símbolo que la IA añade por escenario para respuestas
 idiosincráticas que los factores comunes no capturan (p.ej. un embargo de petróleo que levanta a una
 petrolera por encima del factor de materias primas).</p>
 
-<h3>2.5 · El universo sintético</h3>
-<p>%%NASSETS%% activos: %%NCRYPTO%% criptomonedas, %%NEQUITY%% de renta variable (índices y nombres
-por sector) y %%NMACRO%% de macro/refugio (oro, bonos largos, dólar). La mezcla es deliberada para que
-las correlaciones cruzadas tengan sentido: las financieras cargan tipos en positivo, la energía carga
-materias primas, y los refugios cargan la renta variable en negativo. Cada activo declara además su
-<b>liquidez</b> (volumen típico negociado en dólares al día), que abarca más de dos órdenes de magnitud
-entre un índice amplio y un altcoin: es el eje que hace que ejecutar cueste distinto en cada mercado
-(§3.6). El universo se guarda de forma autocontenida en el manifiesto de cada librería (precio inicial,
-betas, volatilidad idiosincrática y liquidez), de modo que se pueda reconstruir el universo exacto y
-regenerar datos idénticos aunque el código cambie.</p>
-<div class="note"><b>Por qué el universo sintético y el operado no son el mismo (el caso MATIC/USDT).</b>
-Binance deslistó ese par (el token migró a POL), así que está <b>retirado</b> del universo que se opera
-en vivo (§2.1): allí un símbolo muerto falla en silencio en cada ciclo. En el universo sintético se
-<b>mantiene a propósito</b>, y esa asimetría es la decisión, no un descuido: aquí no cotiza nada contra un
-exchange — el símbolo es solo la etiqueta de un perfil de cargas factoriales y las velas las genera el
-motor —, tiene contraparte real en la ventana con la que se mide la fidelidad (2017-2026, y el informe
-publicado lo lista sin símbolos ausentes), y retirarlo cambiaría el universo de %%NASSETS%% a
-%%NASSETS_MINUS_ONE%% activos, desincronizando toda la evidencia ya publicada sobre %%NASSETS%%: la
-calibración de pesos y el propio estudio de fidelidad habría que re-medirlos. <b>Límite declarado:</b> si
-el estudio de fidelidad se vuelve a correr sobre una ventana reciente, MATIC/USDT no tendrá datos reales y
-aparecerá como ausente; ese es el momento de renombrarlo a POL/USDT y republicar las mediciones, no
-antes.</div>
-
-<h3>2.6 · El diseñador de escenarios (la única pieza con IA)</h3>
-<p>Un modelo de lenguaje (Claude) diseña la "física" de cada escenario macro y la emite como
-<b>JSON estricto</b>: fases temporales (cada una con deriva y volatilidad por factor), shocks
-discretos y tilts por activo. Ese objeto — el <i>ScenarioSpec</i> — es 100% serializable y auditable.</p>
-<div class="why"><b>Por qué separar la especificación (IA) de la calibración (código).</b> La IA aporta
-<b>diversidad y narrativa macro plausible</b> (política monetaria, guerras, crisis de liquidez,
-euforias); el código aporta <b>determinismo, validación y reproducibilidad</b>. La frontera es un JSON
-que se puede leer y auditar sin ejecutar la IA.</div>
-<p>El <i>spec.json</i> de cada escenario se guarda en disco: <b>es lo único insustituible</b>. Los
-caminos Monte Carlo se regeneran a partir de él sin volver a llamar a la IA (operación
-"resynthesize"), lo que permite ampliar el número de caminos o reconstruir los datos borrados de forma
-determinista.</p>
-<div class="note"><b>Reproducibilidad de la IA: no la hay, y no puede haberla.</b> Dos llamadas con el
-mismo prompt y el mismo modelo devuelven escenarios distintos. Antes esto se atribuía a
-<span class="mono">temperature=1.0</span>; la realidad es más fuerte: los modelos actuales
-<b>retiraron los parámetros de muestreo</b> — enviar <span class="mono">temperature</span>,
-<span class="mono">top_p</span> o <span class="mono">top_k</span> devuelve un error 400 —, así que ya no
-existe ninguna palanca con la que forzar determinismo. Rehacer una librería con IA produce <i>siempre</i>
-una librería nueva. <b>Mitigación: no se re-deriva, se guarda.</b> El <i>spec.json</i> es la salida cara e
-insustituible y se persiste en disco; todo lo que va detrás (caminos, velas, backtests, métricas) es
-determinista dado el spec y la semilla. La reproducibilidad del proyecto descansa en el artefacto
-guardado, no en la llamada a la IA. <b>Límite declarado:</b> el manifiesto registra la <i>clase</i> del
-diseñador, no el identificador del modelo; dos librerías generadas con modelos distintos son
-indistinguibles por el manifiesto.</div>
-
-<h3>2.7 · Del spec a las velas (el motor numérico)</h3>
-<p>El motor convierte un spec en velas OHLCV multi-activo de forma <b>determinista</b> (vía
-<span class="mono">numpy.default_rng(seed)</span>). Las fases se expanden a series diarias de deriva y
-volatilidad; los shocks se suman como deriva puntual en su día. Las velas son válidas por construcción
-(máximo ≥ cuerpo ≥ mínimo, precios positivos). La apertura de cada día parte del cierre anterior más un
-hueco nocturno; las mechas se escalan por la volatilidad de ese día.</p>
-
-<h3>2.8 · La microestructura estadística: por qué un generador ingenuo miente</h3>
-<p>Este es el corazón de la auditoría de datos. Un generador ingenuo — ruido gaussiano independiente,
-volatilidad constante — <b>miente sistemáticamente en la dirección de hacer las estrategias parecer
-mejores y más seguras de lo que son</b>. Y un optimizador es exactamente la herramienta que
-encontrará y explotará ese sesgo. Por eso cada mecanismo de realismo se añadió con una justificación
-concreta:</p>
-<ul>
-<li><b>Volatilidad por fase, no promediada.</b> El rango intradía debe <b>ensancharse en las fases de
-pánico</b>. Si se promedia al horizonte, el ATR (rango medio verdadero) no reacciona al régimen, y con
-él mienten el filtro de volatilidad y el dimensionado del stop de la estrategia. <i>(Era un bug; se
-corrigió.)</i></li>
-<li><b>Colas gruesas (t-Student, con varianza ajustada).</b> Los mercados reales tienen colas más
-gruesas que la normal. Sin ellas, la pérdida de cola queda sistemáticamente subestimada — justo en los
-escenarios de crisis que el generador existe para producir.</li>
-<li><b>Agrupamiento de volatilidad (tipo GARCH).</b> La volatilidad se agrupa: a un día agitado le
-sigue otro agitado. Sin agrupamiento, la estructura temporal del riesgo es irreal.</li>
-<li><b>Estructura serial (autocorrelación AR(1) idiosincrática, con signo por régimen).</b> Sin
-autocorrelación, los retornos son independientes y <b>la reversión a la media es rentable
-imposible por construcción</b>, no por falta de <i>edge</i>. Con el signo dependiente de la fase, unos
-regímenes <b>tienden</b> (favorecen al momentum) y otros <b>revierten</b> (favorecen a la reversión),
-de modo que el evaluador tiene algo real que distinguir. Es el mecanismo más importante: sin él, un
-optimizador solo aprendería a clasificar fases.</li>
-<li><b>Saltos en el hueco de apertura.</b> Con huecos gaussianos, un stop se ejecuta <b>siempre</b>
-cerca de su nivel. Con saltos, un hueco puede <b>saltarse el stop</b> — la pérdida de cola de las
-crisis deja de estar subestimada.</li>
-<li><b>Dispersión del día del shock entre caminos.</b> Para que un crash no caiga siempre el mismo día
-en todos los caminos del ensemble (diversidad realista).</li>
-</ul>
-<div class="why"><b>Invariantes de estas extensiones.</b> Todas están <b>ajustadas en varianza</b>
-(añadir cola o estructura serial no cambia la volatilidad total, solo su forma), preservan la covarianza
-definida positiva (sigue emergiendo de factores compartidos) y tienen <b>valores neutros por
-defecto</b>: con la microestructura desactivada, el mundo vuelve a ser el gaussiano independiente
-original, byte a byte. Eso permitió introducirlas sin invalidar la librería previa.</div>
-
-<h3>2.9 · Primer test de viabilidad: del mundo que miente (ai_v1) al mundo realista (ai_v2)</h3>
-<p>La microestructura se asigna a los escenarios existentes mediante un <b>retrofit determinista</b>:
-una función que deriva el carácter de cada fase de su propia semántica (una fase direccional → tendencia;
-una fase plana → reversión; una fase de crisis, medida por la volatilidad de la renta variable → colas,
-saltos y agrupamiento). Se reusa así el diseño caro de la IA sin volver a llamarla, y se produce una
-nueva librería (<span class="mono">ai_v2</span>) conservando la anterior para comparar.</p>
-<p>La librería de referencia del <i>scoring</i>, <span class="mono">ai_v2</span>, contiene
-<b>%%V2SCEN%% escenarios × %%V2PATHS%% caminos = %%V2SAMPLES%% muestras</b>, con horizonte de
-%%V2HORIZON%% días. La tabla compara sus <i>stylized facts</i> con los de la librería anterior
-(independiente e ingenua):</p>
-<table><thead><tr><th>Propiedad estadística</th><th class="n">ai_v1 (iid)</th><th class="n">ai_v2</th><th>Lectura</th></tr></thead>
-<tbody>
-<tr><td>Dispersión de la autocorrelación entre escenarios</td><td class="n mono">%%SFV1SPREAD%%</td><td class="n mono">%%SFV2SPREAD%%</td><td>Diversidad de régimen serial</td></tr>
-<tr><td>Escenarios que revierten / tienden (de %%SFV2TOTAL%%)</td><td class="n mono">0 / 0</td><td class="n mono">%%SFV2REV%% / %%SFV2TREND%%</td><td>La reversión deja de ser imposible</td></tr>
-<tr><td>Agrupamiento de volatilidad (autocorr. de |retorno|)</td><td class="n mono">%%SFV1CLUS%%</td><td class="n mono">%%SFV2CLUS%%</td><td>La volatilidad se agrupa</td></tr>
-<tr><td>Exceso de días más allá de 3σ (%)</td><td class="n mono">%%SFV1EXC%%</td><td class="n mono">%%SFV2EXC%%</td><td>Colas más gruesas</td></tr>
-</tbody></table>
-<p>Interpretación: el mundo dejó de mentir en la dirección optimista. En <span class="mono">ai_v1</span>
-todos los escenarios eran indistinguibles del ruido; en <span class="mono">ai_v2</span> hay regímenes
-que tienden y regímenes que revierten, la volatilidad se agrupa y las colas engordan.</p>
-<div class="why"><b>Sustrato por defecto de la evaluación.</b> El harness de puntuación y optimización
-(§4) corre sobre <span class="mono">ai_v2</span> por defecto — es una constante única
-(<span class="mono">DEFAULT_LIBRARY_ID</span>) y hay un test que la fija. La librería anterior
-(<span class="mono">ai_v1</span>) se conserva únicamente como referencia comparativa: para evaluar sobre
-ella hay que pedirla <b>explícitamente</b>. Importa porque optimizar contra ruido independiente premia
-justo los sesgos optimistas que el retrofit vino a corregir.</div>
-<div class="note"><b>Esta tabla compara el mundo sintético consigo mismo.</b> Dice que ai_v2 dejó de
-ser ruido independiente, no que sus colas o su agrupamiento tengan el tamaño de los del mercado. Esa es
-otra pregunta, y se responde con datos reales en §2.10.</div>
-
-%%FIDELITY%%
-
-<h3>2.11 · Qué garantizan los tests sobre los datos</h3>
-<p>La base cuenta con <b>%%NTESTS%% tests</b> automatizados y <i>linting</i> (ruff) sobre todo el código.
-Más allá del número importa <b>qué</b> se garantiza, así que la lista va repartida por capítulos: aquí los
-invariantes del sustrato, en §3.10 los de una operación y en §4.15 los del ranking.</p>
-<ul>
-<li><b>Determinismo:</b> la misma semilla produce las mismas velas, byte a byte.</li>
-<li><b>Validez de las velas:</b> máximo ≥ cuerpo ≥ mínimo y precios positivos, en todos los regímenes,
-incluidos los que activan saltos.</li>
-<li><b>Estructura de correlación:</b> activos que cargan el mismo factor correlacionan positivamente; un
-shock mueve al activo que lo carga.</li>
-<li><b>Microestructura ajustada en varianza:</b> añadir colas, agrupamiento o autocorrelación no cambia
-la volatilidad total; la autocorrelación tiene el signo esperado (negativo → reversión, positivo →
-tendencia).</li>
-<li><b>Neutralidad de los valores por defecto:</b> con la microestructura desactivada, el generador
-reproduce exactamente el mundo previo.</li>
-<li><b>El medidor de fidelidad mide lo que dice:</b> recupera el signo y el tamaño de una autocorrelación
-conocida, distingue una serie con colas t-Student de una gaussiana y una con volatilidad agrupada de una
-plana, devuelve NaN (no 0) cuando la serie es degenerada, y su correlación de rangos da +1 y −1 en
-órdenes idénticos e invertidos. El estudio completo es determinista y declara los símbolos sin
-contraparte real en vez de rellenarlos.</li>
-<li><b>Las señales no pueden mentir sobre su profundidad:</b> un test compara el
-<span class="mono">history_from</span> declarado en el catálogo con el registro de mediciones de la sonda
-y falla si alguien declara una fecha que el registro no respalda.</li>
-<li><b>Puente al backtest:</b> el output del generador es directamente consumible por el motor de
-backtest, y el ciclo completo (estrategia → riesgo → ejecución) funciona sobre datos sintéticos.</li>
-</ul>
 
 <h2 id="s3">3 · Trade: cómo se ejecuta una operación</h2>
 <p class="lead">Este capítulo sigue <b>una sola operación</b> desde que existe una barra cerrada hasta que
@@ -2713,15 +2536,12 @@ un filtro superado. Lo mismo vale para la actividad: si no se ha medido, no se d
 
 %%ACTIVITY%%
 
-%%TRANSFER%%
 
-%%TRANSFER_EXTENDED%%
 
 %%THEMES_REAL%%
 
 %%EXTENDED_GRID%%
 
-%%SIGNALCHANNEL%%
 
 <h3>4.13 · El optimizador: Cross-Entropy Method</h3>
 <p>La mejora de las primitivas se plantea, en esta fase, como <b>optimización de caja negra</b> de sus
@@ -2886,7 +2706,7 @@ diseñador documentada, y el universo operado separado del sintético con el mot
 <h3>6.1-bis · Lo que no se podía medir hacia atrás, y qué se midió al final</h3>
 <p>Cuando se diseñaron las seis familias temáticas, esta sección decía que la capa de señal no se podía
 evaluar hacia atrás y declaraba la fecha en que se podría. <b>Esa afirmación era demasiado pesimista y ya
-está medida</b>: §4.16 publica la comparación pareada —misma familia, misma ventana, mismas barras, la
+está medida</b>: §4.11 publica la comparación pareada —misma familia, misma ventana, mismas barras, la
 puerta abierta y cerrada— sobre <b>cinco</b> de las seis. Lo que queda como limitación es más pequeño y
 más preciso que lo que se anunció, y conviene separar las tres cosas que se confundían.</p>
 
@@ -2928,79 +2748,264 @@ sería prometer un calendario que no depende de nadie.</p>
 
 <div class="note"><b>Lo que sí se puede afirmar hoy, y no es poco.</b> En dos familias
 —<span class="mono">flow_persistence</span> y <span class="mono">signal_composite</span>— el intervalo por
-bloques de la diferencia pareada <b>excluye el cero</b>: la capa ayuda. Con las reservas de §4.16, que son
+bloques de la diferencia pareada <b>excluye el cero</b>: la capa ayuda. Con las reservas de §4.11, que son
 serias y están escritas allí: sin corrección por comparaciones múltiples, con N efectivo menor que el
 nominal, y con el compuesto en la posición incómoda de que su tesis <i>entera</i> vive en la capa, de modo
 que lo medido en su caso es la magnitud y no la dirección. Es la primera evidencia del proyecto en la que
 una señal externa mueve una decisión sobre mercado real, y es deliberadamente modesta.</div>
 
 <h3>6.2 · Lo que queda abierto, por criticidad</h3>
-<p>El orden responde a una asimetría de coste: una estrategia añadida hoy se re-evalúa gratis cuando el
-juez mejore; un juez malo contamina todo lo que puntúe mientras siga malo. Por eso el sustrato y el juez
-van delante de la cosecha, y el paper trading se lanza en paralelo porque es lo único que compra tiempo de
-calendario.</p>
+<p><b>El criterio de ordenación cambió, y con él se retiraron diez entradas.</b> El anterior era la
+asimetría de coste del juez: una estrategia añadida hoy se re-evalúa gratis cuando el juez mejore, pero
+un juez malo contamina todo lo que puntúe mientras siga malo — así que el sustrato y el juez iban delante
+de la cosecha. Ese criterio produjo un instrumento excelente y una herramienta que no opera nada.</p>
+<p>El criterio nuevo es el contrario y se asume con sus consecuencias escritas: <b>poner la herramienta a
+funcionar</b> sobre datos reales, aceptando el riesgo de sobreajuste que eso trae. Es mejor tener algo
+corriendo con sobreajuste —y atacarlo después con evidencia de calendario, que es la única que no se
+puede falsificar— que seguir refinando el juez de un backtest que no decide nada.</p>
 <table><thead><tr><th class="n">#</th><th>Trabajo pendiente</th><th>Por qué está donde está</th></tr></thead><tbody>
-<tr><td class="n">1</td><td><b>Divergencia live-vs-backtest</b> sobre el diario de ciclos</td><td>El diario
-ya se escribe y la vista ya lo lee (§5): lo que falta es calendario. Sigue el primero porque es lo único
-que no se puede comprimir después.</td></tr>
-<tr><td class="n">2</td><td><b>Canal de observación sintético: barrido de ρ y break-even del IC</b></td>
-<td>Es el <b>test de falsación</b> que el radar de señales dejó abierto. Hoy limitar los grados de
-libertad <i>reduce</i> el riesgo de sobreajuste pero no lo <i>mide</i>: hasta que exista una cifra de
-capacidad predictiva mínima —con ρ = 0 como control— una feature de muestra corta puede estar
-sobreajustada y el sistema no puede saberlo.</td></tr>
-<tr><td class="n">3–5</td><td>Que el <b>generador emita las señales</b> y re-medir la transferencia de
-forma pareada; lote caro de fuentes (apalancamiento observable, opciones, atención legal); índice de
-estrés de vendedores forzados</td><td>La transferencia de §4.11 se midió con estrategias que sólo ven
-precio y volumen, sobre un mundo cuyo único <i>edge</i> es un AR(1) colocado por régimen. Ampliar el
-espacio de inputs <b>en los dos lados</b> es lo que convierte «no transfiere» en una conclusión y no en
-un artefacto del instrumento.</td></tr>
-<tr><td class="n">6–11</td><td><b>Rigor del juez:</b> CPCV en dos etapas dentro del optimizador;
+<tr><td class="n">1</td><td><b>Profundidad histórica de las señales externas</b></td><td>Es el cuello de
+botella de todo lo demás, y ahora se ve: el ranking decide sobre histórico real, y una señal sin
+histórico no puede entrar en esa decisión por mucho que esté conectada en vivo. De 30 fuentes
+declaradas sólo 14 son backtesteables, y dos de los cinco temas no alcanzan cobertura hacia atrás.</td></tr>
+<tr><td class="n">2</td><td><b>Análisis individualizado y calidad de dato, fuente por fuente</b></td>
+<td>Las 30 fuentes se agregan en seis <i>features</i> y nunca se han mirado de una en una. El radar
+promedia, y un promedio de una fuente rota y cuatro sanas parece sano: es exactamente la forma en que un
+dato malo entra en una decisión sin que nadie lo vea. Hace falta cobertura, latencia real, estabilidad y
+redundancia por fuente, con un veredicto que pueda ser negativo.</td></tr>
+<tr><td class="n">3</td><td><b>Generar estrategias con la capa de señal armada</b></td><td>Es el objetivo
+de los dos anteriores, y hasta ahora no se podía hacer: el optimizador puntuaba sobre mundos generados y
+las señales sólo entraban en un estudio pareado aparte. Ahora las dos piezas encajan. Incluye hacerlo
+tratable: el cuello está medido y no atacado —el brazo armado reconstruye el radar una vez por fold.</td></tr>
+<tr><td class="n">4</td><td><b>Divergencia live-vs-backtest</b> sobre el diario de ciclos</td><td>El diario
+ya se escribe y la vista ya lo lee (§5.4): lo que falta es calendario. Va en paralelo a los tres de arriba
+porque es lo único que no se puede comprimir después.</td></tr>
+<tr><td class="n">5–6</td><td>Presupuesto de latencia de ejecución; <b>guarda operativa por símbolo</b>
+(sanciones, deslistado, <i>halt</i>)</td><td>Lo que hace falta para <b>operar</b> lo de arriba, no sólo
+medirlo. La latencia sale de §3.5 —el hueco de cierre a apertura es cero, pero la puntualidad tiene un
+precio medido—. La guarda cubre un riesgo que deja de ser teórico en cuanto el bucle opere: hoy nada
+impide abrir posición en un activo sancionado o deslistado.</td></tr>
+<tr><td class="n">7–8</td><td>Renta variable y mercados de predicción</td><td><b>Segundo plano
+explícito.</b> Toda la evidencia empírica del repositorio es cripto; la renta variable tiene proveedor de
+datos y ninguna estrategia detrás, y Polymarket no tiene OHLCV histórico que backtestear.</td></tr>
+<tr><td class="n">9–19</td><td><b>Retiradas:</b> que el generador emita las señales; CPCV en dos etapas;
 re-correr la validación con el ensemble completo; alinear los bloques del PBO con fronteras de escenario;
-reportar el recuento de muestras fallidas junto al reward; declarar que el DSR asume intentos
-independientes; arreglar la <i>ordenación</i> de colas y agrupamiento entre activos</td><td>Seis arreglos
-sobre cifras que se publican como garantía. El CEM sigue puntuando con el corte único que su propio
-estudio desacredita; los bloques del PBO pueden partir un escenario en dos (la misma fuga de arquetipo que
-el hold-out evita); la penalización por fallo domina la cola del CVaR; el CEM no produce los intentos
-independientes que el DSR supone.</td></tr>
-<tr><td class="n">12</td><td><b>Contingencia:</b> mover el sustrato primario del ranking al histórico
-real</td><td>Es la consecuencia directa de §4.11 si los frentes 2–5 no cambian el resultado. Está
-<b>bloqueada</b> a propósito: es un cambio caro y sería prematuro hacerlo antes de saber si el problema
-era el generador o el espacio de inputs con el que se le preguntó.</td></tr>
-<tr><td class="n">13–14</td><td>Optimización CEM completa; presupuesto de latencia de ejecución</td>
-<td>La primera está bloqueada por el juez: gastar cómputo caro en un ganador elegido por un juez que no
-transfiere es tirar el cómputo. La segunda sale de §3.5 — el hueco es cero, pero la puntualidad tiene un
-precio medido.</td></tr>
-<tr><td class="n">15–18</td><td>Nuevas estrategias cripto; re-medir λ y κ con los costes nuevos; anotar el
-modelo de IA en el manifiesto; guarda operativa por símbolo (sanciones, deslistado, halt)</td>
-<td><b>No prioritarias, y por motivos distintos.</b> Añadir candidatos a un juez en el que aún no se
-confía multiplica el problema de múltiples pruebas; la superficie de pesos ya salió plana sobre 480
-backtests; y la guarda operativa cubre un riesgo que, mientras el dinero sea de papel y el universo se
-configure a mano, sigue siendo teórico.</td></tr>
-<tr><td class="n">19–20</td><td>Renta variable y mercados de predicción</td><td><b>Segundo plano
-explícito.</b> Toda la evidencia empírica del repositorio es cripto; la pata de renta variable del
-generador no tiene ni un dato real detrás y el universo de megacaps arrastra sesgo de supervivencia.
-Polymarket no tiene histórico que backtestear: el paper trading en vivo es lo que empezará a
-generarlo.</td></tr>
+reportar el recuento de fallidas junto al reward; el matiz de intentos independientes del DSR; la
+ordenación de colas entre activos; mover el sustrato al histórico real; re-medir λ y κ; anotar el modelo
+de IA en el manifiesto; optimización CEM completa</td><td><b>Salen de la lista, no de la historia.</b>
+Ocho eran mejoras del generador sintético o afinado del juez de backtest, y las dos cosas son afinar el
+instrumento en vez de usarlo. Dos están <b>hechas</b>: mover el sustrato al histórico real (es el estado
+actual) y el CPCV dentro del optimizador. Y la optimización CEM completa queda <b>absorbida</b> por la
+entrada 3, donde además lleva la capa de señal.</td></tr>
 </tbody></table>
-<p class="tag">El dashboard mantiene el detalle accionable de cada evolución —evidencia medida, criterio
-de aceptación y prompt reproducible— con este mismo orden.</p>
 
 <h3>6.3 · Los límites que no se van a cerrar</h3>
 <p>No todo hueco es trabajo pendiente. Estos cuatro son propiedades del enfoque, y se declaran para que
 nadie los lea como promesas:</p>
 <ul>
-<li><b>El diseño con IA no es reproducible</b>, y ya no puede serlo: los modelos actuales retiraron los
-parámetros de muestreo. Lo que se guarda es el artefacto, no la llamada (§2.6).</li>
-<li><b>El histórico real es un único camino.</b> Todas las ventanas reales comparten los mismos ciclos de
+<li><b>El histórico real es un único camino.</b> Todas las sub-ventanas comparten los mismos ciclos de
 2018-2025. Comparar «lo que pasó» con «lo que podría pasar» es una asimetría que sólo se puede declarar,
-no eliminar (§2.10).</li>
-<li><b>El generador produce el cripto de un año cualquiera, no sus años de manía.</b> El umbral de
-aceptación está sobre la mediana; perseguir el p90 de curtosis rompería el nivel de volatilidad
-(§2.10).</li>
-<li><b>Foco cripto.</b> Los <i>stocks</i> no salen del universo <b>sintético</b> — GLD, TLT y UUP son lo
-que hace que los escenarios de tipos y de dólar signifiquen algo para cripto vía factores compartidos —,
-pero se puntúa y se opera sólo cripto (§2.1).</li>
+no eliminar. Generar mundos alternativos era exactamente el intento de eliminarla, y está en el capítulo
+7: se consiguió que se parecieran (§7.8) y no se consiguió que ordenaran (§7.10).</li>
+<li><b>Pocos bloques independientes, y se asume.</b> El ranking que decide se juega sobre cuatro
+sub-ventanas de entrenamiento de ese único camino. Eso tiene su propio sobreajuste, y es un riesgo
+<b>aceptado a propósito</b>: es mejor operar con él y atacarlo con evidencia de calendario que seguir
+investigando. Lo que no se hace es taparlo — PBO, DSR y el número de unidades efectivas van al lado de
+cada cifra (§4.14).</li>
+<li><b>El backtest no puede probar que algo funciona</b>, sólo descartar: lo que no bate a comprar y
+aguantar, o no opera lo suficiente para que su score signifique algo, se cae (§4.9, §4.10). Aprobar el
+gate no es una promesa de rentabilidad, es haber sobrevivido a un filtro. La única evidencia que no se
+puede sobreajustar es el diario del paper trading, y ésa se compra con tiempo (§5).</li>
+<li><b>Foco cripto.</b> Toda la evidencia empírica es cripto. Renta variable y mercados de predicción
+tienen proveedor de datos y ninguna estrategia detrás: están aparcados a propósito, no por olvido
+(§2.1).</li>
 </ul>
+
+<h2 id="s7">7 · Investigación archivada: el mundo sintético</h2>
+<div class="why"><b>Investigación archivada.</b> Esta línea se aparcó. El mundo sintético alcanzó la fidelidad que se le pidió —98&nbsp;% de cobertura y los nueve umbrales aceptados, §7.8— y aun así <b>no ordena las estrategias como el mercado</b> (§7.10). Fidelidad no es transferencia, y por eso el sintético dejó de ser criterio de selección: el ranking que decide sale del histórico real. Lo que sigue son las cifras medidas y no se tocan — un resultado negativo caro es el que no hay que repetir. El código vive en <span class="mono">ai_trader/research/</span> y no se mantiene.</div>
+
+<h3>7.1 · Por qué además datos sintéticos</h3>
+<p>El desarrollo y buena parte de la evaluación se hacen sobre mercados <b>sintéticos</b>. Las razones, y
+sus contrapartidas, son explícitas:</p>
+<ul>
+<li><b>Independencia temporal por diseño.</b> Al no solaparse con ningún periodo histórico real, se
+elimina el <i>data-snooping</i> sobre eventos ya conocidos: no se puede, ni sin querer, ajustar a la
+crisis de 2008 o al COVID.</li>
+<li><b>Control del régimen.</b> Podemos generar a voluntad crisis, rangos laterales, tendencias,
+shocks de tipos o inviernos cripto, y en la proporción que necesitemos para estresar una estrategia.</li>
+<li><b>Volumen ilimitado y hold-out honesto.</b> Generamos tantas muestras como haga falta para una
+estadística robusta, y podemos reservar <b>arquetipos macro enteros</b> como validación (§4.7).</li>
+</ul>
+<div class="note"><b>Las dos contrapartidas, y la segunda resultó mayor que la primera.</b> La conocida:
+un mercado sintético sólo es útil si se parece al real en sus propiedades estadísticas, y por eso existen
+la validación interna de §2.9 y sobre todo la externa contra el histórico real de §2.10. La que no se
+había previsto: parecerse no basta. Lo que el sistema le pide al generador es que <b>ordene</b> las
+estrategias como el mercado, se midió aparte (§4.11) y la respuesta fue que <b>no</b>. Las tres razones de
+arriba siguen valiendo para lo que el sintético hace bien —cubrir regímenes que la historia no dio,
+estresar, dar hold-out de arquetipos y regresión determinista— pero ya no para decidir qué configuración
+es mejor.</div>
+
+<h3>7.2 · El modelo de factores</h3>
+<p>El retorno diario de cada activo se construye con un modelo de factores:</p>
+<div class="formula">r_i(t) = tilt_i + Σ_k β_ik · f_k(t) + idio_i · ε_i(t)</div>
+<p>Las correlaciones entre activos <b>emergen</b> de que comparten exposición (β) a un puñado de
+factores macro comunes f_k; no se imponen con una matriz.</p>
+<div class="why"><b>Por qué un modelo de factores y no una matriz de correlación N×N.</b> La
+covarianza resultante es <b>siempre definida positiva por construcción</b> — no existe matriz que
+pueda degenerar, el problema clásico de las correlaciones impuestas. Además, el diseñador (la IA) solo
+tiene que razonar sobre "qué hacen cinco factores" en cada escenario, no sobre cientos de
+correlaciones sueltas.</div>
+<p>Los cinco factores y su interpretación:</p>
+<h3>7.3 · El universo sintético</h3>
+<p>%%NASSETS%% activos: %%NCRYPTO%% criptomonedas, %%NEQUITY%% de renta variable (índices y nombres
+por sector) y %%NMACRO%% de macro/refugio (oro, bonos largos, dólar). La mezcla es deliberada para que
+las correlaciones cruzadas tengan sentido: las financieras cargan tipos en positivo, la energía carga
+materias primas, y los refugios cargan la renta variable en negativo. Cada activo declara además su
+<b>liquidez</b> (volumen típico negociado en dólares al día), que abarca más de dos órdenes de magnitud
+entre un índice amplio y un altcoin: es el eje que hace que ejecutar cueste distinto en cada mercado
+(§3.6). El universo se guarda de forma autocontenida en el manifiesto de cada librería (precio inicial,
+betas, volatilidad idiosincrática y liquidez), de modo que se pueda reconstruir el universo exacto y
+regenerar datos idénticos aunque el código cambie.</p>
+<div class="note"><b>Por qué el universo sintético y el operado no son el mismo (el caso MATIC/USDT).</b>
+Binance deslistó ese par (el token migró a POL), así que está <b>retirado</b> del universo que se opera
+en vivo (§2.1): allí un símbolo muerto falla en silencio en cada ciclo. En el universo sintético se
+<b>mantiene a propósito</b>, y esa asimetría es la decisión, no un descuido: aquí no cotiza nada contra un
+exchange — el símbolo es solo la etiqueta de un perfil de cargas factoriales y las velas las genera el
+motor —, tiene contraparte real en la ventana con la que se mide la fidelidad (2017-2026, y el informe
+publicado lo lista sin símbolos ausentes), y retirarlo cambiaría el universo de %%NASSETS%% a
+%%NASSETS_MINUS_ONE%% activos, desincronizando toda la evidencia ya publicada sobre %%NASSETS%%: la
+calibración de pesos y el propio estudio de fidelidad habría que re-medirlos. <b>Límite declarado:</b> si
+el estudio de fidelidad se vuelve a correr sobre una ventana reciente, MATIC/USDT no tendrá datos reales y
+aparecerá como ausente; ese es el momento de renombrarlo a POL/USDT y republicar las mediciones, no
+antes.</div>
+
+<h3>7.4 · El diseñador de escenarios (la única pieza con IA)</h3>
+<p>Un modelo de lenguaje (Claude) diseña la "física" de cada escenario macro y la emite como
+<b>JSON estricto</b>: fases temporales (cada una con deriva y volatilidad por factor), shocks
+discretos y tilts por activo. Ese objeto — el <i>ScenarioSpec</i> — es 100% serializable y auditable.</p>
+<div class="why"><b>Por qué separar la especificación (IA) de la calibración (código).</b> La IA aporta
+<b>diversidad y narrativa macro plausible</b> (política monetaria, guerras, crisis de liquidez,
+euforias); el código aporta <b>determinismo, validación y reproducibilidad</b>. La frontera es un JSON
+que se puede leer y auditar sin ejecutar la IA.</div>
+<p>El <i>spec.json</i> de cada escenario se guarda en disco: <b>es lo único insustituible</b>. Los
+caminos Monte Carlo se regeneran a partir de él sin volver a llamar a la IA (operación
+"resynthesize"), lo que permite ampliar el número de caminos o reconstruir los datos borrados de forma
+determinista.</p>
+<div class="note"><b>Reproducibilidad de la IA: no la hay, y no puede haberla.</b> Dos llamadas con el
+mismo prompt y el mismo modelo devuelven escenarios distintos. Antes esto se atribuía a
+<span class="mono">temperature=1.0</span>; la realidad es más fuerte: los modelos actuales
+<b>retiraron los parámetros de muestreo</b> — enviar <span class="mono">temperature</span>,
+<span class="mono">top_p</span> o <span class="mono">top_k</span> devuelve un error 400 —, así que ya no
+existe ninguna palanca con la que forzar determinismo. Rehacer una librería con IA produce <i>siempre</i>
+una librería nueva. <b>Mitigación: no se re-deriva, se guarda.</b> El <i>spec.json</i> es la salida cara e
+insustituible y se persiste en disco; todo lo que va detrás (caminos, velas, backtests, métricas) es
+determinista dado el spec y la semilla. La reproducibilidad del proyecto descansa en el artefacto
+guardado, no en la llamada a la IA. <b>Límite declarado:</b> el manifiesto registra la <i>clase</i> del
+diseñador, no el identificador del modelo; dos librerías generadas con modelos distintos son
+indistinguibles por el manifiesto.</div>
+
+<h3>7.5 · Del spec a las velas (el motor numérico)</h3>
+<p>El motor convierte un spec en velas OHLCV multi-activo de forma <b>determinista</b> (vía
+<span class="mono">numpy.default_rng(seed)</span>). Las fases se expanden a series diarias de deriva y
+volatilidad; los shocks se suman como deriva puntual en su día. Las velas son válidas por construcción
+(máximo ≥ cuerpo ≥ mínimo, precios positivos). La apertura de cada día parte del cierre anterior más un
+hueco nocturno; las mechas se escalan por la volatilidad de ese día.</p>
+
+<h3>7.6 · La microestructura estadística: por qué un generador ingenuo miente</h3>
+<p>Este es el corazón de la auditoría de datos. Un generador ingenuo — ruido gaussiano independiente,
+volatilidad constante — <b>miente sistemáticamente en la dirección de hacer las estrategias parecer
+mejores y más seguras de lo que son</b>. Y un optimizador es exactamente la herramienta que
+encontrará y explotará ese sesgo. Por eso cada mecanismo de realismo se añadió con una justificación
+concreta:</p>
+<ul>
+<li><b>Volatilidad por fase, no promediada.</b> El rango intradía debe <b>ensancharse en las fases de
+pánico</b>. Si se promedia al horizonte, el ATR (rango medio verdadero) no reacciona al régimen, y con
+él mienten el filtro de volatilidad y el dimensionado del stop de la estrategia. <i>(Era un bug; se
+corrigió.)</i></li>
+<li><b>Colas gruesas (t-Student, con varianza ajustada).</b> Los mercados reales tienen colas más
+gruesas que la normal. Sin ellas, la pérdida de cola queda sistemáticamente subestimada — justo en los
+escenarios de crisis que el generador existe para producir.</li>
+<li><b>Agrupamiento de volatilidad (tipo GARCH).</b> La volatilidad se agrupa: a un día agitado le
+sigue otro agitado. Sin agrupamiento, la estructura temporal del riesgo es irreal.</li>
+<li><b>Estructura serial (autocorrelación AR(1) idiosincrática, con signo por régimen).</b> Sin
+autocorrelación, los retornos son independientes y <b>la reversión a la media es rentable
+imposible por construcción</b>, no por falta de <i>edge</i>. Con el signo dependiente de la fase, unos
+regímenes <b>tienden</b> (favorecen al momentum) y otros <b>revierten</b> (favorecen a la reversión),
+de modo que el evaluador tiene algo real que distinguir. Es el mecanismo más importante: sin él, un
+optimizador solo aprendería a clasificar fases.</li>
+<li><b>Saltos en el hueco de apertura.</b> Con huecos gaussianos, un stop se ejecuta <b>siempre</b>
+cerca de su nivel. Con saltos, un hueco puede <b>saltarse el stop</b> — la pérdida de cola de las
+crisis deja de estar subestimada.</li>
+<li><b>Dispersión del día del shock entre caminos.</b> Para que un crash no caiga siempre el mismo día
+en todos los caminos del ensemble (diversidad realista).</li>
+</ul>
+<div class="why"><b>Invariantes de estas extensiones.</b> Todas están <b>ajustadas en varianza</b>
+(añadir cola o estructura serial no cambia la volatilidad total, solo su forma), preservan la covarianza
+definida positiva (sigue emergiendo de factores compartidos) y tienen <b>valores neutros por
+defecto</b>: con la microestructura desactivada, el mundo vuelve a ser el gaussiano independiente
+original, byte a byte. Eso permitió introducirlas sin invalidar la librería previa.</div>
+
+<h3>7.7 · Primer test de viabilidad: del mundo que miente (ai_v1) al mundo realista (ai_v2)</h3>
+<p>La microestructura se asigna a los escenarios existentes mediante un <b>retrofit determinista</b>:
+una función que deriva el carácter de cada fase de su propia semántica (una fase direccional → tendencia;
+una fase plana → reversión; una fase de crisis, medida por la volatilidad de la renta variable → colas,
+saltos y agrupamiento). Se reusa así el diseño caro de la IA sin volver a llamarla, y se produce una
+nueva librería (<span class="mono">ai_v2</span>) conservando la anterior para comparar.</p>
+<p>La librería de referencia del <i>scoring</i>, <span class="mono">ai_v2</span>, contiene
+<b>%%V2SCEN%% escenarios × %%V2PATHS%% caminos = %%V2SAMPLES%% muestras</b>, con horizonte de
+%%V2HORIZON%% días. La tabla compara sus <i>stylized facts</i> con los de la librería anterior
+(independiente e ingenua):</p>
+<table><thead><tr><th>Propiedad estadística</th><th class="n">ai_v1 (iid)</th><th class="n">ai_v2</th><th>Lectura</th></tr></thead>
+<tbody>
+<tr><td>Dispersión de la autocorrelación entre escenarios</td><td class="n mono">%%SFV1SPREAD%%</td><td class="n mono">%%SFV2SPREAD%%</td><td>Diversidad de régimen serial</td></tr>
+<tr><td>Escenarios que revierten / tienden (de %%SFV2TOTAL%%)</td><td class="n mono">0 / 0</td><td class="n mono">%%SFV2REV%% / %%SFV2TREND%%</td><td>La reversión deja de ser imposible</td></tr>
+<tr><td>Agrupamiento de volatilidad (autocorr. de |retorno|)</td><td class="n mono">%%SFV1CLUS%%</td><td class="n mono">%%SFV2CLUS%%</td><td>La volatilidad se agrupa</td></tr>
+<tr><td>Exceso de días más allá de 3σ (%)</td><td class="n mono">%%SFV1EXC%%</td><td class="n mono">%%SFV2EXC%%</td><td>Colas más gruesas</td></tr>
+</tbody></table>
+<p>Interpretación: el mundo dejó de mentir en la dirección optimista. En <span class="mono">ai_v1</span>
+todos los escenarios eran indistinguibles del ruido; en <span class="mono">ai_v2</span> hay regímenes
+que tienden y regímenes que revierten, la volatilidad se agrupa y las colas engordan.</p>
+<div class="why"><b>Sustrato por defecto de la evaluación.</b> El harness de puntuación y optimización
+(§4) corre sobre <span class="mono">ai_v2</span> por defecto — es una constante única
+(<span class="mono">DEFAULT_LIBRARY_ID</span>) y hay un test que la fija. La librería anterior
+(<span class="mono">ai_v1</span>) se conserva únicamente como referencia comparativa: para evaluar sobre
+ella hay que pedirla <b>explícitamente</b>. Importa porque optimizar contra ruido independiente premia
+justo los sesgos optimistas que el retrofit vino a corregir.</div>
+<div class="note"><b>Esta tabla compara el mundo sintético consigo mismo.</b> Dice que ai_v2 dejó de
+ser ruido independiente, no que sus colas o su agrupamiento tengan el tamaño de los del mercado. Esa es
+otra pregunta, y se responde con datos reales en §2.10.</div>
+
+%%FIDELITY%%
+<h3>7.9 · Qué garantizan los tests sobre los datos</h3>
+<p>La base cuenta con <b>%%NTESTS%% tests</b> automatizados y <i>linting</i> (ruff) sobre todo el código.
+Más allá del número importa <b>qué</b> se garantiza, así que la lista va repartida por capítulos: aquí los
+invariantes del sustrato, en §3.10 los de una operación y en §4.15 los del ranking.</p>
+<ul>
+<li><b>Determinismo:</b> la misma semilla produce las mismas velas, byte a byte.</li>
+<li><b>Validez de las velas:</b> máximo ≥ cuerpo ≥ mínimo y precios positivos, en todos los regímenes,
+incluidos los que activan saltos.</li>
+<li><b>Estructura de correlación:</b> activos que cargan el mismo factor correlacionan positivamente; un
+shock mueve al activo que lo carga.</li>
+<li><b>Microestructura ajustada en varianza:</b> añadir colas, agrupamiento o autocorrelación no cambia
+la volatilidad total; la autocorrelación tiene el signo esperado (negativo → reversión, positivo →
+tendencia).</li>
+<li><b>Neutralidad de los valores por defecto:</b> con la microestructura desactivada, el generador
+reproduce exactamente el mundo previo.</li>
+<li><b>El medidor de fidelidad mide lo que dice:</b> recupera el signo y el tamaño de una autocorrelación
+conocida, distingue una serie con colas t-Student de una gaussiana y una con volatilidad agrupada de una
+plana, devuelve NaN (no 0) cuando la serie es degenerada, y su correlación de rangos da +1 y −1 en
+órdenes idénticos e invertidos. El estudio completo es determinista y declara los símbolos sin
+contraparte real en vez de rellenarlos.</li>
+<li><b>Las señales no pueden mentir sobre su profundidad:</b> un test compara el
+<span class="mono">history_from</span> declarado en el catálogo con el registro de mediciones de la sonda
+y falla si alguien declara una fecha que el registro no respalda.</li>
+<li><b>Puente al backtest:</b> el output del generador es directamente consumible por el motor de
+backtest, y el ciclo completo (estrategia → riesgo → ejecución) funciona sobre datos sintéticos.</li>
+</ul>
+
+%%TRANSFER%%
+%%TRANSFER_EXTENDED%%
+%%SIGNALCHANNEL%%
 
 <h2 id="a1">A · Reproducibilidad</h2>
 <p>Toda la cadena es determinista y regenerable. Notas operativas:</p>
