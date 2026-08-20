@@ -491,12 +491,54 @@ def _baselines_on(
     return cached
 
 
+def baseline_fold_scores(
+    base_config: AppConfig,
+    bars: dict[str, pd.DataFrame],
+    start: datetime,
+    end: datetime,
+    *,
+    scheme: str = SCHEME_WALK_FORWARD,
+    n_folds: int = DEFAULT_N_FOLDS,
+    n_groups: int = DEFAULT_N_GROUPS,
+    n_test_groups: int = DEFAULT_N_TEST_GROUPS,
+    purge_days: int | None = None,
+    embargo_days: int | None = None,
+    anchored: bool = True,
+    starting_equity: float = DEFAULT_STARTING_EQUITY,
+    headline_weights: HeadlineWeights = DEFAULT_HEADLINE_WEIGHTS,
+) -> dict[str, list[float]]:
+    """
+    Los baselines pasivos de una muestra, fold a fold, SIN correr ninguna estrategia.
+
+    `validate_multiwindow(with_baselines=True)` ya los devuelve, pero solo de propina: hay
+    que darle una spec y pagar sus 15 backtests. Quien solo quiere el liston -- el
+    optimizador, que lo calcula UNA vez y lo compara contra cientos de candidatas -- no
+    tiene por que pagar una estrategia que va a tirar.
+
+    Misma geometria de folds y mismos costes que la estrategia contra la que se compara: el
+    liston no se mide en un calendario distinto del que mide a quien lo intenta batir.
+    """
+    folds = build_folds(
+        start, end,
+        scheme=scheme, n_folds=n_folds, n_groups=n_groups, n_test_groups=n_test_groups,
+        purge_days=resolve_purge_days(base_config) if purge_days is None else purge_days,
+        embargo_days=embargo_days, anchored=anchored,
+    )
+    return _baseline_fold_scores(
+        base_config, bars, folds,
+        starting_equity=starting_equity,
+        headline_weights=headline_weights,
+        cache={},
+    )
+
+
 __all__ = [
     "SCHEME_CPCV",
     "SCHEME_SINGLE",
     "SCHEME_WALK_FORWARD",
     "FoldScore",
     "MultiWindowValidation",
+    "baseline_fold_scores",
     "resolve_purge_days",
     "validate_multiwindow",
 ]

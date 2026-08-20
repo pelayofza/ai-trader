@@ -30,6 +30,7 @@ from ai_trader.scoring.scenario_split import (
     ScenarioSplit,
     split_scenarios,
 )
+from ai_trader.scoring.real_source import RealWindowSource, TemporalSplit
 from ai_trader.scoring.search_space import ParamSpace, get_space
 from ai_trader.synthetic.service import sample_window
 from ai_trader.synthetic.store import SyntheticStore
@@ -67,7 +68,7 @@ class OptimizationResult:
     best_params: dict
     train: RewardStats
     validation: RewardStats
-    split: ScenarioSplit
+    split: ScenarioSplit | TemporalSplit
     substrate: dict
     gate: BaselineGate
     pbo: PBOResult
@@ -311,26 +312,23 @@ def run_optimization(
     strategy_type: str,
     *,
     source: SampleSource | None = None,
-    library_id: str = DEFAULT_LIBRARY_ID,
-    store: SyntheticStore | None = None,
     base_config: AppConfig | None = None,
     cem_config: CEMConfig | None = None,
     cvar_alpha: float = DEFAULT_CVAR_ALPHA,
     headline_weights: HeadlineWeights = DEFAULT_HEADLINE_WEIGHTS,
-    warmup_days: int | None = None,
-    split_ratio: float = 0.7,
     starting_equity: float = DEFAULT_STARTING_EQUITY,
-    n_paths: int | None = None,
-    validation_fraction: float = DEFAULT_VALIDATION_FRACTION,
-    split_seed: int = 0,
+    offline: bool = True,
+    signals: dict | None = None,
 ) -> OptimizationResult:
     """
-    Optimiza por CEM los parametros de una primitiva sobre el sustrato que se le de.
+    Optimiza por CEM los parametros de una primitiva sobre el HISTORICO REAL.
 
-    - Sustrato: `source`. Es lo unico que decide sobre QUE se optimiza, y por eso viaja
-      dentro del resultado (`substrate`). Los argumentos `library_id`, `store`, `n_paths`,
-      `validation_fraction` y `split_seed` solo se usan para construir la fuente sintetica
-      por omision, y no significan nada con una `source` explicita.
+    - Sustrato: `source`, y por omision `RealWindowSource` -- sub-ventanas del mercado con
+      CPCV purgado y hold-out temporal. Fue sintetico hasta que el estudio de transferencia
+      midio que el ranking de los dos mundos no se parece (rho = -0,04, y -0,67 entre las
+      que operan de verdad): un juez del que se sabe que no transfiere no puede seguir
+      eligiendo. Para volver a puntuar sobre una libreria generada hay que pedirlo
+      explicitamente pasando `source=SyntheticSampleSource.build(...)`.
     - Score por muestra: `Sharpe - lambda*turnover - kappa*maxDD` OUT-OF-SAMPLE.
     - Recompensa: CVaR@`cvar_alpha` de esos scores sobre las muestras de TRAIN, o sea
       la media del peor cuartil: se optimiza la cola mala, no el centro.
@@ -338,22 +336,21 @@ def run_optimization(
     - Gate: en validation, la estrategia debe batir al MEJOR baseline pasivo para
       aprobar. Sin baseline disponible no hay aprobado.
     - Sobreajuste por multiples pruebas: se reportan PBO (sobre la matriz muestras x
-      configuraciones que el CEM genero) y DSR (Sharpe del ganador deflactado).
-    - Determinista de punta a punta (split_seed + cem_config.seed + backtest).
+      configuraciones que el CEM genero) y DSR (Sharpe del ganador deflactado). Sobre el
+      sustrato real IMPORTAN MAS, no menos: son cuatro unidades de train de un unico camino
+      historico, y ese es el problema que el sintetico venia a resolver y no resolvio.
+    - Determinista de punta a punta (geometria de folds + cem_config.seed + backtest).
+    - COSTE: ~8 min por candidata con la cache caliente (ver `scoring.real_source`). Una
+      corrida completa de CEM se mide en horas, no en minutos.
     """
     space: ParamSpace = get_space(strategy_type)
 
-    source = source or SyntheticSampleSource.build(
-        library_id=library_id,
-        store=store,
+    source = source or RealWindowSource.build(
         base_config=base_config,
-        warmup_days=warmup_days,
-        n_paths=n_paths,
-        validation_fraction=validation_fraction,
-        split_seed=split_seed,
-        split_ratio=split_ratio,
+        offline=offline,
         starting_equity=starting_equity,
         headline_weights=headline_weights,
+        signals=signals,
     )
     split = source.split
     train_units, validation_units = source.train_units, source.validation_units

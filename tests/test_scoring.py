@@ -21,7 +21,11 @@ from ai_trader.scoring.baselines import (
     gate,
 )
 from ai_trader.scoring.cem import CEMConfig, maximize
-from ai_trader.scoring.optimize import DEFAULT_LIBRARY_ID, run_optimization
+from ai_trader.scoring.optimize import (
+    DEFAULT_LIBRARY_ID,
+    SyntheticSampleSource,
+    run_optimization,
+)
 from ai_trader.scoring.overfit import (
     deflated_sharpe_ratio,
     probability_of_backtest_overfitting,
@@ -506,47 +510,53 @@ def _fake_base_config() -> AppConfig:
     )
 
 
-class TestDefaultLibrary:
+def _fake_source(n_paths: int = 2) -> SyntheticSampleSource:
+    """Fuente sintetica sobre un store falso, para los end-to-end del optimizador.
+
+    El optimizador ya NO va al mundo sintetico por su cuenta -- su sustrato por defecto es
+    el mercado real, que no se puede correr en un test unitario sin cache ni red -- asi que
+    aqui se le da la fuente a mano. Lo que se prueba es el mecanismo (CEM, hold-out, gate,
+    PBO/DSR), y para eso da igual de donde salgan las barras."""
+    store = _FakeStore({"up": 1.0, "flat": 0.05, "down": -0.5})
+    return SyntheticSampleSource.build(
+        store=store,
+        base_config=_fake_base_config(),
+        n_paths=n_paths,
+    )
+
+
+class TestDefaultSubstrate:
     """
-    El sustrato por defecto del scoring nunca puede ser el ruido iid de ai_v1: optimizar
-    sobre iid premia sesgos optimistas.
+    El sustrato que DECIDE es el historico real, y eso tiene que poder comprobarse sin
+    correr una optimizacion: es la propiedad que cambio cuando el estudio de transferencia
+    midio que el ranking sintetico no transfiere (rho = -0,04).
 
-    Sigue siendo ai_v2 y no ai_v3 (la libreria que ya pasa el estudio de fidelidad) a
-    PROPOSITO: la calibracion de pesos y la validacion multiventana se midieron sobre
-    ai_v2, asi que moverlo invalidaria esas cifras hasta re-correrlas. Cambiar de sustrato
-    es un paso con su propio coste, no un efecto lateral de mejorar el generador."""
+    Y la libreria sintetica por defecto -para quien la pida explicitamente- nunca puede ser
+    el ruido iid de ai_v1: optimizar sobre iid premia sesgos optimistas."""
 
-    def test_constant_points_to_a_library_with_microstructure(self):
+    def test_the_optimizer_defaults_to_the_real_substrate(self):
+        default = inspect.signature(run_optimization).parameters["source"].default
+        assert default is None  # se construye dentro, no se hereda de una libreria
+
+        src = inspect.getsource(run_optimization)
+        assert "RealWindowSource.build(" in src
+        assert "SyntheticSampleSource" not in src.split('"""')[2]  # ni en el cuerpo
+
+    def test_the_optimizer_no_longer_takes_a_library(self):
+        params = inspect.signature(run_optimization).parameters
+        assert "library_id" not in params
+        assert "store" not in params
+
+    def test_the_synthetic_source_still_defaults_to_a_library_with_microstructure(self):
         assert DEFAULT_LIBRARY_ID == "ai_v2"
+        default = inspect.signature(SyntheticSampleSource.build).parameters["library_id"]
+        assert default.default == DEFAULT_LIBRARY_ID
 
-    def test_signature_default_is_the_constant(self):
-        default = inspect.signature(run_optimization).parameters["library_id"].default
-        assert default == DEFAULT_LIBRARY_ID
-
-    def test_optimizer_reads_ai_v2_when_no_library_is_given(self):
+    def test_the_synthetic_source_reads_the_library_it_is_told_to(self):
         store = _FakeStore({"up": 1.0, "flat": 0.05, "down": -0.5})
 
-        run_optimization(
-            "crypto_momentum",
-            store=store,
-            base_config=_fake_base_config(),
-            cem_config=CEMConfig(population=2, iterations=1, seed=0),
-            n_paths=1,
-        )
-
-        assert store.requested_libraries  # se toco el store
-        assert set(store.requested_libraries) == {"ai_v2"}
-
-    def test_explicit_library_still_wins(self):
-        store = _FakeStore({"up": 1.0, "flat": 0.05, "down": -0.5})
-
-        run_optimization(
-            "crypto_momentum",
-            library_id="ai_v1",
-            store=store,
-            base_config=_fake_base_config(),
-            cem_config=CEMConfig(population=2, iterations=1, seed=0),
-            n_paths=1,
+        SyntheticSampleSource.build(
+            library_id="ai_v1", store=store, base_config=_fake_base_config(), n_paths=1
         )
 
         assert set(store.requested_libraries) == {"ai_v1"}
@@ -554,13 +564,11 @@ class TestDefaultLibrary:
 
 class TestRunOptimizationEndToEnd:
     def _run(self):
-        store = _FakeStore({"up": 1.0, "flat": 0.05, "down": -0.5})
         return run_optimization(
             "crypto_momentum",
-            store=store,
+            source=_fake_source(n_paths=2),
             base_config=_fake_base_config(),
             cem_config=CEMConfig(population=4, iterations=2, seed=0),
-            n_paths=2,
         )
 
     def test_produces_valid_best_params_and_holdout_stats(self):
