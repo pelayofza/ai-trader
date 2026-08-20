@@ -99,13 +99,8 @@ from ai_trader.scoring.aggregate import DEFAULT_CVAR_ALPHA, aggregate_reward
 from ai_trader.scoring.baselines import BASELINE_LABELS
 from ai_trader.scoring.multiwindow import resolve_purge_days, validate_multiwindow
 from ai_trader.scoring.scenario_split import ScenarioSplit, split_scenarios
-from ai_trader.scoring.transfer_study import (
-    CONFIGS_PER_FAMILY,
-    N_GROUPS,
-    N_TEST_GROUPS,
-    build_specs,
-    crypto_universe,
-)
+from ai_trader.scoring.real_substrate import N_GROUPS, N_TEST_GROUPS, crypto_universe
+from ai_trader.scoring.transfer_study import CONFIGS_PER_FAMILY, build_specs
 from ai_trader.scoring.weight_study import FAMILIES, STUDY_SEED
 from ai_trader.shared.checkpoint import UnitCheckpoint, fingerprint
 from ai_trader.shared.reports import guard_published_grid

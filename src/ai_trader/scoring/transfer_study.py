@@ -80,7 +80,7 @@ import sys
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -89,7 +89,7 @@ import pandas as pd
 from ai_trader.backtest.engine import DEFAULT_STARTING_EQUITY
 from ai_trader.backtest.metrics import periods_per_year_for_symbols
 from ai_trader.backtest.validation import SCHEME_CPCV, resolve_embargo_days
-from ai_trader.config import AppConfig, StrategySpec, load_config
+from ai_trader.config import StrategySpec, load_config
 from ai_trader.scoring.activity import (
     DEFAULT_ACTIVITY_FLOOR,
     MIN_MEDIAN_TRADES_PER_WINDOW,
@@ -99,6 +99,14 @@ from ai_trader.scoring.activity import (
 from ai_trader.scoring.aggregate import DEFAULT_CVAR_ALPHA, aggregate_reward
 from ai_trader.scoring.baselines import BASELINE_LABELS, BaselineGate, gate
 from ai_trader.scoring.multiwindow import resolve_purge_days, validate_multiwindow
+from ai_trader.scoring.real_substrate import (
+    N_GROUPS,
+    N_TEST_GROUPS,
+    RealWindow,
+    audit_real_symbols,
+    crypto_universe,
+    real_windows,
+)
 from ai_trader.scoring.weight_calibration import candidate_specs, spearman
 from ai_trader.scoring.weight_study import FAMILIES, STUDY_SEED
 from ai_trader.shared.reports import guard_published_grid, load_report
@@ -127,11 +135,6 @@ FALLBACK_LIBRARY_ID = "ai_v2"
 DEFAULT_CONFIG = Path("config") / "default.toml"
 
 CONFIGS_PER_FAMILY = 8  # x 2 familias = 16 configuraciones rankeadas
-
-# CPCV: C(6,2) = 15 ventanas OOS por unidad. Mismos numeros que el estudio de validacion,
-# para que "un fold" signifique lo mismo en los dos sitios.
-N_GROUPS = 6
-N_TEST_GROUPS = 2
 
 # Regla de decision (ver docstring). Se declara aqui, en el codigo, y no en la prosa del
 # informe: un umbral que se elige despues de ver el resultado no es un umbral.
@@ -189,136 +192,6 @@ def build_specs(
     for i, family in enumerate(families):
         specs.extend(candidate_specs(family, per_family, seed=STUDY_SEED + i))
     return specs
-
-
-# ------------------------------------------------------------------- universo --------
-
-
-@dataclass(frozen=True, slots=True)
-class SymbolAudit:
-    """Por que un simbolo del universo operable entra o no en el lado real."""
-
-    symbol: str
-    n_bars: int
-    first_bar: str | None
-    last_bar: str | None
-    reason: str
-
-    def as_dict(self) -> dict:
-        return {
-            "symbol": self.symbol,
-            "n_bars": self.n_bars,
-            "first_bar": self.first_bar,
-            "last_bar": self.last_bar,
-            "reason": self.reason,
-        }
-
-
-def crypto_universe(config: AppConfig) -> list[str]:
-    """Los simbolos CRIPTO del universo operable. La renta variable del config va por otro
-    proveedor y otra sesion de mercado; aqui no hay forma de traerla ni de compararla."""
-    return sorted(
-        s for s in config.runner.symbols if detect_asset_class(s) is AssetClass.CRYPTO
-    )
-
-
-def audit_real_symbols(
-    bars: dict[str, pd.DataFrame],
-    requested: Sequence[str],
-    *,
-    start: pd.Timestamp,
-    end: pd.Timestamp,
-    min_history_days: int,
-) -> tuple[list[SymbolAudit], list[SymbolAudit]]:
-    """
-    Separa los simbolos con historico SUFICIENTE de los que no lo tienen.
-
-    El umbral no es un numero a ojo: `min_history_days` = calentamiento de la estrategia
-    (`lookback_days`) + un grupo de CPCV. Por debajo de eso el simbolo no puede llegar a
-    operarse ni en una sola ventana OOS, asi que no aporta ranking; aporta ruido de
-    cobertura. Los que no llegan se DECLARAN y se omiten: no se rellenan, no se sustituyen
-    y no se les inventa precio (un par listado hace tres meses no tiene 2018).
-    """
-    kept: list[SymbolAudit] = []
-    dropped: list[SymbolAudit] = []
-    for symbol in sorted(requested):
-        df = bars.get(symbol)
-        if df is None or df.empty:
-            dropped.append(SymbolAudit(symbol, 0, None, None, "sin barras en la cache"))
-            continue
-        window = df.loc[start : end - pd.Timedelta(days=1)]
-        n = len(window)
-        audit = SymbolAudit(
-            symbol=symbol,
-            n_bars=n,
-            first_bar=None if n == 0 else str(window.index.min().date()),
-            last_bar=None if n == 0 else str(window.index.max().date()),
-            reason="",
-        )
-        if n < min_history_days:
-            dropped.append(
-                dataclasses.replace(
-                    audit,
-                    reason=f"{n} barras < {min_history_days} exigidas "
-                    "(calentamiento + un grupo de CPCV)",
-                )
-            )
-        else:
-            kept.append(dataclasses.replace(audit, reason="historico suficiente"))
-    return kept, dropped
-
-
-# --------------------------------------------------------------- geometria real ------
-
-
-@dataclass(frozen=True, slots=True)
-class RealWindow:
-    """Una sub-ventana del historico real, del mismo tamano que un camino sintetico."""
-
-    label: str
-    start: datetime
-    end: datetime  # exclusivo, como los bloques de `backtest.validation`
-
-    @property
-    def days(self) -> int:
-        return (self.end - self.start).days
-
-    def as_dict(self) -> dict:
-        return {
-            "label": self.label,
-            "start": self.start.date().isoformat(),
-            "end": (self.end - timedelta(days=1)).date().isoformat(),
-            "days": self.days,
-        }
-
-
-def real_windows(start: datetime, end: datetime, window_days: int) -> list[RealWindow]:
-    """
-    Trocea `[start, end)` en sub-ventanas DISJUNTAS de `window_days`, ancladas al final.
-
-    Ancladas al final y no al principio porque el resto que no completa una ventana tiene
-    que caer en algun sitio, y donde menos cuesta es en la cabecera: es el tramo con menos
-    simbolos vivos (media cripto de hoy no cotizaba en 2017) y el mas lejano del regimen
-    que el sistema va a operar. El tramo descartado se declara en el informe.
-    """
-    if window_days <= 0:
-        raise ValueError("window_days must be positive")
-    total = (end - start).days
-    n = total // window_days
-    if n < 1:
-        raise ValueError(
-            f"El historico real ({total} dias) no llega para una sub-ventana de "
-            f"{window_days} dias"
-        )
-    first = end - timedelta(days=n * window_days)
-    return [
-        RealWindow(
-            label=f"w{i + 1}",
-            start=first + timedelta(days=i * window_days),
-            end=first + timedelta(days=(i + 1) * window_days),
-        )
-        for i in range(n)
-    ]
 
 
 # ------------------------------------------------------------------- el plan ---------

@@ -87,23 +87,27 @@ from ai_trader.shared.clock import HistoricalClock
 from ai_trader.scoring.aggregate import DEFAULT_CVAR_ALPHA
 from ai_trader.scoring.multiwindow import SCHEME_CPCV, validate_multiwindow
 from ai_trader.scoring.signal_study import GATE_VALUE_BY_PARAM, gate_param_for
-from ai_trader.scoring.transfer_study import (
-    DEFAULT_REAL_END,
-    DEFAULT_REAL_START,
+from ai_trader.scoring.real_substrate import (
     N_GROUPS,
     N_TEST_GROUPS,
     RealWindow,
     audit_real_symbols,
-    build_specs,
     crypto_universe,
     real_windows,
 )
+from ai_trader.scoring.transfer_study import build_specs
 from ai_trader.scoring.weight_study import NEW_FAMILIES
 from ai_trader.shared.reports import write_report
 from ai_trader.signals.catalog import CATALOG
 # El cargador de barras reales lo comparten todos los estudios que tocan mercado: los
 # simbolos que el exchange no sirve se OMITEN y se declaran, no se rellenan.
-from ai_trader.data.real_history import DEFAULT_EXCHANGE, build_service, fetch_real_bars
+from ai_trader.data.real_history import (
+    DEFAULT_EXCHANGE,
+    DEFAULT_REAL_END,
+    DEFAULT_REAL_START,
+    build_service,
+    fetch_real_bars,
+)
 from ai_trader.signals.feed import load_frames
 
 logger = logging.getLogger("theme_study")
