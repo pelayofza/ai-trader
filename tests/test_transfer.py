@@ -289,7 +289,7 @@ class TestPublishedFingerprint:
         from ai_trader.backtest.validation import SCHEME_CPCV
         from ai_trader.config import load_config
         from ai_trader.scoring.transfer_study import N_GROUPS, N_TEST_GROUPS
-        from ai_trader.synthetic.fidelity_study import build_service, fetch_real_bars
+        from ai_trader.data.real_history import build_service, fetch_real_bars
 
         base = load_config(plan["config_path"])
         config = dataclasses.replace(

@@ -101,9 +101,9 @@ from ai_trader.scoring.transfer_study import (
 from ai_trader.scoring.weight_study import NEW_FAMILIES
 from ai_trader.shared.reports import write_report
 from ai_trader.signals.catalog import CATALOG
-# El cargador de barras reales vive en `fidelity_study` y lo comparten los estudios que tocan
-# mercado: los simbolos que el exchange no sirve se OMITEN y se declaran, no se rellenan.
-from ai_trader.synthetic.fidelity_study import DEFAULT_EXCHANGE, build_service, fetch_real_bars
+# El cargador de barras reales lo comparten todos los estudios que tocan mercado: los
+# simbolos que el exchange no sirve se OMITEN y se declaran, no se rellenan.
+from ai_trader.data.real_history import DEFAULT_EXCHANGE, build_service, fetch_real_bars
 from ai_trader.signals.feed import load_frames
 
 logger = logging.getLogger("theme_study")

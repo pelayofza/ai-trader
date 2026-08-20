@@ -103,7 +103,7 @@ from ai_trader.scoring.weight_calibration import candidate_specs, spearman
 from ai_trader.scoring.weight_study import FAMILIES, STUDY_SEED
 from ai_trader.shared.reports import guard_published_grid, load_report
 from ai_trader.shared.instruments import AssetClass, detect_asset_class
-from ai_trader.synthetic.fidelity_study import (
+from ai_trader.data.real_history import (
     DEFAULT_EXCHANGE,
     DEFAULT_REAL_END,
     DEFAULT_REAL_START,

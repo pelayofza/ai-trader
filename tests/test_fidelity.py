@@ -37,8 +37,8 @@ from ai_trader.synthetic.fidelity import (
     pair_key,
     series_facts,
 )
+from ai_trader.data.real_history import CachedBarsProvider
 from ai_trader.synthetic.fidelity_study import (
-    CachedBarsProvider,
     FactsCollector,
     StudyPlan,
     build_report,
