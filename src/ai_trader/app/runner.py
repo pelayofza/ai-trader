@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Protocol
 
 import pandas as pd
@@ -48,6 +48,12 @@ from ai_trader.shared.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Cada cuanto puede repetirse un aviso periodico en el canal hacia el humano.
+# El ciclo automatico corre cada 15 minutos y antes notificaba en todos ellos:
+# un Telegram cada cuarto de hora sin nada que contar. El log los sigue viendo
+# todos; el humano, uno al dia (mas las operaciones, que nunca se retienen).
+ROUTINE_NOTICE_INTERVAL_SECONDS = 24 * 3600
 
 
 class MarketDataReader(Protocol):
@@ -225,6 +231,10 @@ class TradingRunner:
         # `_close_position`, que no devuelve el resultado de la ejecucion a nadie, y se
         # vacian al escribir la linea. Solo se llenan si hay diario detras.
         self._exit_fills: list[dict] = []
+        # Momento del ultimo aviso periodico enviado. En memoria a proposito: no entra
+        # en el fichero de estado (no se toca su esquema), y un reinicio vuelve a
+        # notificar, que es justo lo que se quiere saber tras un reinicio.
+        self._last_routine_notice_at: datetime | None = None
 
         payload = self.state_store.load()
         self.state = RunnerState(
@@ -238,12 +248,12 @@ class TradingRunner:
 
     def run_cycle(self) -> list[ExecutionResult]:
         if not self.config.cycle_enabled:
-            self.notifier.warning("Runner cycle is disabled in config.")
+            self._notify_routine("Runner cycle is disabled in config.", level="warning")
             self._write_journal(STATUS_DISABLED, [], [])
             return []
 
         if self.state.is_paused:
-            self.notifier.warning("Runner is paused. Skipping cycle.")
+            self._notify_routine("Runner is paused. Skipping cycle.", level="warning")
             # Un ciclo pausado TAMBIEN deja linea. Es lo que distingue "el proceso sigue
             # vivo y no opera" de "el proceso se cayo", que desde fuera son iguales.
             self._write_journal(STATUS_PAUSED, [], [])
@@ -283,7 +293,15 @@ class TradingRunner:
 
         summary = self._build_cycle_summary(cycle_results, diagnostics, closed_positions)
         logger.info(summary)
-        self.notifier.info(summary)
+
+        # Con operaciones, el resumen acompana a la novedad y sale entero; sin ellas es
+        # solo el latido diario. Antes salia en TODOS los ciclos, hubiera o no algo que
+        # contar, y eso es lo que llenaba el chat cada 15 minutos.
+        if cycle_results or closed_positions:
+            self._last_routine_notice_at = self.clock.now()
+            self.notifier.info(summary)
+        else:
+            self._notify_routine(summary)
 
         for diag in diagnostics:
             logger.info("Cycle diagnostics | %s", diag)
@@ -325,7 +343,9 @@ class TradingRunner:
 
             diag.signals_generated += 1
             diag.signals.append(signal_record(signal))
-            self.notifier.info(self._format_signal(signal))
+            # Solo al log: una senal no es una operacion, y mientras la condicion
+            # persista se repite en cada ciclo. Su cuenta viaja en el resumen (signals=).
+            logger.info(self._format_signal(signal))
 
             # Puerta unica de riesgo. Antes las ordenes de prediccion la esquivaban
             # por completo: se contaban como aprobadas sin evaluarlas siquiera.
@@ -347,13 +367,18 @@ class TradingRunner:
             if not decision.approved:
                 diag.risk_rejected += 1
                 diag.notes.append(f"{strategy.strategy_id}:risk_rejected:{decision.reason}")
-                self.notifier.warning(
-                    f"Risk rejected {signal.symbol} ({signal.strategy_id}): {decision.reason}"
+                # Solo al log: se repite en cada ciclo mientras el rechazo siga vigente.
+                # Su cuenta viaja en el resumen (risk_rejected=).
+                logger.info(
+                    "Risk rejected %s (%s): %s",
+                    signal.symbol,
+                    signal.strategy_id,
+                    decision.reason,
                 )
                 continue
 
             for warning in decision.warnings:
-                self.notifier.warning(f"{signal.symbol}: {warning}")
+                logger.warning("%s: %s", signal.symbol, warning)
 
             diag.risk_approved += 1
             diag.executions_attempted += 1
@@ -375,7 +400,7 @@ class TradingRunner:
             market = self.market_data_reader.get_prediction_market(slug)
             if market is None:
                 diag.notes.append("prediction_market_not_found")
-                self.notifier.warning(f"Prediction market not found: {symbol}")
+                logger.warning("Prediction market not found: %s", symbol)
                 return None
 
             # Gamma devuelve precios que pueden estar rancios. El precio con el que
@@ -826,6 +851,33 @@ class TradingRunner:
         return self._reports().symbols_report(self.config.symbols)
 
     # --- formateo de eventos ---
+
+    def _routine_notice_due(self) -> bool:
+        """Cierto si toca aviso periodico: el primero, o pasado el intervalo."""
+        last = self._last_routine_notice_at
+        if last is None:
+            return True
+        elapsed = (self.clock.now() - last).total_seconds()
+        return elapsed >= ROUTINE_NOTICE_INTERVAL_SECONDS
+
+    def _notify_routine(self, message: str, *, level: str = "info") -> None:
+        """
+        Aviso periodico hacia el humano: como mucho uno cada intervalo.
+
+        Es para lo que cada ciclo repite lo mismo (resumen sin operaciones, runner
+        pausado, ciclo deshabilitado). El pausado se retiene pero NO se calla del
+        todo: sin el, un runner detenido no manda nada, y desde fuera 'vivo y sin
+        operar' se confunde con 'se cayo'. El log lo registra siempre, ademas.
+        """
+        if not self._routine_notice_due():
+            logger.info("Routine notice retenido (ya enviado en el intervalo): %s", message)
+            return
+
+        self._last_routine_notice_at = self.clock.now()
+        if level == "warning":
+            self.notifier.warning(message)
+        else:
+            self.notifier.info(message)
 
     def _build_cycle_summary(
         self,

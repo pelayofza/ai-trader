@@ -788,6 +788,15 @@ A partir de ahí corre cada `AUTO_CYCLE_INTERVAL_SECONDS` (900 s, en
 `src/ai_trader/bots/telegram_bot.py`), con cerrojo de reentrada: un `/run_cycle` manual y
 el programado nunca se solapan.
 
+**Correr cada 15 minutos no es avisar cada 15 minutos.** El ciclo mantiene su ritmo, pero
+hacia Telegram solo salen tres cosas: cada **apertura y cada cierre de posición** en el
+acto, los **errores**, y un **latido periódico** —el resumen de ciclo— como mucho una vez
+cada `ROUTINE_NOTICE_INTERVAL_SECONDS` (24 h, en `src/ai_trader/app/runner.py`). Lo que se
+repetía idéntico ciclo tras ciclo (señal generada, rechazo de riesgo, mercado de predicción
+no encontrado) se queda en el log; sus cuentas viajan dentro del resumen (`signals=`,
+`risk_rejected=`). Un runner **pausado** sigue latiendo una vez al día a propósito: sin ese
+mensaje, detenido y caído se ven igual desde fuera.
+
 ### 3. Que sobreviva a un reinicio de la máquina
 
 Tarea programada de Windows, con arranque al inicio y reintento si el proceso muere.

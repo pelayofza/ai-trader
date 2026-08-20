@@ -1,17 +1,23 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import pytest
 
 from ai_trader.app.journal import CycleJournal
-from ai_trader.app.runner import RunnerConfig, SymbolCycleDiagnostics, TradingRunner
+from ai_trader.app.runner import (
+    ROUTINE_NOTICE_INTERVAL_SECONDS,
+    RunnerConfig,
+    SymbolCycleDiagnostics,
+    TradingRunner,
+)
 from ai_trader.app.state_store import JsonStateStore
 from ai_trader.execution.paper import PaperExecutionConfig, PaperExecutionEngine
 from ai_trader.execution.polymarket_paper import PolymarketPaperExecutionEngine
 from ai_trader.execution.router import ExecutionRouter
 from ai_trader.risk.engine import RiskEngine
+from ai_trader.shared.clock import HistoricalClock
 from ai_trader.shared.instruments import AssetClass, OutcomeToken, PredictionMarket, Venue
 from ai_trader.shared.schemas import PositionStatus, Side, Signal
 from ai_trader.strategies.polymarket_threshold import (
@@ -61,7 +67,16 @@ class SpyRiskEngine(RiskEngine):
         return super().evaluate(signal, portfolio_state)
 
 
-def build_runner(tmp_path, limits, market_data, strategies, journal=None, **config_overrides):
+def build_runner(
+    tmp_path,
+    limits,
+    market_data,
+    strategies,
+    journal=None,
+    clock=None,
+    notifier=None,
+    **config_overrides,
+):
     paper_engine = PaperExecutionEngine(PaperExecutionConfig(fee_rate=0.001, slippage_bps=5.0))
     risk_engine = SpyRiskEngine(limits)
 
@@ -78,6 +93,8 @@ def build_runner(tmp_path, limits, market_data, strategies, journal=None, **conf
         ),
         state_store=JsonStateStore(tmp_path / "state.json"),
         journal=journal,
+        clock=clock,
+        notifier=notifier,
     )
     return runner, risk_engine
 
@@ -593,3 +610,135 @@ class _NoopStrategy:
 
     def generate_signal(self, symbol, context):
         return None
+
+
+class RecordingNotifier:
+    """Apunta lo que sale hacia el humano. Ni red ni Telegram."""
+
+    def __init__(self) -> None:
+        self.messages: list[tuple[str, str]] = []
+
+    def info(self, message: str) -> None:
+        self.messages.append(("info", message))
+
+    def warning(self, message: str) -> None:
+        self.messages.append(("warning", message))
+
+    def error(self, message: str) -> None:
+        self.messages.append(("error", message))
+
+
+class TestRoutineNoticeThrottle:
+    """
+    LO QUE SALE HACIA EL HUMANO, Y CADA CUANTO.
+
+    El ciclo automatico corre cada 15 minutos. El resumen de ciclo se emitia en TODOS
+    ellos, hubiera o no algo que contar: 96 mensajes al dia de los que 95 decian lo
+    mismo. La regla que fija esta clase es la contraria y tiene dos mitades, y las dos
+    importan igual:
+
+      1. Sin novedad, un latido al dia. Ni uno mas.
+      2. Con novedad -una compra, una venta-, sale en el acto. La puerta NUNCA retiene
+         una operacion; si lo hiciera, el ahorro de ruido se pagaria con enterarse
+         tarde de lo unico que hay que saber pronto.
+
+    El caso pausado esta aqui a proposito: es el que tiene mas facil salir mal. Callarlo
+    del todo seria lo comodo -no opera, no cuenta nada- y dejaria un runner detenido
+    indistinguible desde fuera de un runner caido.
+    """
+
+    BASE = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+    def _quiet_runner(self, tmp_path, limits, clock, notifier):
+        """Sin barras no hay contexto, luego no hay senal: todo ciclo es 'sin novedad'."""
+        runner, _ = build_runner(
+            tmp_path,
+            limits,
+            FakeMarketData(),
+            [_NoopStrategy()],
+            clock=clock,
+            notifier=notifier,
+        )
+        return runner
+
+    def test_a_day_of_quiet_cycles_sends_exactly_one_message(self, tmp_path, limits):
+        clock = HistoricalClock(self.BASE)
+        notifier = RecordingNotifier()
+        runner = self._quiet_runner(tmp_path, limits, clock, notifier)
+
+        # Un dia entero al ritmo real del modo automatico: 96 ciclos de 15 minutos.
+        for step in range(96):
+            clock.set(self.BASE + timedelta(minutes=15 * step))
+            runner.run_cycle()
+
+        assert len(notifier.messages) == 1
+        level, message = notifier.messages[0]
+        assert level == "info"
+        assert message.startswith("Cycle complete")
+
+    def test_the_heartbeat_returns_after_the_interval(self, tmp_path, limits):
+        clock = HistoricalClock(self.BASE)
+        notifier = RecordingNotifier()
+        runner = self._quiet_runner(tmp_path, limits, clock, notifier)
+
+        runner.run_cycle()
+
+        # Justo por debajo del intervalo sigue callado; justo encima, vuelve a latir.
+        clock.set(self.BASE + timedelta(seconds=ROUTINE_NOTICE_INTERVAL_SECONDS - 1))
+        runner.run_cycle()
+        assert len(notifier.messages) == 1
+
+        clock.set(self.BASE + timedelta(seconds=ROUTINE_NOTICE_INTERVAL_SECONDS))
+        runner.run_cycle()
+        assert len(notifier.messages) == 2
+
+    def test_a_paused_runner_still_reports_once_a_day(self, tmp_path, limits):
+        clock = HistoricalClock(self.BASE)
+        notifier = RecordingNotifier()
+        runner = self._quiet_runner(tmp_path, limits, clock, notifier)
+        # Directo al estado, no via pause(): pause() es una respuesta a un comando del
+        # humano y notifica siempre, y aqui se mide lo que emite el CICLO.
+        runner.state.is_paused = True
+
+        for step in range(96):
+            clock.set(self.BASE + timedelta(minutes=15 * step))
+            runner.run_cycle()
+
+        assert notifier.messages == [("warning", "Runner is paused. Skipping cycle.")]
+
+    def test_a_purchase_is_never_held_back(self, tmp_path, limits):
+        clock = HistoricalClock(self.BASE)
+        notifier = RecordingNotifier()
+        strategy = PolymarketThresholdStrategy(
+            PolymarketThresholdConfig(
+                slug="test-market",
+                outcome="yes",
+                buy_below_price=0.40,
+                confidence=0.80,
+            )
+        )
+        market_data = FakeMarketData(
+            markets={"test-market": prediction_market(0.30)},
+            midpoints={"tok-yes": 0.30, "tok-no": 0.70},
+        )
+        runner, _ = build_runner(
+            tmp_path,
+            limits,
+            market_data,
+            [strategy],
+            clock=clock,
+            notifier=notifier,
+            symbols=["PM::test-market"],
+        )
+
+        # La puerta arranca CERRADA: ya se gasto el latido de este intervalo.
+        runner._last_routine_notice_at = self.BASE
+        clock.set(self.BASE + timedelta(minutes=15))
+
+        runner.run_cycle()
+
+        assert len(runner.get_positions()) == 1
+        texts = [message for _, message in notifier.messages]
+        assert any("PM::test-market" in text for text in texts), texts
+        # Y el resumen acompana a la operacion, que ahora si hay algo que contar.
+        assert any(text.startswith("Cycle complete") for text in texts), texts

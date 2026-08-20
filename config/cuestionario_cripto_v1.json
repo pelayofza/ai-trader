@@ -1,0 +1,399 @@
+{
+  "schema_version": "1.0",
+  "id_cuestionario": "cuestionario_cripto_v1",
+  "nombre": "Cuestionario diario de señales - Criptomonedas (genérico)",
+  "descripcion": "Cuestionario de opción cerrada apto para cualquier criptomoneda, diseñado para ser rellenado por una IA a partir del reporte diario HTML del activo. Todas las preguntas son categóricas y ordinales cuando es posible. Cada opción incluye un valor numérico ('valor') para facilitar el entrenamiento de modelos: escala centrada en 0 donde negativo = bajista y positivo = alcista, salvo indicación contraria en 'nota'. Usar 'sin_datos' (valor null) cuando el reporte no contenga la información y 'no_aplica' cuando la métrica no exista para el activo.",
+  "instrucciones_para_ia": "Responde cada pregunta usando EXCLUSIVAMENTE la información del reporte del día del activo indicado en los metadatos de la respuesta. Elige exactamente una opción por pregunta (el campo 'id_opcion'). Si el reporte no menciona el dato, responde 'sin_datos'. Si la métrica no existe para el activo (p. ej. no tiene ETFs), responde 'no_aplica' cuando la opción esté disponible. No uses conocimiento externo al reporte.",
+  "metadatos_respuesta_requeridos": ["activo", "ticker", "fecha", "reporte_fuente"],
+  "preguntas": [
+    {
+      "id": "P01",
+      "seccion": "precio",
+      "pregunta": "¿Cuál fue la variación del precio del activo en las últimas 24 horas?",
+      "opciones": [
+        {"id_opcion": "caida_fuerte", "texto": "Caída fuerte (peor que -5%)", "valor": -2},
+        {"id_opcion": "caida_leve", "texto": "Caída leve (-5% a -1%)", "valor": -1},
+        {"id_opcion": "plano", "texto": "Plano (-1% a +1%)", "valor": 0},
+        {"id_opcion": "subida_leve", "texto": "Subida leve (+1% a +5%)", "valor": 1},
+        {"id_opcion": "subida_fuerte", "texto": "Subida fuerte (más de +5%)", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ]
+    },
+    {
+      "id": "P02",
+      "seccion": "precio",
+      "pregunta": "¿Cómo se comportó el activo en los últimos 7 días respecto al mercado cripto global?",
+      "opciones": [
+        {"id_opcion": "mucho_peor", "texto": "Mucho peor que el mercado", "valor": -2},
+        {"id_opcion": "peor", "texto": "Algo peor que el mercado", "valor": -1},
+        {"id_opcion": "en_linea", "texto": "En línea con el mercado", "valor": 0},
+        {"id_opcion": "mejor", "texto": "Algo mejor que el mercado", "valor": 1},
+        {"id_opcion": "mucho_mejor", "texto": "Mucho mejor que el mercado", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ]
+    },
+    {
+      "id": "P03",
+      "seccion": "precio",
+      "pregunta": "¿A qué distancia está el precio de su máximo de los últimos meses?",
+      "opciones": [
+        {"id_opcion": "cerca_maximo", "texto": "Cerca del máximo (menos de -10%)", "valor": 2},
+        {"id_opcion": "correccion_moderada", "texto": "Corrección moderada (-10% a -25%)", "valor": 1},
+        {"id_opcion": "correccion_profunda", "texto": "Corrección profunda (-25% a -50%)", "valor": -1},
+        {"id_opcion": "colapso", "texto": "Colapso (peor que -50%)", "valor": -2},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ]
+    },
+    {
+      "id": "P04",
+      "seccion": "precio",
+      "pregunta": "¿Cómo fue el volumen de negociación de 24h comparado con las sesiones recientes?",
+      "opciones": [
+        {"id_opcion": "muy_bajo", "texto": "Muy inferior a lo habitual", "valor": -2},
+        {"id_opcion": "bajo", "texto": "Inferior a lo habitual", "valor": -1},
+        {"id_opcion": "normal", "texto": "En línea con lo habitual", "valor": 0},
+        {"id_opcion": "alto", "texto": "Superior a lo habitual", "valor": 1},
+        {"id_opcion": "muy_alto", "texto": "Muy superior a lo habitual", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ]
+    },
+    {
+      "id": "P05",
+      "seccion": "contexto_mercado",
+      "pregunta": "¿Cuál fue el comportamiento de Bitcoin en las últimas 24 horas?",
+      "opciones": [
+        {"id_opcion": "caida_fuerte", "texto": "Caída fuerte (peor que -5%)", "valor": -2},
+        {"id_opcion": "caida_leve", "texto": "Caída leve (-5% a -1%)", "valor": -1},
+        {"id_opcion": "plano", "texto": "Plano (-1% a +1%)", "valor": 0},
+        {"id_opcion": "subida_leve", "texto": "Subida leve (+1% a +5%)", "valor": 1},
+        {"id_opcion": "subida_fuerte", "texto": "Subida fuerte (más de +5%)", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ],
+      "nota": "Si el activo analizado es el propio Bitcoin, responder igualmente (coincidirá con P01)."
+    },
+    {
+      "id": "P06",
+      "seccion": "contexto_mercado",
+      "pregunta": "¿En qué zona está el índice Fear & Greed del mercado cripto global?",
+      "opciones": [
+        {"id_opcion": "miedo_extremo", "texto": "Miedo extremo (0-24)", "valor": -2},
+        {"id_opcion": "miedo", "texto": "Miedo (25-44)", "valor": -1},
+        {"id_opcion": "neutral", "texto": "Neutral (45-55)", "valor": 0},
+        {"id_opcion": "codicia", "texto": "Codicia (56-75)", "valor": 1},
+        {"id_opcion": "codicia_extrema", "texto": "Codicia extrema (76-100)", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ]
+    },
+    {
+      "id": "P07",
+      "seccion": "contexto_mercado",
+      "pregunta": "¿Cómo cambió el sentimiento (Fear & Greed) respecto a la semana anterior?",
+      "opciones": [
+        {"id_opcion": "deterioro_fuerte", "texto": "Empeoró mucho (más de 15 puntos)", "valor": -2},
+        {"id_opcion": "deterioro", "texto": "Empeoró (5-15 puntos)", "valor": -1},
+        {"id_opcion": "estable", "texto": "Estable (menos de 5 puntos de cambio)", "valor": 0},
+        {"id_opcion": "mejora", "texto": "Mejoró (5-15 puntos)", "valor": 1},
+        {"id_opcion": "mejora_fuerte", "texto": "Mejoró mucho (más de 15 puntos)", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ]
+    },
+    {
+      "id": "P08",
+      "seccion": "contexto_mercado",
+      "pregunta": "¿El movimiento del mercado global de hoy fue de tipo risk-on o risk-off?",
+      "opciones": [
+        {"id_opcion": "risk_off_fuerte", "texto": "Risk-off fuerte (ventas generalizadas)", "valor": -2},
+        {"id_opcion": "risk_off", "texto": "Risk-off moderado", "valor": -1},
+        {"id_opcion": "mixto", "texto": "Mixto / sin dirección clara", "valor": 0},
+        {"id_opcion": "risk_on", "texto": "Risk-on moderado", "valor": 1},
+        {"id_opcion": "risk_on_fuerte", "texto": "Risk-on fuerte (compras generalizadas)", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ]
+    },
+    {
+      "id": "P09",
+      "seccion": "whales",
+      "pregunta": "¿Ha habido ventas masivas de whales en el último día?",
+      "opciones": [
+        {"id_opcion": "muchas", "texto": "Sí, distribución masiva", "valor": -2},
+        {"id_opcion": "algunas", "texto": "Algunas ventas relevantes", "valor": -1},
+        {"id_opcion": "muy_pocas", "texto": "Muy pocas / marginales", "valor": 0},
+        {"id_opcion": "ninguna", "texto": "No, flujo neto comprador", "valor": 1},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ]
+    },
+    {
+      "id": "P10",
+      "seccion": "whales",
+      "pregunta": "¿Cuál es la intensidad de la acumulación whale reciente (últimas 48-72h)?",
+      "opciones": [
+        {"id_opcion": "distribucion", "texto": "Distribución neta (venden)", "valor": -2},
+        {"id_opcion": "sin_actividad", "texto": "Sin actividad relevante", "valor": 0},
+        {"id_opcion": "acumulacion_leve", "texto": "Acumulación leve", "valor": 1},
+        {"id_opcion": "acumulacion_fuerte", "texto": "Acumulación fuerte (compras notables reportadas)", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ]
+    },
+    {
+      "id": "P11",
+      "seccion": "whales",
+      "pregunta": "¿Las tenencias agregadas de grandes wallets están en máximos, mínimos o zona intermedia?",
+      "opciones": [
+        {"id_opcion": "minimos", "texto": "Cerca de mínimos del año", "valor": -2},
+        {"id_opcion": "bajando", "texto": "Descendiendo", "valor": -1},
+        {"id_opcion": "estables", "texto": "Estables / zona intermedia", "valor": 0},
+        {"id_opcion": "subiendo", "texto": "Ascendiendo", "valor": 1},
+        {"id_opcion": "maximos", "texto": "En máximos históricos o del año", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ]
+    },
+    {
+      "id": "P12",
+      "seccion": "whales",
+      "pregunta": "¿Cuál es la dirección neta de los flujos hacia/desde exchanges?",
+      "opciones": [
+        {"id_opcion": "entradas_fuertes", "texto": "Entradas fuertes a exchanges (presión vendedora)", "valor": -2},
+        {"id_opcion": "entradas", "texto": "Entradas moderadas a exchanges", "valor": -1},
+        {"id_opcion": "equilibrado", "texto": "Equilibrado", "valor": 0},
+        {"id_opcion": "salidas", "texto": "Salidas moderadas de exchanges", "valor": 1},
+        {"id_opcion": "salidas_fuertes", "texto": "Salidas fuertes de exchanges (acumulación/custodia)", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ]
+    },
+    {
+      "id": "P13",
+      "seccion": "institucional",
+      "pregunta": "¿Cómo fueron los flujos de los productos institucionales cotizados del activo (ETFs, ETPs, trusts)?",
+      "opciones": [
+        {"id_opcion": "salidas_fuertes", "texto": "Salidas netas significativas", "valor": -2},
+        {"id_opcion": "salidas_leves", "texto": "Salidas netas leves", "valor": -1},
+        {"id_opcion": "sin_flujo", "texto": "Sin entradas ni salidas relevantes", "valor": 0},
+        {"id_opcion": "entradas_leves", "texto": "Entradas netas leves", "valor": 1},
+        {"id_opcion": "entradas_fuertes", "texto": "Entradas netas significativas", "valor": 2},
+        {"id_opcion": "no_aplica", "texto": "El activo no tiene productos institucionales cotizados", "valor": 0},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ]
+    },
+    {
+      "id": "P14",
+      "seccion": "institucional",
+      "pregunta": "¿Existe divergencia entre la actividad whale y la demanda institucional?",
+      "opciones": [
+        {"id_opcion": "ambos_venden", "texto": "Ambos negativos (whales venden e institucionales con salidas)", "valor": -2},
+        {"id_opcion": "divergencia_negativa", "texto": "Whales venden pero institucionales compran", "valor": -1},
+        {"id_opcion": "sin_divergencia", "texto": "Alineados / sin divergencia clara", "valor": 0},
+        {"id_opcion": "divergencia_positiva", "texto": "Whales compran pero sin demanda institucional", "valor": 1},
+        {"id_opcion": "ambos_compran", "texto": "Ambos positivos (whales e institucionales compran)", "valor": 2},
+        {"id_opcion": "no_aplica", "texto": "No hay canal institucional para el activo", "valor": 0},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ]
+    },
+    {
+      "id": "P15",
+      "seccion": "institucional",
+      "pregunta": "¿Se reportó actividad corporativa relevante (tesorerías, mineras/validadores, adquisiciones) sobre el activo?",
+      "opciones": [
+        {"id_opcion": "negativa", "texto": "Sí, negativa (ventas de tesorería, cierres)", "valor": -2},
+        {"id_opcion": "ninguna", "texto": "No se reporta", "valor": 0},
+        {"id_opcion": "positiva_leve", "texto": "Sí, positiva de tamaño pequeño", "valor": 1},
+        {"id_opcion": "positiva_grande", "texto": "Sí, positiva de gran tamaño", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ]
+    },
+    {
+      "id": "P16",
+      "seccion": "derivados",
+      "pregunta": "¿Cómo está el apalancamiento/interés abierto respecto a niveles recientes?",
+      "opciones": [
+        {"id_opcion": "muy_bajo", "texto": "Muy bajo / desapalancado", "valor": 0},
+        {"id_opcion": "moderado", "texto": "Moderado", "valor": 1},
+        {"id_opcion": "elevado", "texto": "Elevado", "valor": -1},
+        {"id_opcion": "extremo", "texto": "Extremo (riesgo de liquidaciones en cascada)", "valor": -2},
+        {"id_opcion": "no_aplica", "texto": "El activo no tiene mercado de derivados relevante", "valor": 0},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ],
+      "nota": "Escala no monotónica: apalancamiento elevado con precio débil se codifica como riesgo (negativo)."
+    },
+    {
+      "id": "P17",
+      "seccion": "derivados",
+      "pregunta": "¿Cuál es el posicionamiento de los grandes traders en derivados?",
+      "opciones": [
+        {"id_opcion": "corto_consenso", "texto": "Mayoritariamente cortos", "valor": -2},
+        {"id_opcion": "sesgo_corto", "texto": "Sesgo corto", "valor": -1},
+        {"id_opcion": "mixto", "texto": "Mixto / dividido", "valor": 0},
+        {"id_opcion": "sesgo_largo", "texto": "Sesgo largo", "valor": 1},
+        {"id_opcion": "largo_consenso", "texto": "Mayoritariamente largos", "valor": 2},
+        {"id_opcion": "no_aplica", "texto": "El activo no tiene mercado de derivados relevante", "valor": 0},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ]
+    },
+    {
+      "id": "P18",
+      "seccion": "derivados",
+      "pregunta": "¿Hubo eventos de liquidación o squeeze relevantes en las últimas 24h?",
+      "opciones": [
+        {"id_opcion": "long_squeeze", "texto": "Sí, liquidación de largos (caída)", "valor": -2},
+        {"id_opcion": "ninguno", "texto": "No", "valor": 0},
+        {"id_opcion": "short_squeeze", "texto": "Sí, short squeeze (subida)", "valor": 2},
+        {"id_opcion": "no_aplica", "texto": "El activo no tiene mercado de derivados relevante", "valor": 0},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ]
+    },
+    {
+      "id": "P19",
+      "seccion": "noticias",
+      "pregunta": "¿Cuál es el tono agregado de las noticias específicas del activo de las últimas 48h?",
+      "opciones": [
+        {"id_opcion": "muy_negativo", "texto": "Muy negativo", "valor": -2},
+        {"id_opcion": "negativo", "texto": "Predominantemente negativo", "valor": -1},
+        {"id_opcion": "mixto", "texto": "Mixto / equilibrado", "valor": 0},
+        {"id_opcion": "positivo", "texto": "Predominantemente positivo", "valor": 1},
+        {"id_opcion": "muy_positivo", "texto": "Muy positivo", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ]
+    },
+    {
+      "id": "P20",
+      "seccion": "noticias",
+      "pregunta": "¿Se reportó algún catalizador de alto impacto específico del activo (listado/deslistado, ETF, hack, upgrade de red, integración mayor, declaración de figura clave)?",
+      "opciones": [
+        {"id_opcion": "negativo_alto", "texto": "Sí, negativo de alto impacto", "valor": -2},
+        {"id_opcion": "negativo_medio", "texto": "Sí, negativo de impacto medio", "valor": -1},
+        {"id_opcion": "ninguno", "texto": "No", "valor": 0},
+        {"id_opcion": "positivo_medio", "texto": "Sí, positivo de impacto medio", "valor": 1},
+        {"id_opcion": "positivo_alto", "texto": "Sí, positivo de alto impacto", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ]
+    },
+    {
+      "id": "P21",
+      "seccion": "regulacion",
+      "pregunta": "¿Cuál fue el saldo de las novedades regulatorias del día para el activo o el mercado cripto?",
+      "opciones": [
+        {"id_opcion": "muy_negativo", "texto": "Muy negativo (prohibiciones, demandas al activo)", "valor": -2},
+        {"id_opcion": "negativo", "texto": "Negativo (retrasos, incertidumbre)", "valor": -1},
+        {"id_opcion": "neutral", "texto": "Sin novedades relevantes / saldo equilibrado", "valor": 0},
+        {"id_opcion": "positivo", "texto": "Positivo (avances de claridad regulatoria)", "valor": 1},
+        {"id_opcion": "muy_positivo", "texto": "Muy positivo (aprobaciones, leyes favorables)", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ]
+    },
+    {
+      "id": "P22",
+      "seccion": "tecnico",
+      "pregunta": "¿Dónde está el precio respecto a la zona de soporte/resistencia clave?",
+      "opciones": [
+        {"id_opcion": "bajo_soporte", "texto": "Por debajo del soporte clave (ruptura bajista)", "valor": -2},
+        {"id_opcion": "en_soporte", "texto": "Apoyado sobre el soporte clave", "valor": -1},
+        {"id_opcion": "rango_medio", "texto": "En medio del rango", "valor": 0},
+        {"id_opcion": "en_resistencia", "texto": "Presionando la resistencia clave", "valor": 1},
+        {"id_opcion": "sobre_resistencia", "texto": "Por encima de la resistencia (ruptura alcista)", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ]
+    },
+    {
+      "id": "P23",
+      "seccion": "tecnico",
+      "pregunta": "¿Cuál es la posición del precio respecto a las medias móviles clave?",
+      "opciones": [
+        {"id_opcion": "bajo_todas", "texto": "Por debajo de todas las medias clave", "valor": -2},
+        {"id_opcion": "bajo_mayoria", "texto": "Por debajo de la mayoría", "valor": -1},
+        {"id_opcion": "mixto", "texto": "Mixto", "valor": 0},
+        {"id_opcion": "sobre_mayoria", "texto": "Por encima de la mayoría", "valor": 1},
+        {"id_opcion": "sobre_todas", "texto": "Por encima de todas las medias clave", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ]
+    },
+    {
+      "id": "P24",
+      "seccion": "tecnico",
+      "pregunta": "¿Se reportan señales de patrón técnico relevantes?",
+      "opciones": [
+        {"id_opcion": "bajista_confirmado", "texto": "Patrón bajista confirmado", "valor": -2},
+        {"id_opcion": "bajista_formacion", "texto": "Patrón bajista en formación", "valor": -1},
+        {"id_opcion": "ninguno", "texto": "Sin patrón destacado", "valor": 0},
+        {"id_opcion": "alcista_formacion", "texto": "Patrón/señal alcista en formación (sin confirmar)", "valor": 1},
+        {"id_opcion": "alcista_confirmado", "texto": "Patrón alcista confirmado", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ]
+    },
+    {
+      "id": "P25",
+      "seccion": "tecnico",
+      "pregunta": "¿Cuál es el estado del RSI / momentum según el reporte?",
+      "opciones": [
+        {"id_opcion": "sobrecompra", "texto": "Sobrecompra (riesgo de corrección)", "valor": -1},
+        {"id_opcion": "neutral_bajista", "texto": "Neutral con sesgo bajista", "valor": -1},
+        {"id_opcion": "neutral", "texto": "Neutral", "valor": 0},
+        {"id_opcion": "saliendo_sobreventa", "texto": "Saliendo de sobreventa (rebote en curso)", "valor": 1},
+        {"id_opcion": "sobreventa", "texto": "Sobreventa (potencial suelo)", "valor": 1},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ],
+      "nota": "Escala no monotónica: los extremos se codifican como señal contraria."
+    },
+    {
+      "id": "P26",
+      "seccion": "sentimiento",
+      "pregunta": "¿Cuál es el sentimiento de la comunidad/redes sobre el activo?",
+      "opciones": [
+        {"id_opcion": "muy_bajista", "texto": "Muy bajista / capitulación", "valor": -2},
+        {"id_opcion": "bajista", "texto": "Bajista", "valor": -1},
+        {"id_opcion": "neutral", "texto": "Neutral / dividido", "valor": 0},
+        {"id_opcion": "alcista_cauto", "texto": "Optimismo cauto", "valor": 1},
+        {"id_opcion": "euforia", "texto": "Euforia", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ],
+      "nota": "La euforia extrema puede interpretarse como señal contraria en el modelo; se deja al feature engineering."
+    },
+    {
+      "id": "P27",
+      "seccion": "sentimiento",
+      "pregunta": "¿La estacionalidad histórica del mes actual es favorable para el activo?",
+      "opciones": [
+        {"id_opcion": "muy_desfavorable", "texto": "Muy desfavorable (retorno mediano < -5%)", "valor": -2},
+        {"id_opcion": "desfavorable", "texto": "Desfavorable (retorno mediano -5% a 0%)", "valor": -1},
+        {"id_opcion": "neutral", "texto": "Neutral", "valor": 0},
+        {"id_opcion": "favorable", "texto": "Favorable (retorno mediano 0% a +5%)", "valor": 1},
+        {"id_opcion": "muy_favorable", "texto": "Muy favorable (retorno mediano > +5%)", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ]
+    },
+    {
+      "id": "P28",
+      "seccion": "riesgo",
+      "pregunta": "¿Cuántos factores de riesgo relevantes identifica el reporte para el corto plazo?",
+      "opciones": [
+        {"id_opcion": "ninguno", "texto": "0-1 riesgos", "valor": 2},
+        {"id_opcion": "pocos", "texto": "2-3 riesgos", "valor": 1},
+        {"id_opcion": "varios", "texto": "4-5 riesgos", "valor": -1},
+        {"id_opcion": "muchos", "texto": "6 o más riesgos", "valor": -2},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ]
+    },
+    {
+      "id": "P29",
+      "seccion": "resumen",
+      "pregunta": "¿Hay eventos macro pendientes a corto plazo que puedan mover el mercado (datos de inflación, Fed, vencimientos)?",
+      "opciones": [
+        {"id_opcion": "si_alto_riesgo", "texto": "Sí, de alto impacto potencial", "valor": -1},
+        {"id_opcion": "si_moderado", "texto": "Sí, de impacto moderado", "valor": 0},
+        {"id_opcion": "no", "texto": "No se mencionan", "valor": 1},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ]
+    },
+    {
+      "id": "P30",
+      "seccion": "resumen",
+      "pregunta": "¿Cuál es el sesgo global del reporte para el día?",
+      "opciones": [
+        {"id_opcion": "muy_bajista", "texto": "Muy bajista", "valor": -2},
+        {"id_opcion": "bajista", "texto": "Bajista", "valor": -1},
+        {"id_opcion": "neutral", "texto": "Neutral / mixto", "valor": 0},
+        {"id_opcion": "alcista", "texto": "Alcista (táctico o estructural)", "valor": 1},
+        {"id_opcion": "muy_alcista", "texto": "Muy alcista", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "El reporte no lo indica", "valor": null}
+      ]
+    }
+  ]
+}
