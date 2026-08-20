@@ -37,11 +37,18 @@ execution/paper.py      Simulación de fills: cuánto se llena y a qué precio.
 execution/microstructure.py  Coste de ejecución: spread por símbolo, volatilidad, impacto.
 backtest/engine.py      Conduce el runner real sobre histórico; corre planes de folds.
 backtest/validation.py  Geometría temporal: walk-forward, CPCV, purga, embargo, auditoría.
+data/real_history.py    Barras reales: caché offline y ventana histórica CERRADA.
 scoring/multiwindow.py  Agrega las ventanas de una muestra en una distribución robusta.
-scoring/transfer_study.py  ¿Ordena el mundo sintético las estrategias como el real?
-scoring/signal_study.py    ¿Desde qué capacidad predictiva paga una señal? (ρ=0 = control)
-synthetic/signal_channel.py  Canal de observación sintético: emite la señal DESPUÉS de las
-                        velas, sobre el retorno futuro ya generado.
+scoring/real_substrate.py  Sub-ventanas, universo cripto y auditoría de símbolos.
+scoring/real_source.py  EL SUSTRATO QUE DECIDE: folds CPCV sobre histórico real, hold-out
+                        temporal. Es el sustrato por defecto del optimizador.
+scoring/optimize.py     CEM sobre los params de una primitiva. No sabe de dónde salen sus
+                        muestras: se las da un SampleSource.
+scoring/theme_study.py  ¿Aporta la capa de señal, con el archivo REAL enchufado?
+
+research/               INVESTIGACIÓN APARCADA. El generador sintético y los seis estudios
+                        que lo usaban de sustrato. No se trabaja aquí salvo petición
+                        explícita; ver "Investigación archivada" al final.
 signals/                Ingesta de señales externas: catálogo, puerto, 30 adaptadores,
                         archivo, captura, sonda de profundidad, normalización y
                         codificación de eventos.
@@ -84,15 +91,55 @@ cabecera es el **Sharpe out-of-sample penalizado**, `Sharpe − λ·turnover −
 Calmar, que premiaba la inactividad y disparaba la varianza del estimador al meter el
 drawdown en el denominador.
 
-Los pesos λ y κ están **medidos, no supuestos**: se barrieron en rejilla sobre cientos
-de backtests reales de la librería sintética `ai_v2`, midiendo por combinación la
+Los pesos λ y κ están **medidos, no supuestos** — con una salvedad que hay que decir: se
+midieron sobre la librería sintética `ai_v2`, que hoy está aparcada. Se conservan porque lo que
+mostró aquel barrido fue que **la superficie es plana**: dentro del rango probado, los pesos no
+cambian qué configuración gana. Re-medirlos sobre real está en el roadmap, y no es urgente por
+ese motivo. Se barrieron en rejilla sobre cientos de backtests, midiendo por combinación la
 correlación de rangos in-sample/out-of-sample y el gap train-validation, más una
 auditoría de que la penalización por rotación no duplica los costes que la curva de
 equity ya paga. La evidencia se publica en `data/calibration/` y se reproduce con:
 
 ```powershell
-.venv\Scripts\python.exe -m ai_trader.scoring.weight_study   # el estudio completo (horas)
-.venv\Scripts\python.exe -m ai_trader.scoring.weight_study --analyze-only  # re-analiza
+.venv\Scripts\python.exe -m ai_trader.research.weight_study   # el estudio completo (horas)
+.venv\Scripts\python.exe -m ai_trader.research.weight_study --analyze-only  # re-analiza
+```
+
+### El sustrato que decide: sub-ventanas del histórico real
+
+El ranking que elige estrategias sale del **mercado**, no de un mundo generado
+(`scoring/real_source.py`). Fue sintético hasta que el estudio de transferencia midió que los
+dos ranking no se parecen (ρ = −0,04; ver *Investigación archivada*): un juez del que se sabe
+que no transfiere no puede seguir eligiendo.
+
+Cómo se muestrea, y por qué así:
+
+- Una **unidad** es una sub-ventana de calendario de 544 días — el mismo troceo del estudio de
+  transferencia publicado, para que las cifras de los dos sitios se comparen sin traducir nada.
+  Sobre la caché actual son 5 ventanas entre 2018-07-22 y 2025-12-31, con 24 pares cripto.
+- Una **muestra** es un fold CPCV dentro de esa ventana: C(6,2) = 15 ventanas OOS con purga y
+  embargo. Sin esto el sustrato real daría cinco muestras en total y el CVaR de la recompensa
+  sería el mínimo de cinco números.
+- El **hold-out es temporal**: la ventana más reciente se reserva y el CEM no la ve nunca.
+  Sortearla —que es lo que hace un hold-out de escenarios, donde no hay orden— permitiría
+  entrenar en 2024 y validar en 2019, que es fuga temporal disfrazada.
+- Los símbolos sin histórico suficiente se **declaran y se omiten**, nunca se rellenan.
+
+Lo que este sustrato **no** arregla, y se dice en vez de taparse: el histórico real es un único
+camino con cuatro unidades de entrenamiento. Rankear ahí tiene su propio sobreajuste — que es
+exactamente el problema que el sintético venía a resolver y no resolvió. Por eso `describe()`
+publica el número de unidades efectivas y el resultado sigue llevando PBO y DSR al lado.
+
+**Coste, medido:** 121 s por (configuración, unidad) con la caché caliente, o sea ~8 min por
+candidata sobre las cuatro unidades de train. Una corrida completa de CEM se mide en horas. Los
+baselines, en cambio, cuestan 1 s por unidad: van por `multiwindow.baseline_fold_scores`, que
+construye los folds y puntúa las carteras pasivas sin correr ninguna estrategia.
+
+Para volver a puntuar sobre una librería generada hay que pedirlo explícitamente:
+
+```python
+from ai_trader.research.synthetic_source import SyntheticSampleSource
+run_optimization("crypto_momentum", source=SyntheticSampleSource.build())
 ```
 
 ### Validación temporal multiventana
@@ -128,8 +175,8 @@ una mala regla de decisión: basta con que sea arbitrario. La evidencia se publi
 `data/validation/` y se reproduce con:
 
 ```powershell
-.venv\Scripts\python.exe -m ai_trader.scoring.validation_study --workers 7
-.venv\Scripts\python.exe -m ai_trader.scoring.validation_study --analyze-only
+.venv\Scripts\python.exe -m ai_trader.research.validation_study --workers 7
+.venv\Scripts\python.exe -m ai_trader.research.validation_study --analyze-only
 ```
 
 Aviso honesto: dentro de un backtest no se ajusta nada (la configuración entra fija y cada
@@ -150,119 +197,6 @@ sea el activo.
 
 Los mercados de predicción (Polymarket) quedan fuera del backtest: no hay histórico
 OHLCV, solo midpoint vivo.
-
-### Fidelidad del sustrato sintético
-
-Que la librería sintética tenga colas gruesas, agrupamiento de volatilidad y estructura
-serial no dice que los tenga **en la magnitud del mercado**. Esa pregunta se responde
-midiendo: `synthetic/fidelity.py` calcula los *stylized facts* (autocorrelación de
-retornos, autocorrelación de |retorno| a lags 1-10, exceedances más allá de 3σ, curtosis
-en exceso y correlaciones cruzadas par a par) y `synthetic/fidelity_study.py` los compara
-contra el histórico diario real de Binance vía CCXT, cacheado en disco. El histórico real
-se trocea en ventanas del mismo tamaño que un camino sintético, porque esos estimadores
-están sesgados en muestras cortas y comparar longitudes distintas compararía el sesgo.
-
-Se reportan tres ejes por métrica: **nivel** (ratio sintético/real), **ordenación**
-(correlación de rangos de Spearman sobre la sección cruzada de activos, o de pares) y
-**cobertura** (qué fracción de los valores reales cae dentro del [p10, p90] del ensemble).
-Además, el estudio es un **test de aceptación**, no un vistazo: contrasta cada medición con
-umbrales declarados en `synthetic/fidelity.py` (cobertura ≥ 60% por métrica y mediana real
-dentro de la banda del ensemble en curtosis, clustering y exceedances) y **devuelve 1** si
-no se cumplen, de modo que una regresión del generador rompe el comando. El informe se
-escribe igualmente: no cumplir también es un resultado. La evidencia se publica en
-`data/fidelity/` y la vista *Fidelidad* del dashboard:
-
-```powershell
-.venv\Scripts\python.exe -m ai_trader.synthetic.fidelity_study --library ai_v3            # descarga + mide
-.venv\Scripts\python.exe -m ai_trader.synthetic.fidelity_study --library ai_v3 --offline  # solo caché
-.venv\Scripts\python.exe -m ai_trader.synthetic.fidelity_study --library ai_v3 --verify-determinism
-```
-
-Se publican **dos** informes medidos con el mismo harness y la misma ventana real, porque
-sin el "antes" una corrección medida no se distingue de una afirmación:
-
-| | `ai_v2` | `ai_v3` | real |
-|---|---|---|---|
-| Curtosis en exceso | 0,37 | **3,40** | 4,19 |
-| Exceedances > 3σ | 0,55% | **1,27%** | 1,46% |
-| Clustering (autocorr. \|r\|, lag 1) | 0,092 | **0,196** | 0,190 |
-| Correlación cruzada (par a par) | 0,489 | **0,542** | 0,653 |
-| Volatilidad anualizada | 97,2% | 102,4% | 98,7% |
-| Cobertura media p10–p90 | 35% | **98%** | — |
-| Veredicto | no cumple | **acepta** | |
-
-`ai_v3` se deriva de los mismos `spec.json` que `ai_v1` con el retrofit determinista
-(`synthetic/retrofit.py`), sin llamar a la IA. Tres cambios en la física, calibrados
-iterando este mismo harness como función objetivo: colas de Student **también en las fases
-de calma** (antes eran gaussianas exactas, y son la mayor parte del horizonte), reparto
-news/inercia del GARCH movido al *spec* (`vol_news`) y **cargas factoriales que suben en el
-pánico** (`beta_stress`) — sin esto último, la correlación de un modelo de factores es una
-constante del universo y no puede dispararse en las caídas. Los dos campos nuevos son
-neutros por defecto y hay tests que congelan con un hash que `ai_v1` y `ai_v2` se regeneran
-byte a byte desde sus `spec.json`.
-
-Dos límites declarados y medidos: el generador cubre la **mediana** del mercado, no los años
-de manía (el p90 de la curtosis real va de 30 a 90 en DOGE y XRP, y perseguirlo rompería el
-nivel de volatilidad), y la **ordenación** entre activos —qué activo tiene más cola— sigue
-siendo floja o negativa. Documentación completa en §2.8.
-
-### Transferencia de ranking real-vs-sintético
-
-Que el generador se **parezca** al mercado no dice que **ordene** las estrategias como él. Un
-generador puede clavar las colas y ordenar al revés, y ninguna métrica de fidelidad lo
-detectaría. `scoring/transfer_study.py` mide justo eso: las 16 configuraciones de las dos primitivas de precio (la
-rejilla del estudio de pesos, hipercubo latino con semilla fija) se puntúan **dos veces** y se
-compara el orden de los dos rankings.
-
-Todo el diseño persigue que entre los dos lados **lo único que cambie sea el mundo del que
-salen los precios**: el mismo config, el mismo universo (los 11 pares que existen a la vez en
-Binance y en la librería), el mismo CPCV de 15 ventanas con purga de 10 días y embargo de 5, y
-la misma **longitud de ventana** — un camino sintético dura 544 días, así que el histórico real
-se trocea en 5 sub-ventanas disjuntas de ese tamaño en vez de evaluarse de una pieza. Los
-scores de cada configuración (sub-ventana × fold en el real, muestra × fold en el sintético)
-van a **una sola distribución** y se toma su CVaR@25%: el CVaR de CVaR compondría dos
-conservadurismos y dispararía la varianza del estimador.
-
-La regla de decisión estaba escrita en el código **antes** de mirar el resultado
-(`RHO_ACCEPT = 0.30`). El resultado:
-
-| | valor | |
-|---|---|---|
-| Spearman de los dos rankings | **−0,04** | IC95% por bloques [−0,44, +0,49] |
-| p (permutación, 20 000 barajados) | 0,89 | |
-| Top-4 del sintético en la mitad buena del real | 1/4 | por azar saldrían 2,0 |
-| Desacuerdos ≥ 8 puestos | 4 | 3 de ellos **sobrevalorados** por el sintético |
-| ρ sobre las 9 que operan de verdad en ambos | **−0,67** | IC95% [−0,88, +0,23], p = 0,06 |
-
-**Veredicto: no hay transferencia.** No se diseñan estrategias contra el sintético: el ranking
-lo fija el histórico real y el sintético se queda como banco de estrés y veto, nunca como
-criterio de selección.
-
-Antes de creerse un ρ ≈ 0 hay que descartar que el problema sea que **ninguno** de los dos
-lados estaba rankeando estrategias, y el estudio lo comprueba: el headline de una configuración
-que no opera es **cero exacto** (curva plana → Sharpe 0, rotación 0, caída 0) y en un periodo
-donde casi todo lo que arriesga pierde, ese cero gana. La correlación entre recompensa y
-actividad lo confirma — **−0,84** en el lado real frente a −0,09 en el sintético: el mercado de
-2018-2025 premió no operar y el mundo sintético no. Al quitar las inactivas el acuerdo no
-aparece; se vuelve **negativo**. Es un subconjunto *post-hoc* de 9 puntos y su intervalo cruza
-el cero, así que es señal fuerte y no prueba, pero descarta que el ρ nulo sea un artefacto.
-Ese hallazgo abrió el apartado siguiente: hoy el ranking se publica con y sin **suelo de
-actividad**, y con él la ganadora del lado real ya no es la que no operaba.
-
-Se reproduce con (usa la caché de barras ya descargada; verifica determinismo re-corriendo
-unidades en procesos nuevos):
-
-```powershell
-.venv\Scripts\python.exe -m ai_trader.scoring.transfer_study --library ai_v3 --offline --workers 7 --verify-determinism 4
-.venv\Scripts\python.exe -m ai_trader.scoring.transfer_study --library ai_v3 --analyze-only   # re-analiza sin backtestear
-```
-
-Límites declarados en el propio informe, no en una nota al pie: el histórico real es **un solo
-camino** (5 bloques, sin ensemble — de ahí el bootstrap por bloques y no iid), hay **sesgo de
-supervivencia** en el lado real que juega *en contra* de la hipótesis que se quería validar, 13
-pares del universo operable se omiten por histórico insuficiente (se declaran, no se rellenan),
-y 16 configuraciones de las dos primitivas de precio distinguen "ordena como el mercado" de "no ordena", no
-0,35 de 0,45. Evidencia completa en `data/transfer/report_ai_v3.json` y documentación en §2.9.
 
 ### Un ranking que exige operar (suelo de actividad)
 
@@ -289,7 +223,7 @@ superar un suelo de dos condiciones:
 | Condición | Valor | De dónde sale |
 |---|---|---|
 | Ventanas vacías | ≤ **25 %** | **Derivada.** Es α, la fracción de cola que *es* la recompensa (CVaR@25 %). Por encima de ella, el cuartil que fija el CVaR puede estar hecho de ceros estructurales. |
-| Operaciones en la ventana mediana | ≥ **3** | **Medida** (`scoring/activity_study.py`). Regla declarada antes de mirar: el valor de la rejilla {1, 2, 3, 5, 8, 13, 21} que reproduce con menos desacuerdos la condición derivada; a igualdad, el mayor. |
+| Operaciones en la ventana mediana | ≥ **3** | **Medida** (`research/activity_study.py`). Regla declarada antes de mirar: el valor de la rejilla {1, 2, 3, 5, 8, 13, 21} que reproduce con menos desacuerdos la condición derivada; a igualdad, el mayor. |
 
 El umbral **3** gana con 1 desacuerdo (frente a 6 del 1, 3 del 2, 3 del 5 y 4 del 8). Y la
 elección del número casi no importa, que es la mejor noticia posible sobre un umbral: con 1, 2,
@@ -324,7 +258,7 @@ su puesto no se mueve jamás. Es estabilidad de cementerio, así que se publica 
 como criterio.
 
 ```powershell
-.venv\Scripts\python.exe -m ai_trader.scoring.activity_study    # evidencia -> data/activity/
+.venv\Scripts\python.exe -m ai_trader.research.activity_study    # evidencia -> data/activity/
 ```
 
 ### Seis primitivas cuya tesis vive en las señales
@@ -377,7 +311,7 @@ SHA sobre doce muestras, porque el motor no lee `spec.signals` y la emisión es 
 
 ```powershell
 .venv\Scripts\python.exe -m ai_trader.cli synth derive --from ai_v3 --to ai_v4 --enricher v4
-.venv\Scripts\python.exe -m ai_trader.synthetic.fidelity_study --library ai_v4 --offline
+.venv\Scripts\python.exe -m ai_trader.research.fidelity_study --library ai_v4 --offline
 ```
 
 | canal | ρ | h | φ | informative | coverage | IC esperado |
@@ -405,11 +339,11 @@ así que el break-even que se publique es una cota optimista.
 #### Lo que salió al medirlo: el veredicto no se mueve, y el mundo no aporta nada
 
 ```powershell
-.venv\Scripts\python.exe -m ai_trader.scoring.transfer_study --library ai_v4 --offline `
+.venv\Scripts\python.exe -m ai_trader.research.transfer_study --library ai_v4 --offline `
     --workers 7 --configs-per-family 8 --verify-determinism 4          # -> data/transfer/report_ai_v4.json
-.venv\Scripts\python.exe -m ai_trader.scoring.transfer_study --library ai_v3 --offline `
+.venv\Scripts\python.exe -m ai_trader.research.transfer_study --library ai_v3 --offline `
     --workers 7 --configs-per-family 8 --out-dir data\transfer\control_8f   # el CONTROL de rejilla
-.venv\Scripts\python.exe -m ai_trader.scoring.activity_study --library ai_v4
+.venv\Scripts\python.exe -m ai_trader.research.activity_study --library ai_v4
 ```
 
 **ρ = +0,038**, IC95% por bloques `[−0,117, +0,198]`, p de permutación 0,76 → **sin
@@ -510,168 +444,6 @@ capturada** para correr UNA sub-ventana con vista. Primera fecha posible para Hy
 **2028-08-06**. Las cinco sub-ventanas de la geometría publicada pedirían ~2.900 días, ocho años —
 esas cifras **no se van a poder reproducir con vista**, y decir lo contrario sería prometer un
 calendario que no depende de nadie.
-
-### El break-even del IC: desde qué capacidad predictiva paga una señal
-
-El radar de señales (más abajo) mete treinta fuentes en la decisión, y hasta aquí su única
-defensa contra el sobreajuste era **negativa**: ninguna feature entra en `search_space`, así que el
-optimizador no puede ajustar umbrales contra el resultado. Eso limita los grados de libertad pero
-**no mide nada**, y era el hueco que la propia evolución del radar dejó escrito. Esto es la
-medición, y contesta una sola pregunta: **¿a partir de qué ρ una señal externa hace que la
-estrategia bata al baseline después de costes?**
-
-Sobre el mundo sintético —cuyo futuro ya está escrito— no se simula la señal sino el **canal de
-observación**:
-
-```
-señal_t = ρ · z(retorno_t→t+h) + √(1−ρ²) · ruido_t
-```
-
-Simular «el sentimiento de Twitter» —su nivel, su estacionalidad, su reacción a un hack— pediría un
-generador aprendido de datos, y con él vuelve la circularidad: el mundo contra el que se mide lo
-habríamos ajustado nosotros. El canal cuesta **cinco números interpretables**, y lo que se publica
-no son «los mejores parámetros» sino un umbral: una propiedad del **diseño** —de esta estrategia,
-con estos costes, con esta puerta— y no de ningún histórico. No se puede sobreajustar a datos que
-nunca entraron.
-
-Cinco celdas sobre **las mismas barras** (cambiar ρ no mueve ni una vela), las 16 configuraciones de las dos primitivas
-publicadas, CPCV de 15 ventanas, 8 muestras: 640 unidades de backtest. La configuración se elige en
-los escenarios de *train* y se puntúa en los de *validación*, que no participaron en la elección.
-
-| celda | IC declarado | IC medido | elegida | recompensa OOS | baseline | margen |
-|---|---|---|---|---|---|---|
-| sin canal ni puerta | — | — | `mean_reversion#06` | +0,447 | +0,586 | −0,140 |
-| ρ = 0 **(control)** | 0,000 | +0,004 | `crypto_momentum#07` | −0,578 | +0,586 | −1,164 |
-| ρ = 0,05 | 0,050 | +0,054 | `crypto_momentum#07` | −0,464 | +0,586 | −1,050 |
-| ρ = 0,10 | 0,100 | +0,106 | `mean_reversion#06` | +0,314 | +0,586 | −0,273 |
-| ρ = 0,20 | 0,200 | +0,207 | `mean_reversion#06` | +0,568 | +0,586 | **−0,018** |
-
-**El break-even está por encima de ρ = 0,20**: no se alcanza en la rejilla, aunque en el extremo se
-queda a 0,018 puntos. Y eso ya contesta una pregunta que valía una evolución entera, porque un IC
-diario **sostenido** de 0,20 es enorme: la referencia habitual para datos alternativos está un orden
-de magnitud por debajo. Esa referencia es **literatura, no una medición de este repositorio** —el ρ
-de nuestras treinta fuentes está sin medir, y medirlo es trabajo del sustrato real—, así que la
-comparación se ofrece como escala, no como conclusión. Lo que sí es medición es lo demás, y la
-lectura útil no es «hacen falta señales mejores» sino que el cuello de botella es el **uso**: una
-puerta que cierra o abre tira toda la información salvo un bit.
-
-Tres controles hacen legible ese número, y los tres salieron como tenían que salir:
-
-- **ρ = 0 es el grupo de control**, y salió **limpio**: sin información la estrategia no bate al
-  baseline (−1,164). Si lo hubiera batido, el barrido se publicaría *anulado y sin break-even*,
-  porque lo medido no habría sido capacidad predictiva sino el AR(1) del ruido o el simple hecho de
-  operar menos. Es el test de falsación que no existía en ninguna parte del repositorio.
-- **La celda «sin canal» es el cero del eje, no una rival.** La puerta sólo puede *quitar* entradas,
-  así que la curva de ρ arranca por debajo de ella y sube. Cuánto cuesta ese filtro **depende del
-  régimen** y por eso el informe lo publica en los dos lados del hold-out: −1,02 puntos en
-  validación (mercado subiendo) y **+0,09 en train** (mercado cayendo, donde filtrar al azar reduce
-  exposición y por tanto ayuda). Lo que no depende del régimen —y es lo que sostiene el
-  break-even— es la monotonía en ρ. Por eso el valor de la señal se lee **siempre contra ρ = 0** y
-  nunca contra la celda sin puerta.
-- **El canal entrega lo que declara**: IC medido 0,004 / 0,054 / 0,106 / 0,207 frente a 0 / 0,05 /
-  0,10 / 0,20 declarados, y correlación con retornos **ya realizados** de 0,057 — ruido, como debe
-  ser en una señal que mira hacia delante. Son umbrales de aceptación que pueden fallar, dentro del
-  mismo veredicto binario del estudio de fidelidad.
-
-Y el valor de la información es **monótono** en ρ, que es la comprobación de que todo el
-instrumento mide lo que dice: +0,11 · +0,89 · +1,15 sobre el control, para ρ = 0,05 · 0,10 · 0,20.
-
-La lectura más limpia es la de **una misma configuración** a través de las celdas, porque quita el
-ruido de que la elegida cambie — y es la que descarta la explicación alternativa («puntúa mejor
-porque opera menos»):
-
-| `mean_reversion#06` | sin canal | ρ = 0 | ρ = 0,05 | ρ = 0,10 | ρ = 0,20 |
-|---|---|---|---|---|---|
-| recompensa OOS | +0,447 | +0,071 | +0,090 | +0,314 | +0,568 |
-| operaciones/ventana | 16,9 | 11,8 | 11,9 | 12,1 | 11,6 |
-
-La puerta corta **las mismas ~30 % de entradas en las cuatro celdas**. Lo único que cambia entre
-ρ = 0 y ρ = 0,20 es *cuáles* corta, y eso vale medio punto de recompensa. Ahí también se ve el otro
-umbral, el que sí cae dentro de la rejilla: entre ρ = 0,10 y ρ = 0,20 la señal deja de salir peor
-que ignorarla, es decir, **paga el filtro**; batir además al baseline pide más, porque la
-configuración sin puerta ya estaba −0,140 por debajo.
-
-La celda «sin canal» reproduce **128 unidades de `data/transfer/units_ai_v3.json` score a score**:
-es la prueba de que la costura del canal —la factoría de proveedores del motor, la tabla de
-polaridad inyectable, el catálogo de fuentes simuladas— no movió nada del sistema. Y las señales
-llegan a la estrategia por el **mismo contrato que en vivo** (`attach_signal_provider` +
-`signal_gate_reason`, mismo recorte anti-*look-ahead*): si entraran por un camino paralelo, el
-barrido mediría una estrategia que no es la que opera.
-
-```powershell
-.venv\Scripts\python.exe -m ai_trader.scoring.signal_study --workers 7 --verify-determinism
-.venv\Scripts\python.exe -m ai_trader.scoring.signal_study --analyze-only   # re-analiza sin backtestear
-```
-
-Límites declarados, todos en el propio informe: **ninguna de las 16 configuraciones bate al baseline
-en validación en ninguna celda** —las dos ventanas de validación tocaron un tramo alcista donde la
-cartera equiponderada es muy difícil de batir—, así que lo medido es *cuánto acerca la señal*, no
-*cuánto gana*; aquí **no entra un solo dato real** (el sintético es el sustrato de selección y el
-real el de verificación, nunca el mismo dato haciendo las dos cosas); con `informative_share` y
-`coverage` al máximo lo publicado es la cota **optimista**, porque bajarlos sólo puede empeorarlo;
-es **un** canal, así que la *breadth* del grupo de correlación queda declarada y sin medir; y se
-barre una sola geometría de adelanto (h = 1), que es la más favorable a la señal. Evidencia completa
-en `data/signal_channel/` y documentación en §4.12.
-
-#### Y con ocho familias: nada se mueve
-
-El barrido se repitió sobre las **64 configuraciones** de las ocho familias (2.560 unidades,
-16,4 h). El bloque de break-even sale **idéntico campo a campo** al de arriba: mismo veredicto,
-mismos márgenes, misma puerta costando 1,025 puntos. Las 48 candidatas nuevas están en el desglose
-por configuración y **no mueven ni un margen**.
-
-Y no es que no compitieran, que fue lo primero que sospeché y es falso: ninguna fue descartada, y
-las temáticas **operan más** que las publicadas — `event_calendar_drift` abre ~108 operaciones por
-ventana frente a las 48 de momentum y las 7 de reversión. Compitieron en igualdad y **ninguna gana
-una sola celda**.
-
-Lo único que responde a la señal es el compuesto: `signal_composite#06` no aparece en el top-10 de
-la celda ciega y sube al **puesto 2** en la celda de ρ = 0,20 (0,323 con 73,5 operaciones por
-ventana). Su posición se mueve con la fuerza de la señal, que es lo que su diseño predice — y aun
-así no basta. De hecho **ninguna de las 64 bate al baseline en ninguna celda**, y en la celda ciega
-los puestos 2 a 5 los ocupan configuraciones con **0,00 operaciones por ventana**: un cero por no
-operar le gana a cualquiera que opere y pierda, que es exactamente para lo que existe el suelo de
-actividad.
-
-Comprobaciones: determinismo limpio, control ρ = 0 limpio, baselines idénticos entre celdas, y la
-celda ciega reproduce **una a una** las 512 unidades que el estudio de transferencia calculó días
-antes. Esa última importa por un motivo extra: esta corrida se **pausó a mitad y se reanudó** desde
-su punto de guardado, así que la reproducción exacta de evidencia previa e independiente es la
-validación más fuerte del mecanismo de pausa.
-
-#### Los otros dos estudios sobre la misma rejilla
-
-**Validación temporal** (16 configuraciones, 2.560 folds auditados sin fuga). El optimismo del
-corte único frente a la **cola** sale **+1,327**, contra el +1,355 publicado con cuatro
-configuraciones: que no se mueva al cuadruplicar la rejilla es la corroboración más fuerte que ese
-estudio podía dar. Lo que sí crece es la arbitrariedad de la elección: el ganador del corte único
-deja de serlo en **6 de 8** escenarios con walk-forward (antes 4) y en **7 de 8** con CPCV
-(antes 5). Comprobado que no son empates: hay 20 filas de 128 con todos los folds a cero, y
-excluyéndolas los vuelcos salen **idénticos** y el hueco contra la cola sube a **+1,72**.
-
-**Pesos del headline** (64 configuraciones, 34 activas, 11,3 h). Aquí **se cae una conclusión
-publicada**. Sobre el subconjunto activo el mejor punto es **λ = 4, κ = 4** con rank IC **0,194**
-frente a 0,146 sin penalizar: ganancia **+0,0475 ± 0,0189**. Lo publicado con dos familias decía
-que penalizar *no estabiliza*, y allí todas las penalizaciones empeoraban el rank IC.
-
-Tres reservas, y la primera es seria: el óptimo cae en la **esquina** de la rejilla probada, así que
-no está acotado — lo medido es «más penalización es mejor que menos dentro de lo probado», no que el
-óptimo sea 4. Segunda: penalizar **cambia la elección** hacia un candidato con Sharpe de validación
-*menor* (1,49 frente a 1,72), o sea que los pesos que más estabilizan el orden no eligen mejor.
-Tercera: **no se adopta**; mover λ cambiaría retroactivamente quién es rankeable en informes ya
-publicados. Una coherencia que antes no existía: el λ implícito de los costes es **5,96** sobre las
-activas, casi el mismo 6,27 publicado — con dos familias el óptimo empírico era 0 y el implícito
-6,3, y se contradecían; con ocho, el empírico se acerca al que los costes ya imponen.
-
-Y un efecto secundario que conviene no esconder: **DSR y PBO no son aditivos**. El Sharpe
-deflactado se calcula sobre la distribución del propio conjunto probado —`deflated_sharpe_ratio`
-usa `n_trials = len(trials)` y la dispersión de esos Sharpe para estimar el máximo esperado por
-azar—, así que **ampliar la rejilla cambia el DSR de las configuraciones que ya estaban**, sin que
-nadie haya tocado esas estrategias: pasar de 16 candidatos a 64 endurece el listón para todos. O se
-publican dos conjuntos separados —y entonces no hay un DSR del sistema, hay dos— o se publica el
-número que sale y se explica. Se hace lo segundo, porque separarlos sería usar la partición para no
-pagar el descuento. Afecta al camino del optimizador (`run_optimization`), que es el único que
-calcula DSR y PBO; los estudios de arriba publican recompensa y márgenes.
 
 ### Dentro de la barra diaria: sesiones y la ventana ciega
 
@@ -950,7 +722,7 @@ opcional, salir no— y pagan el impacto de todo el tamaño.
 La liquidez se estima con la mediana del volumen de las últimas 20 barras **ya
 cerradas** (mismo corte anti look-ahead que la estrategia), no con la barra de hoy ni
 con su pico. El generador sintético escala el volumen de cada activo a su volumen
-típico negociado (`adv_usd` en `synthetic/universe.py`), de modo que la columna
+típico negociado (`adv_usd` en `research/synthetic/universe.py`), de modo que la columna
 `volume` es un eje de liquidez real y no un adorno.
 
 Variables de entorno (ver `.env.example`):
@@ -1122,7 +894,7 @@ poetry run ruff check .  # linter
   símbolo a símbolo con `DEFAULT_UNIVERSE` del generador o habría activos sin barras. De ahí que
   `MATIC/USDT` esté fuera del primero (Binance lo deslistó, ahora es POL) y dentro del segundo,
   donde no cotiza contra ningún exchange y retirarlo desincronizaría la evidencia ya publicada
-  sobre 35 activos. El motivo completo está en `src/ai_trader/synthetic/universe.py`.
+  sobre 35 activos. El motivo completo está en `src/ai_trader/research/synthetic/universe.py`.
 - **El diseño de escenarios con IA no es reproducible y no puede serlo:** los modelos actuales
   retiraron los parámetros de muestreo, así que no hay palanca de determinismo. Se mitiga guardando
   el `spec.json` de cada escenario, que es la única salida cara; todo lo posterior se regenera
@@ -1132,3 +904,298 @@ poetry run ruff check .  # linter
 
 Copia la carpeta `ai-trader` sin `.venv/` ni `venv/`, instala Python y Poetry, y ejecuta
 `poetry install` en el destino.
+
+## Investigación archivada: el mundo sintético
+
+> **Esta línea está aparcada.** Durante meses la apuesta fue generar mundos sintéticos con los
+> que rankear estrategias: un mundo generado da distribuciones en vez de un único camino
+> histórico, y cubre regímenes que la historia no dio. Se llevó hasta el final y se midió.
+>
+> **Fidelidad: conseguida.** `ai_v3` acepta los nueve umbrales de hechos estilizados contra
+> Binance (cobertura 35% → 98%).
+> **Transferencia: fallida.** ρ de Spearman entre el ranking real y el sintético = **−0,04**
+> sobre 16 configuraciones, y **−0,67** entre las nueve que operan de verdad. La regla de
+> aceptación estaba escrita en el código *antes* de mirar (`RHO_ACCEPT = 0.30`).
+>
+> Fidelidad no es transferencia: un mundo puede tener las colas, el agrupamiento de volatilidad
+> y la estructura de correlaciones del mercado y aun así ordenar las estrategias al revés. El
+> sustrato que decide es ahora el histórico real (`scoring/real_source.py`).
+>
+> **Nada de esto se borra** — un resultado negativo caro es el que no hay que repetir. El código
+> vive en `src/ai_trader/research/` y no se mantiene; los comandos siguen funcionando con la
+> ruta nueva. Lo que sigue son las cifras tal y como se midieron.
+
+### Fidelidad del sustrato sintético
+
+Que la librería sintética tenga colas gruesas, agrupamiento de volatilidad y estructura
+serial no dice que los tenga **en la magnitud del mercado**. Esa pregunta se responde
+midiendo: `research/synthetic/fidelity.py` calcula los *stylized facts* (autocorrelación de
+retornos, autocorrelación de |retorno| a lags 1-10, exceedances más allá de 3σ, curtosis
+en exceso y correlaciones cruzadas par a par) y `research/fidelity_study.py` los compara
+contra el histórico diario real de Binance vía CCXT, cacheado en disco. El histórico real
+se trocea en ventanas del mismo tamaño que un camino sintético, porque esos estimadores
+están sesgados en muestras cortas y comparar longitudes distintas compararía el sesgo.
+
+Se reportan tres ejes por métrica: **nivel** (ratio sintético/real), **ordenación**
+(correlación de rangos de Spearman sobre la sección cruzada de activos, o de pares) y
+**cobertura** (qué fracción de los valores reales cae dentro del [p10, p90] del ensemble).
+Además, el estudio es un **test de aceptación**, no un vistazo: contrasta cada medición con
+umbrales declarados en `research/synthetic/fidelity.py` (cobertura ≥ 60% por métrica y mediana real
+dentro de la banda del ensemble en curtosis, clustering y exceedances) y **devuelve 1** si
+no se cumplen, de modo que una regresión del generador rompe el comando. El informe se
+escribe igualmente: no cumplir también es un resultado. La evidencia se publica en
+`data/fidelity/` y la vista *Fidelidad* del dashboard:
+
+```powershell
+.venv\Scripts\python.exe -m ai_trader.research.fidelity_study --library ai_v3            # descarga + mide
+.venv\Scripts\python.exe -m ai_trader.research.fidelity_study --library ai_v3 --offline  # solo caché
+.venv\Scripts\python.exe -m ai_trader.research.fidelity_study --library ai_v3 --verify-determinism
+```
+
+Se publican **dos** informes medidos con el mismo harness y la misma ventana real, porque
+sin el "antes" una corrección medida no se distingue de una afirmación:
+
+| | `ai_v2` | `ai_v3` | real |
+|---|---|---|---|
+| Curtosis en exceso | 0,37 | **3,40** | 4,19 |
+| Exceedances > 3σ | 0,55% | **1,27%** | 1,46% |
+| Clustering (autocorr. \|r\|, lag 1) | 0,092 | **0,196** | 0,190 |
+| Correlación cruzada (par a par) | 0,489 | **0,542** | 0,653 |
+| Volatilidad anualizada | 97,2% | 102,4% | 98,7% |
+| Cobertura media p10–p90 | 35% | **98%** | — |
+| Veredicto | no cumple | **acepta** | |
+
+`ai_v3` se deriva de los mismos `spec.json` que `ai_v1` con el retrofit determinista
+(`research/synthetic/retrofit.py`), sin llamar a la IA. Tres cambios en la física, calibrados
+iterando este mismo harness como función objetivo: colas de Student **también en las fases
+de calma** (antes eran gaussianas exactas, y son la mayor parte del horizonte), reparto
+news/inercia del GARCH movido al *spec* (`vol_news`) y **cargas factoriales que suben en el
+pánico** (`beta_stress`) — sin esto último, la correlación de un modelo de factores es una
+constante del universo y no puede dispararse en las caídas. Los dos campos nuevos son
+neutros por defecto y hay tests que congelan con un hash que `ai_v1` y `ai_v2` se regeneran
+byte a byte desde sus `spec.json`.
+
+Dos límites declarados y medidos: el generador cubre la **mediana** del mercado, no los años
+de manía (el p90 de la curtosis real va de 30 a 90 en DOGE y XRP, y perseguirlo rompería el
+nivel de volatilidad), y la **ordenación** entre activos —qué activo tiene más cola— sigue
+siendo floja o negativa. Documentación completa en §2.8.
+### Transferencia de ranking real-vs-sintético
+
+Que el generador se **parezca** al mercado no dice que **ordene** las estrategias como él. Un
+generador puede clavar las colas y ordenar al revés, y ninguna métrica de fidelidad lo
+detectaría. `research/transfer_study.py` mide justo eso: las 16 configuraciones de las dos primitivas de precio (la
+rejilla del estudio de pesos, hipercubo latino con semilla fija) se puntúan **dos veces** y se
+compara el orden de los dos rankings.
+
+Todo el diseño persigue que entre los dos lados **lo único que cambie sea el mundo del que
+salen los precios**: el mismo config, el mismo universo (los 11 pares que existen a la vez en
+Binance y en la librería), el mismo CPCV de 15 ventanas con purga de 10 días y embargo de 5, y
+la misma **longitud de ventana** — un camino sintético dura 544 días, así que el histórico real
+se trocea en 5 sub-ventanas disjuntas de ese tamaño en vez de evaluarse de una pieza. Los
+scores de cada configuración (sub-ventana × fold en el real, muestra × fold en el sintético)
+van a **una sola distribución** y se toma su CVaR@25%: el CVaR de CVaR compondría dos
+conservadurismos y dispararía la varianza del estimador.
+
+La regla de decisión estaba escrita en el código **antes** de mirar el resultado
+(`RHO_ACCEPT = 0.30`). El resultado:
+
+| | valor | |
+|---|---|---|
+| Spearman de los dos rankings | **−0,04** | IC95% por bloques [−0,44, +0,49] |
+| p (permutación, 20 000 barajados) | 0,89 | |
+| Top-4 del sintético en la mitad buena del real | 1/4 | por azar saldrían 2,0 |
+| Desacuerdos ≥ 8 puestos | 4 | 3 de ellos **sobrevalorados** por el sintético |
+| ρ sobre las 9 que operan de verdad en ambos | **−0,67** | IC95% [−0,88, +0,23], p = 0,06 |
+
+**Veredicto: no hay transferencia.** No se diseñan estrategias contra el sintético: el ranking
+lo fija el histórico real. Y la lectura de 2026-08-20 va más lejos que la de entonces: el
+sintético no se queda como banco de estrés ni como veto — **la línea entera se aparca**. Un
+mecanismo que no ordena tampoco vetaría con criterio, y mantener vivo un sustrato que no decide
+cuesta atención sin comprar nada.
+
+Antes de creerse un ρ ≈ 0 hay que descartar que el problema sea que **ninguno** de los dos
+lados estaba rankeando estrategias, y el estudio lo comprueba: el headline de una configuración
+que no opera es **cero exacto** (curva plana → Sharpe 0, rotación 0, caída 0) y en un periodo
+donde casi todo lo que arriesga pierde, ese cero gana. La correlación entre recompensa y
+actividad lo confirma — **−0,84** en el lado real frente a −0,09 en el sintético: el mercado de
+2018-2025 premió no operar y el mundo sintético no. Al quitar las inactivas el acuerdo no
+aparece; se vuelve **negativo**. Es un subconjunto *post-hoc* de 9 puntos y su intervalo cruza
+el cero, así que es señal fuerte y no prueba, pero descarta que el ρ nulo sea un artefacto.
+Ese hallazgo abrió el apartado siguiente: hoy el ranking se publica con y sin **suelo de
+actividad**, y con él la ganadora del lado real ya no es la que no operaba.
+
+Se reproduce con (usa la caché de barras ya descargada; verifica determinismo re-corriendo
+unidades en procesos nuevos):
+
+```powershell
+.venv\Scripts\python.exe -m ai_trader.research.transfer_study --library ai_v3 --offline --workers 7 --verify-determinism 4
+.venv\Scripts\python.exe -m ai_trader.research.transfer_study --library ai_v3 --analyze-only   # re-analiza sin backtestear
+```
+
+Límites declarados en el propio informe, no en una nota al pie: el histórico real es **un solo
+camino** (5 bloques, sin ensemble — de ahí el bootstrap por bloques y no iid), hay **sesgo de
+supervivencia** en el lado real que juega *en contra* de la hipótesis que se quería validar, 13
+pares del universo operable se omiten por histórico insuficiente (se declaran, no se rellenan),
+y 16 configuraciones de las dos primitivas de precio distinguen "ordena como el mercado" de "no ordena", no
+0,35 de 0,45. Evidencia completa en `data/transfer/report_ai_v3.json` y documentación en §2.9.
+### El break-even del IC: desde qué capacidad predictiva paga una señal
+
+El radar de señales (más abajo) mete treinta fuentes en la decisión, y hasta aquí su única
+defensa contra el sobreajuste era **negativa**: ninguna feature entra en `search_space`, así que el
+optimizador no puede ajustar umbrales contra el resultado. Eso limita los grados de libertad pero
+**no mide nada**, y era el hueco que la propia evolución del radar dejó escrito. Esto es la
+medición, y contesta una sola pregunta: **¿a partir de qué ρ una señal externa hace que la
+estrategia bata al baseline después de costes?**
+
+Sobre el mundo sintético —cuyo futuro ya está escrito— no se simula la señal sino el **canal de
+observación**:
+
+```
+señal_t = ρ · z(retorno_t→t+h) + √(1−ρ²) · ruido_t
+```
+
+Simular «el sentimiento de Twitter» —su nivel, su estacionalidad, su reacción a un hack— pediría un
+generador aprendido de datos, y con él vuelve la circularidad: el mundo contra el que se mide lo
+habríamos ajustado nosotros. El canal cuesta **cinco números interpretables**, y lo que se publica
+no son «los mejores parámetros» sino un umbral: una propiedad del **diseño** —de esta estrategia,
+con estos costes, con esta puerta— y no de ningún histórico. No se puede sobreajustar a datos que
+nunca entraron.
+
+Cinco celdas sobre **las mismas barras** (cambiar ρ no mueve ni una vela), las 16 configuraciones de las dos primitivas
+publicadas, CPCV de 15 ventanas, 8 muestras: 640 unidades de backtest. La configuración se elige en
+los escenarios de *train* y se puntúa en los de *validación*, que no participaron en la elección.
+
+| celda | IC declarado | IC medido | elegida | recompensa OOS | baseline | margen |
+|---|---|---|---|---|---|---|
+| sin canal ni puerta | — | — | `mean_reversion#06` | +0,447 | +0,586 | −0,140 |
+| ρ = 0 **(control)** | 0,000 | +0,004 | `crypto_momentum#07` | −0,578 | +0,586 | −1,164 |
+| ρ = 0,05 | 0,050 | +0,054 | `crypto_momentum#07` | −0,464 | +0,586 | −1,050 |
+| ρ = 0,10 | 0,100 | +0,106 | `mean_reversion#06` | +0,314 | +0,586 | −0,273 |
+| ρ = 0,20 | 0,200 | +0,207 | `mean_reversion#06` | +0,568 | +0,586 | **−0,018** |
+
+**El break-even está por encima de ρ = 0,20**: no se alcanza en la rejilla, aunque en el extremo se
+queda a 0,018 puntos. Y eso ya contesta una pregunta que valía una evolución entera, porque un IC
+diario **sostenido** de 0,20 es enorme: la referencia habitual para datos alternativos está un orden
+de magnitud por debajo. Esa referencia es **literatura, no una medición de este repositorio** —el ρ
+de nuestras treinta fuentes está sin medir, y medirlo es trabajo del sustrato real—, así que la
+comparación se ofrece como escala, no como conclusión. Lo que sí es medición es lo demás, y la
+lectura útil no es «hacen falta señales mejores» sino que el cuello de botella es el **uso**: una
+puerta que cierra o abre tira toda la información salvo un bit.
+
+Tres controles hacen legible ese número, y los tres salieron como tenían que salir:
+
+- **ρ = 0 es el grupo de control**, y salió **limpio**: sin información la estrategia no bate al
+  baseline (−1,164). Si lo hubiera batido, el barrido se publicaría *anulado y sin break-even*,
+  porque lo medido no habría sido capacidad predictiva sino el AR(1) del ruido o el simple hecho de
+  operar menos. Es el test de falsación que no existía en ninguna parte del repositorio.
+- **La celda «sin canal» es el cero del eje, no una rival.** La puerta sólo puede *quitar* entradas,
+  así que la curva de ρ arranca por debajo de ella y sube. Cuánto cuesta ese filtro **depende del
+  régimen** y por eso el informe lo publica en los dos lados del hold-out: −1,02 puntos en
+  validación (mercado subiendo) y **+0,09 en train** (mercado cayendo, donde filtrar al azar reduce
+  exposición y por tanto ayuda). Lo que no depende del régimen —y es lo que sostiene el
+  break-even— es la monotonía en ρ. Por eso el valor de la señal se lee **siempre contra ρ = 0** y
+  nunca contra la celda sin puerta.
+- **El canal entrega lo que declara**: IC medido 0,004 / 0,054 / 0,106 / 0,207 frente a 0 / 0,05 /
+  0,10 / 0,20 declarados, y correlación con retornos **ya realizados** de 0,057 — ruido, como debe
+  ser en una señal que mira hacia delante. Son umbrales de aceptación que pueden fallar, dentro del
+  mismo veredicto binario del estudio de fidelidad.
+
+Y el valor de la información es **monótono** en ρ, que es la comprobación de que todo el
+instrumento mide lo que dice: +0,11 · +0,89 · +1,15 sobre el control, para ρ = 0,05 · 0,10 · 0,20.
+
+La lectura más limpia es la de **una misma configuración** a través de las celdas, porque quita el
+ruido de que la elegida cambie — y es la que descarta la explicación alternativa («puntúa mejor
+porque opera menos»):
+
+| `mean_reversion#06` | sin canal | ρ = 0 | ρ = 0,05 | ρ = 0,10 | ρ = 0,20 |
+|---|---|---|---|---|---|
+| recompensa OOS | +0,447 | +0,071 | +0,090 | +0,314 | +0,568 |
+| operaciones/ventana | 16,9 | 11,8 | 11,9 | 12,1 | 11,6 |
+
+La puerta corta **las mismas ~30 % de entradas en las cuatro celdas**. Lo único que cambia entre
+ρ = 0 y ρ = 0,20 es *cuáles* corta, y eso vale medio punto de recompensa. Ahí también se ve el otro
+umbral, el que sí cae dentro de la rejilla: entre ρ = 0,10 y ρ = 0,20 la señal deja de salir peor
+que ignorarla, es decir, **paga el filtro**; batir además al baseline pide más, porque la
+configuración sin puerta ya estaba −0,140 por debajo.
+
+La celda «sin canal» reproduce **128 unidades de `data/transfer/units_ai_v3.json` score a score**:
+es la prueba de que la costura del canal —la factoría de proveedores del motor, la tabla de
+polaridad inyectable, el catálogo de fuentes simuladas— no movió nada del sistema. Y las señales
+llegan a la estrategia por el **mismo contrato que en vivo** (`attach_signal_provider` +
+`signal_gate_reason`, mismo recorte anti-*look-ahead*): si entraran por un camino paralelo, el
+barrido mediría una estrategia que no es la que opera.
+
+```powershell
+.venv\Scripts\python.exe -m ai_trader.research.signal_study --workers 7 --verify-determinism
+.venv\Scripts\python.exe -m ai_trader.research.signal_study --analyze-only   # re-analiza sin backtestear
+```
+
+Límites declarados, todos en el propio informe: **ninguna de las 16 configuraciones bate al baseline
+en validación en ninguna celda** —las dos ventanas de validación tocaron un tramo alcista donde la
+cartera equiponderada es muy difícil de batir—, así que lo medido es *cuánto acerca la señal*, no
+*cuánto gana*; aquí **no entra un solo dato real** (el sintético es el sustrato de selección y el
+real el de verificación, nunca el mismo dato haciendo las dos cosas); con `informative_share` y
+`coverage` al máximo lo publicado es la cota **optimista**, porque bajarlos sólo puede empeorarlo;
+es **un** canal, así que la *breadth* del grupo de correlación queda declarada y sin medir; y se
+barre una sola geometría de adelanto (h = 1), que es la más favorable a la señal. Evidencia completa
+en `data/signal_channel/` y documentación en §4.12.
+
+#### Y con ocho familias: nada se mueve
+
+El barrido se repitió sobre las **64 configuraciones** de las ocho familias (2.560 unidades,
+16,4 h). El bloque de break-even sale **idéntico campo a campo** al de arriba: mismo veredicto,
+mismos márgenes, misma puerta costando 1,025 puntos. Las 48 candidatas nuevas están en el desglose
+por configuración y **no mueven ni un margen**.
+
+Y no es que no compitieran, que fue lo primero que sospeché y es falso: ninguna fue descartada, y
+las temáticas **operan más** que las publicadas — `event_calendar_drift` abre ~108 operaciones por
+ventana frente a las 48 de momentum y las 7 de reversión. Compitieron en igualdad y **ninguna gana
+una sola celda**.
+
+Lo único que responde a la señal es el compuesto: `signal_composite#06` no aparece en el top-10 de
+la celda ciega y sube al **puesto 2** en la celda de ρ = 0,20 (0,323 con 73,5 operaciones por
+ventana). Su posición se mueve con la fuerza de la señal, que es lo que su diseño predice — y aun
+así no basta. De hecho **ninguna de las 64 bate al baseline en ninguna celda**, y en la celda ciega
+los puestos 2 a 5 los ocupan configuraciones con **0,00 operaciones por ventana**: un cero por no
+operar le gana a cualquiera que opere y pierda, que es exactamente para lo que existe el suelo de
+actividad.
+
+Comprobaciones: determinismo limpio, control ρ = 0 limpio, baselines idénticos entre celdas, y la
+celda ciega reproduce **una a una** las 512 unidades que el estudio de transferencia calculó días
+antes. Esa última importa por un motivo extra: esta corrida se **pausó a mitad y se reanudó** desde
+su punto de guardado, así que la reproducción exacta de evidencia previa e independiente es la
+validación más fuerte del mecanismo de pausa.
+
+#### Los otros dos estudios sobre la misma rejilla
+
+**Validación temporal** (16 configuraciones, 2.560 folds auditados sin fuga). El optimismo del
+corte único frente a la **cola** sale **+1,327**, contra el +1,355 publicado con cuatro
+configuraciones: que no se mueva al cuadruplicar la rejilla es la corroboración más fuerte que ese
+estudio podía dar. Lo que sí crece es la arbitrariedad de la elección: el ganador del corte único
+deja de serlo en **6 de 8** escenarios con walk-forward (antes 4) y en **7 de 8** con CPCV
+(antes 5). Comprobado que no son empates: hay 20 filas de 128 con todos los folds a cero, y
+excluyéndolas los vuelcos salen **idénticos** y el hueco contra la cola sube a **+1,72**.
+
+**Pesos del headline** (64 configuraciones, 34 activas, 11,3 h). Aquí **se cae una conclusión
+publicada**. Sobre el subconjunto activo el mejor punto es **λ = 4, κ = 4** con rank IC **0,194**
+frente a 0,146 sin penalizar: ganancia **+0,0475 ± 0,0189**. Lo publicado con dos familias decía
+que penalizar *no estabiliza*, y allí todas las penalizaciones empeoraban el rank IC.
+
+Tres reservas, y la primera es seria: el óptimo cae en la **esquina** de la rejilla probada, así que
+no está acotado — lo medido es «más penalización es mejor que menos dentro de lo probado», no que el
+óptimo sea 4. Segunda: penalizar **cambia la elección** hacia un candidato con Sharpe de validación
+*menor* (1,49 frente a 1,72), o sea que los pesos que más estabilizan el orden no eligen mejor.
+Tercera: **no se adopta**; mover λ cambiaría retroactivamente quién es rankeable en informes ya
+publicados. Una coherencia que antes no existía: el λ implícito de los costes es **5,96** sobre las
+activas, casi el mismo 6,27 publicado — con dos familias el óptimo empírico era 0 y el implícito
+6,3, y se contradecían; con ocho, el empírico se acerca al que los costes ya imponen.
+
+Y un efecto secundario que conviene no esconder: **DSR y PBO no son aditivos**. El Sharpe
+deflactado se calcula sobre la distribución del propio conjunto probado —`deflated_sharpe_ratio`
+usa `n_trials = len(trials)` y la dispersión de esos Sharpe para estimar el máximo esperado por
+azar—, así que **ampliar la rejilla cambia el DSR de las configuraciones que ya estaban**, sin que
+nadie haya tocado esas estrategias: pasar de 16 candidatos a 64 endurece el listón para todos. O se
+publican dos conjuntos separados —y entonces no hay un DSR del sistema, hay dos— o se publica el
+número que sale y se explica. Se hace lo segundo, porque separarlos sería usar la partición para no
+pagar el descuento. Afecta al camino del optimizador (`run_optimization`), que es el único que
+calcula DSR y PBO; los estudios de arriba publican recompensa y márgenes.
