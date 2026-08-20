@@ -16,7 +16,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 import subprocess
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -128,14 +128,19 @@ def _blind_themes() -> frozenset[str]:
 BLIND_THEMES = _blind_themes()
 
 # --- scope del ranking de muestra (reducido para que el build sea rapido) -----------
-RANK_LIB = "ai_v2"
-RANK_UNIVERSE = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "SPY", "QQQ", "GLD", "TLT"]
-# Un path por escenario, y no dos, desde que la vista tiene OCHO familias en vez de dos: este
-# ranking es una MUESTRA ilustrativa —la evidencia vive en data/transfer/— y el build se paga
-# en cada `verify.ps1`, que es el bucle de desarrollo diario. Con los valores anteriores el
-# artefacto tardaba ~25 min en regenerarse y la verificacion completa pasaba de ~12 a ~40.
-RANK_N_PATHS = 1
-RANK_N_SCENARIOS = 4
+#
+# Sobre MERCADO REAL, no sobre una libreria generada. Es el cambio que arrastro el estudio
+# de transferencia: el sintetico no ordena como el mercado, asi que un ranking ilustrativo
+# calculado sobre el sintetico ilustraba la cosa equivocada.
+#
+# Sigue siendo una MUESTRA: la evidencia vive en `data/`. Lo que se reduce es el universo y
+# el numero de sub-ventanas, no el metodo -- cada muestra se puntua con el mismo
+# `evaluate_sample_detailed` que usa el optimizador.
+RANK_UNIVERSE = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT", "ADA/USDT"]
+# Cuatro sub-ventanas de 300 dias, las mas RECIENTES del historico cerrado. Las mas
+# recientes y no las primeras porque son el regimen que el sistema va a operar, y porque
+# ahi el universo reducido esta vivo entero (SOL no cotizaba en 2018).
+RANK_N_WINDOWS = 4
 RANK_WINDOW_DAYS = 300
 # Una entrada por familia y no dos: cada una anade ~40 s al build, y el build se paga DOS
 # veces en cada `verify.ps1` (una la caracterizacion y otra la regeneracion). Las dos de
@@ -155,7 +160,7 @@ RANK_CONFIGS = [
     ("Compuesta (default)", "signal_composite", {}),
 ]
 
-CHART_SYMBOLS = ["BTC/USDT", "SPY", "GLD"]
+CHART_SYMBOLS = ["BTC/USDT", "ETH/USDT", "SOL/USDT"]
 CHART_POINTS = 160  # downsample de las series de precio para el JSON
 
 # Puntos de la curva de paper trading que se embeben en el HTML. El diario crece sin
@@ -163,17 +168,66 @@ CHART_POINTS = 160  # downsample de las series de precio para el JSON
 CURVE_POINTS = 400
 
 # --- panel de costes de ejecucion ---------------------------------------------------
-# Muestra transversal del universo: dos cripto de primer nivel, tres altcoins, dos
-# indices y dos macro. Los tamanos van de "orden de andar por casa" a institucional,
+# Muestra transversal del universo OPERADO: dos cripto de primer nivel y cinco altcoins
+# de liquidez muy distinta. Los tamanos van de "orden de andar por casa" a institucional,
 # que es donde el impacto y el techo de capacidad dejan de ser teoria.
+#
+# Ya no hay indices ni macro en esta tabla, y no es un recorte cosmetico: se calculaba
+# sobre precios de la libreria sintetica, donde SPY o GLD existian por construccion. Sobre
+# mercado real solo hay lo que se opera, que es cripto.
 COST_SYMBOLS = [
-    "BTC/USDT", "ETH/USDT", "SOL/USDT", "DOGE/USDT", "MATIC/USDT",
-    "SPY", "QQQ", "GLD", "UUP",
+    "BTC/USDT", "ETH/USDT", "SOL/USDT", "DOGE/USDT",
+    "LINK/USDT", "ATOM/USDT", "SEI/USDT",
 ]
 COST_ORDER_USD = [1_000.0, 250_000.0, 25_000_000.0]
 
 
 # ------------------------------------------------------------------ util ------------
+
+
+def real_sample() -> dict:
+    """
+    Las barras REALES que alimentan las tres vistas que se calculan en el build: el
+    ranking de muestra, el panel de costes y la demo de señales.
+
+    Se leen UNA vez de la cache en disco (`--offline`), sobre la ventana historica CERRADA
+    del proyecto. Cerrada y no "hasta hoy" por una razon operativa: el artefacto se
+    compara byte a byte contra el commiteado en cada verificacion, y una ventana que
+    avanzara con el calendario haria fallar esa comparacion cada dia.
+
+    Devuelve {} si no hay cache -- las tres vistas degradan solas y lo declaran.
+    """
+    from ai_trader.data.real_history import (
+        DEFAULT_EXCHANGE,
+        DEFAULT_REAL_END,
+        DEFAULT_REAL_START,
+        build_service,
+        fetch_real_bars,
+    )
+    from ai_trader.scoring.real_substrate import real_windows
+
+    start = datetime.fromisoformat(DEFAULT_REAL_START).replace(tzinfo=timezone.utc)
+    end = datetime.fromisoformat(DEFAULT_REAL_END).replace(tzinfo=timezone.utc)
+    symbols = sorted(set(RANK_UNIVERSE) | set(COST_SYMBOLS) | set(CHART_SYMBOLS))
+    try:
+        bars = fetch_real_bars(
+            symbols, start, end, build_service(DEFAULT_EXCHANGE, offline=True)
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Sin barras reales en cache: %s", exc)
+        return {}
+    if not bars:
+        logger.warning("Sin barras reales en cache para %s", ", ".join(symbols))
+        return {}
+
+    windows = real_windows(start, end, RANK_WINDOW_DAYS)[-RANK_N_WINDOWS:]
+    return {
+        "bars": bars,
+        "windows": windows,
+        "exchange": DEFAULT_EXCHANGE,
+        "start": start,
+        "end": end,
+    }
 
 
 def _git(*args: str) -> str:
@@ -522,37 +576,39 @@ def _feature_descriptions() -> dict:
     }
 
 
-def strategy_signals_demo(store: SyntheticStore, synthetic: dict) -> dict:
-    """Series reales anotadas con las entradas de cada primitiva (ilustrativo).
+def strategy_signals_demo(sample: dict) -> dict:
+    """Series de precio REAL anotadas con las entradas de cada primitiva (ilustrativo).
 
-    Para cada primitiva escanea unos pocos (escenario, simbolo) y se queda con el que
-    MAS senales dispara, de modo que el chart sea representativo (p.ej. mean-reversion
-    no queda vacio si el activo elegido resulto estar en tendencia)."""
+    Para cada primitiva escanea unas pocas (sub-ventana, simbolo) y se queda con la que MAS
+    senales dispara, de modo que el chart sea representativo (p.ej. mean-reversion no queda
+    vacio si el activo elegido resulto estar en tendencia).
+
+    El docstring decia "series reales" desde siempre y dibujaba velas de la libreria ai_v2.
+    Ahora dice la verdad."""
     demo: dict = {}
-    scen = synthetic.get("scenarios", [])
-    cand_syms = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "GLD", "SPY"]
+    if not sample:
+        return demo
 
-    # El regimen preferido de cada primitiva sale del CATALOGO de la vista, no de una tupla
-    # escrita aqui: estaba en dos sitios y con ocho familias eso es una divergencia esperando
-    # a pasar.
-    wanted = {s["id"]: s["regime"] for s in collect_strategies()["strategies"]}
-    for strat_type, want in wanted.items():
-        preferred = [s["id"] for s in scen if s["regime"] == want]
-        # Dos escenarios por familia y no cuatro, por el mismo motivo que RANK_N_PATHS: son
-        # ocho familias, el barrido evalua una senal cada dos barras sobre cada (escenario,
-        # simbolo), y el chart es ilustrativo.
-        scan = (preferred or [s["id"] for s in scen])[:2]
+    windows = sample["windows"]
+    # Dos sub-ventanas por familia y no cuatro: son ocho familias, el barrido evalua una
+    # senal cada dos barras sobre cada (ventana, simbolo), y el chart es ilustrativo.
+    scan = windows[-2:]
+    cand_syms = [s for s in CHART_SYMBOLS + RANK_UNIVERSE if s in sample["bars"]]
+
+    # Lista y no `set`: el orden de iteracion fija el orden de las claves del JSON, y el
+    # hash de las cadenas esta aleatorizado por proceso. Con un set, el artefacto saldria
+    # distinto en cada build y la comparacion contra el commiteado fallaria sin motivo.
+    for strat_type in [s["id"] for s in collect_strategies()["strategies"]]:
         strat = build_strategy(strat_type, {})
         best: dict | None = None
-        for sid in scan:
-            try:
-                allbars = store.load_bars(PRIMARY_LIB, sid, 0)
-            except Exception:  # noqa: BLE001
-                continue
-            for sym in cand_syms:
-                if sym not in allbars:
+        for window in scan:
+            for sym in dict.fromkeys(cand_syms):
+                df = sample["bars"].get(sym)
+                if df is None:
                     continue
-                bars = allbars[sym]
+                bars = df.loc[window.start : window.end]
+                if len(bars) < 80:
+                    continue
                 signals = [
                     t
                     for t in range(60, len(bars), 2)
@@ -565,7 +621,8 @@ def strategy_signals_demo(store: SyntheticStore, synthetic: dict) -> dict:
                     idx = np.linspace(0, len(norm) - 1, min(CHART_POINTS, len(norm))).astype(int)
                     marks = sorted({int(np.searchsorted(idx, t)) for t in signals})
                     best = {
-                        "scenario": sid,
+                        "window": window.label,
+                        "period": f"{window.start.date()} → {(window.end).date()}",
                         "symbol": sym,
                         "series": _downsample(norm, CHART_POINTS),
                         "signals": [m for m in marks if 0 <= m < len(idx)],
@@ -584,21 +641,30 @@ def _safe_signal(strat, sym, window) -> bool:
         return False
 
 
-def run_ranking(store: SyntheticStore) -> dict:
+def run_ranking(sample: dict) -> dict:
     """
-    Ranking real sobre una muestra reducida de ai_v2.
+    Ranking de muestra sobre MERCADO REAL: una sub-ventana del historico = una muestra.
 
     Rankea por CVaR@25% del HEADLINE score out-of-sample (Sharpe - lambda*turnover -
     kappa*maxDD). Ademas de las estrategias corre los BASELINES pasivos sobre las mismas
     muestras (el gate que hay que batir para 'aprobar') y descuenta el sobreajuste por
     multiples pruebas con PBO y DSR sobre la distribucion de scores del propio ranking.
+
+    Se calculaba sobre caminos de la libreria ai_v2 hasta que el estudio de transferencia
+    midio que el sintetico no ordena como el mercado: un ranking ilustrativo sobre el
+    sintetico ilustraba la cosa equivocada. El metodo no cambia -- el mismo
+    `evaluate_sample_detailed` con el mismo corte 70/30 --, cambia de donde salen las velas.
+
+    Y con eso cambia una propiedad, que hay que decir: cuatro sub-ventanas del MISMO camino
+    historico no son cuatro mundos independientes. El PBO y el DSR de esta vista siguen
+    siendo el descuento por multiples pruebas, pero sobre una muestra con menos variedad
+    que la que tenia el sintetico. La evidencia con potencia vive en `data/`.
     """
     result: dict = {
         "scope": {
-            "library": RANK_LIB,
+            "substrate": "real",
             "universe": RANK_UNIVERSE,
-            "n_scenarios": RANK_N_SCENARIOS,
-            "n_paths": RANK_N_PATHS,
+            "n_windows": RANK_N_WINDOWS,
             "window_days": RANK_WINDOW_DAYS,
             "weights": DEFAULT_HEADLINE_WEIGHTS.as_dict(),
         },
@@ -607,69 +673,60 @@ def run_ranking(store: SyntheticStore) -> dict:
         "distributions": {},
         "overfit": {},
     }
-    try:
-        base_config = load_config(ROOT / "config" / "synthetic.toml")
-        manifest = store.load_manifest(RANK_LIB)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Ranking no disponible: %s", exc)
+    if not sample:
+        logger.warning("Ranking no disponible: no hay barras reales en cache")
         return result
 
+    base_config = load_config(ROOT / "config" / "default.toml")
     base_config = dataclasses.replace(
         base_config, runner=dataclasses.replace(base_config.runner, symbols=list(RANK_UNIVERSE))
     )
-    anchor = datetime.fromisoformat(manifest.anchor)
-    warmup = base_config.runner.lookback_days + 5
-    start = anchor + timedelta(days=warmup)
-    end = start + timedelta(days=RANK_WINDOW_DAYS)
-
-    # Escenarios elegidos por diversidad de regimen (por su idio_ar medio, si disponible).
-    specs = {s.id: s for s in store.load_specs(RANK_LIB)}
-    scen_ids = [m["id"] for m in manifest.scenarios]
-    scen_ids = sorted(scen_ids, key=lambda i: _scenario_regime(specs[i])[1] if i in specs else 0)
-    chosen = _spread_pick(scen_ids, RANK_N_SCENARIOS)
-    result["scope"]["scenarios"] = chosen
+    windows = sample["windows"]
+    bars = {s: df for s, df in sample["bars"].items() if s in RANK_UNIVERSE}
+    result["scope"]["windows"] = [w.as_dict() for w in windows]
+    result["scope"]["exchange"] = sample["exchange"]
 
     specs = [(label, stype, StrategySpec(type=stype, id=label, params=params))
              for label, stype, params in RANK_CONFIGS]
 
-    # Una sola pasada por muestra: el parquet se lee una vez y sobre esas mismas barras
-    # se puntuan todas las configuraciones Y los baselines. Asi la comparacion es
-    # pareada (mismo mundo para todos), que es lo que el gate necesita.
+    # Una sola pasada por muestra: sobre las mismas barras se puntuan todas las
+    # configuraciones Y los baselines. Asi la comparacion es pareada (misma ventana para
+    # todos), que es lo que el gate necesita.
     scores: dict[str, list[float]] = {label: [] for label, _, _ in specs}
     sharpes: dict[str, list[float]] = {label: [] for label, _, _ in specs}
+    # Las operaciones de cada muestra viajan al lado de su score porque el gate las
+    # NECESITA: sin ellas `gate()` deja approved=False con activity_checked=False -a
+    # proposito, para que un requisito sin comprobar no pase por comprobado-, y la columna
+    # "aprueba" de esta vista era estructuralmente 'no' para todo el mundo.
+    trades: dict[str, list[int]] = {label: [] for label, _, _ in specs}
     baseline_scores: dict[str, list[float]] = {}
     baseline_stats: dict[str, list] = {}
     oos_obs: list[int] = []
 
-    for sid in chosen:
-        for p in range(RANK_N_PATHS):
+    for window in windows:
+        start, end = window.start, window.end
+
+        for label, _, spec in specs:
             try:
-                allbars = store.load_bars(RANK_LIB, sid, p)
-                bars = {s: allbars[s] for s in RANK_UNIVERSE if s in allbars}
+                ev = evaluate_sample_detailed(
+                    base_config, spec, bars, start, end, split_ratio=0.7
+                )
             except Exception as exc:  # noqa: BLE001
-                logger.warning("barras no disponibles %s/%s: %s", sid, p, exc)
+                logger.warning("eval fallo %s/%s: %s", label, window.label, exc)
                 continue
+            scores[label].append(ev.score)
+            sharpes[label].append(ev.sharpe)
+            trades[label].append(ev.num_trades)
+            oos_obs.append(ev.oos_observations)
 
-            for label, _, spec in specs:
-                try:
-                    ev = evaluate_sample_detailed(
-                        base_config, spec, bars, start, end, split_ratio=0.7
-                    )
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("eval fallo %s/%s: %s", label, sid, exc)
-                    continue
-                scores[label].append(ev.score)
-                sharpes[label].append(ev.sharpe)
-                oos_obs.append(ev.oos_observations)
-
-            try:
-                for name, baseline in evaluate_baselines(
-                    base_config, bars, start, end, split_ratio=0.7
-                ).items():
-                    baseline_scores.setdefault(name, []).append(baseline.score)
-                    baseline_stats.setdefault(name, []).append(baseline)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("baselines fallaron %s/%s: %s", sid, p, exc)
+        try:
+            for name, baseline in evaluate_baselines(
+                base_config, bars, start, end, split_ratio=0.7
+            ).items():
+                baseline_scores.setdefault(name, []).append(baseline.score)
+                baseline_stats.setdefault(name, []).append(baseline)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("baselines fallaron %s: %s", window.label, exc)
 
     n_samples = max((len(v) for v in scores.values()), default=0)
     usable_baselines = {k: v for k, v in baseline_scores.items() if len(v) == n_samples}
@@ -689,13 +746,22 @@ def run_ranking(store: SyntheticStore) -> dict:
     for label, stype, _ in specs:
         if not scores[label]:
             continue
-        stats = aggregate_reward(scores[label])
-        verdict = gate(scores[label], usable_baselines)
+        stats = aggregate_reward(scores[label], trades=trades[label])
+        verdict = gate(scores[label], usable_baselines, trades=trades[label])
+        activity = stats.activity
         result["rows"].append(
             {
                 "label": label,
                 "type": stype,
                 "approved": verdict.approved,
+                "rankable": verdict.eligible,
+                "beats_baselines": verdict.beats_baselines,
+                "trades_per_window": None if activity is None else round(
+                    activity.trades_per_window, 1
+                ),
+                "zero_window_pct": None if activity is None else round(
+                    activity.zero_window_pct, 0
+                ),
                 "margin": round(verdict.margin, 3),
                 "win_rate_pct": round(verdict.win_rate_pct, 1),
                 **_stats_row(stats),
@@ -807,26 +873,37 @@ def collect_trade() -> dict:
     }
 
 
-def collect_costs(store: SyntheticStore) -> dict:
-    """Lo que cuesta EJECUTAR en cada mercado del universo.
+def collect_costs(sample: dict) -> dict:
+    """Lo que cuesta EJECUTAR en cada mercado del universo, con LIQUIDEZ REAL.
 
-    No corre backtests: toma un escenario real de la libreria, resuelve la liquidez de
-    cada simbolo con la misma costura que usa el motor (mediana de volumen y volatilidad
-    de las ultimas barras cerradas) y evalua el modelo para ordenes de tamano creciente.
-    Es la evidencia de que la friccion dejo de ser una constante."""
-    out: dict = {"library": PRIMARY_LIB, "sizes_usd": COST_ORDER_USD, "rows": []}
-    try:
-        config = load_config(ROOT / "config" / "synthetic.toml")
-        manifest = store.load_manifest(PRIMARY_LIB)
-        bars = store.load_bars(PRIMARY_LIB, manifest.scenarios[0]["id"], 0)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Panel de costes no disponible: %s", exc)
+    No corre backtests: resuelve la liquidez de cada simbolo con la misma costura que usa
+    el motor (mediana de volumen y volatilidad de las ultimas barras cerradas) y evalua el
+    modelo para ordenes de tamano creciente. Es la evidencia de que la friccion dejo de ser
+    una constante.
+
+    Se calculaba sobre un escenario de la libreria sintetica, y eso lo invalidaba como
+    panel de COSTES: el volumen de un activo generado es el que el generador le puso, asi
+    que la capacidad y el impacto que salian de aqui eran los de un mercado inventado. Con
+    barras reales, la capacidad en dolares es la que de verdad hay."""
+    out: dict = {"substrate": "real", "sizes_usd": COST_ORDER_USD, "rows": []}
+    if not sample:
+        logger.warning("Panel de costes no disponible: no hay barras reales en cache")
         return out
 
+    config = load_config(ROOT / "config" / "default.toml")
+    # La liquidez se mide sobre el tramo mas reciente, que es el que describe el mercado
+    # que se va a operar: promediar ocho anos mezclaria el volumen de 2018 con el de hoy.
+    window = sample["windows"][-1]
+    bars = {
+        s: df.loc[window.start : window.end]
+        for s, df in sample["bars"].items()
+        if s in COST_SYMBOLS
+    }
     symbols = [s for s in COST_SYMBOLS if s in bars and len(bars[s]) > 2]
     if not symbols:
-        logger.warning("Panel de costes: ningun simbolo de la muestra esta en %s", PRIMARY_LIB)
+        logger.warning("Panel de costes: ningun simbolo de la muestra tiene barras reales")
         return out
+    out["period"] = f"{window.start.date()} → {window.end.date()}"
 
     model = config.execution.slippage
     out["max_participation"] = config.execution.max_participation
@@ -894,13 +971,6 @@ def _overfit_report(
     dsr = deflated_sharpe_ratio(observed, trial_sharpes, n_obs)
 
     return {"pbo": pbo.as_dict(), "dsr": dsr.as_dict(), "winner": winner}
-
-
-def _spread_pick(items: list, k: int) -> list:
-    if len(items) <= k:
-        return items
-    idx = np.linspace(0, len(items) - 1, k).astype(int)
-    return [items[i] for i in idx]
 
 
 def collect_kpis(store: SyntheticStore, synthetic: dict) -> dict:
@@ -1869,8 +1939,11 @@ def collect_roadmap() -> list[dict]:
     A cada prompt se le pega `REUSE_RULE` al vuelo. Se hace aqui y no en el texto de cada
     entrada para que la regla exista UNA sola vez en el repo; y sobre copias
     (`{**r, ...}`) para no mutar `ROADMAP`, que si no acumularia la regla en cada llamada.
+
+    Las entradas RETIRADAS no llevan prompt, y no es un olvido: no hay nada que ejecutar.
+    Estan en la lista para que se sepa cuales eran y por que dejaron de estar -- borrarlas
+    dejaria el roadmap mas corto y la historia sin explicar.
     """
-    from ai_trader.research.synthetic import retrofit  # noqa: F401  (asegura que el modulo existe)
     ranks = [r["rank"] for r in ROADMAP]
     if sorted(ranks) != list(range(1, len(ROADMAP) + 1)):
         raise ValueError(f"Los rangos del roadmap deben ser 1..N sin huecos: {sorted(ranks)}")
@@ -1878,23 +1951,33 @@ def collect_roadmap() -> list[dict]:
     unknown = groups - {g["key"] for g in ROADMAP_GROUPS}
     if unknown:
         raise ValueError(f"Grupos de roadmap desconocidos: {sorted(unknown)}")
+    retired_with_prompt = [
+        r["id"] for r in ROADMAP if r["group"] == "retiradas" and r.get("prompt")
+    ]
+    if retired_with_prompt:
+        raise ValueError(f"Una entrada retirada no lleva prompt: {retired_with_prompt}")
     return [
-        {**row, "prompt": row["prompt"] + REUSE_RULE}
+        {**row, "prompt": row["prompt"] + REUSE_RULE} if row.get("prompt") else dict(row)
         for row in sorted(ROADMAP, key=lambda r: r["rank"])
     ]
 
 
 def build() -> None:
+    # Las tres vistas que se CALCULAN en el build (ranking, costes y demo de señales)
+    # salen de aqui: barras reales, leidas una vez de la cache en disco. La libreria
+    # sintetica ya solo se lee para el capitulo de investigacion archivada.
+    logger.info("Barras reales de la cache (ventana historica cerrada)...")
+    sample = real_sample()
     store = SyntheticStore(ROOT / "data" / "synthetic")
     logger.info("Captura de datos reales y constantes del trade...")
     market, trade = collect_market(), collect_trade()
-    logger.info("Recolectando datos sinteticos...")
+    logger.info("Investigacion archivada: escenarios sinteticos...")
     synthetic = collect_synthetic(store)
-    logger.info("Stylized facts ai_v1 vs ai_v2...")
+    logger.info("Investigacion archivada: stylized facts ai_v1 vs ai_v2...")
     facts = stylized_facts(store)
-    logger.info("Fidelidad sintetico vs real (informe publicado)...")
+    logger.info("Investigacion archivada: fidelidad (informe publicado)...")
     fidelity = collect_fidelity()
-    logger.info("Transferencia de ranking real vs sintetico (informe publicado)...")
+    logger.info("Investigacion archivada: transferencia (informe publicado)...")
     transfer = collect_transfer()
     logger.info("Descomposicion por sesion horaria (informe publicado)...")
     logger.info("Divergencia live-vs-backtest (informe publicado)...")
@@ -1904,12 +1987,12 @@ def build() -> None:
     signals_platform = collect_signals()
     logger.info("Catalogo de estrategias...")
     strategies = collect_strategies()
-    logger.info("Demo de señales...")
-    signals = strategy_signals_demo(store, synthetic)
-    logger.info("Costes de ejecucion por simbolo...")
-    costs = collect_costs(store)
-    logger.info("Ranking (muestra reducida, puede tardar unos minutos)...")
-    ranking = run_ranking(store)
+    logger.info("Demo de señales sobre precio real...")
+    signals = strategy_signals_demo(sample)
+    logger.info("Costes de ejecucion con liquidez real...")
+    costs = collect_costs(sample)
+    logger.info("Ranking sobre sub-ventanas reales (puede tardar unos minutos)...")
+    ranking = run_ranking(sample)
     kpis = collect_kpis(store, synthetic)
 
     data = {
@@ -1953,13 +2036,29 @@ def build() -> None:
 
 # --- catalogo de evoluciones pendientes (con prompts detallados para Claude Code) ---
 #
-# ORDEN: `rank` 1..N de mayor a menor criticidad. No es una lista de deseos ordenada por
-# gusto: el criterio es el de la revision externa de 2026-08-10, y su asimetria de coste
-# es la que manda -- una estrategia anadida hoy se re-evalua gratis cuando el juez mejore,
-# pero un juez malo contamina TODO lo que puntue mientras siga malo. Por eso el sustrato
-# (fidelidad) y el juez (validacion multiventana) van delante de la cosecha (estrategias),
-# y por eso el paper trading en vivo se lanza en paralelo: es lo unico que compra tiempo
-# de calendario, que no se puede comprimir despues.
+# ORDEN: `rank` 1..N de mayor a menor criticidad.
+#
+# ACTUALIZACION 2026-08-20: CAMBIA EL CRITERIO DE ORDENACION, y con el se caen diez
+# entradas. El criterio anterior era la asimetria de coste del juez -- "un juez malo
+# contamina todo lo que puntue mientras siga malo", asi que el sustrato y el juez van
+# delante de la cosecha --. Ese criterio construyo un instrumento excelente y una
+# herramienta que no opera nada.
+#
+# El criterio nuevo es el contrario, y se asume con sus consecuencias escritas: PONER LA
+# HERRAMIENTA A FUNCIONAR sobre datos reales, aceptando el riesgo de sobreajuste que eso
+# trae. Es mejor tener algo corriendo con sobreajuste -- y atacarlo despues con evidencia
+# de calendario, que es la unica que no se puede falsificar -- que seguir refinando el
+# juez de un backtest que no decide nada.
+#
+# Las tres lineas de "Ahora" son las tres piezas de ese bucle, en orden de dependencia:
+# capturar mas y mejor senal externa, medir su calidad una por una, y generar estrategias
+# con ella sobre el historico real. El paper trading sigue en paralelo por el motivo de
+# siempre: es lo unico que compra tiempo de calendario, que no se puede comprimir despues.
+#
+# Lo que se retira NO se borra: las diez entradas siguen en la lista, en su grupo, con el
+# motivo. Casi todas eran mejoras del generador sintetico o afinado del juez de backtest, y
+# las dos cosas son afinar el instrumento en vez de usarlo. El historico de decisiones que
+# sigue debajo se conserva entero por la misma razon.
 #
 # ACTUALIZACION 2026-08-11: el estudio de transferencia cerro el bucle que ocupaba el
 # puesto 1 y devolvio el resultado malo -- la libreria sintetica pasa todos los umbrales de
@@ -2112,37 +2211,175 @@ ROADMAP_GROUPS = [
     {
         "key": "ahora",
         "title": "Ahora",
-        "subtitle": "Mantener corriendo el PAPER TRADING -que ya deja diario auditable por "
-                    "ciclo- porque compra lo único que no se puede comprimir después: tiempo de "
-                    "calendario. El test de falsación que faltaba ya está hecho (break-even del "
-                    "IC: hace falta rho > 0,20 para batir al baseline con una puerta binaria), y "
-                    "lo que abre no es «mejores señales» sino usarlas de otra forma.",
+        "subtitle": "Poner la herramienta a FUNCIONAR sobre datos reales. Tres frentes, en este "
+                    "orden: capturar más y mejor señal externa, medir su calidad una por una, y "
+                    "generar estrategias con ella. Y en paralelo, lo único que no se puede "
+                    "comprimir después: que el paper trading siga despertando.",
     },
     {
         "key": "despues",
         "title": "Despues",
-        "subtitle": "Ampliar el espacio de inputs en los dos mundos y afinar el rigor del juez. Es "
-                    "lo que convierte el 'no transfiere' de la vista Ordenación en una conclusión "
-                    "en vez de un artefacto del instrumento con el que se midió.",
-    },
-    {
-        "key": "no-prioritario",
-        "title": "No prioritario",
-        "subtitle": "Trabajo legítimo que no se aborda todavía: añadir candidatos a un juez en el "
-                    "que aún no se confía solo multiplica el problema de múltiples pruebas.",
+        "subtitle": "Lo que hace falta para que lo de arriba se pueda OPERAR de verdad, no solo "
+                    "medir: la guarda por símbolo y el presupuesto de latencia.",
     },
     {
         "key": "segundo-plano",
         "title": "Segundo plano (no cripto)",
         "subtitle": "Renta variable y mercados de predicción, aparcados a propósito hasta que el "
-                    "bucle cripto -sintético, real, paper- esté cerrado y medido.",
+                    "bucle cripto -captura, señal, estrategia, paper- esté cerrado y medido.",
+    },
+    {
+        "key": "retiradas",
+        "title": "Retiradas",
+        "subtitle": "Diez entradas que salen de la lista al aparcar la línea sintética. No se "
+                    "borran de la historia: se declara cuáles eran y por qué dejaron de estar. "
+                    "Casi todas eran o mejoras del generador o afinado del juez de backtest, y "
+                    "las dos cosas son afinar el instrumento en vez de usarlo.",
     },
 ]
 
 ROADMAP = [
     {
-        "id": "paper-trading-live",
+        "id": "signal-capture-depth",
         "rank": 1,
+        "group": "ahora",
+        "priority": "critica",
+        "title": "Capturar de verdad: profundidad histórica de las señales externas",
+        "line": "Datos", "status": "pendiente", "impact": "alto", "effort": "medio",
+        "evidence": "MEDIDO: el catálogo declara 30 fuentes y solo 14 son backtesteables "
+                    "(`signals/catalog.py`, campo `history_from`, poblado por sonda y no a "
+                    "mano). De los cinco temas, `liquidation` (1 de 4 fuentes con historia) y "
+                    "`vol_surface` (1 de 2) NO alcanzan el mínimo de cobertura, y por eso el "
+                    "estudio de la capa temática los declara no evaluables en vez de puntuarlos.",
+        "why": "Es el cuello de botella de todo lo demás, y ahora se ve: el ranking decide sobre "
+               "histórico real, y una señal sin histórico no puede entrar en esa decisión por "
+               "mucho que esté conectada en vivo. Cada mes que el archivo crece hacia adelante es "
+               "un mes que no se recupera; cada fuente que admita descarga hacia atrás es "
+               "profundidad que se gana hoy.",
+        "prompt": (
+            "Proyecto ai-trader (Python). El archivo de senales externas vive en "
+            "data/signals_raw/ y su catalogo en src/ai_trader/signals/catalog.py, con el campo "
+            "`history_from` que dice desde cuando hay profundidad MEDIDA (lo puebla la sonda, "
+            "`ai-trader signals depth`, no se escribe a mano).\n"
+            "\n"
+            "ESTADO: 30 fuentes declaradas, 30 conectadas, 14 backtesteables. Dos temas de cinco "
+            "no llegan al minimo de cobertura y el estudio de la capa tematica los declara no "
+            "evaluables.\n"
+            "\n"
+            "TAREA: subir la profundidad historica utilizable, por este orden:\n"
+            "(1) Para CADA fuente sin `history_from` o con poca: comprobar si su endpoint admite "
+            "rango historico. Varias capturas piden 30 dias por defecto (ver `signals/capture.py`) "
+            "cuando el proveedor sirve anos. Eso es profundidad gratis.\n"
+            "(2) Priorizar las fuentes de `liquidation` y `vol_surface`: son los dos temas que hoy "
+            "no se pueden evaluar hacia atras, asi que cada una de las suyas vale mas que una de "
+            "un tema que ya llega.\n"
+            "(3) Re-correr la sonda y dejar que `history_from` se actualice SOLO. Si una fuente no "
+            "admite historia, se declara y no se toca: un `history_from` inventado convierte un "
+            "backtest en ficcion.\n"
+            "(4) Publicar la auditoria (`ai-trader signals audit`) y regenerar dashboard y docs "
+            "con el recuento nuevo de backtesteables.\n"
+            "\n"
+            "NO conectes fuentes nuevas en esta entrada. Primero exprime las 30 que ya hay: una "
+            "fuente conectada sin historia no aporta a la decision, y anadir la 31 solo aumenta el "
+            "problema de multiples pruebas.\n"
+            "\n"
+            "Tests + .venv\\Scripts\\python.exe (poetry run esta roto) + ruff."
+        ),
+    },
+    {
+        "id": "signal-quality-review",
+        "rank": 2,
+        "group": "ahora",
+        "priority": "critica",
+        "title": "Análisis individualizado y calidad de dato, fuente por fuente",
+        "line": "Datos", "status": "pendiente", "impact": "alto", "effort": "medio",
+        "evidence": "Las 30 fuentes se agregan hoy en seis features (tono, intensidad y cobertura, "
+                    "por activo y de mercado) y NUNCA se han mirado de una en una. Hay precedentes "
+                    "de que bajar al dato cambia la respuesta: identificar el activo de una "
+                    "tesorería por su precio implícito daba 25% de falsos positivos, y el efecto "
+                    "Upbit resultó vivir en mercados de 248k $/día. Las dos cosas se vieron mirando "
+                    "la fuente, no el agregado.",
+        "why": "El radar promedia. Un promedio de una fuente rota y cuatro sanas parece sano, y "
+               "esa es exactamente la forma en que un dato malo entra en una decisión sin que "
+               "nadie lo vea. Antes de generar estrategias sobre estas señales hay que saber "
+               "cuáles valen: qué latencia real tiene cada una, cuántos huecos, si su fecha es de "
+               "publicación o de referencia, y si su distribución cambia de régimen a mitad de la "
+               "serie.",
+        "prompt": (
+            "Proyecto ai-trader (Python). Las 30 fuentes de signals/catalog.py se normalizan "
+            "(signals/normalize.py) y se agregan en seis features del radar "
+            "(observation/signal_radar.py). Nadie las ha mirado NUNCA de una en una.\n"
+            "\n"
+            "TAREA: un informe de calidad POR FUENTE, publicado en data/signals/, que conteste "
+            "para cada una y con cifras:\n"
+            "(a) COBERTURA: dias con dato / dias del rango, y el hueco mas largo. Un hueco de tres "
+            "semanas en una serie diaria no es 'ruido', es que la fuente estuvo caida.\n"
+            "(b) LATENCIA REAL: distancia entre la fecha de referencia del dato y la fecha en que "
+            "se pudo observar. Ojo con las que se fechan por PUBLICACION (el COT ya lo hace): usar "
+            "la fecha de referencia en un backtest es mirar el futuro.\n"
+            "(c) ESTABILIDAD: media, dispersion y fraccion de ceros por ano. Una serie cuya "
+            "distribucion cambia a mitad del historico esta midiendo dos cosas distintas con el "
+            "mismo nombre.\n"
+            "(d) REDUNDANCIA: correlacion entre fuentes del mismo tema. Cinco fuentes que dicen lo "
+            "mismo son una fuente con cinco votos, y el radar las cuenta como cinco.\n"
+            "(e) UN VEREDICTO POR FUENTE que pueda ser NEGATIVO: apta / apta con reservas / no "
+            "apta para decidir, con el motivo. Un informe que no puede suspender a nadie no es un "
+            "control de calidad.\n"
+            "\n"
+            "Y engancharlo: las fuentes 'no aptas' tienen que quedar fuera del radar por "
+            "CONFIGURACION, no porque alguien se acuerde. Declara cuantas quedan fuera y cuanto "
+            "cambia la cobertura de cada tema al quitarlas.\n"
+            "\n"
+            "Tests + determinismo + .venv\\Scripts\\python.exe + ruff. Regenera dashboard y docs."
+        ),
+    },
+    {
+        "id": "strategy-generation-real",
+        "rank": 3,
+        "group": "ahora",
+        "priority": "critica",
+        "title": "Generar estrategias con las señales reales dentro, y operar las que aprueben",
+        "line": "Estrategias", "status": "pendiente", "impact": "alto", "effort": "alto",
+        "evidence": "El sustrato ya está: scoring/real_source.py rankea sobre cinco sub-ventanas "
+                    "reales (2018-07 → 2025-12, 24 pares) con CPCV purgado y hold-out temporal, y "
+                    "es el sustrato por defecto de run_optimization. Acepta `signals=` -- los "
+                    "frames del archivo real -- pero va APAGADO por defecto: armar el radar "
+                    "multiplica el coste por 7,9 (medido en el estudio de la capa temática), sobre "
+                    "los 121 s por (configuración, unidad) que ya cuesta con el radar apagado.",
+        "why": "Es el objetivo de todo lo anterior, y hasta ahora no se podía hacer: el "
+               "optimizador puntuaba sobre mundos generados y las señales solo entraban en un "
+               "estudio pareado aparte. Ahora las dos piezas encajan. El coste es real, así que la "
+               "entrada incluye hacerlo tratable, no solo lanzarlo.",
+        "prompt": (
+            "Proyecto ai-trader (Python). run_optimization (src/ai_trader/scoring/optimize.py) ya "
+            "puntua por defecto sobre el HISTORICO REAL via scoring/real_source.py: cinco "
+            "sub-ventanas de 544 dias, CPCV C(6,2)=15 folds por unidad con purga, hold-out "
+            "TEMPORAL (la ventana mas reciente no la ve el CEM), 24 pares cripto.\n"
+            "\n"
+            "TAREA: la cosecha de estrategias, con la capa de senal ARMADA.\n"
+            "(1) Enchufa el archivo real: `signals=load_frames(...)` (signals/feed.py) llega hasta "
+            "el motor por la costura que ya existe. Mide lo que cuesta ANTES de lanzar la corrida "
+            "entera: el estudio tematico midio 7,9x, y sobre este sustrato eso son dias.\n"
+            "(2) Hazlo tratable antes de lanzarlo. El cuello esta MEDIDO y no se ha atacado: el "
+            "brazo armado reconstruye el radar UNA VEZ POR FOLD, y cada construccion normaliza el "
+            "archivo entero. Cachear el radar por (ventana, brazo) es el primer sitio donde mirar. "
+            "Paraleliza tambien por unidad si hace falta, y DECLARA por log cualquier subsampleo.\n"
+            "(3) Corre las ocho familias, con y sin capa, y publica el resultado con su veredicto "
+            "completo: gate de baselines, suelo de actividad, PBO y DSR.\n"
+            "(4) HONESTIDAD, que aqui es lo que mas cuesta: son CUATRO unidades de train de un "
+            "unico camino historico. El riesgo de sobreajuste se asume a proposito -- es mejor "
+            "tener algo corriendo y atacarlo despues con evidencia de calendario que seguir en "
+            "modo investigacion --, pero se DECLARA: numero de unidades efectivas, PBO y DSR al "
+            "lado de cada cifra, y ni una sola frase que sugiera que este ranking generaliza.\n"
+            "(5) Lo que apruebe entra en config/default.toml y empieza a operar en paper. Ese es "
+            "el entregable: no un informe, estrategias corriendo.\n"
+            "\n"
+            "Tests + determinismo + .venv\\Scripts\\python.exe + ruff. Regenera dashboard y docs."
+        ),
+    },
+    {
+        "id": "paper-trading-live",
+        "rank": 4,
         "group": "ahora",
         "priority": "alta",
         "title": "Mantener el proceso vivo hasta que el diario tenga un mes",
@@ -2191,458 +2428,8 @@ ROADMAP = [
         ),
     },
     {
-        "id": "synthetic-signal-emission",
-        "rank": 2,
-        "group": "despues",
-        "priority": "critica",
-        "title": "Que el generador emita las señales, y re-medir la transferencia de forma pareada",
-        "line": "B/D", "status": "pendiente", "impact": "alto", "effort": "alto",
-        "evidence": "Los FactorShock del generador YA son eventos con día, factor y magnitud "
-                    "(research/synthetic/scenarios.py), descritos como 'un anuncio de la Fed, un "
-                    "default, un ataque'. El generador ya sabe QUE pasa y CUANDO: las señales "
-                    "sintéticas serían la emisión observable de un estado latente que ya existe. "
-                    "Y la mitad barata del problema ya está construida y medida (2026-08-13): el "
-                    "canal de observación existe (research/synthetic/signal_channel.py), se emite en un "
-                    "pase aparte y entra por el contrato de producción, así que esta evolución "
-                    "hereda toda esa fontanería y sólo tiene que ACOPLAR la emisión al estado "
-                    "latente. Lo que el break-even ya contestó: con una PUERTA BINARIA hace falta "
-                    "rho > 0,20 para batir al baseline, y la puerta por sí sola cuesta 1,02 "
-                    "puntos de recompensa. Antes de acoplar señales conviene decidir si el "
-                    "consumo correcto es una puerta o un input continuo del sizing: acoplar mejor "
-                    "una señal que se consume tirando toda su información salvo un bit sube el "
-                    "coste sin mover el listón.",
-        "why": "Es la ficha que VALIDA O REFUTA la tesis entera: si ampliar el espacio de inputs "
-               "hace que el ranking transfiera, el sintético se queda en el núcleo; si no, la "
-               "contingencia ('mover el sustrato primario del ranking al histórico REAL') se "
-               "activa. Y es la más delicada del roadmap por un riesgo "
-               "concreto: si las señales sintéticas se emiten del mismo estado latente que los "
-               "precios con un acoplamiento limpio, funcionaran demasiado bien en el sintético; y "
-               "si ajustamos ese acoplamiento hasta que rho suba, habremos calibrado el generador "
-               "contra nuestro propio instrumento de medida.",
-        "prompt": (
-            "Proyecto ai-trader (Python). Con las senales reales ya ingiriendo y medidas, haz que "
-            "el generador sintetico las emita y re-mide la transferencia.\n"
-            "\n"
-            "(a) EMISION EN UN PASE APARTE, no dentro de PathEngine.generate. Motivo decisivo: "
-            "asi la no interferencia con la secuencia RNG no es una promesa que haya que auditar "
-            "leyendo el codigo, es una IMPOSIBILIDAD ESTRUCTURAL -- el emisor recibe las barras ya "
-            "cerradas. tests/research/test_synthetic.py::TestEngineByteIdentity congela dos SHA de "
-            "librerias publicadas y su docstring avisa de que ponerlos en rojo significa que una "
-            "libreria ha dejado de ser reproducible.\n"
-            "(b) CAMPOS DE SPEC via MICROSTRUCTURE_FIELDS (research/synthetic/scenarios.py:12-20, punto de "
-            "extension ya declarado: solo se serializa lo NO neutro, asi que los spec.json "
-            "existentes no cambian ni un byte). Regla dura: 0 = MENOS edge, nunca mas. Parametriza "
-            "en positivo (informative_share, coverage) y no en negativo (false_positive_rate), "
-            "para que un default olvidado degrade a 'sin senal' y no a 'senal perfecta'.\n"
-            "(c) EL MODELO necesita cuatro piezas y ninguna es opcional: llegada AGRUPADA "
-            "(sin autoexcitacion, 'pico de atencion' no existe como concepto y el experimento "
-            "queda sesgado hacia el nulo); FALSOS POSITIVOS (son lo unico que da COSTE a la "
-            "puerta: sin ellos, cerrar ante una senal nunca renuncia a nada bueno y radar-on "
-            "domina por construccion); FALSOS NEGATIVOS (sin ellos, la ausencia de senal es un "
-            "certificado perfecto de calma, y encima refuerza que el CVaR ya premia no operar); y "
-            "LEAD/LAG (sin ese eje el radar colapsa a un filtro de volatilidad).\n"
-            "(d) OJO CON EL JITTER: _apply_shocks recoloca el dia del shock por path con un RNG "
-            "salado, y ai_v3 pone jitter_days=15 en TODOS los shocks. Si el emisor usa shock.day "
-            "del spec, la senal y el evento se desacoplan en todos los paths. Extrae una funcion "
-            "pura effective_shocks(...) que replique exactamente la logica actual.\n"
-            "(e) ANTICIRCULARIDAD, y esto es el corazon: cada mando se calibra contra UNA cifra "
-            "medida en datos REALES (el acoplamiento contra el IC medido, informative_share "
-            "contra la precision, coverage contra el recall), con la misma definicion de 'evento' "
-            "en los dos mundos. Cuatro cerrojos: constantes atadas por test a un informe medido; "
-            "BANDA DE ACEPTACION DE DOS COLAS en el estudio de fidelidad (ser DEMASIADO predictivo "
-            "es un FALLO y devuelve 1 -- es lo que convierte la circularidad en un test rojo en "
-            "vez de en un logro); huella de calibracion que el estudio de transferencia exige "
-            "para correr; y un libro de intentos que haga visible la multiplicidad.\n"
-            "(f) EL EXPERIMENTO: cuatro brazos sobre LAS MISMAS 16 configuraciones (inyecta los "
-            "params de puerta con dataclasses.replace, sin tocar search_space, para que los "
-            "config_id sean literalmente los publicados). off (control, verificando que reproduce "
-            "data/transfer/units_ai_v3.json), on, PLACEBO (senales desplazadas CIRCULARMENTE, no "
-            "barajadas: el desplazamiento preserva el agrupamiento y la distribucion y destruye "
-            "SOLO la alineacion con los precios, asi que controla a la vez la informacion y la "
-            "frecuencia de operacion) y ORACULO (acoplamiento absurdo, etiquetado como "
-            "diagnostico no publicable: si ni haciendo trampa sube rho, el cuello de botella no "
-            "son los inputs sino el instrumento). Bootstrap PAREADO: remuestrea los indices de "
-            "bloque UNA vez por replica y calcula los dos brazos sobre los mismos bloques.\n"
-            "(g) Criterio de exito declarado en el codigo ANTES de correr, y la lectura de cada "
-            "rama posible escrita de antemano para que ninguna se pueda reinterpretar despues.\n"
-            "\n"
-            "Tests + determinismo + .venv\\Scripts\\python.exe (poetry run esta roto) + ruff. "
-            "Regenera dashboard y docs."
-        ),
-    },
-    {
-        "id": "line-d-cpcv-two-stage-cem",
-        "rank": 3,
-        "group": "despues",
-        "priority": "alta",
-        "title": "CPCV en dos etapas dentro del optimizador (que el CEM deje de puntuar con el corte único)",
-        "line": "D", "status": "pendiente", "impact": "alto", "effort": "medio",
-        "evidence": "mom_default en crypto_winter: +2,63 con el corte único y -2,20 con CPCV. En "
-                    "crypto_bull_supercycle: -0,18 vs -0,60, con dispersión entre folds de "
-                    "sigma ~ 2-3 unidades de Sharpe.",
-        "why": "El optimizador sigue puntuando con el corte que su propio estudio desacredita: "
-               "run_optimization -> evaluate_sample_detailed -> BacktestEngine.run(split_ratio=0.7). "
-               "El corte único no está SESGADO, está ARBITRARIO -y arbitrario es letal para un "
-               "optimizador: el CEM escala un paisaje cuyo relieve depende de que tramo de "
-               "historia cayó en el 30% de test. La objeción obvia es el coste (CPCV multiplica "
-               "x15), y la solución no es elegir sino separar cribado de decisión: dos etapas.",
-        "prompt": (
-            "Proyecto ai-trader (Python). La validacion multiventana esta implementada, testeada "
-            "y MEDIDA: src/ai_trader/backtest/validation.py (geometria de folds con purga y "
-            "embargo), BacktestEngine.run_folds, src/ai_trader/scoring/multiwindow.py "
-            "(validate_multiwindow -> distribucion robusta) y el estudio publicado en "
-            "data/validation/report_ai_v2.json. Pero el camino que usa el OPTIMIZADOR sigue "
-            "siendo el corte unico: scoring/sample_eval.py::evaluate_sample_detailed llama a "
-            "BacktestEngine.run(split_ratio=0.7), y scoring/optimize.py::run_optimization agrega "
-            "un score por muestra. El objetivo del CEM es, literalmente, el score del split "
-            "70/30. El propio informe muestra por que eso es un problema: mom_default puntua "
-            "+2,63 con el corte unico y -2,20 con CPCV en crypto_winter, y -0,18 vs -0,60 en "
-            "crypto_bull_supercycle, con dispersion entre folds de sigma ~ 2-3 unidades de "
-            "Sharpe.\n"
-            "\n"
-            "TAREA: arquitectura en DOS ETAPAS dentro de run_optimization.\n"
-            "(1) CRIBADO (barato): el CEM sigue explorando con el corte unico o con un "
-            "walk-forward corto (2-3 folds). Es el paisaje que se escala, y basta con que sea "
-            "informativo, no con que sea la verdad.\n"
-            "(2) FINALISTAS (caro y decisivo): los top-k del CEM (5-10 configuraciones, "
-            "parametrizable) se RE-EVALUAN con CPCV completo, y es esa evaluacion la que decide "
-            "el ranking final y la que alimenta el gate de baselines, el DSR y el PBO. El "
-            "resultado de la etapa 1 no debe aparecer como si fuera el veredicto en ningun sitio.\n"
-            "\n"
-            "AGREGACION -- este matiz es el que hay que hacer bien: agrega poniendo en comun "
-            "TODOS los scores fold x muestra en UNA sola distribucion y toma el CVaR de eso. NO "
-            "hagas CVaR-de-CVaR (cola de la cola): compone dos conservadurismos y deja un "
-            "estimador con varianza enorme sobre 5 folds. Documenta la eleccion en el docstring "
-            "de la funcion, con esa razon.\n"
-            "\n"
-            "CONSERVAR PARA EL DESCUENTO: la evaluacion multiventana tiene que seguir devolviendo "
-            "lo que DSR y PBO necesitan (oos_observations y los momentos de los retornos), "
-            "sumando/encadenando las ventanas en vez de reportar las de un unico corte; hoy esos "
-            "campos salen de SampleEvaluation en scoring/sample_eval.py.\n"
-            "\n"
-            "COSTE: CPCV multiplica por ~15 el numero de backtests por muestra, y por eso solo lo "
-            "pagan los finalistas. Aun asi, mide y reporta el coste real, y ofrece subsampleo de "
-            "paths (ya existe `n_paths` con aviso por log) y paralelizacion por muestra "
-            "(multiprocessing, como hacen weight_study y validation_study).\n"
-            "\n"
-            "EVIDENCIA DEL CAMBIO: re-corre el ranking del dashboard con el esquema nuevo, y "
-            "reporta explicitamente cuantos finalistas CAMBIAN de posicion entre la etapa 1 y la "
-            "etapa 2, y cuantos aprueban el gate en cada una. Ese numero es el valor del cambio; "
-            "si es cero, tambien hay que publicarlo. Tests + determinismo + "
-            ".venv\\Scripts\\python.exe (poetry run esta roto) + ruff. Regenera dashboard y docs."
-        ),
-    },
-    {
-        "id": "validation-study-full-ensemble",
-        "rank": 4,
-        "group": "despues",
-        "priority": "media",
-        "title": "Re-correr el estudio de validación con el ensemble completo",
-        "line": "D", "status": "pendiente", "impact": "medio", "effort": "bajo",
-        "evidence": "El informe publicado corrió con n_paths=1: 8 escenarios x 4 configuraciones "
-                    "= 32 muestras.",
-        "why": "Las conclusiones sobre el corte único -que es arbitrario y no optimista, y que la "
-               "brecha real está contra la cola- son direccionales pero descansan en poca "
-               "muestra. Al integrar CPCV en el pipeline (evolución 'CPCV en dos etapas dentro del "
-               "optimizador') conviene re-correrlo con "
-               "varios caminos por escenario para que la dispersión medida tenga detrás "
-               "observaciones suficientes.",
-        "prompt": (
-            "Proyecto ai-trader (Python). El estudio de validacion "
-            "(src/ai_trader/research/validation_study.py, informe en "
-            "data/validation/report_ai_v2.json, vista 'Validacion' del dashboard) se corrio con "
-            "--paths 1: 8 escenarios x 4 configuraciones = 32 muestras. Sus conclusiones "
-            "(el corte unico es arbitrario y no optimista; la brecha sistematica esta contra la "
-            "COLA, no contra la mediana; la dispersion entre ventanas cambia que configuracion "
-            "gana) son direccionales pero tienen poca muestra detras.\n"
-            "TAREA: (1) Re-corre el estudio con el ensemble completo -mas escenarios y varios "
-            "caminos por escenario- sobre la libreria vigente (ai_v3 si ya existe; si no, ai_v2, "
-            "dejandolo dicho en el informe), paralelizando con --workers. Publica el informe "
-            "nuevo SIN borrar el anterior, para poder comparar. (2) Anade intervalos de confianza "
-            "por bootstrap sobre ESCENARIOS (no sobre muestras: los caminos de un mismo escenario "
-            "no son independientes) a las cifras de optimismo, dispersion, acuerdo de rangos y "
-            "cambios de decision. (3) Deja escrito en el informe y en el dashboard si alguna "
-            "conclusion cambia de signo con la muestra grande. Determinismo + "
-            ".venv\\Scripts\\python.exe (poetry run esta roto) + ruff. Regenera dashboard y docs."
-        ),
-    },
-    {
-        "id": "pbo-blocks-scenario-aligned",
-        "rank": 5,
-        "group": "despues",
-        "priority": "media",
-        "title": "Alinear los bloques del PBO con las fronteras de escenario",
-        "line": "A", "status": "pendiente", "impact": "medio", "effort": "bajo",
-        "evidence": "La matriz muestras x configuraciones se trocea en bloques CONTIGUOS y las "
-                    "muestras van en orden escenario-mayor: los 30 caminos de un escenario pueden "
-                    "quedar mitad en train y mitad en test de la CSCV.",
-        "why": "Es la misma fuga de arquetipo que `scenario_split` evita cuidadosamente en el "
-               "hold-out, colándose dentro del PBO: si el mismo escenario está a los dos lados, "
-               "el PBO sale más benigno de lo que debería, porque elegir por train ya sabe algo "
-               "del test. Arreglo pequeño, y afecta a una cifra que se publica como garantía.",
-        "prompt": (
-            "Proyecto ai-trader (Python). `probability_of_backtest_overfitting` "
-            "(src/ai_trader/scoring/overfit.py) implementa PBO por CSCV: recibe una matriz "
-            "muestras x configuraciones y la parte en `n_blocks` bloques CONTIGUOS "
-            "(partition = [range(b*block_size, (b+1)*block_size) ...]). El problema: quien la "
-            "llama es run_optimization (scoring/optimize.py), y sus muestras vienen en orden "
-            "ESCENARIO-MAYOR (por cada escenario, sus paths). Con 30 caminos por escenario, los "
-            "caminos de un mismo escenario pueden quedar mitad en train y mitad en test de la "
-            "CSCV: fuga de ARQUETIPO dentro del PBO, exactamente la que "
-            "scoring/scenario_split.py evita en el hold-out.\n"
-            "TAREA: (1) Anade a `probability_of_backtest_overfitting` un parametro opcional "
-            "`groups` (una etiqueta por FILA de la matriz, p.ej. el scenario_id) y construye los "
-            "bloques respetando fronteras de grupo -reparto codicioso equilibrado de grupos "
-            "enteros entre bloques-, en lugar de trocear por indice. Con groups=None, el "
-            "comportamiento actual se conserva bit a bit. (2) Haz que run_optimization pase el "
-            "scenario_id de cada muestra (ya lo conoce: _SampleEvaluator._samples genera los "
-            "pares (scenario_id, path_index)). (3) Declara en el resultado cuantos grupos y "
-            "cuantas filas se usaron y cuantas se descartaron por no encajar en bloques iguales "
-            "-nada de recortes silenciosos. (4) Tests: una matriz con estructura de grupo "
-            "conocida donde se compruebe que ningun grupo se parte, y el caso degenerado "
-            "(menos grupos que bloques). (5) Reporta el PBO antes y despues del cambio sobre la "
-            "misma corrida, para que se vea cuanto benigno era. .venv\\Scripts\\python.exe "
-            "(poetry run esta roto) + ruff. Regenera dashboard y docs."
-        ),
-    },
-    {
-        "id": "report-n-failed-with-reward",
-        "rank": 6,
-        "group": "despues",
-        "priority": "media",
-        "title": "Reportar n_failed junto al reward (la penalización domina la cola)",
-        "line": "A", "status": "pendiente", "impact": "medio", "effort": "bajo",
-        "evidence": "FAILURE_PENALTY = -5 frente a un headline que vive en el rango -2..2: una "
-                    "configuración que falla en 2-3 muestras de 100 tiene el CVaR@25% "
-                    "prácticamente capturado por los -5.",
-        "why": "Que fallar duela es correcto y no se discute; lo que no puede ser es que el "
-               "número final no distinga 'esta config tiene mala cola' de 'esta config es "
-               "frágil'. Son dos diagnósticos distintos con dos acciones distintas, y hoy "
-               "colapsan en el mismo -5. No hay que cambiar la penalización, hay que publicar el "
-               "recuento al lado.",
-        "prompt": (
-            "Proyecto ai-trader (Python). `FAILURE_PENALTY = -5.0` "
-            "(src/ai_trader/scoring/sample_eval.py) puntua las muestras cuyo backtest falla. El "
-            "headline score vive en unidades de Sharpe (tipicamente -2..2), asi que en el "
-            "CVaR@25% que agrega las muestras (scoring/aggregate.py::aggregate_reward) unas pocas "
-            "muestras fallidas COPAN la cola: una config que falla en 2-3 de 100 tiene su reward "
-            "determinado por los -5, no por su comportamiento. La eleccion es defendible -fallar "
-            "debe doler- pero el numero resultante no distingue 'cola mala' de 'config fragil'.\n"
-            "TAREA: (1) Anade a RewardStats (scoring/aggregate.py) el recuento y la fraccion de "
-            "muestras fallidas, propagando el flag `failed` que SampleEvaluation ya lleva; "
-            "aggregate_reward debe poder recibir esa informacion sin cambiar su firma escalar "
-            "actual para quien no la tenga. (2) Reporta n_failed / failure_rate junto al reward "
-            "en run_optimization, en el ranking del dashboard y en el estudio de validacion. "
-            "(3) Emite un aviso explicito cuando failure_rate >= alpha del CVaR: en ese caso la "
-            "cola esta hecha SOLO de fallos y el reward no esta midiendo rendimiento. (4) NO "
-            "cambies el valor de la penalizacion ni el estadistico de agregacion. Tests + "
-            ".venv\\Scripts\\python.exe (poetry run esta roto) + ruff. Regenera dashboard y docs."
-        ),
-    },
-    {
-        "id": "dsr-independent-trials-caveat",
-        "rank": 7,
-        "group": "despues",
-        "priority": "baja",
-        "title": "Declarar que el DSR asume intentos independientes y el CEM no los produce",
-        "line": "A", "status": "pendiente", "impact": "bajo", "effort": "bajo",
-        "evidence": "n_trials = 192 configuraciones evaluadas por el CEM, tratadas como intentos "
-                    "independientes en el máximo esperado bajo la nula.",
-        "why": "Las generaciones tardías del CEM se concentran alrededor de la élite, así que los "
-               "intentos efectivos son menos que los contados y el DSR SOBRE-deflacta. El sentido "
-               "del error es el prudente, pero mientras no esté escrito alguien puede leer el DSR "
-               "como una probabilidad calibrada, que no lo es. Una línea de docstring y una nota "
-               "en la metodología.",
-        "prompt": (
-            "Proyecto ai-trader (Python). `deflated_sharpe_ratio` "
-            "(src/ai_trader/scoring/overfit.py) deflacta el Sharpe del ganador usando "
-            "`_expected_max_sharpe(std_trials, n_trials)`, que es el maximo esperado bajo la nula "
-            "asumiendo n_trials intentos INDEPENDIENTES. Quien lo llama es run_optimization con "
-            "n_trials = numero de configuraciones que el CEM evaluo (del orden de 192). Pero el "
-            "CEM no produce intentos independientes: las generaciones tardias se concentran "
-            "alrededor de la elite, asi que los intentos EFECTIVOS son bastantes menos y el DSR "
-            "sobre-deflacta.\n"
-            "TAREA: (1) Documenta el supuesto y su direccion en el docstring de "
-            "deflated_sharpe_ratio: el error va del lado prudente (el DSR sale mas bajo de lo que "
-            "corresponderia), pero por eso mismo el DSR NO debe leerse como una probabilidad "
-            "calibrada. (2) Refleja la misma advertencia en la vista del dashboard donde se "
-            "publica el DSR y en docs/ (metodologia). (3) OPCIONAL y solo si sale limpio: reporta "
-            "junto al DSR una estimacion INFORMATIVA de intentos efectivos (p.ej. a partir de la "
-            "correlacion media entre las series de scores de las configuraciones probadas, "
-            "n_eff = n / (1 + (n-1)*rho_medio)), etiquetada claramente como informativa y sin "
-            "usarla para deflactar. .venv\\Scripts\\python.exe (poetry run esta roto) + ruff. "
-            "Regenera dashboard y docs."
-        ),
-    },
-    {
-        "id": "fidelity-rank-corr-ordering",
-        "rank": 8,
-        "group": "despues",
-        "priority": "media",
-        "title": "Ordenación de colas y clustering entre activos: el eje que ai_v3 no arregló",
-        "line": "B", "status": "pendiente", "impact": "medio", "effort": "medio",
-        "evidence": "ai_v3 cumple los umbrales de NIVEL y COBERTURA (98,3% de cobertura media, "
-                    "curtosis 3,40 vs 4,19 real, clustering 0,196 vs 0,190) pero su rank_corr "
-                    "medio es -0,23: clustering -0,74 y curtosis -0,18. En ai_v2 el clustering "
-                    "ordenaba +0,32. El nivel se arregló y la ordenación empeoró.",
-        "why": "El generador ya produce la magnitud correcta de cola y de agrupamiento, pero no "
-               "sabe QUÉ activo tiene más: en el mercado real son los más ruidosos (DOGE 17,8 de "
-               "curtosis y 0,31 de clustering; XRP 13,9) y en el sintético salen de los que menos "
-               "ruido propio tienen. La causa es identificable en el motor: el componente "
-               "idiosincrático pasa por `_ar1_idio`, un AR(1) con phi negativo en las fases de "
-               "rango, que BLANQUEA la estructura de |r| justo en los activos donde ese "
-               "componente pesa más (idio_vol alto). Importa para la selección cross-sectional: "
-               "una política que elija activos por su régimen de volatilidad está aprendiendo un "
-               "ordenamiento invertido respecto al mercado. No es crítico -las tres lecturas se "
-               "publican por separado y esta se declara- pero es el último hueco medido del "
-               "sustrato.",
-        "prompt": (
-            "Proyecto ai-trader (Python). El estudio de fidelidad "
-            "(src/ai_trader/research/fidelity_study.py, informes en data/fidelity/) ya acepta la "
-            "libreria ai_v3: cobertura media 98,3% y las medianas reales de curtosis, clustering "
-            "y exceedances dentro de la banda sintetica. Queda UN eje medido y no arreglado: la "
-            "ORDENACION entre activos. rank_corr (Spearman de la seccion cruzada real contra la "
-            "sintetica) sale -0,74 en clustering (ac_abs1) y -0,18 en curtosis; el medio de las "
-            "metricas objetivo es -0,23. Esta INVERTIDO, no solo flojo.\n"
-            "\n"
-            "HIPOTESIS DE CAUSA (verificala antes de tocar nada, no la des por buena): en el "
-            "mercado real los activos con mas ruido propio son los que mas cola y mas "
-            "agrupamiento tienen (DOGE: idio_vol 0,055 en el universo, curtosis real 17,8, "
-            "clustering 0,308; XRP: 13,9 y 0,245; frente a BTC: 3,9 y 0,152). En el motor "
-            "(src/ai_trader/research/research/synthetic/engine.py) el componente idiosincratico se dibuja con colas "
-            "y GARCH pero DESPUES pasa por `_ar1_idio`, un AR(1) con phi por fase que en las "
-            "fases de rango es negativo (-0,30, ver `_idio_ar_for` en research/synthetic/retrofit.py). Un "
-            "AR(1) mezcla dias adyacentes: baja la curtosis y BLANQUEA la autocorrelacion de |r| "
-            "de ese componente, y lo hace MAS en los activos donde el idio pesa mas. Eso "
-            "invertiria la ordenacion. Compruebalo midiendo, con el mismo `series_facts` del "
-            "harness, curtosis y ac_abs1 de un solo activo variando idio_vol con y sin idio_ar.\n"
-            "\n"
-            "TAREA: subir el rank_corr de ac_abs1 y excess_kurtosis a >= +0,3 SIN romper lo que ya "
-            "cumple. Ideas, en orden de preferencia (elige con la medicion, no a priori): (a) que "
-            "el AR(1) idiosincratico actue sobre el SIGNO/direccion pero no destruya el "
-            "agrupamiento -p.ej. aplicando el GARCH DESPUES del AR(1) en vez de antes, que "
-            "reordena las dos operaciones sin cambiar la varianza-; (b) dar al idio su propia "
-            "persistencia/cola por activo en vez de compartir el timeline de fase; (c) escalar "
-            "tail_dof o vol_persistence del idio con el idio_vol del activo. Mide cada una con el "
-            "harness antes de quedarte con ninguna.\n"
-            "\n"
-            "REGLAS DEL SITIO, no negociables: (1) La aceptacion actual NO puede empeorar: "
-            "'.venv\\Scripts\\python.exe -m ai_trader.research.fidelity_study --library ai_v4 "
-            "--offline' tiene que seguir devolviendo 0 y la cobertura media quedarse en >= 95%, "
-            "con el nivel de volatilidad en ratio 0,9-1,1. (2) Neutralidad EXACTA de los defaults: "
-            "tests/research/test_synthetic.py::TestEngineByteIdentity congela con un hash que ai_v1 y ai_v2 "
-            "se regeneran byte a byte desde sus spec.json; si se pone rojo, el cambio esta mal "
-            "hecho, no el test. (3) Libreria nueva (ai_v4) derivada de ai_v1 con "
-            "`SyntheticDataService.derive_library`, sin tocar las anteriores, y su informe "
-            "publicado junto a los otros dos. (4) Variance-matching: cualquier reordenacion de "
-            "AR(1)/GARCH tiene que dejar la volatilidad total donde estaba. Tests + "
-            ".venv\\Scripts\\python.exe (poetry run esta roto) + ruff. Regenera dashboard y docs."
-        ),
-    },
-    {
-        "id": "real-substrate-primary-ranking",
-        "rank": 9,
-        "group": "despues",
-        "priority": "critica",
-        "title": "CONTINGENCIA: mover el sustrato primario del ranking al histórico REAL",
-        "line": "B/D", "status": "bloqueada", "impact": "alto", "effort": "alto",
-        "evidence": "MEDIDO: Spearman entre el ranking real y el sintético = -0,04 sobre 16 "
-                    "configuraciones (IC95% por bloques [-0,44, +0,49], p = 0,89). El top-4 del "
-                    "sintético acierta 1 de 4 en la mitad buena del real, peor que el azar (2,0). "
-                    "Y sobre las 9 que operan de verdad en los dos mundos el acuerdo es NEGATIVO "
-                    "(-0,67). Informe: data/transfer/report_ai_v3.json.",
-        "why": "La evidencia de arriba sigue en pie y no se toca. Lo que cambia es la LECTURA: se "
-               "midió con estrategias que solo ven precio y volumen, y el único edge del mundo "
-               "sintético es un AR(1) colocado a mano por régimen -- rankear momentum sobre eso "
-               "mide que configuración ajusta mejor ese AR(1), y no hay motivo para que "
-               "transfiera. La hipótesis alternativa (el cuello de botella es el ESPACIO DE "
-               "INPUTS, no el generador) es testeable con el mismo instrumento, y es lo que "
-               "persiguen los ranks 1-9. Por eso esta ficha pasa de conclusión automática a "
-               "CONTINGENCIA: se ejecuta si `synthetic-signal-emission` refuta esa "
-               "hipótesis -- es decir, si con el espacio de inputs ampliado el ranking sigue sin "
-               "transferir, y en particular si tampoco transfiere en el brazo ORÁCULO, que hace "
-               "trampa a propósito. Si ni haciendo trampa transfiere, el problema no son los "
-               "inputs y hay que sacar el sintético del criterio de selección. Bloqueada, no "
-               "descartada: el código sigue eligiendo hoy con un juez del que se sabe que no "
-               "transfiere, y eso no deja de ser cierto mientras se prueba la alternativa.",
-        "prompt": (
-            "Proyecto ai-trader (Python). El estudio de transferencia "
-            "(src/ai_trader/research/transfer_study.py, informe en "
-            "data/transfer/report_ai_v3.json, vista 'Transferencia' del dashboard) ya respondio la "
-            "pregunta que decidia la arquitectura, y la respuesta fue NO: el Spearman entre el "
-            "ranking real y el sintetico es -0,04 (IC95% por bloques [-0,44, +0,49], p = 0,89), el "
-            "top-4 del sintetico acierta 1 de 4 en la mitad buena del real (azar = 2) y sobre las 9 "
-            "configuraciones que operan de verdad en los dos mundos el acuerdo es NEGATIVO (-0,67, "
-            "IC [-0,88, +0,23]). La regla de decision estaba escrita en el codigo ANTES de mirar "
-            "(transfer_study.RHO_ACCEPT = 0.30), asi que el flujo queda fijado: 'real como sustrato "
-            "primario del ranking, sintetico como capa de estres y veto'.\n"
-            "\n"
-            "PROBLEMA: el codigo no hace eso. scoring/optimize.py::run_optimization, "
-            "scoring/sample_eval.py::evaluate_sample_detailed y el CEM entero puntuan SOLO sobre "
-            "librerias sinteticas (SyntheticStore -> load_bars). El unico sitio donde una estrategia "
-            "se puntua hoy contra el mercado real es el estudio de transferencia y el comando "
-            "`backtest` a mano.\n"
-            "\n"
-            "TAREA: que el ranking que DECIDE salga del historico real.\n"
-            "(a) Un evaluador real reutilizable: la maquinaria de transfer_study (universo comun, "
-            "sub-ventanas del mismo tamano, CPCV purgado, agregacion en comun de todos los folds) "
-            "extraida a algo que el optimizador pueda llamar, no duplicada. Cuida el punto que ya "
-            "resolvio ese estudio: los simbolos sin historico suficiente se declaran y se omiten.\n"
-            "(b) Dos etapas explicitas: el sintetico CRIBA (es barato, tiene ensemble y cubre "
-            "regimenes que la historia no dio) y el real DECIDE. El resultado de la criba no puede "
-            "aparecer como veredicto en ningun sitio.\n"
-            "(c) El sintetico como VETO, que es para lo que si esta validado: una configuracion que "
-            "gana en el real pero se hunde en los escenarios de crisis sinteticos no asciende. "
-            "Declara el criterio de veto y mide cuantas veta.\n"
-            "(d) HONESTIDAD: el historico real es UN camino con pocos bloques independientes (5 "
-            "sub-ventanas de 544 dias en el estudio actual). Rankear ahi tiene su propio problema de "
-            "sobreajuste, y es el problema que el sintetico venia a resolver. Hay que medirlo, no "
-            "taparlo: PBO y DSR sobre el lado real, y el numero de bloques efectivos declarado en "
-            "cada ranking publicado.\n"
-            "\n"
-            "Tests + determinismo + .venv\\Scripts\\python.exe (poetry run esta roto) + ruff. "
-            "Regenera dashboard y docs."
-        ),
-    },
-    {
-        "id": "rl-full-run",
-        "rank": 10,
-        "group": "despues",
-        "priority": "alta",
-        "title": "Optimización CEM completa, ya con el juez validado",
-        "line": "RL", "status": "bloqueada", "impact": "alto", "effort": "medio",
-        "depends": 1,
-        "evidence": "El harness CEM está listo, pero cada backtest cuesta ~60 s con 35 activos y "
-                    "hoy apuntaría al juez del corte único.",
-        "why": "Correr la optimización a escala solo tiene sentido cuando el objetivo que escala "
-               "el CEM es el bueno: primero el sustrato (#1) y el juez en dos etapas (#3), "
-               "después esto. Hacerlo antes es gastar cómputo caro produciendo un ganador que "
-               "habría que tirar.",
-        "prompt": (
-            "Proyecto ai-trader (Python). El harness de optimizacion por Cross-Entropy Method "
-            "(src/ai_trader/scoring/optimize.py, run_optimization) esta listo, pero cada backtest "
-            "cuesta ~60 s con los 35 activos, asi que una corrida completa sobre 900 muestras "
-            "(30 escenarios x 30 paths) necesita subsampleo o paralelizacion.\n"
-            "REQUISITO PREVIO: esta tarea solo debe ejecutarse cuando esten hechas (a) la "
-            "correccion de fidelidad del generador con su libreria ai_v3 y (b) el juez en dos "
-            "etapas con CPCV dentro de run_optimization. Si alguna falta, paralo y dilo: "
-            "optimizar contra el juez viejo produce un ganador que habria que descartar.\n"
-            "TAREA: ejecuta y consolida la optimizacion CEM de las primitivas disponibles "
-            "(crypto_momentum y mean_reversion) sobre la libreria vigente (ai_v3). La metrica de "
-            "cabecera honesta (Sharpe - lambda*turnover - kappa*maxDD, agregada por CVaR@25%, con "
-            "gate de baselines y descuento DSR/PBO) ya esta implementada, asi que "
-            "run_optimization devuelve tambien el veredicto del gate y el sobreajuste por "
-            "multiples pruebas: reportalos junto al recuento de muestras fallidas. Optimiza el "
-            "rendimiento del backtest o paraleliza la evaluacion de muestras para que la corrida "
-            "sea tratable, y declara por log cualquier subsampleo. Guarda los mejores parametros "
-            "por primitiva con su distribucion train/validation y vuelca los resultados al "
-            "dashboard (seccion Ranking). Determinismo + tests + .venv\\Scripts\\python.exe "
-            "(poetry run esta roto) + ruff. Regenera dashboard y docs."
-        ),
-    },
-    {
         "id": "execution-latency-budget",
-        "rank": 11,
+        "rank": 5,
         "group": "despues",
         "priority": "media",
         "title": "Presupuesto de latencia: el backtest supone que se llena a las 00:00 UTC en punto",
@@ -2661,7 +2448,6 @@ ROADMAP = [
                "ejecutar antes de que el backtest deje de describirlo. Va en 'después' y no en "
                "'ahora' porque solo muerde cuando el paper trading corra en vivo (#6), que es "
                "donde la latencia deja de ser hipotética.",
-        "depends": 6,
         "prompt": (
             "Proyecto ai-trader (Python). El estudio de sesiones (data/sessions/report.json, "
             "ai_trader/backtest/session_study.py) ya midio que el hueco cierre-visto -> "
@@ -2686,89 +2472,12 @@ ROADMAP = [
         ),
     },
     {
-        "id": "weights-recalibrate-power",
-        "rank": 12,
-        "group": "no-prioritario",
-        "priority": "baja",
-        "title": "Re-medir lambda y kappa con los costes nuevos y más potencia estadística",
-        "line": "A/C", "status": "pendiente", "impact": "bajo", "effort": "medio",
-        "evidence": "480 backtests ya medidos: la superficie (lambda, kappa) sale PLANA y la "
-                    "elección de configuración no cambia. Pero se midió con un único corte 70/30, "
-                    "un camino por escenario y el slippage PLANO de 5 bps que ya no existe.",
-        "why": "La conclusión publicada -penalizar no estabiliza, y los costes ya dentro del "
-               "Sharpe equivalen a un lambda ~ 6,3, muy por encima del 0,25 elegido- se refuerza "
-               "con el modelo de costes nuevo, que cobra más fricción. Es decir: re-medirlo casi "
-               "seguro no mueve nada. Por eso es de impacto bajo y va aquí, no arriba.",
-        "prompt": (
-            "Proyecto ai-trader (Python). Los pesos del headline score "
-            "(src/ai_trader/backtest/metrics.py::DEFAULT_HEADLINE_WEIGHTS, hoy lambda=0.25, "
-            "kappa=0.0) estan calibrados con evidencia: estudio en "
-            "src/ai_trader/research/weight_study.py, informe en "
-            "data/calibration/report_ai_v2.json, 480 backtests. Resultado: la superficie "
-            "(lambda, kappa) es PLANA en rank IC y en gap train-validation, y la auditoria de "
-            "costes dice que el slippage ya cobrado dentro del Sharpe equivale a un lambda "
-            "implicito ~ 6,3. Dos motivos para repetirlo, ninguno urgente:\n"
-            "  (a) se midio con UN corte temporal 70/30, un camino por escenario y 16 "
-            "configuraciones: sirve para descartar que los pesos importen mucho, no para afinar "
-            "decimales;\n"
-            "  (b) se midio cuando el motor cobraba un slippage PLANO de 5 bps, y hoy la "
-            "ejecucion usa el modelo de microestructura (medio spread por simbolo + volatilidad "
-            "reciente + impacto por raiz cuadrada de la participacion, con techo de capacidad).\n"
-            "TAREA: (1) Repite el barrido con los costes actuales y con validacion multiventana "
-            "(scoring/multiwindow.py, walk-forward o CPCV con purga y embargo) y varios caminos "
-            "por escenario, reutilizando el cacheo de componentes crudos que ya existe (los "
-            "componentes no dependen de los pesos, asi que la rejilla sale gratis). (2) Anade "
-            "intervalos de confianza por bootstrap sobre ESCENARIOS al rank IC y al gap, para "
-            "poder afirmar o descartar diferencias entre puntos de la rejilla en vez de leer "
-            "ruido. (3) Corrige turnover_cost_audit en scoring/weight_calibration.py: hoy deriva "
-            "el lambda implicito de un cost_rate PLANO (fee_rate + slippage_bps); hazlo con el "
-            "slippage REALMENTE cobrado por operacion (ExecutionResult.slippage_bps), que ya no "
-            "es una constante. (4) Publica el informe nuevo sin borrar el anterior. (5) Solo si "
-            "la evidencia nueva mueve el optimo FUERA del error, actualiza "
-            "DEFAULT_HEADLINE_WEIGHTS y el test que los congela "
-            "(tests/test_backtest_metrics.py::TestDefaultWeightsAreCalibrated). Determinismo + "
-            ".venv\\Scripts\\python.exe (poetry run esta roto) + ruff. Regenera dashboard y docs."
-        ),
-    },
-    {
-        "id": "designer-model-in-manifest",
-        "rank": 13,
-        "group": "no-prioritario",
-        "priority": "baja",
-        "title": "Anotar el modelo de IA en el manifiesto de cada librería",
-        "line": "E", "status": "pendiente", "impact": "bajo", "effort": "bajo",
-        "evidence": "El manifiesto guarda la CLASE del diseñador ('ClaudeScenarioDesigner'), no "
-                    "el identificador del modelo ni la fecha del diseño.",
-        "why": "El diseño con IA no es reproducible y ya no puede serlo (los modelos actuales "
-               "retiraron los parámetros de muestreo), así que la única trazabilidad posible es "
-               "registrar CON QUE se generó. Hoy dos librerías diseñadas con modelos distintos "
-               "son indistinguibles en disco.",
-        "prompt": (
-            "Proyecto ai-trader (Python). El disenador con IA "
-            "(src/ai_trader/research/research/synthetic/designer.py, ClaudeScenarioDesigner) produce escenarios NO "
-            "reproducibles por diseno: los modelos actuales retiraron temperature/top_p/top_k, "
-            "asi que no hay ninguna palanca de determinismo. La mitigacion vigente es guardar el "
-            "spec.json. Falta la trazabilidad: SyntheticDataService "
-            "(src/ai_trader/research/research/synthetic/service.py) escribe en el manifiesto "
-            "`designer=type(self.designer).__name__`, es decir solo la clase.\n"
-            "TAREA: haz que el manifiesto registre tambien el identificador del modelo y la fecha "
-            "de generacion del diseno, sin romper las librerias ya publicadas (ai_v1, ai_v2, "
-            "ai_v3): los manifiestos antiguos sin ese campo deben seguir cargando. Sugerencia: un "
-            "metodo/propiedad opcional en el protocolo ScenarioDesigner (p.ej. `describe()`) que "
-            "el servicio consulte con getattr y que TemplateScenarioDesigner tambien implemente, "
-            "y un campo nuevo en SyntheticManifest con valor por defecto. Expon el dato en la "
-            "vista 'Datos sinteticos' del dashboard. Tests de compatibilidad hacia atras (cargar "
-            "un manifiesto sin el campo) + .venv\\Scripts\\python.exe (poetry run esta roto) + "
-            "ruff. Regenera dashboard y docs."
-        ),
-    },
-    {
         "id": "operational-symbol-guard",
-        "rank": 14,
-        "group": "no-prioritario",
-        "priority": "baja",
+        "rank": 6,
+        "group": "despues",
+        "priority": "media",
         "title": "Guarda operativa por símbolo (sanciones, deslistado, halt): lo que deja abierto no tener veto",
-        "line": "Riesgo", "status": "pendiente", "impact": "bajo", "effort": "bajo",
+        "line": "Riesgo", "status": "pendiente", "impact": "medio", "effort": "bajo",
         "evidence": "El sistema no tiene ningún concepto de símbolo no operable: grep de "
                     "eligib|veto|blacklist|blackout|halt en src/ no devuelve nada, y las únicas "
                     "guardas por símbolo son la posición abierta y el cooldown "
@@ -2828,7 +2537,7 @@ ROADMAP = [
     },
     {
         "id": "equities-parked",
-        "rank": 15,
+        "rank": 7,
         "group": "segundo-plano",
         "priority": "aparcada",
         "title": "Renta variable: aparcada a propósito (no se activa la clase de activo)",
@@ -2875,7 +2584,7 @@ ROADMAP = [
     },
     {
         "id": "polymarket-parked",
-        "rank": 16,
+        "rank": 8,
         "group": "segundo-plano",
         "priority": "aparcada",
         "title": "Polymarket en el backtest: aparcado hasta tener histórico propio",
@@ -2909,6 +2618,109 @@ ROADMAP = [
             "evaluacion con el mismo juez. Mientras tanto, lo unico que hay que hacer es "
             "REGISTRAR: sin serie propia, no hay nada que medir."
         ),
+    },
+    {
+        "id": "rl-full-run",
+        "rank": 9,
+        "group": "retiradas",
+        "priority": "retirada",
+        "title": "Optimización CEM completa, ya con el juez validado",
+        "line": "RL", "status": "retirada", "impact": "nulo", "effort": "-",
+        "why": "ABSORBIDA por «Generar estrategias con las señales reales dentro». Estaba "
+               "bloqueada esperando dos cosas: un sustrato con fidelidad y un juez con CPCV. El "
+               "juez llegó (CPCV purgado dentro del optimizador) y el sustrato cambió de mundo -- "
+               "ahora es el histórico real. Correr el CEM completo ya no es una entrada aparte: es "
+               "el paso 3 de la entrada que lo sustituye, y allí lleva además la capa de señal.",
+    },
+    {
+        "id": "synthetic-signal-emission",
+        "rank": 10,
+        "group": "retiradas",
+        "priority": "retirada",
+        "title": "Que el generador emita las señales, y re-medir la transferencia de forma pareada",
+        "line": "B/D", "status": "retirada", "impact": "nulo", "effort": "-",
+        "why": "Ampliar el espacio de inputs del generador solo tenía sentido para salvar la hipótesis de que el sintético podía llegar a ordenar. Esa apuesta se cierra.",
+    },
+    {
+        "id": "line-d-cpcv-two-stage-cem",
+        "rank": 11,
+        "group": "retiradas",
+        "priority": "retirada",
+        "title": "CPCV en dos etapas dentro del optimizador",
+        "line": "D", "status": "retirada", "impact": "nulo", "effort": "-",
+        "why": "HECHA a medias, y el resto muere con el sintético: el CEM ya puntúa con CPCV purgado (scoring/real_source.py). Las «dos etapas» eran sintético-criba + real-decide, y ya no hay criba.",
+    },
+    {
+        "id": "validation-study-full-ensemble",
+        "rank": 12,
+        "group": "retiradas",
+        "priority": "retirada",
+        "title": "Re-correr el estudio de validación con el ensemble completo",
+        "line": "D", "status": "retirada", "impact": "nulo", "effort": "-",
+        "why": "Re-correr un estudio sobre un sustrato aparcado. Lo publicado sigue describiendo lo que midió, que es todo lo que se le pedía.",
+    },
+    {
+        "id": "pbo-blocks-scenario-aligned",
+        "rank": 13,
+        "group": "retiradas",
+        "priority": "retirada",
+        "title": "Alinear los bloques del PBO con las fronteras de escenario",
+        "line": "A", "status": "retirada", "impact": "nulo", "effort": "-",
+        "why": "Los «escenarios» eran del generador. Sobre sustrato real la unidad de bloque es la sub-ventana, y ya lo es por construcción.",
+    },
+    {
+        "id": "report-n-failed-with-reward",
+        "rank": 14,
+        "group": "retiradas",
+        "priority": "retirada",
+        "title": "Reportar n_failed junto al reward",
+        "line": "A", "status": "retirada", "impact": "nulo", "effort": "-",
+        "why": "Rigor de informe de un estudio archivado.",
+    },
+    {
+        "id": "dsr-independent-trials-caveat",
+        "rank": 15,
+        "group": "retiradas",
+        "priority": "retirada",
+        "title": "Declarar que el DSR asume intentos independientes y el CEM no los produce",
+        "line": "A", "status": "retirada", "impact": "nulo", "effort": "-",
+        "why": "Matiz metodológico legítimo, pero es afinar el juez cuando lo que falta es tener algo en marcha que juzgar.",
+    },
+    {
+        "id": "fidelity-rank-corr-ordering",
+        "rank": 16,
+        "group": "retiradas",
+        "priority": "retirada",
+        "title": "Ordenación de colas y clustering entre activos",
+        "line": "B", "status": "retirada", "impact": "nulo", "effort": "-",
+        "why": "Mejorar la fidelidad del generador. Fidelidad no era el problema: se consiguió (98% de cobertura, nueve umbrales aceptados) y aun así no sirvió para ordenar.",
+    },
+    {
+        "id": "real-substrate-primary-ranking",
+        "rank": 17,
+        "group": "retiradas",
+        "priority": "retirada",
+        "title": "Mover el sustrato primario del ranking al histórico REAL",
+        "line": "B/D", "status": "retirada", "impact": "nulo", "effort": "-",
+        "why": "HECHA. scoring/real_source.py: sub-ventanas reales con CPCV purgado y hold-out temporal, y es el sustrato por defecto de run_optimization. Era la contingencia declarada, y se disparó.",
+    },
+    {
+        "id": "weights-recalibrate-power",
+        "rank": 18,
+        "group": "retiradas",
+        "priority": "retirada",
+        "title": "Re-medir lambda y kappa con más potencia estadística",
+        "line": "A/C", "status": "retirada", "impact": "nulo", "effort": "-",
+        "why": "La calibración se midió sobre la librería sintética. Re-medirla ahí no aporta nada; re-medirla sobre real es parte del ranking, no una entrada aparte.",
+    },
+    {
+        "id": "designer-model-in-manifest",
+        "rank": 19,
+        "group": "retiradas",
+        "priority": "retirada",
+        "title": "Anotar el modelo de IA en el manifiesto de cada librería",
+        "line": "E", "status": "retirada", "impact": "nulo", "effort": "-",
+        "why": "Trazabilidad de un generador que ya no genera.",
     },
 ]
 

@@ -47,6 +47,14 @@ a{color:var(--s1)}
   font-weight:700;text-transform:uppercase;letter-spacing:.06em}
 .nav li.chap:first-child{margin-top:2px}
 .nav li.chap b{color:var(--ink2)}
+/* El capitulo archivado se separa del resto y se apaga: sigue ahi -lo medido no se borra-
+   pero no es donde se trabaja. */
+.nav li.chap.arch{margin-top:22px;padding-top:14px;border-top:1px solid var(--border)}
+.nav li.chap.arch ~ li button{opacity:.6}
+.nav li.chap.arch ~ li button.active{opacity:1}
+.archnote{border:1px solid var(--border);border-left:3px solid var(--muted);border-radius:8px;
+  padding:11px 13px;margin:0 0 16px;background:var(--surface);color:var(--ink2);font-size:13px}
+.archnote b{color:var(--ink)}
 .crumb{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.05em;
   font-weight:600;margin:0 0 4px}
 .main{padding:26px 32px;max-width:1180px;overflow-x:hidden}
@@ -119,6 +127,7 @@ svg{max-width:100%;display:block}
 .rmitem.media{--pc:var(--warn)}
 .rmitem.baja{--pc:var(--s1)}
 .rmitem.aparcada{--pc:var(--muted)}
+.rmitem.retirada{--pc:var(--muted);opacity:.72}
 .rmrank{text-align:center;line-height:1.05;padding-top:2px}
 .rmrank b{font-size:24px;font-weight:700;color:var(--pc);font-variant-numeric:tabular-nums}
 .rmrank small{display:block;margin-top:3px;font-size:10px;font-weight:600;color:var(--muted);
@@ -139,6 +148,7 @@ details.pr .prompt{max-height:340px}
 .chip.baja{background:color-mix(in srgb,var(--s1) 16%,transparent);color:var(--s1)}
 .chip.bloqueada{background:color-mix(in srgb,var(--s7) 20%,transparent);color:var(--s7)}
 .chip.aparcada{background:color-mix(in srgb,var(--muted) 22%,transparent);color:var(--ink2)}
+.chip.retirada{background:color-mix(in srgb,var(--muted) 22%,transparent);color:var(--ink2)}
 @media(max-width:820px){.app{grid-template-columns:1fr}.side{position:static;height:auto}.split{grid-template-columns:1fr}
   .rmitem{grid-template-columns:1fr}.rmrank{text-align:left;display:flex;gap:8px;align-items:baseline}
   .rmrank small{margin:0}}
@@ -488,7 +498,7 @@ function renderOverview(){
   const chain=[
     ['1','Captura de precio',(M.n_symbols||'-')+' pares cripto, velas diarias cacheadas en disco: cualquier estudio se repite sin red.','market','Datos'],
     ['2','Señales externas','Diecisiete fuentes fuera del precio, normalizadas y con su profundidad histórica medida, no declarada.','signals','Datos'],
-    ['3','Mundos sintéticos','Una IA diseña la física de cada escenario macro; un motor determinista la convierte en velas con colas, clustering y estructura serial.','synthetic','Datos'],
+    ['3','Sub-ventanas reales','El histórico cerrado se trocea en sub-ventanas disjuntas; dentro de cada una, folds CPCV con purga y embargo. Las más recientes se reservan y no se optimizan.','ranking','Datos'],
     ['4','Observación','Lo que la política ve al decidir: mercado propio, contexto cross-sectional y radar de señales. Solo datos hasta el cierre de ayer.','strategies','Estrategias'],
     ['5','Señal','Ocho primitivas proponen entrada, confianza y salidas: dos de régimen opuesto que solo miran precio, y seis temáticas con núcleo de precio y capa de señal.','strategies','Estrategias'],
     ['6','Riesgo','Puerta única: tamaño, exposición, confianza mínima, pérdida diaria y propiedad del stop.','trade','Trade'],
@@ -503,10 +513,10 @@ function renderOverview(){
   const findings=[
     ['¿Se parece el mundo sintético al mercado?',
       F?('Sí: cobertura '+fmt(F.summary.coverage_mean_pct,0)+'% y nueve umbrales que el estudio puede fallar.'):'Sin informe.',
-      'hecho','El generador vale como banco de estrés y de regresión.','fidelity'],
+      'hecho','Fidelidad conseguida — y aun así insuficiente: ver la pregunta siguiente.','fidelity'],
     ['¿<b>Ordena</b> las estrategias como el mercado?',
       T?('<b>No.</b> ρ = '+fmt(rho,2)+' sobre '+T.n_configs+' configuraciones, y '+fmt(T.transfer.activity.spearman_active,2)+' entre las que operan de verdad.'):'Sin informe.',
-      'pend','El sintético deja de ser criterio de selección: el ranking que decide sale del histórico real.','transfer'],
+      'pend','Fidelidad ≠ transferencia. El sintético sale del criterio de selección y la línea se aparca; el ranking que decide sale del histórico real.','transfer'],
     ['¿Sobre-estimaba el corte único 70/30?',
       V?('No sobre-estima ('+fmt(V.optimism.walk_forward.median,2)+'): es <b>arbitrario</b>. Mover la ventana pesa ×'+fmt(V.svn.ratio,1)+' más que cambiar de estrategia.'):'Sin informe.',
       'pend','Elegir con una sola ventana es elegir por el tramo de historia que tocó.','validation'],
@@ -792,8 +802,9 @@ function renderSynthetic(){
   const colors=[cssv('--s1'),cssv('--s2'),cssv('--s4')];
   const lineage=((D.kpis&&D.kpis.lineage)||Object.keys(f)).filter(l=>f[l]);
   host.innerHTML=`
-    <p class="crumb">Capítulo 2 · Datos</p>
+    <p class="crumb">Capítulo 7 · Investigación archivada</p>
     <h1>Generación de datos sintéticos</h1>
+    <div class="archnote"><b>Investigación archivada.</b> Esta línea se aparcó: el mundo sintético alcanzó la fidelidad que se le pidió y aun así <b>no ordena las estrategias como el mercado</b>, así que dejó de ser criterio de selección. Las cifras de abajo son las medidas y no se tocan — un resultado negativo caro es el que no hay que repetir. El código vive en <span class="mono">ai_trader/research/</span> y no se mantiene.</div>
     <p class="lead">Librería <b>${esc(D.synthetic.library)}</b>: ${sc.length} escenarios macro × ${D.synthetic.n_paths} paths Monte Carlo,
       horizonte ${D.synthetic.horizon_days} días, 35 activos. Deterministas y reproducibles. Diseñador: <span class="mono">${esc(D.synthetic.designer||'')}</span>.</p>
     <div class="note"><b>Qué es reproducible aquí, y qué no.</b> Todo lo que va del <i>spec.json</i> hacia abajo
@@ -888,8 +899,9 @@ function renderFidelity(){
     ['Muestras',S.n_real_windows+' / '+S.n_synthetic_samples,'ventanas reales / paths sintéticos'],
   ];
   host.innerHTML=`
-    <p class="crumb">Capítulo 2 · Datos</p>
+    <p class="crumb">Capítulo 7 · Investigación archivada</p>
     <h1>Fidelidad: el test que el generador puede fallar</h1>
+    <div class="archnote"><b>Investigación archivada.</b> Esta línea se aparcó: el mundo sintético alcanzó la fidelidad que se le pidió y aun así <b>no ordena las estrategias como el mercado</b>, así que dejó de ser criterio de selección. Las cifras de abajo son las medidas y no se tocan — un resultado negativo caro es el que no hay que repetir. El código vive en <span class="mono">ai_trader/research/</span> y no se mantiene.</div>
     <p class="lead">Un mercado sintético solo vale si se parece al real en sus propiedades estadísticas.
       Aquí se miden los mismos <i>stylized facts</i> sobre <b>${esc(F.library)}</b> y sobre el histórico
       diario real de ${esc(F.exchange)} (${esc(F.real_start)} → ${esc(F.real_end)}, ${S.n_symbols} criptos),
@@ -1081,8 +1093,9 @@ function renderTransfer(){
       `sobre las ${ACT.n_active}/${n} que operan de verdad en los dos mundos`],
   ];
   host.innerHTML=`
-    <p class="crumb">Capítulo 4 · Estrategias</p>
+    <p class="crumb">Capítulo 7 · Investigación archivada</p>
     <h1>Ordenación en datos reales y sintéticos: ¿ordena el sintético como el mercado?</h1>
+    <div class="archnote"><b>Investigación archivada.</b> Esta línea se aparcó: el mundo sintético alcanzó la fidelidad que se le pidió y aun así <b>no ordena las estrategias como el mercado</b>, así que dejó de ser criterio de selección. Las cifras de abajo son las medidas y no se tocan — un resultado negativo caro es el que no hay que repetir. El código vive en <span class="mono">ai_trader/research/</span> y no se mantiene.</div>
     <p class="lead">La vista <b>Fidelidad</b> mide si el generador <i>se parece</i> al mercado en sus
       propiedades estadísticas. Esta vista mide lo único
       que el producto le pide de verdad: que si una configuración es mejor que otra en el mundo
@@ -1309,7 +1322,7 @@ function renderStrategies(){
         <p class="tag" style="margin-top:8px">+ one-hot de clase de activo (crypto/stock/macro).</p></div>
     </div>`;
   S.strategies.forEach(st=>{const dm=demo[st.id];const holder=$('#demo_'+st.id);if(!dm){holder.innerHTML='<span class="tag">Sin demo de señales.</span>';return;}
-    holder.innerHTML=`<b class="tag">Entradas sobre una muestra real (${esc(dm.symbol)}, escenario ${esc(dm.scenario)})</b>
+    holder.innerHTML=`<b class="tag">Entradas sobre precio real (${esc(dm.symbol)}, ${esc(dm.period)})</b>
       <div class="legend"><span><span class="swatch" style="background:var(--s1)"></span>precio</span><span><span class="swatch" style="background:var(--s6)"></span>entrada (${dm.signals.length})</span></div>
       <div id="sig_${st.id}"></div>`;
     lineChart($('#sig_'+st.id),[{name:'precio',color:cssv('--s1'),values:dm.series,marks:dm.signals}],{h:180,xlab:'día'});
@@ -1387,15 +1400,21 @@ function renderRanking(){
       <b>headline out-of-sample</b> = <span class="mono">Sharpe − ${W.lambda_turnover ?? 'λ'}·turnover${W.kappa_maxdd?' − '+W.kappa_maxdd+'·maxDD':''}</span>${W.kappa_maxdd===0?' (el término de maxDD queda en 0 por la calibración medida, más abajo)':''},
       y el ranking es el <b>CVaR@25%</b> de esa distribución (media del peor cuartil: se compite por la cola mala, no por el centro).</p>
     ${calibrationPanel(D.calibration)}
-    <div class="note"><b>Muestra reducida.</b> ${sc.n_scenarios} escenarios × ${sc.n_paths} paths sobre <b>${esc(sc.library)}</b>,
-      universo de ${sc.universe?sc.universe.length:'?'} activos, ventana ${sc.window_days} días. Para ampliar el scope,
-      edita las constantes <span class="mono">RANK_*</span> en <span class="mono">dashboard/build_dashboard.py</span> y regenera.</div>
+    <div class="note"><b>Muestra reducida, sobre mercado REAL.</b> ${sc.n_windows} sub-ventanas de ${sc.window_days} días
+      del histórico de <span class="mono">${esc(sc.exchange||'binance')}</span>${sc.windows&&sc.windows.length?' ('+esc(sc.windows[0].start)+' → '+esc(sc.windows[sc.windows.length-1].end)+')':''},
+      universo de ${sc.universe?sc.universe.length:'?'} pares. Para ampliar el scope, edita las constantes
+      <span class="mono">RANK_*</span> en <span class="mono">dashboard/build_dashboard.py</span> y regenera.</div>
+    <div class="note"><b>Lo que esta muestra NO tiene.</b> Cuatro sub-ventanas del <b>mismo camino histórico</b> no son
+      cuatro mundos independientes: comparten los mismos ciclos de mercado. El PBO y el DSR de abajo siguen siendo el
+      descuento por múltiples pruebas, pero sobre una muestra con menos variedad de la que tenía el sustrato sintético —
+      y esa era justamente la promesa que el sintético no cumplió (ver <b>Investigación archivada</b>). La evidencia con
+      potencia estadística vive en <span class="mono">data/</span>, no en esta vista.</div>
     <div class="note"><b>Cómo se anualiza el Sharpe.</b> Por número de observaciones al año, y eso depende del mercado:
       cripto cotiza 24/7 (365 barras) y la renta variable solo en sesión (252). Anualizar acciones por 365 inflaba su
       Sharpe y su volatilidad un 20% (<span class="mono">√(365/252)=1,204</span>). El factor lo fija el <b>universo</b>
       —365 en cuanto hay un activo 24/7, porque el backtest recorre la unión de días con barra— y se aplica igual a la
-      estrategia y a sus baselines: comparar dos Sharpe con escalas distintas no significaría nada. Este universo mezcla
-      cripto y renta variable, así que todo lo de esta vista está anualizado por <b>365</b>; las métricas lo reportan en
+      estrategia y a sus baselines: comparar dos Sharpe con escalas distintas no significaría nada. Este universo es
+      cripto puro, así que todo lo de esta vista está anualizado por <b>365</b>; las métricas lo reportan en
       <span class="mono">periods_per_year</span>. El CAGR es aparte: vive en tiempo de calendario (365 días naturales
       para toda clase de activo).</div>
     ${(R.rows&&R.rows.length)?`
@@ -1403,11 +1422,22 @@ function renderRanking(){
     <p class="lead">La columna <b>gate</b> es el veredicto: una estrategia solo <i>aprueba</i> si su CVaR@25% supera al del
       <b>mejor baseline pasivo</b> sobre las mismas muestras. <b>margen</b> es cuánto lo supera; <b>gana</b>, en qué porcentaje
       de muestras bate al mejor rival de ese mundo concreto.</p>
-    <div class="card"><div class="tblwrap"><table><thead><tr><th>#</th><th>Estrategia</th><th>gate</th><th class="num">margen</th><th class="num">gana</th>${statCols}</tr></thead><tbody>
-    ${R.rows.map((r,i)=>`<tr><td class="num">${i+1}</td><td><b>${esc(r.label)}</b> <span class="pill">${esc(r.type)}</span></td>
-      <td><span class="chip ${r.approved?'hecho':'pend'}">${r.approved?'aprueba':'no aprueba'}</span></td>
-      <td class="num">${fmt(r.margin)}</td><td class="num">${fmt(r.win_rate_pct,0)}%</td>${statCells(r)}</tr>`).join('')}
-    </tbody></table></div></div>
+    <div class="card"><div class="tblwrap"><table><thead><tr><th>#</th><th>Estrategia</th><th>gate</th><th class="num">ops/vent.</th><th class="num">margen</th><th class="num">gana</th>${statCols}</tr></thead><tbody>
+    ${R.rows.map((r,i)=>{
+      const why = r.approved?'aprueba':(r.rankable===false?'no rankeable':(r.beats_baselines===false?'no bate':'no aprueba'));
+      return `<tr><td class="num">${i+1}</td><td><b>${esc(r.label)}</b> <span class="pill">${esc(r.type)}</span></td>
+      <td><span class="chip ${r.approved?'hecho':'pend'}">${why}</span></td>
+      <td class="num">${r.trades_per_window==null?'—':fmt(r.trades_per_window,1)}${r.zero_window_pct?' <span class="tag">'+fmt(r.zero_window_pct,0)+'% vacías</span>':''}</td>
+      <td class="num">${fmt(r.margin)}</td><td class="num">${fmt(r.win_rate_pct,0)}%</td>${statCells(r)}</tr>`;}).join('')}
+    </tbody></table></div>
+    <p class="tag" style="margin-top:9px">El gate son <b>dos</b> condiciones, y la columna dice cuál falló: batir al mejor
+      baseline pasivo <b>y</b> superar el suelo de actividad (<span class="mono">no rankeable</span> = opera tan poco que su
+      score mide inactividad, no criterio). Una configuración que no opera puntúa cero exacto, y un cero gana a cualquier
+      pérdida.</p>
+    ${R.rows.length&&R.rows.every(r=>r.cvar25<0)?`<div class="note"><b>Aquí «aprueba» significa perder menos.</b> Todas las
+      configuraciones y todos los baselines tienen CVaR@25% <b>negativo</b> en esta muestra: el peor cuartil de estas cuatro
+      sub-ventanas es malo para todo el mundo, cosa razonable en un tramo que incluye un mercado bajista entero. Batir al
+      pasivo en la cola mala es exactamente lo que el gate pide, y no es lo mismo que ganar dinero.</div>`:''}</div>
     ${bl.length?`
     <h2>Baselines: lo que consigue no hacer nada</h2>
     <p class="lead">Mismas muestras, misma ventana out-of-sample y las mismas comisiones y slippage que paga la estrategia.
@@ -1466,7 +1496,9 @@ function costPanel(C){
     <p class="lead">El deslizamiento <b>no es una constante</b>. Cada fill paga
       <span class="mono">medio spread del símbolo + volatilidad reciente + impacto</span>, y el impacto sigue la
       <b>ley de raíz cuadrada</b> sobre la fracción del volumen de la barra que consume la orden: cuadruplicar el tamaño
-      duplica el coste. Cifras calculadas sobre barras reales de <span class="mono">${esc(C.library)}</span>, en puntos básicos.</p>
+      duplica el coste. Cifras calculadas sobre <b>liquidez real</b> (${esc(C.period||'')}), en puntos básicos. Se calculaban
+      sobre la librería sintética, donde el volumen de cada activo era el que el generador le puso: la capacidad en dólares
+      que salía de aquí describía un mercado inventado.</p>
     <div class="card"><div class="tblwrap"><table>
       <thead><tr><th>Símbolo</th><th class="num">spread base</th><th class="num">vol. diaria</th>${head}<th class="num">capacidad / barra</th></tr></thead>
       <tbody>${C.rows.map(r=>`<tr>
@@ -2199,7 +2231,7 @@ function paperEmpty(P){
 function renderSignalChannel(){
   const host=$('#signalchannel'),S=D.signal_channel;
   if(!S){
-    host.innerHTML=`<p class="crumb">Capítulo 4 · Estrategias</p>
+    host.innerHTML=`<p class="crumb">Capítulo 7 · Investigación archivada</p>
       <h1>Break-even del IC</h1>
       <div class="card"><p class="tag">No hay informe publicado. Genéralo con
       <span class="mono">python -m ai_trader.research.signal_study</span>.</p></div>`;
@@ -2229,8 +2261,9 @@ function renderSignalChannel(){
   const critKeys=[['seleccion','Selección'],['lectura','Lectura'],['batir','Batir'],
                   ['break_even','Break-even'],['control','Control'],['delta','Delta']];
   host.innerHTML=`
-    <p class="crumb">Capítulo 4 · Estrategias</p>
+    <p class="crumb">Capítulo 7 · Investigación archivada</p>
     <h1>Break-even del IC: ¿desde qué capacidad predictiva paga una señal?</h1>
+    <div class="archnote"><b>Investigación archivada.</b> Esta línea se aparcó: el mundo sintético alcanzó la fidelidad que se le pidió y aun así <b>no ordena las estrategias como el mercado</b>, así que dejó de ser criterio de selección. Las cifras de abajo son las medidas y no se tocan — un resultado negativo caro es el que no hay que repetir. El código vive en <span class="mono">ai_trader/research/</span> y no se mantiene.</div>
     <p class="lead">El radar mete diecisiete fuentes en la decisión y su única defensa contra el
       sobreajuste era <b>negativa</b>: nada entra en <span class="mono">search_space</span>, así que el
       optimizador no puede sortear umbrales. Eso limita los grados de libertad pero <b>no mide nada</b>.
@@ -2410,7 +2443,7 @@ function renderPaper(){
   }
 }
 
-const PRIORITY_LABEL={critica:'crítica',alta:'alta',media:'media',baja:'baja',aparcada:'aparcada'};
+const PRIORITY_LABEL={critica:'crítica',alta:'alta',media:'media',baja:'baja',aparcada:'aparcada',retirada:'retirada'};
 
 function roadmapItem(r,i){
   const dep=r.depends?`<span class="tag">depende de #${r.depends}</span>`:'';
@@ -2425,10 +2458,10 @@ function roadmapItem(r,i){
         <span class="chip ${r.impact}">impacto ${esc(r.impact)}</span>${dep}</div>
       ${r.evidence?`<div class="rmev"><b>Evidencia medida:</b> ${esc(r.evidence)}</div>`:''}
       <p class="rmwhy">${esc(r.why)}</p>
-      <details class="pr"><summary>Prompt para Claude Code</summary>
+      ${r.prompt?`<details class="pr"><summary>Prompt para Claude Code</summary>
         <div class="prompt" id="pr_${i}">${esc(r.prompt)}</div>
         <div class="rowbtns"><button class="btn" onclick="copyPrompt(${i},this)">Copiar prompt</button></div>
-      </details>
+      </details>`:''}
     </div>
   </div>`;
 }
@@ -2438,14 +2471,14 @@ function roadmapItem(r,i){
 function limitsPanel(){
   const F=D.fidelity, M=D.market;
   const limits=[
-    ['El diseño con IA no es reproducible',
-      'Los modelos actuales retiraron los parámetros de muestreo: enviar <span class="mono">temperature</span> devuelve error. Lo que se guarda es el artefacto —el <span class="mono">spec.json</span>— no la llamada.'],
     ['El histórico real es un único camino',
-      'Todas las ventanas reales comparten los mismos ciclos de mercado'+(F?' ('+F.real_start+' → '+F.real_end+')':'')+'. Comparar «lo que pasó» con «lo que podría pasar» es una asimetría que solo se puede declarar, no eliminar.'],
-    ['El generador produce el cripto de un año cualquiera, no sus años de manía',
-      'El umbral de aceptación está sobre la <b>mediana</b> de la sección cruzada: perseguir el p90 de curtosis rompería el nivel de volatilidad, que es la propiedad que sostiene todo lo demás.'],
+      'Todas las sub-ventanas comparten los mismos ciclos de mercado'+(F?' ('+F.real_start+' → '+F.real_end+')':'')+'. Comparar «lo que pasó» con «lo que podría pasar» es una asimetría que solo se puede declarar, no eliminar. Generar mundos alternativos era exactamente el intento de eliminarla, y está en <b>Investigación archivada</b>: se consiguió que se parecieran y no se consiguió que ordenaran.'],
+    ['Pocos bloques independientes, y se asume',
+      'El ranking que decide se juega sobre <b>cuatro sub-ventanas de entrenamiento</b> de ese único camino. Eso tiene su propio sobreajuste, y es un riesgo <b>aceptado a propósito</b>: es mejor operar con él y atacarlo con evidencia de calendario que seguir investigando. Lo que no se hace es taparlo — PBO, DSR y el número de unidades efectivas van al lado de cada cifra.'],
+    ['El backtest no puede probar que algo funciona',
+      'Puede descartar: lo que no bate a comprar y aguantar, o no opera lo suficiente para que su score signifique algo, se cae. Aprobar el gate no es una promesa de rentabilidad, es haber sobrevivido a un filtro. La única evidencia que no se puede sobreajustar es el diario del paper trading, y esa se compra con tiempo.'],
     ['Foco cripto',
-      'Toda la evidencia empírica es cripto'+(M?' ('+M.n_symbols+' pares operados)':'')+'. Los stocks <i>sí</i> siguen en el universo sintético —GLD, TLT y UUP son lo que hace que los escenarios de tipos signifiquen algo para cripto vía factores compartidos—, pero se puntúa y se opera solo cripto.'],
+      'Toda la evidencia empírica es cripto'+(M?' ('+M.n_symbols+' pares operados)':'')+'. Renta variable y mercados de predicción tienen proveedor de datos y ninguna estrategia detrás: están aparcados a propósito, no por olvido.'],
   ];
   return `<h2>Los límites que no se van a cerrar</h2>
     <p class="lead">No todo hueco es trabajo pendiente. Estos cuatro son propiedades del enfoque, y se
@@ -2470,11 +2503,15 @@ function renderRoadmap(){
   host.innerHTML=`
     <p class="crumb">Capítulo 6 · Limitaciones y evoluciones</p>
     <h1>Evoluciones pendientes</h1>
-    <p class="lead">Ordenadas <b>de mayor a menor criticidad</b>. El criterio es una asimetría de coste: una
-      estrategia añadida hoy se re-evalúa gratis cuando el juez mejore, pero un juez malo contamina todo lo
-      que puntúe mientras siga malo. Por eso el sustrato y el juez van delante de la cosecha, y el paper
-      trading se lanza en paralelo: es lo único que compra tiempo de calendario. Cada ficha lleva su
-      evidencia medida y un prompt reproducible.</p>
+    <p class="lead">Ordenadas <b>de mayor a menor criticidad</b>. Cada ficha lleva su evidencia medida y un
+      prompt reproducible.</p>
+    <div class="note"><b>El criterio cambió, y con él se caen diez entradas.</b> El anterior era la asimetría
+      de coste del juez —«un juez malo contamina todo lo que puntúe mientras siga malo», así que el sustrato y
+      el juez van delante de la cosecha—. Ese criterio construyó un instrumento excelente y una herramienta que
+      no opera nada. El nuevo es el contrario: <b>poner la herramienta a funcionar</b> sobre datos reales,
+      <b>aceptando el riesgo de sobreajuste</b> que eso trae. Es mejor tener algo corriendo con sobreajuste —y
+      atacarlo después con evidencia de calendario, que es la única que no se puede falsificar— que seguir
+      refinando el juez de un backtest que no decide nada. Lo retirado no se borra: sigue abajo, con el motivo.</div>
     ${limitsPanel()}
     ${groups}`;
 }
@@ -3101,8 +3138,6 @@ SHELL = """
       <li class="chap"><b>2 · Datos</b></li>
       <li><button data-sec="market">Captura de datos reales</button></li>
       <li><button data-sec="signals">Señales externas</button></li>
-      <li><button data-sec="synthetic">Generación sintética</button></li>
-      <li><button data-sec="fidelity">Fidelidad del sintético</button></li>
       <li class="chap"><b>3 · Trade</b></li>
       <li><button data-sec="trade">Cómo se ejecuta un trade</button></li>
       <li><button data-sec="sessions">Sesiones intradía</button></li>
@@ -3111,13 +3146,16 @@ SHELL = """
       <li><button data-sec="ranking">Recompensa y ranking</button></li>
       <li><button data-sec="activity">Suelo de actividad</button></li>
       <li><button data-sec="validation">Validación temporal</button></li>
-      <li><button data-sec="transfer">Ordenación real vs sintético</button></li>
-      <li><button data-sec="signalchannel">Break-even del IC</button></li>
       <li><button data-sec="themes">Capa de señal sobre real</button></li>
       <li class="chap"><b>5 · Resultados</b></li>
       <li><button data-sec="paper">Paper trading</button></li>
       <li class="chap"><b>6 · Limitaciones</b></li>
       <li><button data-sec="roadmap">Evoluciones</button></li>
+      <li class="chap arch"><b>7 · Investigación archivada</b></li>
+      <li><button data-sec="synthetic">Generación sintética</button></li>
+      <li><button data-sec="fidelity">Fidelidad del sintético</button></li>
+      <li><button data-sec="transfer">Ordenación real vs sintético</button></li>
+      <li><button data-sec="signalchannel">Break-even del IC</button></li>
     </ul>
   </aside>
   <main class="main">
@@ -3125,19 +3163,19 @@ SHELL = """
     <section id="overview" class="section active"></section>
     <section id="market" class="section"></section>
     <section id="signals" class="section"></section>
-    <section id="synthetic" class="section"></section>
-    <section id="fidelity" class="section"></section>
     <section id="trade" class="section"></section>
     <section id="sessions" class="section"></section>
     <section id="strategies" class="section"></section>
     <section id="ranking" class="section"></section>
     <section id="activity" class="section"></section>
     <section id="validation" class="section"></section>
-    <section id="transfer" class="section"></section>
-    <section id="signalchannel" class="section"></section>
     <section id="themes" class="section"></section>
     <section id="paper" class="section"></section>
     <section id="roadmap" class="section"></section>
+    <section id="synthetic" class="section"></section>
+    <section id="fidelity" class="section"></section>
+    <section id="transfer" class="section"></section>
+    <section id="signalchannel" class="section"></section>
   </main>
 </div>
 """
