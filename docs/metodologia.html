@@ -64,15 +64,15 @@ figure{margin:14px 0}
 <h1>AI-Trader — Documentación funcional</h1>
 <div class="sub">Cómo funciona la herramienta, con el detalle necesario para replicarla y auditarla.
 Cada decisión de diseño va justificada.</div>
-<div class="meta">Documento vivo · generado desde el commit <span class="mono">6761ca0</span>
-(122 commits)2026-08-20 · se regenera con <span class="mono">python -m docs.build_docs</span>.
+<div class="meta">Documento vivo · generado desde el commit <span class="mono">0612206</span>
+(127 commits)2026-08-20 · se regenera con <span class="mono">python -m docs.build_docs</span>.
 Las cifras marcadas son extraídas del repositorio en el momento de generar este documento.</div>
 
 <div class="toc noprint">
 <b>Contenido</b>
 <ol>
 <li><a href="#s1">Resumen ejecutivo</a></li>
-<li><a href="#s2">Datos</a> — captura real y señales externas</li>
+<li><a href="#s2">Datos</a> — captura real, señales externas y el reporte diario por activo</li>
 <li><a href="#s3">Trade</a> — cómo se ejecuta una operación, qué cuesta y cómo se contabiliza</li>
 <li><a href="#s4">Estrategias</a> — recompensa, ordenación y validación</li>
 <li><a href="#s5">Resultados</a></li>
@@ -184,10 +184,16 @@ la fuente clásica de sorpresas en producción (§3.1).</div>
 
 <h2 id="s2">2 · Datos</h2>
 <p class="lead">La calidad de todo lo demás depende de la calidad del sustrato de datos, así que la
-auditoría empieza aquí y no por el código. Hay tres sustratos y conviene no confundirlos: el
-<b>mercado real</b> (§2.1), las <b>señales externas</b> (§2.2) y los <b>mundos sintéticos</b> (§2.3–2.8).
-Los dos últimos existen porque el primero es escaso: un único camino de la historia, y sólo el que
-ocurrió.</p>
+auditoría empieza aquí y no por el código. Hay <b>cuatro</b> sustratos y conviene no confundirlos: el
+<b>mercado real</b> (§2.1), las <b>señales externas</b> capturadas contra APIs (§2.2), el <b>reporte
+diario por activo</b> que escribe un agente externo leyendo la web (§2.3) y los <b>mundos
+sintéticos</b>, que se llevaron hasta el final, fallaron la transferencia y viven desde entonces en el
+capítulo 7. Los tres últimos existen porque el primero es escaso: un único camino de la historia, y
+sólo el que ocurrió.</p>
+<p>Los dos de captura externa se parecen menos de lo que sugiere el nombre, y el orden en que se leen
+importa. §2.2 va contra APIs, devuelve <b>números</b> y ya está cableado al espacio de observación.
+§2.3 lo ejecuta un agente fuera de este repo, devuelve <b>categorías</b> y hoy <b>no llega al
+motor</b>: se captura porque el pasado no se puede descargar, no porque el sistema lo use.</p>
 
 
 <h3>2.1 · Captura de datos reales</h3>
@@ -546,6 +552,143 @@ permisivos: son <b>imposibles de activar</b>, porque el tono vive en ±4.0 y la 
 intervalo. Es la mejora concreta sobre <span class="mono">min_relative_strength = −1.0</span>, que se
 documentó como «sin filtro» sin serlo: la fuerza relativa no está acotada y un −1.0 es alcanzable.</div>
 
+
+
+<h3>2.3 · Reporte diario por activo: 37 preguntas categóricas</h3>
+<p>La <b>segunda vía de captura</b>, y de otra naturaleza que la de §2.2. Aquélla va contra APIs y
+devuelve <b>números</b>; ésta la ejecuta un <b>agente externo</b> (Claude Cowork) todas las mañanas a
+las <b>08:00 Europe/Madrid</b>, lee fuentes públicas de la web y devuelve <b>categorías</b>:
+37 preguntas por activo sobre los 24 del universo declarado en
+<span class="mono">config/assets.json</span>. No comparte una línea de código con la otra —no toca
+<span class="mono">SignalStore</span>, no pasa por <span class="mono">normalize.py</span> y no entra
+en el radar—, así que se documenta aparte y no como una fuente más del catálogo.</p>
+
+<h4>2.3.1 · La hora de corte, que es lo que hace point-in-time al dato</h4>
+<p>Se declara <b>antes de buscar nada</b> —06:00Z por defecto— y a partir de ahí rige una sola regla:
+se descarta toda fuente publicada después, <i>aunque el buscador la devuelva primero y aunque
+contenga justo el dato que se busca</i>.</p>
+<div class="why"><b>Por qué no es negociable.</b> Un artículo publicado a las 19:00 puede contener el
+cierre del día. Usarlo para «predecir» ese día es contaminación de <i>look-ahead</i>, y produce un
+backtest espectacular con un live plano. El problema es que <b>no se detecta a posteriori</b>: una
+vez la categoría está en el fichero, nada la distingue de una honesta. Por eso cada respuesta lleva
+<span class="mono">fuente_ts</span> y cada fuente su fecha de publicación — para que el filtro se
+pueda volver a aplicar en el entrenamiento aunque algún día se cuele algo. Si un dato sólo existe en
+fuentes posteriores al corte, la respuesta correcta es <span class="mono">sin_datos</span>.</div>
+
+<h4>2.3.2 · Primero se mide, después se narra</h4>
+<p>Es la inversión que define la versión 2 del cuestionario. En la 1 el agente escribía el reporte y
+después respondía <i>usando exclusivamente el reporte que acababa de escribir</i>. Eso no medía el
+mercado: <b>medía al redactor</b>. Varias preguntas acababan siendo funciones deterministas de la
+prosa — una contaba ítems de una lista que redactaba el propio agente, o sea <b>verbosidad</b>; otra
+premiaba con +1 que el reporte <b>omitiese</b> los eventos macro.</p>
+<p>Hoy las dos salidas se derivan de la <b>misma captura numérica</b>
+(<span class="mono">_medidas/medidas_&#123;TICKER&#125;.json</span>, 36 métricas con
+<span class="mono">&#123;v, unidad, fuente, url, ts&#125;</span>), escrita <b>antes</b> que una sola
+frase del HTML. Ese fichero es lo que hace verificable el orden: sin él, nada distingue «medí y luego
+narré» de «narré y luego rellené los números para que cuadraran». De las 37
+preguntas, <b>14</b> son de medición pura —la opción sale de aplicar una
+derivación declarada al número, mecánicamente, sin juicio—, <b>5</b> son
+juicio narrativo y <b>18</b> admiten cualquier fuente fechada y anterior
+al corte, esté o no en el reporte. Esas últimas son las que rompen la circularidad.</p>
+<table><thead><tr><th>Sección del cuestionario</th><th class=n>Preguntas</th></tr></thead><tbody><tr><td class=mono>coste_y_riesgo_de_posicion</td><td class=n mono>5</td></tr><tr><td class=mono>precio</td><td class=n mono>4</td></tr><tr><td class=mono>contexto_mercado</td><td class=n mono>4</td></tr><tr><td class=mono>whales</td><td class=n mono>4</td></tr><tr><td class=mono>tecnico</td><td class=n mono>4</td></tr><tr><td class=mono>institucional</td><td class=n mono>3</td></tr><tr><td class=mono>derivados</td><td class=n mono>3</td></tr><tr><td class=mono>noticias</td><td class=n mono>2</td></tr><tr><td class=mono>sentimiento</td><td class=n mono>2</td></tr><tr><td class=mono>riesgo</td><td class=n mono>2</td></tr><tr><td class=mono>oferta</td><td class=n mono>2</td></tr><tr><td class=mono>regulacion</td><td class=n mono>1</td></tr><tr><td class=mono>resumen</td><td class=n mono>1</td></tr></tbody></table>
+<p>Suman <b>29</b> de 37. Las 8 restantes
+(P16, P25, P30, P31, P32, P33, P34, P35) son <b>estado descriptivo</b> o el <b>benchmark</b> del
+redactor: sumar el RSI o el funding sería afirmar una interpretación —contrarian o no— que le toca al
+modelo y no al fichero. Y la agregada del día lleva
+<span class="mono">usar_en_entrenamiento: false</span> escrito dentro: suma peras con manzanas con
+pesos implícitos iguales.</p>
+
+<h4>2.3.3 · La máscara: <span class="mono">sin_datos</span> y <span class="mono">no_aplica</span>
+son cosas opuestas</h4>
+<p><span class="mono">sin_datos</span> es «la métrica existe para este activo y no se encontró»;
+<span class="mono">no_aplica</span> es «no existe» —sin producto cotizado, sin derivados, sin
+opciones, oferta ya circulante—. En la versión 1 las dos valían <b>0</b> y colisionaban además con el
+0 legítimo de «flujos planos», que significa lo contrario. Ahora ambas valen
+<span class="mono">null</span> y se distinguen por <span class="mono">estado</span>, que junto a
+<span class="mono">disponible</span> forma la máscara del dataset.</p>
+<div class="why"><b>Quién puede decir <span class="mono">no_aplica</span> no lo decide el agente.</b>
+Lo decide <span class="mono">config/assets.json</span>, que hoy declara <b>10</b>
+activos con producto cotizado, <b>1</b> sin él y
+<b>13</b> como <span class="mono">desconocido</span>. Y
+<span class="mono">desconocido</span> <b>no</b> habilita <span class="mono">no_aplica</span>: obliga a
+<span class="mono">sin_datos</span>, porque un hueco de verificación no es un «no existe». La
+distinción es la que impide que la pereza de comprobar se cuele en el dataset como un hecho.</div>
+
+<h4>2.3.4 · El ancla, y unas etiquetas que todavía nadie rellena</h4>
+<p>Todo lo demás de una ejecución se puede volver a mirar más tarde y con mejor criterio. El
+<b>precio a la hora de corte</b>, no: si no se guardó como número, no hay forma de calcular a
+posteriori qué pasó después, y el día entero deja de servir como dato de entrenamiento por bueno que
+fuese el cuestionario. Fue el fallo grueso de la versión 1 — el precio nunca se guardaba como número,
+así que <b>cada día que pasaba era un día perdido</b>. Hoy cada fichero de respuestas abre con
+<span class="mono">ancla</span>: precio, sello UTC, par, exchange de referencia y número de fuentes
+contrastadas, que debe ser <b>≥ 2</b>; si discrepan se guarda el <b>rango</b> y nunca un promedio,
+porque en una sesión direccional dos cifras separadas por varios puntos suelen ser <b>cronología, no
+error</b>.</p>
+<p>Sobre ese ancla se escribe cada día <span class="mono">etiquetas_&#123;FECHA&#125;.json</span>, con
+los 13 campos de resultado declarados y <b>todos a
+<span class="mono">null</span></b>: <span class="mono">ancla_precio_usd</span>, <span class="mono">ancla_ts_utc</span>, <span class="mono">ret_1d</span>, <span class="mono">ret_3d</span>, <span class="mono">ret_7d</span>, <span class="mono">ret_14d</span>, <span class="mono">vol_realizada_14d</span>, <span class="mono">mfe_14d</span>, <span class="mono">mae_14d</span>, <span class="mono">coste_funding_14d</span>, <span class="mono">ret_14d_neto</span>, <span class="mono">ret_14d_exceso_btc</span>, <span class="mono">completo</span>.</p>
+<div class="note"><b>El proceso que los rellena a T+14 no existe, y se dejó fuera a propósito.</b> Es
+cálculo numérico sobre datos de mercado y, por la Regla 4 del proyecto, eso <b>no es un cambio
+mecánico</b>: improvisarlo dentro de una iteración de esquema es exactamente cómo se cuela un error
+de horizonte que después nadie encuentra. Mientras no exista, el fichero sigue sirviendo, porque lo
+que salva el día es el ancla. Dos decisiones de ese esquema conviene justificarlas ya:
+<b>MFE/MAE</b>, porque un corto que acaba en +0 % pero que pasó por −18 % te liquida antes de tener
+razón —el retorno final no lo captura y el MAE sí—; y el <b>exceso sobre BTC</b>, porque casi todo el
+universo tiene beta alta contra BTC y una etiqueta de retorno absoluto premia acertar la dirección
+del mercado, que es una apuesta distinta y ya disponible mucho más barata.</div>
+
+<!--LIVE-->
+<h4>2.3.5 · Lo que midió la última ejecución</h4>
+<p>Las cifras de este apartado <b>no son evidencia commiteada</b>:
+<span class="mono">data/signals_raw/</span> está entero en el
+<span class="mono">.gitignore</span>, así que no existen en un clon recién hecho y cambian solas cada
+mañana. Se incluyen porque un contrato sin una sola ejecución detrás no demuestra que el pipeline
+corra; lo que se congela en la caracterización es el contrato de los apartados anteriores.</p>
+<p>Día <b>2026-08-21</b>, con corte <b>2026-08-21T06:00:00Z</b>: <b>24</b> de
+24 activos con el <b>trío completo</b> —reporte, respuestas y medidas—, sobre
+<b>2</b> días capturados desde
+2026-08-20. Cobertura media de sumables <b>59,63 %</b>, entre
+48,28 % y 72,41 %.</p>
+<table><thead><tr><th>Ticker</th><th class=n>Media</th><th class=n>Lectura</th><th class=n>Cobertura</th><th class=n>Pct. media</th><th class=n>Pct. cob.</th><th class=n>P30</th><th class=n>Ancla USD</th></tr></thead><tbody><tr><td class=mono>XRP</td><td class=n mono>1,3529</td><td class=n mono>muy_alcista</td><td class=n mono>58,62 %</td><td class=n mono>100,0</td><td class=n mono>47,8</td><td class=n mono>alcista</td><td class=n mono>1,2900</td></tr><tr><td class=mono>LINK</td><td class=n mono>1,2105</td><td class=n mono>muy_alcista</td><td class=n mono>65,52 %</td><td class=n mono>95,7</td><td class=n mono>71,7</td><td class=n mono>alcista</td><td class=n mono>10,6000</td></tr><tr><td class=mono>ADA</td><td class=n mono>1,1429</td><td class=n mono>muy_alcista</td><td class=n mono>48,28 %</td><td class=n mono>91,3</td><td class=n mono>2,2</td><td class=n mono>alcista</td><td class=n mono>0,1960</td></tr><tr><td class=mono>AAVE</td><td class=n mono>1,1000</td><td class=n mono>muy_alcista</td><td class=n mono>68,97 %</td><td class=n mono>87,0</td><td class=n mono>84,8</td><td class=n mono>alcista</td><td class=n mono>100,9500</td></tr><tr><td class=mono>AVAX</td><td class=n mono>1,0667</td><td class=n mono>muy_alcista</td><td class=n mono>51,72 %</td><td class=n mono>82,6</td><td class=n mono>19,6</td><td class=n mono>alcista</td><td class=n mono>7,2000</td></tr><tr><td class=mono>INJ</td><td class=n mono>1,0556</td><td class=n mono>muy_alcista</td><td class=n mono>62,07 %</td><td class=n mono>78,3</td><td class=n mono>60,9</td><td class=n mono>alcista</td><td class=n mono>4,8100</td></tr><tr><td class=mono>BTC</td><td class=n mono>1,0476</td><td class=n mono>muy_alcista</td><td class=n mono>72,41 %</td><td class=n mono>73,9</td><td class=n mono>97,8</td><td class=n mono>alcista</td><td class=n mono>74 700,0000</td></tr><tr><td class=mono>DOGE</td><td class=n mono>1,0000</td><td class=n mono>muy_alcista</td><td class=n mono>48,28 %</td><td class=n mono>65,2</td><td class=n mono>2,2</td><td class=n mono>alcista</td><td class=n mono>0,0816</td></tr><tr><td class=mono>LTC</td><td class=n mono>1,0000</td><td class=n mono>muy_alcista</td><td class=n mono>51,72 %</td><td class=n mono>65,2</td><td class=n mono>19,6</td><td class=n mono>alcista</td><td class=n mono>47,9200</td></tr><tr><td class=mono>UNI</td><td class=n mono>1,0000</td><td class=n mono>muy_alcista</td><td class=n mono>55,17 %</td><td class=n mono>65,2</td><td class=n mono>37,0</td><td class=n mono>alcista</td><td class=n mono>3,8100</td></tr><tr><td class=mono>ETH</td><td class=n mono>0,9524</td><td class=n mono>alcista</td><td class=n mono>72,41 %</td><td class=n mono>56,5</td><td class=n mono>97,8</td><td class=n mono>alcista</td><td class=n mono>2 354,0000</td></tr><tr><td class=mono>SOL</td><td class=n mono>0,9412</td><td class=n mono>alcista</td><td class=n mono>58,62 %</td><td class=n mono>50,0</td><td class=n mono>47,8</td><td class=n mono>alcista</td><td class=n mono>89,1400</td></tr><tr><td class=mono>BNB</td><td class=n mono>0,9412</td><td class=n mono>alcista</td><td class=n mono>58,62 %</td><td class=n mono>50,0</td><td class=n mono>47,8</td><td class=n mono>alcista</td><td class=n mono>631,0300</td></tr><tr><td class=mono>ARB</td><td class=n mono>0,9333</td><td class=n mono>alcista</td><td class=n mono>51,72 %</td><td class=n mono>43,5</td><td class=n mono>19,6</td><td class=n mono>alcista</td><td class=n mono>0,0907</td></tr><tr><td class=mono>SUI</td><td class=n mono>0,9000</td><td class=n mono>alcista</td><td class=n mono>68,97 %</td><td class=n mono>39,1</td><td class=n mono>84,8</td><td class=n mono>alcista</td><td class=n mono>0,7697</td></tr><tr><td class=mono>DOT</td><td class=n mono>0,8667</td><td class=n mono>alcista</td><td class=n mono>51,72 %</td><td class=n mono>32,6</td><td class=n mono>19,6</td><td class=n mono>alcista</td><td class=n mono>0,8320</td></tr><tr><td class=mono>APT</td><td class=n mono>0,8667</td><td class=n mono>alcista</td><td class=n mono>51,72 %</td><td class=n mono>32,6</td><td class=n mono>19,6</td><td class=n mono>alcista</td><td class=n mono>0,5810</td></tr><tr><td class=mono>NEAR</td><td class=n mono>0,8000</td><td class=n mono>alcista</td><td class=n mono>51,72 %</td><td class=n mono>26,1</td><td class=n mono>19,6</td><td class=n mono>alcista</td><td class=n mono>1,7300</td></tr><tr><td class=mono>ETC</td><td class=n mono>0,7778</td><td class=n mono>alcista</td><td class=n mono>62,07 %</td><td class=n mono>21,7</td><td class=n mono>60,9</td><td class=n mono>neutral</td><td class=n mono>7,0840</td></tr><tr><td class=mono>SEI</td><td class=n mono>0,7000</td><td class=n mono>alcista</td><td class=n mono>68,97 %</td><td class=n mono>17,4</td><td class=n mono>84,8</td><td class=n mono>neutral</td><td class=n mono>0,0445</td></tr><tr><td class=mono>ATOM</td><td class=n mono>0,6875</td><td class=n mono>alcista</td><td class=n mono>55,17 %</td><td class=n mono>13,0</td><td class=n mono>37,0</td><td class=n mono>alcista</td><td class=n mono>1,5200</td></tr><tr><td class=mono>FIL</td><td class=n mono>0,6667</td><td class=n mono>alcista</td><td class=n mono>62,07 %</td><td class=n mono>8,7</td><td class=n mono>60,9</td><td class=n mono>neutral</td><td class=n mono>0,7560</td></tr><tr><td class=mono>OP</td><td class=n mono>0,5789</td><td class=n mono>alcista</td><td class=n mono>65,52 %</td><td class=n mono>4,3</td><td class=n mono>71,7</td><td class=n mono>neutral</td><td class=n mono>0,0979</td></tr><tr><td class=mono>TIA</td><td class=n mono>0,4500</td><td class=n mono>alcista</td><td class=n mono>68,97 %</td><td class=n mono>0,0</td><td class=n mono>84,8</td><td class=n mono>neutral</td><td class=n mono>0,3468</td></tr></tbody></table>
+<div class="why"><b>El primer sesgo a vigilar no es la media: es que la cobertura la explique.</b>
+Los huecos <b>no son aleatorios</b> —faltan más en <i>small caps</i> y en días volátiles, justo donde
+más importa—, así que si la cobertura correlacionase con la puntuación, el ranking del día estaría
+midiendo <b>cuánto se pudo medir</b> de cada activo y no cuánto favorable es. El propio resumen lo
+calcula: Pearson <b>-0,1917</b> y Spearman
+<b>-0,1382</b>. Lo que tranquiliza es la <b>magnitud</b>: con |ρ| por
+debajo de 0,20 la cobertura no manda en el orden del día. Lo que <b>no</b> tranquiliza es el
+<b>signo</b>, y no debe venderse como buena noticia — negativo significa que los mejor puntuados
+tienden a ser los <i>menos</i> medidos, que es la dirección incómoda: puntúa más alto aquello de lo
+que menos se sabe. En la tabla se ve en las filas con percentil de media alto y percentil de
+cobertura bajo. Con 2 días de historia y 24 activos eso
+no es un resultado sino una <b>lectura</b>: fija la cifra que hay que seguir mirando, y el día que
+|ρ| suba, el ranking del día deja de significar lo que dice.</div>
+<!--/LIVE-->
+
+<h4>2.3.6 · Lo que este pipeline no promete</h4>
+<p>Está <b>capturado, no conectado</b>: ni una línea del paquete lee todavía
+<span class="mono">data/signals_raw/ai_reports/</span>. No hay adaptador, no hay feature en el radar y
+nada de esto llega al motor. Se captura desde ya por el mismo motivo que las fuentes
+<span class="mono">forward_capture</span> de §2.2 —el pasado no se puede descargar, y cada día sin
+capturar es profundidad que no se recupera ni pagando—, pero no debe leerse como una capacidad del
+sistema. Hoy es un archivo que crece. Y quedan tres cosas que ningún cambio de esquema resuelve:</p>
+<ul>
+<li><b>Acuerdo entre anotadores desconocido.</b> Con temperatura no nula y búsqueda web no
+determinista, dos ejecuciones del mismo día dan respuestas distintas. Pasar el mismo HTML por el
+cuestionario cinco veces y medir el <b>alfa de Krippendorff</b> por pregunta daría el <b>techo de
+señal</b> de cada columna. No se ha hecho. Se espera que las duras salgan muy bien y que las
+5 de juicio narrativo salgan mal.</li>
+<li><b>N efectivo minúsculo.</b> Horizonte de 14 días con observación diaria significa ventanas
+<b>solapadas</b>: 250 días por activo son <b>~18 periodos independientes</b>, no 250. Contra eso hay
+29 variables sumables fuertemente correlacionadas y uno o dos regímenes de mercado en
+todo el año. Cualquier validación que trate las filas como independientes inflará la significación —
+la misma trampa que §4.8 documenta para el backtest, y aquí con menos margen.</li>
+<li><b>El baseline barato.</b> Antes de dar por buenas 37 preguntas de LLM hay que
+entrenar con <span class="mono">[ret_24h, ret_7d, funding, vol_realizada]</span> — exactos, gratis y
+point-in-time. Si el cuestionario no bate eso de forma robusta, el pipeline <b>no se paga</b>. Es la
+misma pregunta que hundió al sustrato sintético del capítulo 7: que una cosa sea fiel no significa
+que <b>ordene</b>.</li>
+</ul>
 
 <table><thead><tr><th>Factor</th><th>Interpretación</th></tr></thead><tbody><tr><td class=mono>EQUITY</td><td>Broad equity risk appetite. Positive on risk-on days, negative on risk-off.</td></tr><tr><td class=mono>RATES</td><td>Interest rates / bond yields. Positive = yields rising (hawkish, bonds fall).</td></tr><tr><td class=mono>USD</td><td>US dollar strength. Positive = stronger dollar (headwind for crypto/commodities).</td></tr><tr><td class=mono>COMMODITY</td><td>Real assets / commodities (oil, gold). Positive = commodities rally.</td></tr><tr><td class=mono>CRYPTO</td><td>Crypto-specific beta (adoption, on-chain flows, regulation shocks).</td></tr></tbody></table>
 <p>Las <b>betas son fijas</b> por activo (estructura estable que no cambia entre escenarios); los
@@ -1910,7 +2053,7 @@ solo declarar.</div>
 reproducible con <span class="mono">python -m ai_trader.research.fidelity_study</span>
 (30 escenarios × 5 caminos; 2026-08-10).</p>
 <h3>7.9 · Qué garantizan los tests sobre los datos</h3>
-<p>La base cuenta con <b>910 tests</b> automatizados y <i>linting</i> (ruff) sobre todo el código.
+<p>La base cuenta con <b>924 tests</b> automatizados y <i>linting</i> (ruff) sobre todo el código.
 Más allá del número importa <b>qué</b> se garantiza, así que la lista va repartida por capítulos: aquí los
 invariantes del sustrato, en §3.10 los de una operación y en §4.15 los del ranking.</p>
 <ul>
@@ -2177,5 +2320,5 @@ agrupamiento de volatilidad, autocorrelación) que un buen simulador debe reprod
 <li><b>Forward capture:</b> fuente cuyo pasado nadie publica: su profundidad histórica sólo crece
 capturando, un día por día real.</li>
 </ul>
-<p class="meta">Fin del documento · AI-Trader · commit <span class="mono">6761ca0</span>.</p>
+<p class="meta">Fin del documento · AI-Trader · commit <span class="mono">0612206</span>.</p>
 </div></body></html>

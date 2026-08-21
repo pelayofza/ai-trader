@@ -1883,6 +1883,197 @@ reproducible con <span class="mono">python -m ai_trader.research.transfer_study 
 if t["is_fallback"] else ""}; {t["generated_at"]}).</p>"""
 
 
+def _ai_reports_block(a):
+    """Seccion 2.3: el reporte diario por activo, escrito por un agente externo.
+
+    Va detras de las senales externas (§2.2) porque es la SEGUNDA via de captura y no una
+    variante de la primera: aquella va contra APIs y devuelve numeros; esta la ejecuta un
+    agente fuera del repo, lee la web y devuelve categorias.
+
+    La prosa que gasta cifras de la ULTIMA EJECUCION va marcada con <!--LIVE--> y la
+    caracterizacion la enmascara. El generador marca la region volatil al emitirla en vez
+    de que el scrubber adivine sus bordes con una expresion regular sobre prosa -- misma
+    decision que en la seccion 5.4 del diario en vivo."""
+    if not a:
+        return ""
+
+    c, run = a["contract"], a.get("last_run")
+    u, origins = c["universe"], c["by_origin"]
+    listed = u["listed_product"]
+    n_not_sumable = c["n_questions"] - c["n_sumable"]
+
+    sections = _rows(
+        [(s["key"], s["n"]) for s in c["sections"]],
+        ["Sección del cuestionario", "Preguntas"],
+    )
+
+    if run:
+        rows = _rows(
+            [
+                (
+                    r["ticker"],
+                    _n(r["mean"], 4),
+                    r["reading"],
+                    _n(r["coverage_pct"], 2) + " %",
+                    _n(r["pct_mean"], 1),
+                    _n(r["pct_coverage"], 1),
+                    r["p30"],
+                    _n(r["anchor_usd"], 4),
+                )
+                for r in run["rows"]
+            ],
+            # Los dos percentiles van juntos y a proposito: es donde se ve el sesgo de
+            # cobertura fila a fila, que es lo que la advertencia de debajo afirma.
+            ["Ticker", "Media", "Lectura", "Cobertura", "Pct. media", "Pct. cob.", "P30",
+             "Ancla USD"],
+        )
+        dias = run["n_days_captured"]
+        live = f"""
+<!--LIVE-->
+<h4>2.3.5 · Lo que midió la última ejecución</h4>
+<p>Las cifras de este apartado <b>no son evidencia commiteada</b>:
+<span class="mono">data/signals_raw/</span> está entero en el
+<span class="mono">.gitignore</span>, así que no existen en un clon recién hecho y cambian solas cada
+mañana. Se incluyen porque un contrato sin una sola ejecución detrás no demuestra que el pipeline
+corra; lo que se congela en la caracterización es el contrato de los apartados anteriores.</p>
+<p>Día <b>{run["date"]}</b>, con corte <b>{run["cutoff_utc"]}</b>: <b>{run["n_complete"]}</b> de
+{run["n_assets"]} activos con el <b>trío completo</b> —reporte, respuestas y medidas—, sobre
+<b>{dias}</b> día{"" if dias == 1 else "s"} capturado{"" if dias == 1 else "s"} desde
+{run["first_date"]}. Cobertura media de sumables <b>{_n(run["coverage_mean_pct"], 2)} %</b>, entre
+{_n(run["coverage_min_pct"], 2)} % y {_n(run["coverage_max_pct"], 2)} %.</p>
+{rows}
+<div class="why"><b>El primer sesgo a vigilar no es la media: es que la cobertura la explique.</b>
+Los huecos <b>no son aleatorios</b> —faltan más en <i>small caps</i> y en días volátiles, justo donde
+más importa—, así que si la cobertura correlacionase con la puntuación, el ranking del día estaría
+midiendo <b>cuánto se pudo medir</b> de cada activo y no cuánto favorable es. El propio resumen lo
+calcula: Pearson <b>{_n(run["coverage_bias_pearson"], 4)}</b> y Spearman
+<b>{_n(run["coverage_bias_spearman"], 4)}</b>. Lo que tranquiliza es la <b>magnitud</b>: con |ρ| por
+debajo de 0,20 la cobertura no manda en el orden del día. Lo que <b>no</b> tranquiliza es el
+<b>signo</b>, y no debe venderse como buena noticia — negativo significa que los mejor puntuados
+tienden a ser los <i>menos</i> medidos, que es la dirección incómoda: puntúa más alto aquello de lo
+que menos se sabe. En la tabla se ve en las filas con percentil de media alto y percentil de
+cobertura bajo. Con {dias} día{"" if dias == 1 else "s"} de historia y {run["n_assets"]} activos eso
+no es un resultado sino una <b>lectura</b>: fija la cifra que hay que seguir mirando, y el día que
+|ρ| suba, el ranking del día deja de significar lo que dice.</div>
+<!--/LIVE-->"""
+    else:
+        live = """
+<h4>2.3.5 · Lo que midió la última ejecución</h4>
+<p>No hay ninguna captura en este clon, y <b>no es un fallo</b>:
+<span class="mono">data/signals_raw/</span> está en el <span class="mono">.gitignore</span>. El
+contrato de los apartados anteriores está entero y la primera ejecución escribe la carpeta del día.</p>"""
+
+    return f"""
+<h3>2.3 · Reporte diario por activo: {c["n_questions"]} preguntas categóricas</h3>
+<p>La <b>segunda vía de captura</b>, y de otra naturaleza que la de §2.2. Aquélla va contra APIs y
+devuelve <b>números</b>; ésta la ejecuta un <b>agente externo</b> (Claude Cowork) todas las mañanas a
+las <b>08:00 Europe/Madrid</b>, lee fuentes públicas de la web y devuelve <b>categorías</b>:
+{c["n_questions"]} preguntas por activo sobre los {u["n_assets"]} del universo declarado en
+<span class="mono">config/assets.json</span>. No comparte una línea de código con la otra —no toca
+<span class="mono">SignalStore</span>, no pasa por <span class="mono">normalize.py</span> y no entra
+en el radar—, así que se documenta aparte y no como una fuente más del catálogo.</p>
+
+<h4>2.3.1 · La hora de corte, que es lo que hace point-in-time al dato</h4>
+<p>Se declara <b>antes de buscar nada</b> —06:00Z por defecto— y a partir de ahí rige una sola regla:
+se descarta toda fuente publicada después, <i>aunque el buscador la devuelva primero y aunque
+contenga justo el dato que se busca</i>.</p>
+<div class="why"><b>Por qué no es negociable.</b> Un artículo publicado a las 19:00 puede contener el
+cierre del día. Usarlo para «predecir» ese día es contaminación de <i>look-ahead</i>, y produce un
+backtest espectacular con un live plano. El problema es que <b>no se detecta a posteriori</b>: una
+vez la categoría está en el fichero, nada la distingue de una honesta. Por eso cada respuesta lleva
+<span class="mono">fuente_ts</span> y cada fuente su fecha de publicación — para que el filtro se
+pueda volver a aplicar en el entrenamiento aunque algún día se cuele algo. Si un dato sólo existe en
+fuentes posteriores al corte, la respuesta correcta es <span class="mono">sin_datos</span>.</div>
+
+<h4>2.3.2 · Primero se mide, después se narra</h4>
+<p>Es la inversión que define la versión 2 del cuestionario. En la 1 el agente escribía el reporte y
+después respondía <i>usando exclusivamente el reporte que acababa de escribir</i>. Eso no medía el
+mercado: <b>medía al redactor</b>. Varias preguntas acababan siendo funciones deterministas de la
+prosa — una contaba ítems de una lista que redactaba el propio agente, o sea <b>verbosidad</b>; otra
+premiaba con +1 que el reporte <b>omitiese</b> los eventos macro.</p>
+<p>Hoy las dos salidas se derivan de la <b>misma captura numérica</b>
+(<span class="mono">_medidas/medidas_&#123;TICKER&#125;.json</span>, 36 métricas con
+<span class="mono">&#123;v, unidad, fuente, url, ts&#125;</span>), escrita <b>antes</b> que una sola
+frase del HTML. Ese fichero es lo que hace verificable el orden: sin él, nada distingue «medí y luego
+narré» de «narré y luego rellené los números para que cuadraran». De las {c["n_questions"]}
+preguntas, <b>{origins.get("medicion", 0)}</b> son de medición pura —la opción sale de aplicar una
+derivación declarada al número, mecánicamente, sin juicio—, <b>{origins.get("reporte", 0)}</b> son
+juicio narrativo y <b>{origins.get("cualquiera", 0)}</b> admiten cualquier fuente fechada y anterior
+al corte, esté o no en el reporte. Esas últimas son las que rompen la circularidad.</p>
+{sections}
+<p>Suman <b>{c["n_sumable"]}</b> de {c["n_questions"]}. Las {n_not_sumable} restantes
+({", ".join(c["excluded_from_sum"])}) son <b>estado descriptivo</b> o el <b>benchmark</b> del
+redactor: sumar el RSI o el funding sería afirmar una interpretación —contrarian o no— que le toca al
+modelo y no al fichero. Y la agregada del día lleva
+<span class="mono">usar_en_entrenamiento: false</span> escrito dentro: suma peras con manzanas con
+pesos implícitos iguales.</p>
+
+<h4>2.3.3 · La máscara: <span class="mono">sin_datos</span> y <span class="mono">no_aplica</span>
+son cosas opuestas</h4>
+<p><span class="mono">sin_datos</span> es «la métrica existe para este activo y no se encontró»;
+<span class="mono">no_aplica</span> es «no existe» —sin producto cotizado, sin derivados, sin
+opciones, oferta ya circulante—. En la versión 1 las dos valían <b>0</b> y colisionaban además con el
+0 legítimo de «flujos planos», que significa lo contrario. Ahora ambas valen
+<span class="mono">null</span> y se distinguen por <span class="mono">estado</span>, que junto a
+<span class="mono">disponible</span> forma la máscara del dataset.</p>
+<div class="why"><b>Quién puede decir <span class="mono">no_aplica</span> no lo decide el agente.</b>
+Lo decide <span class="mono">config/assets.json</span>, que hoy declara <b>{listed.get("si", 0)}</b>
+activos con producto cotizado, <b>{listed.get("no", 0)}</b> sin él y
+<b>{listed.get("desconocido", 0)}</b> como <span class="mono">desconocido</span>. Y
+<span class="mono">desconocido</span> <b>no</b> habilita <span class="mono">no_aplica</span>: obliga a
+<span class="mono">sin_datos</span>, porque un hueco de verificación no es un «no existe». La
+distinción es la que impide que la pereza de comprobar se cuele en el dataset como un hecho.</div>
+
+<h4>2.3.4 · El ancla, y unas etiquetas que todavía nadie rellena</h4>
+<p>Todo lo demás de una ejecución se puede volver a mirar más tarde y con mejor criterio. El
+<b>precio a la hora de corte</b>, no: si no se guardó como número, no hay forma de calcular a
+posteriori qué pasó después, y el día entero deja de servir como dato de entrenamiento por bueno que
+fuese el cuestionario. Fue el fallo grueso de la versión 1 — el precio nunca se guardaba como número,
+así que <b>cada día que pasaba era un día perdido</b>. Hoy cada fichero de respuestas abre con
+<span class="mono">ancla</span>: precio, sello UTC, par, exchange de referencia y número de fuentes
+contrastadas, que debe ser <b>≥ 2</b>; si discrepan se guarda el <b>rango</b> y nunca un promedio,
+porque en una sesión direccional dos cifras separadas por varios puntos suelen ser <b>cronología, no
+error</b>.</p>
+<p>Sobre ese ancla se escribe cada día <span class="mono">etiquetas_&#123;FECHA&#125;.json</span>, con
+los {len(c["labels"]["fields"])} campos de resultado declarados y <b>todos a
+<span class="mono">null</span></b>: {", ".join(f'<span class="mono">{f}</span>' for f in c["labels"]["fields"])}.</p>
+<div class="note"><b>El proceso que los rellena a T+14 no existe, y se dejó fuera a propósito.</b> Es
+cálculo numérico sobre datos de mercado y, por la Regla 4 del proyecto, eso <b>no es un cambio
+mecánico</b>: improvisarlo dentro de una iteración de esquema es exactamente cómo se cuela un error
+de horizonte que después nadie encuentra. Mientras no exista, el fichero sigue sirviendo, porque lo
+que salva el día es el ancla. Dos decisiones de ese esquema conviene justificarlas ya:
+<b>MFE/MAE</b>, porque un corto que acaba en +0 % pero que pasó por −18 % te liquida antes de tener
+razón —el retorno final no lo captura y el MAE sí—; y el <b>exceso sobre BTC</b>, porque casi todo el
+universo tiene beta alta contra BTC y una etiqueta de retorno absoluto premia acertar la dirección
+del mercado, que es una apuesta distinta y ya disponible mucho más barata.</div>
+{live}
+
+<h4>2.3.6 · Lo que este pipeline no promete</h4>
+<p>Está <b>capturado, no conectado</b>: ni una línea del paquete lee todavía
+<span class="mono">data/signals_raw/ai_reports/</span>. No hay adaptador, no hay feature en el radar y
+nada de esto llega al motor. Se captura desde ya por el mismo motivo que las fuentes
+<span class="mono">forward_capture</span> de §2.2 —el pasado no se puede descargar, y cada día sin
+capturar es profundidad que no se recupera ni pagando—, pero no debe leerse como una capacidad del
+sistema. Hoy es un archivo que crece. Y quedan tres cosas que ningún cambio de esquema resuelve:</p>
+<ul>
+<li><b>Acuerdo entre anotadores desconocido.</b> Con temperatura no nula y búsqueda web no
+determinista, dos ejecuciones del mismo día dan respuestas distintas. Pasar el mismo HTML por el
+cuestionario cinco veces y medir el <b>alfa de Krippendorff</b> por pregunta daría el <b>techo de
+señal</b> de cada columna. No se ha hecho. Se espera que las duras salgan muy bien y que las
+{origins.get("reporte", 0)} de juicio narrativo salgan mal.</li>
+<li><b>N efectivo minúsculo.</b> Horizonte de 14 días con observación diaria significa ventanas
+<b>solapadas</b>: 250 días por activo son <b>~18 periodos independientes</b>, no 250. Contra eso hay
+{c["n_sumable"]} variables sumables fuertemente correlacionadas y uno o dos regímenes de mercado en
+todo el año. Cualquier validación que trate las filas como independientes inflará la significación —
+la misma trampa que §4.8 documenta para el backtest, y aquí con menos margen.</li>
+<li><b>El baseline barato.</b> Antes de dar por buenas {c["n_questions"]} preguntas de LLM hay que
+entrenar con <span class="mono">[ret_24h, ret_7d, funding, vol_realizada]</span> — exactos, gratis y
+point-in-time. Si el cuestionario no bate eso de forma robusta, el pipeline <b>no se paga</b>. Es la
+misma pregunta que hundió al sustrato sintético del capítulo 7: que una cosa sea fiel no significa
+que <b>ordene</b>.</li>
+</ul>"""
+
+
 def _market_block(m):
     """Seccion 2.1: la captura de datos REALES.
 
@@ -2079,6 +2270,7 @@ def render_html(f: dict) -> str:
         "DIVERGENCE": _divergence_block(f.get("divergence")),
         "ACTIVITY": _activity_block(f.get("activity")),
         "SIGNALS": _signals_block(f.get("signals")),
+        "AIREPORTS": _ai_reports_block(f.get("ai_reports")),
         "LAMBDA": _n((f.get("calibration") or {}).get("lambda", 0.5), 2),
         "KAPPA": _n((f.get("calibration") or {}).get("kappa", 1.0), 1),
     }
@@ -2107,7 +2299,7 @@ Las cifras marcadas son extraídas del repositorio en el momento de generar este
 <b>Contenido</b>
 <ol>
 <li><a href="#s1">Resumen ejecutivo</a></li>
-<li><a href="#s2">Datos</a> — captura real y señales externas</li>
+<li><a href="#s2">Datos</a> — captura real, señales externas y el reporte diario por activo</li>
 <li><a href="#s3">Trade</a> — cómo se ejecuta una operación, qué cuesta y cómo se contabiliza</li>
 <li><a href="#s4">Estrategias</a> — recompensa, ordenación y validación</li>
 <li><a href="#s5">Resultados</a></li>
@@ -2219,14 +2411,22 @@ la fuente clásica de sorpresas en producción (§3.1).</div>
 
 <h2 id="s2">2 · Datos</h2>
 <p class="lead">La calidad de todo lo demás depende de la calidad del sustrato de datos, así que la
-auditoría empieza aquí y no por el código. Hay tres sustratos y conviene no confundirlos: el
-<b>mercado real</b> (§2.1), las <b>señales externas</b> (§2.2) y los <b>mundos sintéticos</b> (§2.3–2.8).
-Los dos últimos existen porque el primero es escaso: un único camino de la historia, y sólo el que
-ocurrió.</p>
+auditoría empieza aquí y no por el código. Hay <b>cuatro</b> sustratos y conviene no confundirlos: el
+<b>mercado real</b> (§2.1), las <b>señales externas</b> capturadas contra APIs (§2.2), el <b>reporte
+diario por activo</b> que escribe un agente externo leyendo la web (§2.3) y los <b>mundos
+sintéticos</b>, que se llevaron hasta el final, fallaron la transferencia y viven desde entonces en el
+capítulo 7. Los tres últimos existen porque el primero es escaso: un único camino de la historia, y
+sólo el que ocurrió.</p>
+<p>Los dos de captura externa se parecen menos de lo que sugiere el nombre, y el orden en que se leen
+importa. §2.2 va contra APIs, devuelve <b>números</b> y ya está cableado al espacio de observación.
+§2.3 lo ejecuta un agente fuera de este repo, devuelve <b>categorías</b> y hoy <b>no llega al
+motor</b>: se captura porque el pasado no se puede descargar, no porque el sistema lo use.</p>
 
 %%MARKET%%
 
 %%SIGNALS%%
+
+%%AIREPORTS%%
 
 %%FACTOR_TABLE%%
 <p>Las <b>betas son fijas</b> por activo (estructura estable que no cambia entre escenarios); los

@@ -754,6 +754,24 @@ def _signals() -> dict:
     }
 
 
+def _ai_reports() -> dict | None:
+    """Seccion 2.3: el reporte diario por activo que escribe un agente externo.
+
+    Dos bloques con vidas distintas, y no se mezclan: el CONTRATO sale de `config/`, que
+    esta versionado y es reproducible en cualquier clon; la ULTIMA EJECUCION sale de
+    `data/signals_raw/ai_reports/`, que esta en el .gitignore y crece cada manana. Por eso
+    la prosa que gasta cifras de ejecucion va envuelta en <!--LIVE--> y la caracterizacion
+    la enmascara: si no, el documento commiteado quedaria obsoleto a las ocho del dia
+    siguiente sin que nadie hubiera cambiado una linea de codigo.
+    """
+    from ai_trader.signals.ai_reports import load_contract, load_last_run
+
+    contract = load_contract(ROOT)
+    if not contract:
+        return None
+    return {"contract": contract, "last_run": load_last_run(ROOT)}
+
+
 def collect() -> dict:
     store = SyntheticStore(ROOT / "data" / "synthetic")
     facts: dict = {}
@@ -794,6 +812,7 @@ def collect() -> dict:
     facts["activity"] = _activity()
     facts["signal_channel"] = _signal_channel()
     facts["signals"] = _signals()
+    facts["ai_reports"] = _ai_reports()
 
     facts["mom_params"] = _params(CryptoMomentumStrategy().config)
     facts["mr_params"] = _params(MeanReversionStrategy().config)
