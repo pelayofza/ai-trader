@@ -52,6 +52,8 @@ research/               INVESTIGACIÓN APARCADA. El generador sintético y los s
 signals/                Ingesta de señales externas: catálogo, puerto, 30 adaptadores,
                         archivo, captura, sonda de profundidad, normalización y
                         codificación de eventos.
+signals/ai_reports.py   La SEGUNDA vía de captura: contrato y última ejecución del reporte
+                        diario por activo que escribe un agente externo. Sólo lee.
 observation/signal_radar.py  Las 30 fuentes -> seis features: tono, intensidad y
                         cobertura, por activo y de mercado. Nunca bloquea sin datos.
 notifications/          Canal hacia el humano (Telegram) desacoplado del núcleo.
@@ -707,6 +709,45 @@ credenciales, sin archivo o con medio catálogo caído el sistema arranca igual:
 .venv\Scripts\python.exe -m ai_trader.cli signals adv       # MIDE el ADV de las entidades donde vive cada señal
 .venv\Scripts\python.exe -m ai_trader.cli signals audit     # cobertura de entidades y archivo
 ```
+
+### La segunda vía de captura: el reporte diario por activo
+
+Todo lo anterior va contra APIs y devuelve **números**. Hay una segunda vía, de otra naturaleza y
+sin una línea de código en común: un **agente externo** (Claude Cowork) corre todas las mañanas a
+las **08:00 Europe/Madrid**, lee fuentes públicas de la web y devuelve **categorías** — 37 preguntas
+por activo sobre los 24 del universo, más un reporte HTML y la captura numérica de la que salen las
+dos cosas. Escribe en `data/signals_raw/ai_reports/{FECHA}/`, que está en el `.gitignore`.
+
+El contrato vive en `config/` y **manda sobre el prompt**: `assets.json` (el universo, y los dos
+campos que gobiernan qué preguntas admiten `no_aplica`), `cuestionario_cripto_v2.json`,
+`esquema_etiquetas.json`, `plantilla_respuestas_v2.json`, `plantilla_reporte.html` e
+`INSTRUCCIONES_AGENTE.md`. Para añadir o quitar un activo se edita el JSON y no se toca ningún
+prompt. `tools/validar_respuestas_v2.py` valida un fichero de respuestas contra ese contrato.
+
+Tres decisiones que son el contenido del pipeline:
+
+- **La hora de corte se declara antes de buscar nada** (06:00Z por defecto), y se descarta toda
+  fuente publicada después *aunque contenga el dato que se busca*. Un artículo de las 19:00 puede
+  llevar el cierre del día: usarlo da un backtest espectacular, un live plano y un error que **no se
+  detecta a posteriori**. Cada respuesta lleva `fuente_ts` para que el filtro se pueda volver a
+  aplicar en el entrenamiento.
+- **Primero se mide, después se narra.** Las dos salidas se derivan de la misma captura numérica
+  (`_medidas/medidas_{TICKER}.json`), escrita antes que una sola frase del HTML. En la versión
+  anterior el cuestionario se respondía leyendo el reporte recién escrito: eso no medía el mercado,
+  medía al redactor — una pregunta acababa puntuando **verbosidad** y otra premiaba que el reporte
+  **omitiese** los eventos macro.
+- **El ancla es lo único de lo que depende que el día se pueda recuperar.** Precio a la hora de
+  corte, como número, contrastado con ≥2 fuentes (si discrepan se guarda el rango, nunca un
+  promedio). Sin él no hay forma de calcular a posteriori qué pasó después. El esquema de etiquetas
+  a T+14 está declarado y **todos sus campos se escriben a `null`**: el proceso que los rellena es
+  cálculo numérico sobre mercado y se dejó fuera a propósito.
+
+Está **capturado, no conectado**: ni una línea del paquete lee todavía ese archivo — no hay
+adaptador, no hay feature en el radar y nada llega al motor. Se captura desde ya por el mismo motivo
+que las fuentes *forward capture*: el pasado no se puede descargar. `signals/ai_reports.py` sólo lee
+el contrato y la última ejecución para el dashboard y la metodología, y
+`tests/test_ai_reports_contract.py` comprueba el contrato en cada verificación, porque un JSON mal
+cerrado aquí no rompe nada y rompe la ejecución de mañana en un sandbox donde nadie está mirando.
 
 ### Costes de ejecución
 

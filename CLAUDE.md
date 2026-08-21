@@ -56,7 +56,11 @@ propósito.
   de caracterización. Si cambias algo que los afecta, regenéralos
   (`-m dashboard.build_dashboard`, `-m docs.build_docs`) y commitea el resultado.
 - `tools/` y `config/*.md|json` alimentan una tarea diaria externa (Claude Cowork) que
-  escribe en `data/signals_raw/ai_reports/`. No son código del paquete.
+  escribe en `data/signals_raw/ai_reports/`. No son código del paquete. **Sus rutas son una
+  frontera pública**: el prompt de esa tarea vive fuera del repo y no se entera de un
+  renombrado, así que mover uno de esos ficheros rompe la ejecución de la mañana siguiente
+  y el día perdido no se recupera —la captura es point-in-time—. `verify.ps1` tiene un paso
+  para ellos (`contrato`) y `tests/test_ai_reports_contract.py` comprueba el contrato.
 
 ## Regla 4: cómo se hacen los cambios aquí
 
