@@ -1,0 +1,139 @@
+{
+  "_comentario": "EJEMPLO COMPLETO Y COMENTADO del formato respuestas_{TICKER}.json v2. No es un fichero de datos: es la referencia de forma. Se muestran sólo 6 de las 37 preguntas, una de cada tipo. Copia la forma, no los valores.",
+
+  "schema_version": "2.0",
+  "cuestionario": "cuestionario_cripto_v2",
+  "activo": "Dogecoin",
+  "ticker": "DOGE",
+  "fecha": "2026-08-21",
+  "hora_corte_utc": "2026-08-21T06:00:00Z",
+  "_comentario_hora_corte": "Se fija ANTES de buscar nada. Toda fuente publicada después de este instante se descarta. Es lo que hace el dato point-in-time y lo que impide el look-ahead.",
+  "reporte_fuente": "reporte_DOGE.html",
+
+  "ancla": {
+    "_comentario": "OBLIGATORIO. Sin esto el día es irrecuperable: no hay forma de calcular retroactivamente qué pasó después.",
+    "precio_usd": 0.0751,
+    "ts_utc": "2026-08-21T06:00:00Z",
+    "fuente": "CoinDesk",
+    "url": "https://www.coindesk.com/price/dogecoin",
+    "exchange_ref": "binance",
+    "par": "DOGEUSDT",
+    "precio_rango_usd": [0.0748, 0.0755],
+    "n_fuentes_contrastadas": 2
+  },
+
+  "respuestas": {
+    "P01": {
+      "_comentario": "Pregunta DURA. origen='medicion': la opción sale de aplicar la derivación al número, mecánicamente. No hay juicio.",
+      "id_opcion": "subida_fuerte",
+      "valor": 2,
+      "valor_crudo": 7.67,
+      "unidad": "%",
+      "estado": "medido",
+      "disponible": 1,
+      "origen": "medicion",
+      "derivacion": "ret_24h_pct = 7.67 > +5 => subida_fuerte",
+      "evidencia": "Ancla y tabla de la sección 1: $0,0751 a las 06:00Z frente a $0,0698 a las 06:00Z del 20-ago",
+      "fuente_ts": "2026-08-21T05:40:00Z"
+    },
+
+    "P13": {
+      "_comentario": "NO_APLICA: la métrica no existe para el activo. valor null y disponible 0, NO valor 0. En v1 valía 0 y colisionaba con 'flujos planos', que es lo contrario.",
+      "id_opcion": "no_aplica",
+      "valor": null,
+      "valor_crudo": null,
+      "unidad": "USD",
+      "estado": "no_aplica",
+      "disponible": 0,
+      "origen": "medicion",
+      "derivacion": "assets.json: producto_cotizado = 'no' para este activo",
+      "evidencia": "config/assets.json, campo producto_cotizado verificado el 2026-08-21",
+      "fuente_ts": null
+    },
+
+    "P19": {
+      "_comentario": "JUICIO NARRATIVO. origen='reporte'. Es de las que peor acuerdo entre anotadores tendrán: mídelo antes de fiarte.",
+      "id_opcion": "positivo",
+      "valor": 1,
+      "valor_crudo": null,
+      "unidad": null,
+      "estado": "medido",
+      "disponible": 1,
+      "origen": "reporte",
+      "derivacion": null,
+      "evidencia": "Sección 7: 3 ítems alcistas y 1 neutral, ninguno bajista, todos publicados antes del corte",
+      "fuente_ts": "2026-08-21T04:15:00Z"
+    },
+
+    "P25": {
+      "_comentario": "ESTADO CRUDO, no suma. Se guarda el nivel del RSI, no una lectura contrarian. La interpretación es del modelo.",
+      "id_opcion": "alto",
+      "valor": 1,
+      "valor_crudo": 68.4,
+      "unidad": "índice 0-100",
+      "estado": "medido",
+      "disponible": 1,
+      "origen": "medicion",
+      "derivacion": "rsi_14_diario = 68.4 en [55,70] => alto",
+      "evidencia": "Sección 9: RSI(14) diario 68,4 con corte 06:00Z",
+      "fuente_ts": "2026-08-21T05:00:00Z"
+    },
+
+    "P31": {
+      "_comentario": "SIN_DATOS: la métrica existe para el activo pero no se encontró. Distinto de no_aplica. No se estima jamás.",
+      "id_opcion": "sin_datos",
+      "valor": null,
+      "valor_crudo": null,
+      "unidad": "% por 8h",
+      "estado": "sin_datos",
+      "disponible": 0,
+      "origen": "medicion",
+      "derivacion": null,
+      "evidencia": "Sección 6: funding de DOGE no disponible en las fuentes consultadas antes del corte",
+      "fuente_ts": null
+    },
+
+    "P36": {
+      "_comentario": "FUENTE_DIRECTA: dato que NO está en el reporte, tomado de una fuente externa fechada y anterior al corte. Esto es lo que rompe la circularidad: el cuestionario ya no está limitado a lo que el redactor decidió contar.",
+      "id_opcion": "ninguno",
+      "valor": 1,
+      "valor_crudo": 0.0,
+      "unidad": "% del circulante",
+      "estado": "medido",
+      "disponible": 1,
+      "origen": "fuente_directa",
+      "derivacion": "desbloqueo_14d_pct_float = 0 => ninguno",
+      "evidencia": "Calendario de desbloqueos consultado el 21-ago: sin eventos para DOGE hasta el 4-sep",
+      "fuente_ts": "2026-08-20T22:00:00Z"
+    }
+  },
+
+  "benchmark_llm": {
+    "_comentario": "P30 vive aquí y NO se suma. Es la conclusión del redactor, no una feature. Se guarda para una sola pregunta legítima: ¿bate el juicio del LLM al modelo?",
+    "P30": {
+      "id_opcion": "alcista",
+      "valor": 1,
+      "evidencia": "Sección 13: sesgo global del día alcista"
+    }
+  },
+
+  "puntuacion_agregada": {
+    "_comentario": "Comodidad de lectura y de ordenación del log. NO es una feature: suma peras con manzanas con pesos implícitos iguales.",
+    "usar_en_entrenamiento": false,
+    "preguntas_sumadas": 29,
+    "suma_valores": 0,
+    "preguntas_respondidas": 0,
+    "preguntas_sin_datos": 0,
+    "preguntas_no_aplica": 0,
+    "media": 0,
+    "interpretacion": "neutral"
+  },
+
+  "cobertura": {
+    "_comentario": "Meta-dato del día. Un activo con cobertura baja tiene una media calculada sobre media docena de respuestas y no es comparable con uno de cobertura alta. Sin esto, el ranking del día miente.",
+    "preguntas_totales": 37,
+    "sumables_totales": 29,
+    "sumables_disponibles": 0,
+    "cobertura_sumables_pct": 0.0
+  }
+}

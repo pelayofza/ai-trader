@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0",
+  "id": "esquema_etiquetas_v1",
+  "nombre": "Esquema de etiquetas (variables objetivo) del reporte diario",
+
+  "por_que_existe": "El pipeline de v1 no capturaba ni una sola variable objetivo. Sin label no hay entrenamiento, por bueno que sea el cuestionario. Y como el precio nunca se guardaba como número, las etiquetas tampoco se podían reconstruir a posteriori: cada día que pasaba era un día perdido. Con el bloque 'ancla' de respuestas v2, ya son reconstruibles.",
+
+  "como_se_usa": [
+    "Cada ejecución diaria escribe etiquetas_{fecha}.json en la carpeta del día, con una entrada por ticker y TODOS los campos de resultado a null.",
+    "Un proceso posterior (a T+14 o más tarde) rellena esos campos leyendo el precio desde 'ancla.ts_utc' hasta ancla.ts_utc + horizonte.",
+    "Ese proceso NO existe todavía. Se ha dejado deliberadamente fuera de esta iteración: es cálculo numérico sobre datos de mercado y, según la Regla 4 del proyecto, no es un cambio mecánico.",
+    "Mientras no exista, el fichero sigue siendo útil: fija el contrato y garantiza que el ancla se guarda desde hoy."
+  ],
+
+  "campos_por_ticker": {
+    "ticker": "string",
+    "ancla_precio_usd": "number. Copiado de respuestas_{TICKER}.json -> ancla.precio_usd. Es el precio de entrada teórico.",
+    "ancla_ts_utc": "string ISO-8601. Copiado del ancla. Es t=0 para todos los horizontes.",
+    "ret_1d": "number|null. Retorno simple a t+1 día desde ancla_precio_usd.",
+    "ret_3d": "number|null.",
+    "ret_7d": "number|null.",
+    "ret_14d": "number|null. Es el horizonte objetivo del sistema.",
+    "vol_realizada_14d": "number|null. Volatilidad realizada anualizada de la ventana t..t+14.",
+    "mfe_14d": "number|null. Máxima excursión FAVORABLE en la ventana: el mejor punto no realizado.",
+    "mae_14d": "number|null. Máxima excursión ADVERSA en la ventana: el peor punto no realizado.",
+    "coste_funding_14d": "number|null. Suma del funding pagado o cobrado en la ventana, en % sobre nocional.",
+    "ret_14d_neto": "number|null. ret_14d menos coste_funding_14d menos slippage estimado. Es la etiqueta que de verdad importa.",
+    "ret_14d_exceso_btc": "number|null. ret_14d del activo menos ret_14d de BTC. Para long/short lo relevante es el exceso, no el absoluto.",
+    "completo": "boolean. true sólo cuando todos los campos anteriores están rellenos."
+  },
+
+  "por_que_mfe_y_mae": "Son las que deciden si una posición sobrevive. Un corto que acaba en +0% pero que pasó por -18% te liquida antes de tener razón: el retorno final no lo captura y el MAE sí. Sin MFE/MAE no se puede evaluar ni el sizing ni el stop, que a 14 días pesan más que la dirección.",
+
+  "por_que_exceso_sobre_btc": "El sistema es long/short y casi todo el universo tiene beta alta contra BTC. Una etiqueta de retorno absoluto premia acertar la dirección del mercado, que es una apuesta distinta —y ya disponible mucho más barata— que acertar el activo. El exceso sobre BTC es la etiqueta alineada con lo que el sistema puede aportar.",
+
+  "advertencia_de_solapamiento": "Con horizonte de 14 días y observación diaria, las ventanas se solapan casi por completo: 250 días por activo son ~18 periodos independientes, no 250. Cualquier validación que trate las filas como independientes inflará la significación. Usa validación por bloques con embargo de al menos 14 días."
+}

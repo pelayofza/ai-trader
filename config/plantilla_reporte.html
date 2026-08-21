@@ -1,0 +1,107 @@
+<!DOCTYPE html><html lang='es'><head><meta charset='utf-8'>
+<meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>Reporte diario {TICKER} · {FECHA}</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#0d1117;color:#c9d1d9;
+ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+ font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1080px;margin:0 auto;padding:32px 24px 72px}
+header.rep{border-bottom:1px solid #21262d;padding-bottom:20px;margin-bottom:8px}
+.eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#7d8590;margin:0 0 6px}
+h1{font-size:30px;line-height:1.2;margin:0 0 4px;color:#f0f6fc;font-weight:650}
+h1 .tk{color:#58a6ff}
+.sub{color:#7d8590;font-size:13px;margin:0}
+.strip{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 4px}
+.sig{border:1px solid;border-radius:8px;padding:8px 12px;min-width:132px;flex:1 1 auto}
+.sig .l{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#7d8590;display:block;margin-bottom:2px}
+.sig .v{font-size:14px;font-weight:650}
+.lede{background:#161b22;border:1px solid #21262d;border-left:3px solid #58a6ff;
+ border-radius:6px;padding:14px 16px;margin:18px 0 0;color:#adbac7;font-size:14px}
+section{margin-top:34px;scroll-margin-top:16px}
+h2{font-size:19px;color:#f0f6fc;margin:0 0 14px;padding-bottom:8px;border-bottom:1px solid #21262d;font-weight:600}
+h2 .num{display:inline-block;min-width:26px;height:26px;line-height:26px;text-align:center;
+ background:#1f6feb;color:#fff;border-radius:6px;font-size:12px;margin-right:10px;vertical-align:2px;font-weight:700}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:10px;margin-bottom:16px}
+.kpi{background:#161b22;border:1px solid #21262d;border-radius:8px;padding:11px 13px}
+.kpi .k{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:#7d8590;display:block}
+.kpi .val{font-size:17px;color:#f0f6fc;font-weight:650;display:block;margin:2px 0 1px}
+.kpi .n{font-size:11px;color:#7d8590;display:block}
+p.par{margin:0 0 12px}
+table{width:100%;border-collapse:collapse;margin:6px 0 16px;font-size:13.5px}
+th{background:#161b22;color:#adbac7;text-align:left;font-weight:600;font-size:11px;
+ letter-spacing:.06em;text-transform:uppercase;padding:9px 11px;border-bottom:1px solid #30363d}
+td{padding:9px 11px;border-bottom:1px solid #21262d;vertical-align:top}
+tr:last-child td{border-bottom:none}
+ul.tl{list-style:none;padding:0;margin:0 0 14px}
+ul.tl li{position:relative;padding:8px 12px 8px 14px;margin-bottom:6px;background:#161b22;
+ border:1px solid #21262d;border-left-width:3px;border-radius:5px;font-size:14px}
+.tag{display:inline-block;font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;
+ padding:2px 7px;border-radius:4px;margin-right:8px;font-weight:700;vertical-align:1px}
+.nota{background:#161b22;border:1px dashed #30363d;border-radius:6px;padding:11px 13px;
+ font-size:13px;color:#8b949e;margin:0 0 14px}
+.src{font-size:12.5px;color:#7d8590}
+.src a{color:#58a6ff;text-decoration:none;word-break:break-word}
+.src li{margin-bottom:5px}
+footer.rep{margin-top:44px;padding-top:16px;border-top:1px solid #21262d;font-size:11.5px;color:#6e7681}
+.disc{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:12px 14px;
+ font-size:12px;color:#8b949e;margin-top:18px}
+@media(max-width:600px){.wrap{padding:20px 14px 48px}h1{font-size:23px}.sig{min-width:112px}}
+</style></head><body><div class='wrap'>
+
+<!-- ============ CABECERA ============ -->
+<header class='rep'>
+<p class='eyebrow'>Reporte diario de señales · {FECHA}</p>
+<h1>{NOMBRE_ACTIVO} <span class='tk'>{TICKER}/USDT</span></h1>
+<p class='sub'>Generado el {FECHA} · corte de datos {HORA_CORTE} · documento descriptivo, no es asesoramiento de inversión</p>
+<div class='strip'>
+<!-- Paleta de tonos (fondo / color de texto y borde):
+     alcista  #0f3d2e / #3ddc97   ·  bajista #3d1620 / #ff6b81
+     neutral  #2a2f3a / #c9d1d9   ·  aviso   #3d3216 / #ffc857   -->
+<div class='sig' style='background:#2a2f3a;border-color:#c9d1d9'><span class='l'>Sesgo diario</span><span class='v' style='color:#c9d1d9'>Neutral</span></div>
+<div class='sig' style='background:#0f3d2e;border-color:#3ddc97'><span class='l'>Momentum 24h</span><span class='v' style='color:#3ddc97'>+0,0%</span></div>
+<div class='sig' style='background:#0f3d2e;border-color:#3ddc97'><span class='l'>Tendencia 7d</span><span class='v' style='color:#3ddc97'>Alcista</span></div>
+<div class='sig' style='background:#2a2f3a;border-color:#c9d1d9'><span class='l'>Derivados</span><span class='v' style='color:#c9d1d9'>OI moderado</span></div>
+<div class='sig' style='background:#2a2f3a;border-color:#c9d1d9'><span class='l'>Flujo institucional</span><span class='v' style='color:#c9d1d9'>No aplica</span></div>
+<div class='sig' style='background:#3d3216;border-color:#ffc857'><span class='l'>Riesgo</span><span class='v' style='color:#ffc857'>Medio</span></div>
+</div>
+<div class='lede'>2–4 frases con lo esencial del día.</div>
+</header>
+
+<!-- ============ SECCIÓN N (repetir 1..13) ============ -->
+<section id='s1'>
+<h2><span class='num'>1</span>Snapshot de mercado</h2>
+
+<div class='kpis'>
+<div class='kpi'><span class='k'>Precio</span><span class='val'>$0,0000</span><span class='n'>rango $0,0000–0,0000</span></div>
+<div class='kpi'><span class='k'>Variación 24h</span><span class='val'>+0,0%</span></div>
+</div>
+
+<p class='par'>Párrafo normal, admite <strong style='color:#f0f6fc'>negrita</strong> y <code style="background:#21262d;padding:1px 5px;border-radius:4px;font-size:12.5px">código</code>.</p>
+
+<p class='par' style='font-size:13px;color:#adbac7;margin-bottom:4px'><strong style='color:#f0f6fc'>Título opcional de tabla</strong></p>
+<table><thead><tr><th>Métrica</th><th>Valor</th><th>Fuente</th></tr></thead>
+<tbody><tr><td>Volumen 24h</td><td>$0,0 B</td><td>Fuente</td></tr></tbody></table>
+
+<ul class='tl'>
+<li style='border-left-color:#3ddc97'><span class='tag' style='background:#0f3d2e;color:#3ddc97'>Alcista</span>Ítem alcista.</li>
+<li style='border-left-color:#ff6b81'><span class='tag' style='background:#3d1620;color:#ff6b81'>Bajista</span>Ítem bajista.</li>
+<li style='border-left-color:#c9d1d9'><span class='tag' style='background:#2a2f3a;color:#c9d1d9'>Neutral</span>Ítem neutral.</li>
+<li style='border-left-color:#ffc857'><span class='tag' style='background:#3d3216;color:#ffc857'>Atención</span>Ítem de aviso.</li>
+</ul>
+
+<div class='nota'>Aclaración o límite del dato (p. ej. «no disponible en las fuentes consultadas»).</div>
+</section>
+
+<!-- Sección 9 requiere OBLIGATORIAMENTE esta tabla de escenarios:
+<table><thead><tr><th>Escenario</th><th>Disparador</th><th>Zona objetivo</th><th>Probabilidad cualitativa</th></tr></thead>
+<tbody><tr><td>Alcista</td>…</tr><tr><td>Base</td>…</tr><tr><td>Bajista</td>…</tr></tbody></table> -->
+
+<!-- ============ FUENTES ============ -->
+<section id='fuentes'><h2><span class='num'>F</span>Fuentes</h2><ul class='src'>
+<li><a href='https://...'>Título de la fuente</a></li>
+</ul></section>
+
+<div class='disc'>Este documento es descriptivo y de uso interno. Recopila datos públicos de mercado y no constituye asesoramiento financiero ni una recomendación de compra o venta. Los datos de 24 h dependen de la hora de corte indicada en la cabecera y pueden diferir entre agregadores; cuando hay discrepancias relevantes se reportan como rango.</div>
+<footer class='rep'>cuestionario_cripto_v1 · pipeline ai-trader · reporte_{TICKER}.html · {FECHA}</footer>
+</div></body></html>

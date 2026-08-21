@@ -1,0 +1,669 @@
+{
+  "schema_version": "2.0",
+  "id_cuestionario": "cuestionario_cripto_v2",
+  "nombre": "Cuestionario diario de señales - Criptomonedas (v2, orientado a dataset)",
+  "reemplaza_a": "cuestionario_cripto_v1",
+  "compatibilidad": "NO es compatible hacia atrás con v1. Los ficheros de respuestas de 2026-08-20 y 2026-08-21 siguen siendo válidos contra v1, que se conserva intacto. Ninguna respuesta antigua se reescribe.",
+
+  "por_que_v2": [
+    "v1 se rellenaba 'usando exclusivamente el reporte que acabas de generar'. Eso medía al redactor, no al mercado: el cuestionario entrevistaba al generador. v2 invierte la causalidad — primero se mide, después se narra, y ambos artefactos se derivan de la MISMA captura numérica.",
+    "v1 no guardaba ni un solo número: el precio vivía como string de presentación ('$0,0751') dentro de un JSON de maquetación. Sin ancla numérica con timestamp no se pueden calcular retornos ex-post, así que cada día que pasaba era un día de datos irrecuperables. v2 hace obligatorio el bloque 'ancla'.",
+    "v1 colisionaba 'no_aplica' (=0) con 'neutral' (=0): el modelo no podía distinguir 'no existe ETF' de 'flujos ETF planos', que son cosas opuestas. En v2 'no_aplica' vale null y la diferencia se codifica en 'estado' + 'disponible'.",
+    "v1 bucketizaba de forma destructiva: 'más de +5%' agrupa un +5% con un +40%. v2 exige 'valor_crudo' junto a la categoría.",
+    "v1 enterraba decisiones de modelado en la capa de datos (escalas contrarian de P16 y P25). v2 marca esas preguntas como 'estado_crudo' y las saca de la suma: la interpretación contrarian es feature engineering, no captura.",
+    "v1 usaba P30 (sesgo global) como una feature más, cuando es la conclusión filtrándose como input y una función determinista de P01–P29. En v2 P30 es 'benchmark': se guarda para comparar el juicio del LLM contra el modelo, y no se suma.",
+    "v1 medía en P28 la verbosidad del redactor (contaba ítems de una lista que él mismo escribía) y premiaba en P29 la OMISIÓN de eventos macro. Ambas están redefinidas contra criterios objetivos.",
+    "v1 no capturaba nada de lo que gobierna el P&L de un largo/corto a dos semanas: funding, volatilidad, liquidez ejecutable, beta y desbloqueos. Son P31–P37."
+  ],
+
+  "descripcion": "Cuestionario de opción cerrada apto para cualquier criptomoneda. Cada opción lleva un 'valor' numérico: escala centrada en 0 donde negativo = bajista y positivo = alcista, SALVO en las preguntas marcadas escala='estado_crudo', que son descriptivas y ordinales y no deben interpretarse como dirección.",
+
+  "instrucciones_para_ia": "ORDEN OBLIGATORIO: (1) fijas la hora de corte ANTES de buscar nada; (2) capturas el bloque 'ancla' y las métricas numéricas; (3) escribes el reporte HTML a partir de esas métricas; (4) respondes el cuestionario. Las preguntas con origen_esperado='medicion' se responden aplicando su 'derivacion' al número capturado, de forma mecánica, y NO por lectura del reporte: si el número existe, la opción está determinada y no hay juicio que ejercer. Las preguntas con origen_esperado='reporte' son juicio narrativo y se responden desde el reporte. Las de origen_esperado='cualquiera' se responden desde donde haya dato, declarando cuál en el campo 'origen'. Puedes usar información que NO esté en el reporte siempre que (a) la fuente esté fechada, (b) su fecha de publicación sea ANTERIOR a la hora de corte y (c) la cites en 'evidencia' y en 'fuente_ts'. Una opción por pregunta. NUNCA estimes un número que no has encontrado: eso es 'sin_datos'.",
+
+  "distincion_critica": {
+    "medido": "Hay dato y se ha capturado. 'disponible': 1, 'valor' numérico.",
+    "sin_datos": "La métrica EXISTE para este activo pero no se ha encontrado dentro del presupuesto de búsqueda. 'disponible': 0, 'valor': null.",
+    "no_aplica": "La métrica NO EXISTE para este activo (p. ej. no hay producto cotizado, no hay mercado de derivados, oferta 100% circulante). 'disponible': 0, 'valor': null. Sólo se usa si assets.json lo respalda con 'no', nunca con 'desconocido'."
+  },
+
+  "regla_point_in_time": "Toda fuente usada debe llevar fecha de publicación. Se DESCARTA cualquier fuente publicada después de la hora de corte declarada, aunque el buscador la devuelva primero. Un artículo de las 19:00 puede contener el cierre del día: usarlo para 'predecir' ese día es contaminación de look-ahead, produce un backtest espectacular y un live plano, y no es detectable a posteriori. Cada respuesta guarda 'fuente_ts' para que ese filtro se pueda aplicar en el entrenamiento.",
+
+  "metadatos_respuesta_requeridos": ["activo", "ticker", "fecha", "hora_corte_utc", "reporte_fuente", "ancla"],
+
+  "esquema_ancla": {
+    "obligatorio": true,
+    "por_que": "Es la única pieza sin la cual el día entero es irrecuperable: sin precio numérico con timestamp no hay forma de calcular retroactivamente qué pasó después del reporte, y por tanto no hay etiquetas y no hay entrenamiento.",
+    "campos": {
+      "precio_usd": "number. El precio, como número. No como string, no con símbolo de moneda, punto decimal.",
+      "ts_utc": "string ISO-8601 en UTC, p. ej. '2026-08-21T06:00:00Z'. Es el momento AL QUE SE REFIERE el precio, no el momento en que lo leíste.",
+      "fuente": "string. Nombre de la fuente.",
+      "url": "string. URL exacta de donde salió el número.",
+      "exchange_ref": "string. De assets.json.",
+      "par": "string. De assets.json.",
+      "precio_rango_usd": "[min, max] o null. Si dos fuentes discrepan, el rango. NUNCA un promedio inventado.",
+      "n_fuentes_contrastadas": "integer ≥ 2."
+    }
+  },
+
+  "esquema_respuesta": {
+    "id_opcion": "string. Debe existir en las opciones de esa pregunta.",
+    "valor": "number|null. Debe coincidir exactamente con el valor de la opción en este fichero.",
+    "valor_crudo": "number|null. El número continuo del que sale la categoría, en la unidad de 'metrica_cruda'. Obligatorio siempre que la pregunta tenga 'metrica_cruda' y estado='medido'. La discretización pertenece al feature engineering, no a la captura: aquí se guardan las dos cosas.",
+    "unidad": "string|null. Copiada de metrica_cruda.unidad.",
+    "estado": "medido | sin_datos | no_aplica. Debe ser coherente con id_opcion.",
+    "disponible": "1 si estado='medido', 0 en los otros dos casos. Es la máscara: permite al modelo distinguir un 0 real de un hueco.",
+    "origen": "medicion | reporte | fuente_directa. 'medicion' = derivado mecánicamente del número capturado. 'reporte' = juicio leído del HTML. 'fuente_directa' = dato externo al reporte, con fuente fechada y anterior al corte.",
+    "derivacion": "string|null. Si origen='medicion', la regla aplicada, p. ej. 'ret_24h_pct=7.67 > +5 => subida_fuerte'. Hace la respuesta auditable y reproducible.",
+    "evidencia": "string ≥ 8 caracteres. Sección y dato concreto, o fuente y dato concreto.",
+    "fuente_ts": "string ISO-8601|null. Fecha de publicación de la fuente. Debe ser ≤ hora_corte_utc."
+  },
+
+  "reglas_de_agregacion": {
+    "solo_suman": "Las preguntas con sumable=true. Es decir: uso='feature' Y escala='direccional'.",
+    "excluidas_de_la_suma": ["P16", "P25", "P30", "P31", "P32", "P33", "P34", "P35"],
+    "por_que_excluidas": "P16, P25 y P31–P35 son estado descriptivo, no dirección: sumarlas es afirmar una interpretación (contrarian o no) que corresponde al modelo, no al fichero. P30 es la conclusión del propio redactor y se guarda sólo como benchmark.",
+    "usar_en_entrenamiento": false,
+    "advertencia": "'puntuacion_agregada' es una comodidad para leer el día de un vistazo y para ordenar la tabla del log. NO es una feature: suma peras con manzanas con pesos implícitos iguales y con nulls por medio. Los pesos los aprende el modelo. Para long/short lo que importa es el ranking por sección transversal del día entre activos, no el score absoluto de uno.",
+    "interpretacion": "media ≤ -1.0 -> muy_bajista; ≤ -0.35 -> bajista; < 0.35 -> neutral; < 1.0 -> alcista; en otro caso -> muy_alcista"
+  },
+
+  "preguntas": [
+    {
+      "id": "P01", "seccion": "precio",
+      "pregunta": "¿Cuál fue la variación del precio del activo en las últimas 24 horas hasta la hora de corte?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "medicion",
+      "metrica_cruda": {"campo": "ret_24h_pct", "unidad": "%"},
+      "derivacion": "ret_24h_pct < -5 -> caida_fuerte; [-5,-1) -> caida_leve; [-1,+1] -> plano; (+1,+5] -> subida_leve; > +5 -> subida_fuerte",
+      "opciones": [
+        {"id_opcion": "caida_fuerte", "texto": "Caída fuerte (peor que -5%)", "valor": -2},
+        {"id_opcion": "caida_leve", "texto": "Caída leve (-5% a -1%)", "valor": -1},
+        {"id_opcion": "plano", "texto": "Plano (-1% a +1%)", "valor": 0},
+        {"id_opcion": "subida_leve", "texto": "Subida leve (+1% a +5%)", "valor": 1},
+        {"id_opcion": "subida_fuerte", "texto": "Subida fuerte (más de +5%)", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P02", "seccion": "precio",
+      "pregunta": "¿Cómo se comportó el activo en los últimos 7 días respecto al mercado cripto global?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "medicion",
+      "metrica_cruda": {"campo": "exceso_7d_pp", "unidad": "puntos porcentuales (ret_7d_activo - ret_7d_capitalizacion_total)"},
+      "derivacion": "exceso_7d_pp < -10 -> mucho_peor; [-10,-3) -> peor; [-3,+3] -> en_linea; (+3,+10] -> mejor; > +10 -> mucho_mejor",
+      "opciones": [
+        {"id_opcion": "mucho_peor", "texto": "Mucho peor que el mercado", "valor": -2},
+        {"id_opcion": "peor", "texto": "Algo peor que el mercado", "valor": -1},
+        {"id_opcion": "en_linea", "texto": "En línea con el mercado", "valor": 0},
+        {"id_opcion": "mejor", "texto": "Algo mejor que el mercado", "valor": 1},
+        {"id_opcion": "mucho_mejor", "texto": "Mucho mejor que el mercado", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P03", "seccion": "precio",
+      "pregunta": "¿A qué distancia está el precio de su máximo de las últimas 90 sesiones?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "medicion",
+      "metrica_cruda": {"campo": "dist_max_90d_pct", "unidad": "% (negativo = por debajo del máximo)"},
+      "derivacion": "dist_max_90d_pct > -10 -> cerca_maximo; [-25,-10] -> correccion_moderada; [-50,-25) -> correccion_profunda; < -50 -> colapso",
+      "nota": "Cambio respecto a v1: v1 decía 'de los últimos meses' sin definirlo y los anotadores divergieron entre máximo reciente y ATH. Aquí es SIEMPRE el máximo de 90 sesiones. La distancia al ATH se captura aparte, en el reporte, y no puntúa.",
+      "opciones": [
+        {"id_opcion": "cerca_maximo", "texto": "Cerca del máximo (menos de -10%)", "valor": 2},
+        {"id_opcion": "correccion_moderada", "texto": "Corrección moderada (-10% a -25%)", "valor": 1},
+        {"id_opcion": "correccion_profunda", "texto": "Corrección profunda (-25% a -50%)", "valor": -1},
+        {"id_opcion": "colapso", "texto": "Colapso (peor que -50%)", "valor": -2},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P04", "seccion": "precio",
+      "pregunta": "¿Cómo fue el volumen de negociación de 24h comparado con su media reciente?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "medicion",
+      "metrica_cruda": {"campo": "vol_24h_sobre_media_30d", "unidad": "ratio (1,0 = igual que la media de 30 días)"},
+      "derivacion": "ratio < 0.5 -> muy_bajo; [0.5,0.8) -> bajo; [0.8,1.25] -> normal; (1.25,2.0] -> alto; > 2.0 -> muy_alto",
+      "nota": "El volumen de agregadores en small caps está inflado por wash trading. Si sólo hay volumen de agregador y no de exchange, dilo en 'evidencia': la métrica es ruidosa justo donde el activo es menos líquido.",
+      "opciones": [
+        {"id_opcion": "muy_bajo", "texto": "Muy inferior a lo habitual", "valor": -2},
+        {"id_opcion": "bajo", "texto": "Inferior a lo habitual", "valor": -1},
+        {"id_opcion": "normal", "texto": "En línea con lo habitual", "valor": 0},
+        {"id_opcion": "alto", "texto": "Superior a lo habitual", "valor": 1},
+        {"id_opcion": "muy_alto", "texto": "Muy superior a lo habitual", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P05", "seccion": "contexto_mercado",
+      "pregunta": "¿Cuál fue el comportamiento de Bitcoin en las últimas 24 horas?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "medicion",
+      "metrica_cruda": {"campo": "btc_ret_24h_pct", "unidad": "%"},
+      "derivacion": "Mismos cortes que P01, aplicados a btc_ret_24h_pct",
+      "nota": "Si el activo analizado es el propio Bitcoin, coincidirá con P01. Es intencionado: la colinealidad se gestiona en el modelo, no ocultando la variable.",
+      "opciones": [
+        {"id_opcion": "caida_fuerte", "texto": "Caída fuerte (peor que -5%)", "valor": -2},
+        {"id_opcion": "caida_leve", "texto": "Caída leve (-5% a -1%)", "valor": -1},
+        {"id_opcion": "plano", "texto": "Plano (-1% a +1%)", "valor": 0},
+        {"id_opcion": "subida_leve", "texto": "Subida leve (+1% a +5%)", "valor": 1},
+        {"id_opcion": "subida_fuerte", "texto": "Subida fuerte (más de +5%)", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P06", "seccion": "contexto_mercado",
+      "pregunta": "¿En qué zona está el índice Fear & Greed del mercado cripto global?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "medicion",
+      "metrica_cruda": {"campo": "fng_hoy", "unidad": "índice 0-100"},
+      "derivacion": "fng_hoy 0-24 -> miedo_extremo; 25-44 -> miedo; 45-55 -> neutral; 56-75 -> codicia; 76-100 -> codicia_extrema",
+      "opciones": [
+        {"id_opcion": "miedo_extremo", "texto": "Miedo extremo (0-24)", "valor": -2},
+        {"id_opcion": "miedo", "texto": "Miedo (25-44)", "valor": -1},
+        {"id_opcion": "neutral", "texto": "Neutral (45-55)", "valor": 0},
+        {"id_opcion": "codicia", "texto": "Codicia (56-75)", "valor": 1},
+        {"id_opcion": "codicia_extrema", "texto": "Codicia extrema (76-100)", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P07", "seccion": "contexto_mercado",
+      "pregunta": "¿Cómo cambió el Fear & Greed respecto a hace 7 días?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "medicion",
+      "metrica_cruda": {"campo": "fng_delta_7d", "unidad": "puntos de índice"},
+      "derivacion": "delta < -15 -> deterioro_fuerte; [-15,-5) -> deterioro; [-5,+5] -> estable; (+5,+15] -> mejora; > +15 -> mejora_fuerte",
+      "opciones": [
+        {"id_opcion": "deterioro_fuerte", "texto": "Empeoró mucho (más de 15 puntos)", "valor": -2},
+        {"id_opcion": "deterioro", "texto": "Empeoró (5-15 puntos)", "valor": -1},
+        {"id_opcion": "estable", "texto": "Estable (menos de 5 puntos de cambio)", "valor": 0},
+        {"id_opcion": "mejora", "texto": "Mejoró (5-15 puntos)", "valor": 1},
+        {"id_opcion": "mejora_fuerte", "texto": "Mejoró mucho (más de 15 puntos)", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P08", "seccion": "contexto_mercado",
+      "pregunta": "¿El movimiento del mercado global del día fue de tipo risk-on o risk-off?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "reporte",
+      "metrica_cruda": {"campo": "cap_total_ret_24h_pct", "unidad": "%"},
+      "nota": "JUICIO NARRATIVO. Se escribe después del movimiento y lo racionaliza: espera que correlacione fuerte con P01 y P05 y descuéntalo en consecuencia. Guarda igualmente el cambio de la capitalización total como valor_crudo, que sí es medible.",
+      "opciones": [
+        {"id_opcion": "risk_off_fuerte", "texto": "Risk-off fuerte (ventas generalizadas)", "valor": -2},
+        {"id_opcion": "risk_off", "texto": "Risk-off moderado", "valor": -1},
+        {"id_opcion": "mixto", "texto": "Mixto / sin dirección clara", "valor": 0},
+        {"id_opcion": "risk_on", "texto": "Risk-on moderado", "valor": 1},
+        {"id_opcion": "risk_on_fuerte", "texto": "Risk-on fuerte (compras generalizadas)", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P09", "seccion": "whales",
+      "pregunta": "¿Ha habido ventas masivas de whales en el último día?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "cualquiera",
+      "opciones": [
+        {"id_opcion": "muchas", "texto": "Sí, distribución masiva", "valor": -2},
+        {"id_opcion": "algunas", "texto": "Algunas ventas relevantes", "valor": -1},
+        {"id_opcion": "muy_pocas", "texto": "Muy pocas / marginales", "valor": 0},
+        {"id_opcion": "ninguna", "texto": "No, flujo neto comprador", "valor": 1},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P10", "seccion": "whales",
+      "pregunta": "¿Cuál es la intensidad de la acumulación whale reciente (últimas 48-72h)?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "cualquiera",
+      "opciones": [
+        {"id_opcion": "distribucion", "texto": "Distribución neta (venden)", "valor": -2},
+        {"id_opcion": "sin_actividad", "texto": "Sin actividad relevante", "valor": 0},
+        {"id_opcion": "acumulacion_leve", "texto": "Acumulación leve", "valor": 1},
+        {"id_opcion": "acumulacion_fuerte", "texto": "Acumulación fuerte (compras notables reportadas)", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P11", "seccion": "whales",
+      "pregunta": "¿Las tenencias agregadas de grandes wallets están en máximos, mínimos o zona intermedia?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "cualquiera",
+      "opciones": [
+        {"id_opcion": "minimos", "texto": "Cerca de mínimos del año", "valor": -2},
+        {"id_opcion": "bajando", "texto": "Descendiendo", "valor": -1},
+        {"id_opcion": "estables", "texto": "Estables / zona intermedia", "valor": 0},
+        {"id_opcion": "subiendo", "texto": "Ascendiendo", "valor": 1},
+        {"id_opcion": "maximos", "texto": "En máximos históricos o del año", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P12", "seccion": "whales",
+      "pregunta": "¿Cuál es la dirección neta de los flujos hacia/desde exchanges?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "cualquiera",
+      "metrica_cruda": {"campo": "netflow_exchange_usd_24h", "unidad": "USD (positivo = entra a exchanges)"},
+      "opciones": [
+        {"id_opcion": "entradas_fuertes", "texto": "Entradas fuertes a exchanges (presión vendedora)", "valor": -2},
+        {"id_opcion": "entradas", "texto": "Entradas moderadas a exchanges", "valor": -1},
+        {"id_opcion": "equilibrado", "texto": "Equilibrado", "valor": 0},
+        {"id_opcion": "salidas", "texto": "Salidas moderadas de exchanges", "valor": 1},
+        {"id_opcion": "salidas_fuertes", "texto": "Salidas fuertes de exchanges (acumulación/custodia)", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P13", "seccion": "institucional",
+      "pregunta": "¿Cómo fueron los flujos de los productos institucionales cotizados del activo (ETFs, ETPs, trusts)?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "cualquiera",
+      "metrica_cruda": {"campo": "flujo_producto_cotizado_usd", "unidad": "USD netos del último día con dato"},
+      "nota": "'no_aplica' SÓLO si assets.json marca producto_cotizado='no' para este activo. Si marca 'desconocido', la respuesta es 'sin_datos'. Confundirlos mete un 0 falso donde había un hueco.",
+      "opciones": [
+        {"id_opcion": "salidas_fuertes", "texto": "Salidas netas significativas", "valor": -2},
+        {"id_opcion": "salidas_leves", "texto": "Salidas netas leves", "valor": -1},
+        {"id_opcion": "sin_flujo", "texto": "Sin entradas ni salidas relevantes", "valor": 0},
+        {"id_opcion": "entradas_leves", "texto": "Entradas netas leves", "valor": 1},
+        {"id_opcion": "entradas_fuertes", "texto": "Entradas netas significativas", "valor": 2},
+        {"id_opcion": "no_aplica", "texto": "El activo no tiene productos institucionales cotizados", "valor": null},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P14", "seccion": "institucional",
+      "pregunta": "¿Existe divergencia entre la actividad whale y la demanda institucional?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "medicion",
+      "derivacion": "Se deriva de P10 y P13, NO se juzga de nuevo. P10≤0 y P13≤0 -> ambos_venden; P10≤0 y P13>0 -> divergencia_negativa; P10>0 y P13≤0 -> divergencia_positiva; P10>0 y P13>0 -> ambos_compran; si alguna de las dos es null -> sin_datos; si P13 es no_aplica -> no_aplica",
+      "nota": "En v1 esta pregunta era un juicio libre que duplicaba P10 y P13. Ahora es una derivación determinista de ambas: si el modelo quiere la interacción, la tiene sin una anotación extra que añadiese ruido sin información.",
+      "opciones": [
+        {"id_opcion": "ambos_venden", "texto": "Ambos negativos (whales venden e institucionales con salidas)", "valor": -2},
+        {"id_opcion": "divergencia_negativa", "texto": "Whales venden pero institucionales compran", "valor": -1},
+        {"id_opcion": "sin_divergencia", "texto": "Alineados / sin divergencia clara", "valor": 0},
+        {"id_opcion": "divergencia_positiva", "texto": "Whales compran pero sin demanda institucional", "valor": 1},
+        {"id_opcion": "ambos_compran", "texto": "Ambos positivos (whales e institucionales compran)", "valor": 2},
+        {"id_opcion": "no_aplica", "texto": "No hay canal institucional para el activo", "valor": null},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P15", "seccion": "institucional",
+      "pregunta": "¿Se reportó actividad corporativa relevante (tesorerías, mineras/validadores, adquisiciones) sobre el activo?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "cualquiera",
+      "opciones": [
+        {"id_opcion": "negativa", "texto": "Sí, negativa (ventas de tesorería, cierres)", "valor": -2},
+        {"id_opcion": "ninguna", "texto": "No se reporta", "valor": 0},
+        {"id_opcion": "positiva_leve", "texto": "Sí, positiva de tamaño pequeño", "valor": 1},
+        {"id_opcion": "positiva_grande", "texto": "Sí, positiva de gran tamaño", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P16", "seccion": "derivados",
+      "pregunta": "¿En qué nivel está el interés abierto respecto a su media de 30 días?",
+      "uso": "feature", "escala": "estado_crudo", "sumable": false,
+      "origen_esperado": "cualquiera",
+      "metrica_cruda": {"campo": "oi_sobre_media_30d", "unidad": "ratio"},
+      "derivacion": "ratio < 0.6 -> muy_bajo; [0.6,0.9) -> bajo; [0.9,1.2] -> moderado; (1.2,1.6] -> elevado; > 1.6 -> extremo",
+      "nota": "CAMBIO IMPORTANTE respecto a v1. En v1 esta pregunta puntuaba el apalancamiento como riesgo (elevado=-1, extremo=-2), enterrando una decisión de modelado en la capa de datos. Aquí es estado descriptivo ordinal y NO suma: que un OI alto sea alcista o bajista depende del signo del movimiento y del funding, y eso lo decide el modelo.",
+      "opciones": [
+        {"id_opcion": "muy_bajo", "texto": "Muy bajo / desapalancado", "valor": -2},
+        {"id_opcion": "bajo", "texto": "Bajo", "valor": -1},
+        {"id_opcion": "moderado", "texto": "Moderado", "valor": 0},
+        {"id_opcion": "elevado", "texto": "Elevado", "valor": 1},
+        {"id_opcion": "extremo", "texto": "Extremo", "valor": 2},
+        {"id_opcion": "no_aplica", "texto": "El activo no tiene mercado de derivados relevante", "valor": null},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P17", "seccion": "derivados",
+      "pregunta": "¿Cuál es el posicionamiento de los grandes traders en derivados?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "cualquiera",
+      "metrica_cruda": {"campo": "long_short_ratio_top_traders", "unidad": "ratio"},
+      "opciones": [
+        {"id_opcion": "corto_consenso", "texto": "Mayoritariamente cortos", "valor": -2},
+        {"id_opcion": "sesgo_corto", "texto": "Sesgo corto", "valor": -1},
+        {"id_opcion": "mixto", "texto": "Mixto / dividido", "valor": 0},
+        {"id_opcion": "sesgo_largo", "texto": "Sesgo largo", "valor": 1},
+        {"id_opcion": "largo_consenso", "texto": "Mayoritariamente largos", "valor": 2},
+        {"id_opcion": "no_aplica", "texto": "El activo no tiene mercado de derivados relevante", "valor": null},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P18", "seccion": "derivados",
+      "pregunta": "¿Hubo eventos de liquidación o squeeze relevantes en las últimas 24h?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "cualquiera",
+      "metrica_cruda": {"campo": "liq_neta_usd_24h", "unidad": "USD (positivo = predominan liquidaciones de cortos)"},
+      "opciones": [
+        {"id_opcion": "long_squeeze", "texto": "Sí, liquidación de largos (caída)", "valor": -2},
+        {"id_opcion": "ninguno", "texto": "No", "valor": 0},
+        {"id_opcion": "short_squeeze", "texto": "Sí, short squeeze (subida)", "valor": 2},
+        {"id_opcion": "no_aplica", "texto": "El activo no tiene mercado de derivados relevante", "valor": null},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P19", "seccion": "noticias",
+      "pregunta": "¿Cuál es el tono agregado de las noticias específicas del activo de las últimas 48h anteriores a la hora de corte?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "reporte",
+      "nota": "JUICIO NARRATIVO y el más contaminado por look-ahead: las noticias se escriben después del movimiento. Descarta toda pieza publicada después de la hora de corte antes de puntuar el tono.",
+      "opciones": [
+        {"id_opcion": "muy_negativo", "texto": "Muy negativo", "valor": -2},
+        {"id_opcion": "negativo", "texto": "Predominantemente negativo", "valor": -1},
+        {"id_opcion": "mixto", "texto": "Mixto / equilibrado", "valor": 0},
+        {"id_opcion": "positivo", "texto": "Predominantemente positivo", "valor": 1},
+        {"id_opcion": "muy_positivo", "texto": "Muy positivo", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P20", "seccion": "noticias",
+      "pregunta": "¿Se reportó algún catalizador de alto impacto específico del activo (listado/deslistado, ETF, hack, upgrade de red, integración mayor, declaración de figura clave)?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "cualquiera",
+      "opciones": [
+        {"id_opcion": "negativo_alto", "texto": "Sí, negativo de alto impacto", "valor": -2},
+        {"id_opcion": "negativo_medio", "texto": "Sí, negativo de impacto medio", "valor": -1},
+        {"id_opcion": "ninguno", "texto": "No", "valor": 0},
+        {"id_opcion": "positivo_medio", "texto": "Sí, positivo de impacto medio", "valor": 1},
+        {"id_opcion": "positivo_alto", "texto": "Sí, positivo de alto impacto", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P21", "seccion": "regulacion",
+      "pregunta": "¿Cuál fue el saldo de las novedades regulatorias del día para el activo o el mercado cripto?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "cualquiera",
+      "opciones": [
+        {"id_opcion": "muy_negativo", "texto": "Muy negativo (prohibiciones, demandas al activo)", "valor": -2},
+        {"id_opcion": "negativo", "texto": "Negativo (retrasos, incertidumbre)", "valor": -1},
+        {"id_opcion": "neutral", "texto": "Sin novedades relevantes / saldo equilibrado", "valor": 0},
+        {"id_opcion": "positivo", "texto": "Positivo (avances de claridad regulatoria)", "valor": 1},
+        {"id_opcion": "muy_positivo", "texto": "Muy positivo (aprobaciones, leyes favorables)", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P22", "seccion": "tecnico",
+      "pregunta": "¿Dónde está el precio respecto a la zona de soporte/resistencia clave?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "medicion",
+      "metrica_cruda": {"campo": "pos_en_rango_pct", "unidad": "% (0 = en el soporte clave, 100 = en la resistencia clave)"},
+      "derivacion": "precio < soporte -> bajo_soporte; pos_en_rango ≤ 15 -> en_soporte; (15,85) -> rango_medio; ≥ 85 -> en_resistencia; precio > resistencia -> sobre_resistencia",
+      "opciones": [
+        {"id_opcion": "bajo_soporte", "texto": "Por debajo del soporte clave (ruptura bajista)", "valor": -2},
+        {"id_opcion": "en_soporte", "texto": "Apoyado sobre el soporte clave", "valor": -1},
+        {"id_opcion": "rango_medio", "texto": "En medio del rango", "valor": 0},
+        {"id_opcion": "en_resistencia", "texto": "Presionando la resistencia clave", "valor": 1},
+        {"id_opcion": "sobre_resistencia", "texto": "Por encima de la resistencia (ruptura alcista)", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P23", "seccion": "tecnico",
+      "pregunta": "¿Cuál es la posición del precio respecto a las medias móviles de 50, 100 y 200 sesiones?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "medicion",
+      "metrica_cruda": {"campo": "n_medias_por_debajo_del_precio", "unidad": "entero 0-3"},
+      "derivacion": "0 de 3 -> bajo_todas; 1 de 3 -> bajo_mayoria; 2 de 3 -> sobre_mayoria; 3 de 3 -> sobre_todas. 'mixto' sólo si falta alguna media y las disponibles se contradicen.",
+      "opciones": [
+        {"id_opcion": "bajo_todas", "texto": "Por debajo de todas las medias clave", "valor": -2},
+        {"id_opcion": "bajo_mayoria", "texto": "Por debajo de la mayoría", "valor": -1},
+        {"id_opcion": "mixto", "texto": "Mixto", "valor": 0},
+        {"id_opcion": "sobre_mayoria", "texto": "Por encima de la mayoría", "valor": 1},
+        {"id_opcion": "sobre_todas", "texto": "Por encima de todas las medias clave", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P24", "seccion": "tecnico",
+      "pregunta": "¿Se reportan señales de patrón técnico relevantes?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "reporte",
+      "nota": "JUICIO NARRATIVO, y de los de peor acuerdo entre anotadores. Trátalo como sospechoso hasta que midas su alfa de Krippendorff.",
+      "opciones": [
+        {"id_opcion": "bajista_confirmado", "texto": "Patrón bajista confirmado", "valor": -2},
+        {"id_opcion": "bajista_formacion", "texto": "Patrón bajista en formación", "valor": -1},
+        {"id_opcion": "ninguno", "texto": "Sin patrón destacado", "valor": 0},
+        {"id_opcion": "alcista_formacion", "texto": "Patrón/señal alcista en formación (sin confirmar)", "valor": 1},
+        {"id_opcion": "alcista_confirmado", "texto": "Patrón alcista confirmado", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P25", "seccion": "tecnico",
+      "pregunta": "¿En qué nivel está el RSI de 14 sesiones en gráfico diario?",
+      "uso": "feature", "escala": "estado_crudo", "sumable": false,
+      "origen_esperado": "medicion",
+      "metrica_cruda": {"campo": "rsi_14_diario", "unidad": "índice 0-100"},
+      "derivacion": "rsi < 30 -> muy_bajo; [30,45) -> bajo; [45,55] -> neutral; (55,70] -> alto; > 70 -> muy_alto",
+      "nota": "CAMBIO IMPORTANTE respecto a v1. En v1 los extremos se codificaban como señal contraria (sobrecompra=-1, sobreventa=+1), que es una hipótesis de modelado escrita en el dataset. Aquí se guarda el ESTADO CRUDO y el número, y no suma. Si el modelo quiere la lectura contrarian, la aprende.",
+      "opciones": [
+        {"id_opcion": "muy_bajo", "texto": "RSI < 30", "valor": -2},
+        {"id_opcion": "bajo", "texto": "RSI 30-45", "valor": -1},
+        {"id_opcion": "neutral", "texto": "RSI 45-55", "valor": 0},
+        {"id_opcion": "alto", "texto": "RSI 55-70", "valor": 1},
+        {"id_opcion": "muy_alto", "texto": "RSI > 70", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P26", "seccion": "sentimiento",
+      "pregunta": "¿Cuál es el sentimiento de la comunidad/redes sobre el activo?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "reporte",
+      "nota": "JUICIO NARRATIVO. La euforia extrema puede leerse como señal contraria; esa decisión se deja al feature engineering y por eso la escala se mantiene direccional simple.",
+      "opciones": [
+        {"id_opcion": "muy_bajista", "texto": "Muy bajista / capitulación", "valor": -2},
+        {"id_opcion": "bajista", "texto": "Bajista", "valor": -1},
+        {"id_opcion": "neutral", "texto": "Neutral / dividido", "valor": 0},
+        {"id_opcion": "alcista_cauto", "texto": "Optimismo cauto", "valor": 1},
+        {"id_opcion": "euforia", "texto": "Euforia", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P27", "seccion": "sentimiento",
+      "pregunta": "¿La estacionalidad histórica del mes actual es favorable para el activo?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "medicion",
+      "metrica_cruda": {"campo": "retorno_mediano_mes_historico_pct", "unidad": "%"},
+      "derivacion": "mediana < -5 -> muy_desfavorable; [-5,0) -> desfavorable; = 0 aprox -> neutral; (0,+5] -> favorable; > +5 -> muy_favorable",
+      "nota": "Si sólo hay estacionalidad del conjunto del mercado y no del activo, dilo en 'evidencia' y usa origen='fuente_directa'. Es una variable de baja frecuencia: repetirá valor todo el mes, y eso reduce su información efectiva.",
+      "opciones": [
+        {"id_opcion": "muy_desfavorable", "texto": "Muy desfavorable (retorno mediano < -5%)", "valor": -2},
+        {"id_opcion": "desfavorable", "texto": "Desfavorable (retorno mediano -5% a 0%)", "valor": -1},
+        {"id_opcion": "neutral", "texto": "Neutral", "valor": 0},
+        {"id_opcion": "favorable", "texto": "Favorable (retorno mediano 0% a +5%)", "valor": 1},
+        {"id_opcion": "muy_favorable", "texto": "Muy favorable (retorno mediano > +5%)", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P28", "seccion": "riesgo",
+      "pregunta": "¿Cuántas banderas de riesgo TIPIFICADAS están activas hoy para este activo?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "medicion",
+      "checklist_cerrado": [
+        "desbloqueo de tokens ≥1% del float en los próximos 14 días",
+        "evento regulatorio adverso pendiente con fecha conocida",
+        "funding en |valor| > 0,05% por 8h",
+        "interés abierto > 1,6x su media de 30 días",
+        "exploit, halt de cadena o incidente de seguridad en los últimos 7 días",
+        "precio por debajo del soporte clave (P22 = bajo_soporte)",
+        "evento macro de alto impacto en los próximos 7 días",
+        "profundidad de libro a ±1% inferior a 1 M USD"
+      ],
+      "derivacion": "Se cuentan SÓLO las banderas del checklist cerrado que estén verificadas. 0-1 -> ninguno; 2-3 -> pocos; 4-5 -> varios; ≥6 -> muchos. Las banderas no verificables NO se cuentan ni como presentes ni como ausentes: se listan en 'evidencia'.",
+      "nota": "REDEFINIDA respecto a v1. En v1 contaba ítems de una lista en prosa que escribía el propio redactor: medía verbosidad, no riesgo, y un día locuaz puntuaba -2. Un motor RL explota eso en backtest y no generaliza ni un día en producción. Ahora el conjunto de banderas es cerrado, tipificado y verificable.",
+      "opciones": [
+        {"id_opcion": "ninguno", "texto": "0-1 banderas activas", "valor": 2},
+        {"id_opcion": "pocos", "texto": "2-3 banderas activas", "valor": 1},
+        {"id_opcion": "varios", "texto": "4-5 banderas activas", "valor": -1},
+        {"id_opcion": "muchos", "texto": "6 o más banderas activas", "valor": -2},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P29", "seccion": "riesgo",
+      "pregunta": "¿Cuántos eventos macro de alto impacto hay en el calendario de los próximos 7 días naturales?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "medicion",
+      "metrica_cruda": {"campo": "n_eventos_macro_7d", "unidad": "entero"},
+      "eventos_que_cuentan": ["reunión o acta del FOMC", "IPC de EE. UU.", "nóminas no agrícolas", "Jackson Hole u otra comparecencia del presidente de la Fed", "vencimiento trimestral de opciones de BTC/ETH", "decisión de tipos del BCE o del BoJ"],
+      "derivacion": "n = 0 -> ninguno; n = 1 -> uno; n ≥ 2 -> varios. La respuesta EXIGE citar el evento con su fecha en 'evidencia', o es sin_datos.",
+      "nota": "REDEFINIDA respecto a v1. La opción de v1 'No se mencionan' valía +1: premiaba que el reporte OMITIESE los eventos macro, que es exactamente el incentivo contrario al que quieres. Ahora se pregunta por un calendario objetivo y la ausencia de comprobación es sin_datos, no un premio.",
+      "opciones": [
+        {"id_opcion": "varios", "texto": "Dos o más eventos de alto impacto", "valor": -2},
+        {"id_opcion": "uno", "texto": "Un evento de alto impacto", "valor": -1},
+        {"id_opcion": "ninguno", "texto": "Ningún evento de alto impacto en el calendario", "valor": 1},
+        {"id_opcion": "sin_datos", "texto": "Calendario no consultado", "valor": null}
+      ]
+    },
+    {
+      "id": "P30", "seccion": "resumen",
+      "pregunta": "¿Cuál es el sesgo global del reporte para el día?",
+      "uso": "benchmark", "escala": "direccional", "sumable": false,
+      "origen_esperado": "reporte",
+      "nota": "NO ES UNA FEATURE. Es la conclusión del redactor, obligada a ser coherente con las secciones anteriores, es decir, una función determinista de P01–P29: colinealidad perfecta y la conclusión filtrándose como input. Se guarda aparte para una única pregunta legítima: ¿bate el juicio del LLM al modelo? Excluida de la suma y del entrenamiento.",
+      "opciones": [
+        {"id_opcion": "muy_bajista", "texto": "Muy bajista", "valor": -2},
+        {"id_opcion": "bajista", "texto": "Bajista", "valor": -1},
+        {"id_opcion": "neutral", "texto": "Neutral / mixto", "valor": 0},
+        {"id_opcion": "alcista", "texto": "Alcista (táctico o estructural)", "valor": 1},
+        {"id_opcion": "muy_alcista", "texto": "Muy alcista", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P31", "seccion": "coste_y_riesgo_de_posicion",
+      "pregunta": "¿En qué nivel está el funding rate de los perpetuos del activo?",
+      "uso": "feature", "escala": "estado_crudo", "sumable": false,
+      "origen_esperado": "cualquiera",
+      "metrica_cruda": {"campo": "funding_8h_pct", "unidad": "% por periodo de 8 horas, con signo"},
+      "derivacion": "f < -0.05 -> muy_negativo; [-0.05,-0.01) -> negativo; [-0.01,+0.01] -> neutro; (+0.01,+0.05] -> positivo; > +0.05 -> muy_positivo",
+      "nota": "NUEVA. Es el coste directo de mantener la posición y la variable que más P&L explica en un corto a dos semanas: un funding de +0,05%/8h son ~2,6% en 14 días, más que el edge esperado de la mayoría de señales direccionales. El signo importa tanto como el nivel, por eso se guarda con signo y sin interpretar.",
+      "opciones": [
+        {"id_opcion": "muy_negativo", "texto": "Muy negativo (cortos pagan a largos)", "valor": -2},
+        {"id_opcion": "negativo", "texto": "Negativo", "valor": -1},
+        {"id_opcion": "neutro", "texto": "Neutro", "valor": 0},
+        {"id_opcion": "positivo", "texto": "Positivo", "valor": 1},
+        {"id_opcion": "muy_positivo", "texto": "Muy positivo (largos pagan mucho)", "valor": 2},
+        {"id_opcion": "no_aplica", "texto": "El activo no tiene perpetuos con funding publicado", "valor": null},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P32", "seccion": "coste_y_riesgo_de_posicion",
+      "pregunta": "¿Cuál es la volatilidad realizada de 14 sesiones, anualizada?",
+      "uso": "feature", "escala": "estado_crudo", "sumable": false,
+      "origen_esperado": "cualquiera",
+      "metrica_cruda": {"campo": "vol_realizada_14d_anual_pct", "unidad": "% anualizado"},
+      "derivacion": "v < 40 -> muy_baja; [40,70) -> baja; [70,100) -> media; [100,150] -> alta; > 150 -> muy_alta",
+      "nota": "NUEVA. Con horizonte de 14 días la volatilidad determina el sizing y el stop, y pesa más que la dirección: un +1 alcista en un activo al 40% de vol y otro al 180% no son la misma apuesta. v1 no tenía ni una sola pregunta de volatilidad.",
+      "opciones": [
+        {"id_opcion": "muy_baja", "texto": "Muy baja (< 40%)", "valor": -2},
+        {"id_opcion": "baja", "texto": "Baja (40-70%)", "valor": -1},
+        {"id_opcion": "media", "texto": "Media (70-100%)", "valor": 0},
+        {"id_opcion": "alta", "texto": "Alta (100-150%)", "valor": 1},
+        {"id_opcion": "muy_alta", "texto": "Muy alta (> 150%)", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P33", "seccion": "coste_y_riesgo_de_posicion",
+      "pregunta": "¿Cuál es la volatilidad implícita a un mes del activo?",
+      "uso": "feature", "escala": "estado_crudo", "sumable": false,
+      "origen_esperado": "cualquiera",
+      "metrica_cruda": {"campo": "iv_1m_pct", "unidad": "% anualizado"},
+      "derivacion": "Mismos cortes que P32 aplicados a la implícita",
+      "nota": "NUEVA. Sólo hay mercado de opciones líquido para BTC y ETH: para el resto la respuesta esperada es 'no_aplica' si se confirma que no cotizan opciones, y 'sin_datos' si simplemente no se encuentra. No la fuerces.",
+      "opciones": [
+        {"id_opcion": "muy_baja", "texto": "Muy baja (< 40%)", "valor": -2},
+        {"id_opcion": "baja", "texto": "Baja (40-70%)", "valor": -1},
+        {"id_opcion": "media", "texto": "Media (70-100%)", "valor": 0},
+        {"id_opcion": "alta", "texto": "Alta (100-150%)", "valor": 1},
+        {"id_opcion": "muy_alta", "texto": "Muy alta (> 150%)", "valor": 2},
+        {"id_opcion": "no_aplica", "texto": "El activo no tiene mercado de opciones", "valor": null},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P34", "seccion": "coste_y_riesgo_de_posicion",
+      "pregunta": "¿Cuál es la liquidez ejecutable del activo (profundidad del libro a ±1% en el exchange de referencia)?",
+      "uso": "feature", "escala": "estado_crudo", "sumable": false,
+      "origen_esperado": "cualquiera",
+      "metrica_cruda": {"campo": "profundidad_1pct_usd", "unidad": "USD"},
+      "metrica_cruda_secundaria": {"campo": "spread_bps", "unidad": "puntos básicos"},
+      "derivacion": "d < 100k -> muy_baja; [100k,1M) -> baja; [1M,10M) -> media; [10M,50M] -> alta; > 50M -> muy_alta",
+      "nota": "NUEVA. Una señal en un activo con 800.000 USD de profundidad real no es explotable, por muy correcta que sea. El volumen 24h de agregadores (P04) NO sirve como proxy: en altcoins está inflado por wash trading. Si no encuentras profundidad de libro, es 'sin_datos' — no la sustituyas por volumen.",
+      "opciones": [
+        {"id_opcion": "muy_baja", "texto": "Muy baja (< $100k a ±1%)", "valor": -2},
+        {"id_opcion": "baja", "texto": "Baja ($100k-1M)", "valor": -1},
+        {"id_opcion": "media", "texto": "Media ($1-10M)", "valor": 0},
+        {"id_opcion": "alta", "texto": "Alta ($10-50M)", "valor": 1},
+        {"id_opcion": "muy_alta", "texto": "Muy alta (> $50M)", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P35", "seccion": "coste_y_riesgo_de_posicion",
+      "pregunta": "¿Cuál es la beta del activo respecto a BTC en los últimos 30 días?",
+      "uso": "feature", "escala": "estado_crudo", "sumable": false,
+      "origen_esperado": "cualquiera",
+      "metrica_cruda": {"campo": "beta_btc_30d", "unidad": "beta"},
+      "derivacion": "b < 0.3 -> muy_baja; [0.3,0.7) -> baja; [0.7,1.2] -> en_linea; (1.2,2.0] -> alta; > 2.0 -> muy_alta",
+      "nota": "NUEVA. Si la cartera son cinco alts largas con beta 1,5, en realidad hay una sola posición larga en BTC apalancada. P02 y P05 rozan esto pero no lo miden. Si no hay beta publicada, se puede estimar con la correlación de retornos diarios de 30 sesiones, declarándolo en 'derivacion'.",
+      "opciones": [
+        {"id_opcion": "muy_baja", "texto": "Muy baja (< 0,3)", "valor": -2},
+        {"id_opcion": "baja", "texto": "Baja (0,3-0,7)", "valor": -1},
+        {"id_opcion": "en_linea", "texto": "En línea con BTC (0,7-1,2)", "valor": 0},
+        {"id_opcion": "alta", "texto": "Alta (1,2-2,0)", "valor": 1},
+        {"id_opcion": "muy_alta", "texto": "Muy alta (> 2,0)", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    },
+    {
+      "id": "P36", "seccion": "oferta",
+      "pregunta": "¿Hay desbloqueo de tokens programado en los próximos 14 días y de qué tamaño?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "cualquiera",
+      "metrica_cruda": {"campo": "desbloqueo_14d_pct_float", "unidad": "% de la oferta circulante"},
+      "derivacion": "sin desbloqueo -> ninguno; pct < 1 -> menor; [1,5] -> medio; > 5 -> grande",
+      "nota": "NUEVA, y probablemente la más valiosa de las siete. Es de los poquísimos catalizadores bajistas PREDECIBLES, con timing conocido y dentro de tu ventana de 14 días. En v1 aparecía en la 'investigación mínima' del reporte pero ninguna pregunta lo capturaba, así que no llegaba al dataset. 'no_aplica' sólo si assets.json marca desbloqueos_programados='no'.",
+      "opciones": [
+        {"id_opcion": "grande", "texto": "Sí, más del 5% del circulante", "valor": -2},
+        {"id_opcion": "medio", "texto": "Sí, entre el 1% y el 5%", "valor": -1},
+        {"id_opcion": "menor", "texto": "Sí, menos del 1%", "valor": 0},
+        {"id_opcion": "ninguno", "texto": "No hay desbloqueo en los próximos 14 días", "valor": 1},
+        {"id_opcion": "no_aplica", "texto": "El activo no tiene calendario de desbloqueos (oferta ya circulante)", "valor": null},
+        {"id_opcion": "sin_datos", "texto": "Calendario no consultado", "valor": null}
+      ]
+    },
+    {
+      "id": "P37", "seccion": "oferta",
+      "pregunta": "¿Cuál es la emisión neta anualizada del activo (inflación menos quemas)?",
+      "uso": "feature", "escala": "direccional", "sumable": true,
+      "origen_esperado": "cualquiera",
+      "metrica_cruda": {"campo": "emision_neta_anual_pct", "unidad": "% anual sobre el circulante"},
+      "derivacion": "e > 15 -> muy_alta; (7,15] -> alta; (2,7] -> moderada; [0,2] -> baja; < 0 -> deflacionaria",
+      "nota": "NUEVA. Complementa a P36: el desbloqueo es el evento puntual, la emisión es la presión estructural continua. Distingue un activo con 20% de inflación anual de uno deflacionario, cosa que v1 no hacía en ninguna pregunta pese a pedir el dato en la investigación.",
+      "opciones": [
+        {"id_opcion": "muy_alta", "texto": "Muy alta (> 15% anual)", "valor": -2},
+        {"id_opcion": "alta", "texto": "Alta (7-15%)", "valor": -1},
+        {"id_opcion": "moderada", "texto": "Moderada (2-7%)", "valor": 0},
+        {"id_opcion": "baja", "texto": "Baja (0-2%)", "valor": 1},
+        {"id_opcion": "deflacionaria", "texto": "Deflacionaria (emisión neta negativa)", "valor": 2},
+        {"id_opcion": "sin_datos", "texto": "No capturado", "valor": null}
+      ]
+    }
+  ]
+}
