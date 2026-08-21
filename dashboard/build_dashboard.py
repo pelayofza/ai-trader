@@ -1787,6 +1787,44 @@ detecta un test, porque cada una tiene los suyos: corregir una y no las otras de
 sistema puntuando con dos definiciones distintas de la misma metrica."""
 
 
+def collect_daily_reports() -> dict:
+    """
+    La SEGUNDA via de captura: el reporte diario por activo que escribe un agente externo.
+
+    Dos bloques, y separarlos es el contenido de la vista:
+
+    - `contract`: sale de `config/`, que esta VERSIONADO. Es lo que el pipeline promete y
+      es reproducible en cualquier clon.
+    - `last_run`: sale de `data/signals_raw/ai_reports/`, que esta en el .gitignore y crece
+      cada manana a las ocho. Es lo que una ejecucion MIDIO, y cambia solo con que pase un
+      dia -- igual que el bloque de paper trading en vivo, y por el mismo motivo la
+      caracterizacion lo enmascara en vez de congelarlo (ver tests/golden_support.py).
+
+    Confundir los dos seria repetir el error que la propia v2 del cuestionario vino a
+    arreglar: dar por medido lo que solo estaba declarado.
+
+    `last_run` va DENTRO y al final del dict a proposito: el scrubber lo recorta por su
+    clave, y para eso necesita que el borde sea estable.
+    """
+    from ai_trader.signals.ai_reports import (
+        AI_REPORTS_DIR,
+        AGENT_INSTRUCTIONS,
+        contract_problems,
+        load_contract,
+        load_last_run,
+    )
+
+    return {
+        "contract": load_contract(ROOT),
+        # Vacia mientras el contrato sea coherente. Si algun dia no lo es, la vista lo dice
+        # en vez de ensenar cifras que ya no cuadran con lo que el agente va a leer manana.
+        "problems": contract_problems(ROOT),
+        "instructions_path": AGENT_INSTRUCTIONS.as_posix(),
+        "archive_path": AI_REPORTS_DIR.as_posix(),
+        "last_run": load_last_run(ROOT),
+    }
+
+
 def collect_paper() -> dict:
     """
     La vista del paper trading en vivo. DOS fuentes reales y ninguna llamada de red.
@@ -1985,6 +2023,7 @@ def build() -> None:
     logger.info("Break-even del IC: barrido de rho (informe publicado)...")
     logger.info("Catalogo de senales externas y auditoria de cobertura...")
     signals_platform = collect_signals()
+    logger.info("Reporte diario por activo: contrato y ultima ejecucion...")
     logger.info("Catalogo de estrategias...")
     strategies = collect_strategies()
     logger.info("Demo de señales sobre precio real...")
@@ -2022,6 +2061,7 @@ def build() -> None:
         "activity_v4": collect_activity(CHANNELS_LIB),
         "signal_channel_v4": collect_signal_channel(CHANNELS_LIB),
         "signals_platform": signals_platform,
+        "daily_reports": collect_daily_reports(),
         "paper": collect_paper(),
         "divergence": collect_divergence(),
         "roadmap": collect_roadmap(),

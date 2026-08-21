@@ -3001,6 +3001,209 @@ function renderSignals(){
       era: la fuerza relativa no está acotada y un −1.0 es alcanzable.</div>`;
 }
 
+function renderDailyReports(){
+  const host=$('#aireports'),R=D.daily_reports;
+  if(!R||!R.contract){host.innerHTML='<h1>Reporte diario por activo</h1><div class="card"><p class="tag">Sin contrato que leer.</p></div>';return;}
+  const C=R.contract,U=C.universe,L=R.last_run,O=C.by_origin||{};
+  const pct=v=>v==null?'—':v.toFixed(1).replace('.',',')+'%';
+  const num=(v,d)=>v==null?'—':v.toFixed(d==null?2:d).replace('.',',');
+  // El chip pinta RIESGO, no magnitud: `alto` es el rojo de criticidad. Aqui lo que debe
+  // alarmar es la cobertura BAJA -- una media calculada sobre media docena de respuestas
+  // no es comparable con una de 29 --, asi que el mapeo va invertido a proposito.
+  const covRisk=v=>v==null?'':(v<50?'alto':v<70?'medio':'bajo');
+  const tiles=[
+    ['Preguntas por activo',C.n_questions,`<b>${C.n_sumable}</b> suman · ${C.n_questions-C.n_sumable} son estado o benchmark`],
+    ['Activos del universo',U.n_assets,`<span class="mono">config/assets.json</span> manda${U.updated?', al '+esc(U.updated):''}`],
+    ['De medición pura',O.medicion||0,'la opción sale del número, sin juicio'],
+    ['De juicio narrativo',O.reporte||0,'las de peor acuerdo esperado entre anotadores'],
+    ['De cualquier fuente',O.cualquiera||0,'lo que rompe la circularidad de la v1'],
+    ['Con número crudo guardado',`${C.n_with_raw_metric}/${C.n_questions}`,'la categoría no sustituye al valor'],
+  ];
+  host.innerHTML=`
+    <p class="crumb">Capítulo 2 · Datos</p>
+    <h1>Reporte diario por activo: ${C.n_questions} preguntas, ${U.n_assets} activos, una hora de corte</h1>
+    <p class="lead">La <b>segunda vía de captura</b>, y es de otra naturaleza que la primera. Las
+      ${(D.signals_platform&&D.signals_platform.summary.n_sources)||29} fuentes de la vista anterior van
+      contra APIs y devuelven <b>números</b>. Ésta la ejecuta un <b>agente externo</b> (Claude Cowork)
+      todas las mañanas a las <b>08:00 Europe/Madrid</b>, lee fuentes públicas de la web y devuelve
+      <b>categorías</b>: ${C.n_questions} preguntas por activo sobre ${U.n_assets} activos. No comparte
+      una línea de código con la otra —no toca <span class="mono">SignalStore</span>, no pasa por
+      <span class="mono">normalize.py</span>, no entra en el radar— y por eso se lee aparte.</p>
+    <div class="grid tiles">${tiles.map(t=>`<div class="card tile"><div class="k">${t[0]}</div>
+      <div class="v">${t[1]}</div><div class="s">${t[2]}</div></div>`).join('')}</div>
+
+    <div class="note"><b>Lo primero de todo es la hora de corte, y es lo más importante del pipeline.</b>
+      Se declara <b>antes de buscar nada</b> —06:00Z por defecto— y a partir de ahí se descarta toda
+      fuente publicada después, <i>aunque el buscador la devuelva primero y aunque contenga justo el dato
+      que se busca</i>. El motivo no es pulcritud: un artículo publicado a las 19:00 puede contener el
+      cierre del día, y usarlo para «predecir» ese día produce un backtest espectacular y un live plano.
+      Ese error <b>no se detecta a posteriori</b> y no se repara después. Por eso cada respuesta lleva
+      <span class="mono">fuente_ts</span> y cada fuente su fecha de publicación: para que el filtro se
+      pueda volver a aplicar en el entrenamiento aunque algún día se cuele algo. Si un dato sólo existe
+      en fuentes posteriores al corte, la respuesta correcta es <span class="mono">sin_datos</span>.</div>
+
+    <h2>Primero se mide, después se narra</h2>
+    <p class="lead">Es la inversión que separa esta versión de la anterior, y no es cosmética. En la v1
+      el agente escribía el reporte y luego respondía el cuestionario <i>usando exclusivamente el reporte
+      que acababa de escribir</i>. Eso no medía el mercado: <b>medía al redactor</b>. Varias preguntas
+      acababan siendo funciones deterministas de la prosa —una contaba ítems de una lista que escribía el
+      propio agente, o sea <b>verbosidad</b>; otra premiaba con +1 que el reporte <b>omitiese</b> los
+      eventos macro—. Hoy las dos salidas se derivan de la <b>misma captura numérica</b>
+      (<span class="mono">_medidas/medidas_{TICKER}.json</span>), escrita <b>antes</b> que una sola frase
+      del HTML. Ese fichero es lo que hace verificable el orden: sin él, nada distingue «medí y luego
+      narré» de «narré y luego rellené los números para que cuadraran».</p>
+    <div class="grid cards">
+      <div class="card"><h3>1 · Medir</h3><p class="lead" style="margin:8px 0">36 métricas por activo con
+        <span class="mono">{v, unidad, fuente, url, ts}</span>. El precio se contrasta con <b>≥2 fuentes</b>
+        y, si discrepan, se guarda el <b>rango</b> y nunca un promedio: en una sesión direccional dos
+        cifras separadas por varios puntos suelen ser <b>cronología, no error</b>.</p></div>
+      <div class="card"><h3>2 · Narrar</h3><p class="lead" style="margin:8px 0">HTML autocontenido de 13
+        secciones fijas, escrito <b>a partir</b> de las medidas. Descriptivo: las recomendaciones de
+        inversión están prohibidas. La conclusión del redactor (<b>P30</b>) se guarda, pero fuera de la
+        suma.</p></div>
+      <div class="card"><h3>3 · Responder</h3><p class="lead" style="margin:8px 0">Las de
+        <span class="mono">medicion</span> aplican una <b>derivación declarada</b> al número, mecánicamente
+        —si el número existe, la opción está determinada y no hay juicio que ejercer—. Las de
+        <span class="mono">cualquiera</span> pueden usar fuentes que <b>no</b> están en el reporte,
+        declarándolo.</p></div>
+    </div>
+
+    <div class="note"><b><span class="mono">sin_datos</span> y <span class="mono">no_aplica</span> son
+      cosas opuestas, y en la v1 colisionaban en el mismo cero.</b> <span class="mono">sin_datos</span> es
+      «la métrica existe para este activo y no se encontró»; <span class="mono">no_aplica</span> es «no
+      existe» —sin producto cotizado, sin derivados, sin opciones—. Meter las dos en un 0 pone un dato
+      falso donde había un hueco, y encima choca con el 0 legítimo de «flujos planos», que significa lo
+      contrario. Ahora las dos valen <span class="mono">null</span> y se distinguen por
+      <span class="mono">estado</span>, que junto a <span class="mono">disponible</span> forma la
+      <b>máscara</b> del dataset. Y quién puede decir <span class="mono">no_aplica</span> no lo decide el
+      agente: lo decide <span class="mono">assets.json</span>. Hoy declara
+      <b>${(U.listed_product||{}).si||0}</b> activos con producto cotizado, <b>${(U.listed_product||{}).no||0}</b>
+      sin él y <b>${(U.listed_product||{}).desconocido||0}</b> como <span class="mono">desconocido</span> —y
+      <span class="mono">desconocido</span> <b>no</b> habilita <span class="mono">no_aplica</span>: obliga
+      a <span class="mono">sin_datos</span>, porque un hueco de verificación no es un «no existe».</div>
+
+    <h2>El ancla: el único campo del que depende que el día se pueda recuperar</h2>
+    <p class="lead">Todo lo demás de una ejecución se puede volver a mirar más tarde y con mejor criterio.
+      El <b>precio a la hora de corte</b>, no: si no se guardó como número, no hay forma de calcular a
+      posteriori qué pasó después, y el día entero deja de servir como dato de entrenamiento por bueno que
+      fuese el cuestionario. Ése fue el fallo grueso de la v1 —el precio nunca se guardaba como número, así
+      que las etiquetas tampoco se podían reconstruir y <b>cada día que pasaba era un día perdido</b>—. Hoy
+      cada respuesta abre con <span class="mono">ancla</span>: precio, sello UTC, par, exchange de
+      referencia y número de fuentes contrastadas.</p>
+    <div class="grid cards">
+      <div class="card"><h3>El esquema de etiquetas existe; el proceso que lo rellena, no</h3>
+        <p class="lead" style="margin:8px 0">Cada día se escribe
+          <span class="mono">etiquetas_{FECHA}.json</span> con una entrada por ticker, el ancla copiada y
+          <b>todos los campos de resultado a <span class="mono">null</span></b>. Rellenarlos a T+14 es
+          cálculo numérico sobre datos de mercado y, por la Regla 4 del proyecto, <b>no es un cambio
+          mecánico</b>: se dejó fuera a propósito en vez de improvisarlo. Mientras no exista, el fichero
+          sigue sirviendo, porque lo que salva el día es el ancla.</p>
+        <p class="tag">${(C.labels.fields||[]).length} campos declarados: ${(C.labels.fields||[]).map(f=>`<span class="mono">${esc(f)}</span>`).join(' · ')}</p></div>
+      <div class="card"><h3>Por qué MFE/MAE y por qué el exceso sobre BTC</h3>
+        <p class="lead" style="margin:8px 0">Un corto que acaba en <b>+0%</b> pero que pasó por
+          <b>−18%</b> te liquida antes de tener razón: el retorno final no lo captura y el <b>MAE</b> sí.
+          Sin MFE/MAE no se puede evaluar ni el <i>sizing</i> ni el stop, que a 14 días pesan más que la
+          dirección. Y como casi todo el universo tiene beta alta contra BTC, una etiqueta de retorno
+          <b>absoluto</b> premia acertar la dirección del mercado —una apuesta distinta, y ya disponible
+          mucho más barata—. El <b>exceso sobre BTC</b> es la que está alineada con lo que este sistema
+          puede aportar.</p></div>
+    </div>
+
+    <h2>Las ${C.n_questions} preguntas, por sección</h2>
+    <div class="card"><div class="tblwrap"><table>
+      <thead><tr><th>sección</th><th class="num">preguntas</th></tr></thead><tbody>
+      ${(C.sections||[]).map(s=>`<tr><td class="mono">${esc(s.key)}</td><td class="num">${s.n}</td></tr>`).join('')}
+      </tbody></table></div>
+      <p class="tag">Las ${C.n_questions-C.n_sumable} que no suman —${(C.excluded_from_sum||[]).map(q=>`<span class="mono">${esc(q)}</span>`).join(', ')}—
+        son <b>estado descriptivo</b> o el benchmark del redactor. Sumar el RSI o el funding sería afirmar
+        una interpretación (contrarian o no) que le toca al modelo, no al fichero.</p></div>
+
+    ${L?`
+    <h2>La última ejecución</h2>
+    <p class="lead">Las cifras de este bloque salen de <span class="mono">${esc(R.archive_path)}</span>,
+      que está <b>fuera de git</b>: no existen en un clon recién hecho y cambian solas cada mañana. Lo que
+      va arriba —el contrato— sí está versionado. Esa frontera es la vista: <b>lo prometido se congela, lo
+      medido no</b>.</p>
+    <div class="grid tiles">
+      <div class="card tile"><div class="k">Día capturado</div><div class="v">${esc(L.date)}</div>
+        <div class="s">corte ${esc((L.cutoff_utc||'').replace('T',' ').replace(':00Z','Z'))} · ${L.n_days_captured} día${L.n_days_captured===1?'':'s'} desde ${esc(L.first_date)}</div></div>
+      <div class="card tile"><div class="k">Trío completo</div><div class="v">${L.n_complete}/${L.n_assets}</div>
+        <div class="s">${(L.incomplete||[]).length?'a medias: '+L.incomplete.map(esc).join(', '):'reporte + respuestas + medidas en todos'}</div></div>
+      <div class="card tile"><div class="k">Cobertura media</div><div class="v">${pct(L.coverage_mean_pct)}</div>
+        <div class="s">de ${pct(L.coverage_min_pct)} a ${pct(L.coverage_max_pct)} entre activos</div></div>
+      <div class="card tile"><div class="k">Media de medias</div><div class="v">${num(L.mean_of_means)}</div>
+        <div class="s">dispersión ${num(L.spread_of_means)} · P30: ${Object.entries(L.p30_split||{}).map(([k,v])=>`${v} ${esc(k)}`).join(' · ')||'—'}</div></div>
+    </div>
+    <div class="note"><b>El primer sesgo a vigilar no es la media: es que la cobertura la explique.</b>
+      Los huecos <b>no son aleatorios</b> —faltan más en <i>small caps</i> y en días volátiles, justo donde
+      más importa—, así que si la cobertura correlacionase con la puntuación, el ranking del día estaría
+      midiendo <b>cuánto se pudo medir</b> de cada activo y no cuánto favorable es. El propio resumen lo
+      calcula y hoy da <b>ρ de Pearson ${num(L.coverage_bias_pearson)}</b> y
+      <b>Spearman ${num(L.coverage_bias_spearman)}</b>. Lo que tranquiliza es la <b>magnitud</b>: con
+      |ρ| por debajo de 0,20 la cobertura no manda en el orden. Lo que <b>no</b> tranquiliza es el
+      <b>signo</b>, y conviene no venderlo como buena noticia — negativo significa que los mejor
+      puntuados tienden a ser los <i>menos</i> medidos, que es la dirección incómoda: puntúa más alto
+      aquello de lo que menos se sabe. La tabla de abajo lo enseña de un vistazo — mira las filas donde
+      el percentil de media es alto y el de cobertura, bajo. Con
+      ${L.n_days_captured} día${L.n_days_captured===1?'':'s'} capturado${L.n_days_captured===1?'':'s'} y
+      ${L.n_assets} activos esto no es un resultado sino una <b>lectura</b>: fija la cifra que hay que
+      seguir mirando, y el día que |ρ| suba, el ranking del día deja de significar lo que dice.</div>
+    <div class="card"><div class="tblwrap"><table>
+      <thead><tr><th class="num">#</th><th>ticker</th><th class="num">media</th><th>lectura</th>
+        <th class="num">cobertura</th><th class="num">pct. media</th><th class="num">pct. cob.</th>
+        <th>P30</th><th class="num">ancla USD</th></tr></thead><tbody>
+      ${(L.rows||[]).map(r=>`<tr><td class="num">${r.rank==null?'—':r.rank}</td>
+        <td class="mono">${esc(r.ticker)}</td><td class="num">${num(r.mean)}</td>
+        <td>${esc(r.reading)}</td>
+        <td class="num"><span class="chip ${covRisk(r.coverage_pct)}">${pct(r.coverage_pct)}</span></td>
+        <td class="num">${num(r.pct_mean,1)}</td><td class="num">${num(r.pct_coverage,1)}</td>
+        <td>${esc(r.p30)}</td><td class="num">${r.anchor_usd==null?'—':r.anchor_usd}</td></tr>`).join('')}
+      </tbody></table></div>
+      <p class="tag">La <b>media</b> no es una feature y lleva
+        <span class="mono">usar_en_entrenamiento: false</span> en el propio fichero: suma peras con
+        manzanas con pesos implícitos iguales y con nulls por medio. Está para leer el día de un vistazo
+        y para ordenar la tabla. Lo que importa en largo/corto es el <b>rango por sección transversal</b>
+        del día, no el score absoluto de uno — y leerlo sin la columna de cobertura al lado es leerlo mal.</p></div>
+    `:`<h2>La última ejecución</h2>
+    <div class="card"><p class="lead" style="margin:8px 0">No hay ninguna captura en este clon.
+      <span class="mono">${esc(R.archive_path)}</span> está en el <span class="mono">.gitignore</span>,
+      así que <b>no es un fallo</b>: el contrato de arriba está entero y la primera ejecución escribe la
+      carpeta del día.</p></div>`}
+
+    ${R.problems&&R.problems.length?`<div class="note"><b>El contrato tiene incoherencias.</b>
+      <ul>${R.problems.map(p=>`<li>${esc(p)}</li>`).join('')}</ul>
+      Se ven aquí y rompen <span class="mono">verify.ps1</span>, que es lo que impide que se descubran
+      mañana a las ocho en un sandbox donde nadie está mirando.</div>`:''}
+
+    <h2>Lo que este pipeline no promete</h2>
+    <div class="note"><b>Está capturado, no conectado.</b> Ni una línea del paquete lee todavía
+      <span class="mono">${esc(R.archive_path)}</span>: no hay adaptador, no hay feature en el radar y
+      nada de esto llega al motor. Se captura desde ya por el mismo motivo que las fuentes
+      <span class="mono">forward_capture</span> de la vista anterior —<b>el pasado no se puede descargar</b>,
+      y cada día sin capturar es profundidad que no se recupera ni pagando—, pero conviene que no se lea
+      como una capacidad del sistema: hoy es un <b>archivo que crece</b>.</div>
+    <div class="grid cards">
+      <div class="card"><h3>Acuerdo entre anotadores: desconocido</h3>
+        <p class="lead" style="margin:8px 0">Con temperatura no nula y búsqueda web no determinista, dos
+          ejecuciones del mismo día dan respuestas distintas. Pasar el mismo HTML por el cuestionario
+          cinco veces y medir el <b>alfa de Krippendorff</b> por pregunta daría el <b>techo de señal</b> de
+          cada columna. No se ha hecho. Se espera que las duras salgan muy bien y que las
+          <b>${O.reporte||0} de juicio narrativo</b> salgan mal.</p></div>
+      <div class="card"><h3>N efectivo minúsculo</h3>
+        <p class="lead" style="margin:8px 0">Horizonte de <b>14 días</b> con observación diaria significa
+          ventanas <b>solapadas</b>: 250 días por activo son <b>~18 periodos independientes</b>, no 250.
+          Contra eso hay <b>${C.n_sumable} variables</b> sumables fuertemente correlacionadas y uno o dos
+          regímenes de mercado en todo el año. Cualquier validación que trate las filas como
+          independientes inflará la significación.</p></div>
+      <div class="card"><h3>El baseline barato, y si no lo bate no se paga</h3>
+        <p class="lead" style="margin:8px 0">Antes de dar por buenas ${C.n_questions} preguntas de LLM hay
+          que entrenar con <span class="mono">[ret_24h, ret_7d, funding, vol_realizada]</span> —exactos,
+          gratis y point-in-time—. Si el cuestionario no bate eso de forma robusta, el pipeline
+          <b>no se paga</b>. Es la misma pregunta que hundió al sustrato sintético: que una cosa sea fiel
+          no significa que <b>ordene</b>.</p></div>
+    </div>`;
+}
+
 function renderThemes(){
   const host=$('#themes'),T=D.themes;
   if(!T){
@@ -3119,7 +3322,7 @@ function renderThemes(){
 
 function main(){
   initTheme();initNav();
-  renderOverview();renderMarket();renderSignals();renderSynthetic();renderFidelity();
+  renderOverview();renderMarket();renderSignals();renderDailyReports();renderSynthetic();renderFidelity();
   renderTrade();renderSessions();renderStrategies();renderRanking();renderActivity();
   renderValidation();renderTransfer();renderSignalChannel();renderThemes();
   renderPaper();renderRoadmap();
@@ -3138,6 +3341,7 @@ SHELL = """
       <li class="chap"><b>2 · Datos</b></li>
       <li><button data-sec="market">Captura de datos reales</button></li>
       <li><button data-sec="signals">Señales externas</button></li>
+      <li><button data-sec="aireports">Reporte diario por activo</button></li>
       <li class="chap"><b>3 · Trade</b></li>
       <li><button data-sec="trade">Cómo se ejecuta un trade</button></li>
       <li><button data-sec="sessions">Sesiones intradía</button></li>
@@ -3163,6 +3367,7 @@ SHELL = """
     <section id="overview" class="section active"></section>
     <section id="market" class="section"></section>
     <section id="signals" class="section"></section>
+    <section id="aireports" class="section"></section>
     <section id="trade" class="section"></section>
     <section id="sessions" class="section"></section>
     <section id="strategies" class="section"></section>

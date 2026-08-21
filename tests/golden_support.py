@@ -60,6 +60,14 @@ _KEYED = (
     # `_count_tests()` cuenta los tests del repo: anadir un test cambiaria el artefacto
     # sin que el comportamiento cambie.
     (re.compile(r"<b>\d+ tests</b>"), "<b><NTESTS> tests</b>"),
+    # La ULTIMA EJECUCION del reporte diario por activo. Mismo motivo que los dos bloques
+    # de abajo y un caso mas claro todavia: `data/signals_raw/` esta entero en el
+    # .gitignore, asi que estas cifras no existen en un clon recien hecho y cambian solas
+    # cada manana a las ocho, cuando la tarea externa escribe la carpeta del dia. Lo que SI
+    # se congela es el `contract` que va delante --sale de `config/`, que esta versionado--,
+    # y esa es justo la frontera que la vista ensena: lo prometido se caracteriza, lo medido
+    # no. Lo que el bloque contenga se prueba en tests/test_ai_reports_contract.py.
+    (re.compile(r'"last_run": (?:\{.*?\}|null)\}, "paper":', re.S), '"last_run": <LIVE>}, "paper":'),
     # El bloque `paper` del dashboard es ESTADO LOCAL DE LA MAQUINA, no evidencia
     # publicada: sale de `data/live/cycles.jsonl` y de `data/runtime_state.json`, que
     # estan fuera de git a proposito (crecen cada 15 minutos en la maquina que opera).
@@ -87,9 +95,10 @@ def scrub(text: str) -> str:
     """Neutraliza lo que varia sin que el comportamiento cambie.
 
     Solo cinco cosas: la marca de tiempo, la metadata del commit, el recuento de tests,
-    la ruta absoluta del repo (distinta en cada maquina) y el bloque de paper trading en
-    vivo del dashboard (estado local, no evidencia commiteada). Cualquier otra diferencia
-    se considera un cambio de comportamiento y debe romper el test."""
+    la ruta absoluta del repo (distinta en cada maquina) y los bloques de ESTADO LOCAL
+    --paper trading en vivo, divergencia y la ultima ejecucion del reporte diario--, que
+    salen de carpetas fuera de git y cambian solos con que pase el tiempo. Cualquier otra
+    diferencia se considera un cambio de comportamiento y debe romper el test."""
     text = text.replace("\r\n", "\n")
 
     root = str(REPO_ROOT)
