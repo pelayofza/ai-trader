@@ -63,6 +63,13 @@ REQUIRED_INPUTS = (
 SUMMARY_FILE = "_resumen.json"
 LABELS_PREFIX = "etiquetas_"
 MEASURES_DIR = "_medidas"
+ANSWERS_PREFIX = "respuestas_"
+
+# El id del cuestionario contra el que estan escritas las tablas que INTERPRETAN estas
+# respuestas (`observation/daily_report_scores.py`). Se exporta desde aqui, que es donde
+# vive el lector, para que el consumidor no tenga que abrir el JSON de config para saber
+# que version esta leyendo. Una v3 con otros ids se detecta comparando, no adivinando.
+QUESTIONNAIRE_ID = "cuestionario_cripto_v2"
 
 # El nombre CANONICO del dia lleva el ticker y nada mas. Una reejecucion añade sufijo
 # (`_v2`, `_v3`) y una version archivada tambien (`_vOld`), y las dos conviven en la misma
@@ -396,4 +403,79 @@ def load_last_run(root: Path) -> dict | None:
             "coverage_bias_spearman": diagnostic.get("spearman"),
             "rows": rows,
         }
+    return None
+
+
+# ------------------------------------------------------- respuestas de un dia ------
+def load_day_answers(root: Path, date: str | None = None) -> dict | None:
+    """Las 36 respuestas por activo de UN dia, crudas y sin interpretar.
+
+    Es el tercer lector del modulo y el unico que baja al detalle de la pregunta: los otros
+    dos describen el CONTRATO y resumen la EJECUCION, y ninguno de los dos sirve para
+    decidir nada porque no llegan al valor de P22 de SUI. Este si, y por eso se separa: lo
+    que devuelve alimenta a `observation/daily_report_scores.py`, que es quien puntua.
+
+    Sin `date` coge la ULTIMA carpeta que tenga al menos un fichero de respuestas de nombre
+    canonico. Los sufijados (`_v2`, `_vOld`) se ignoran aqui igual que en `load_last_run`,
+    y por el mismo motivo: la regla del pipeline es no sobrescribir jamas, asi que contar
+    ficheros a secas contaria dos veces el activo que se reejecuto.
+
+    P30 NO VIAJA EN LO QUE DEVUELVE ESTA FUNCION, Y ES DELIBERADO
+    -------------------------------------------------------------
+    P30 es el sesgo global que el propio redactor le pone al dia: una funcion determinista
+    de P01-P29 escrita por quien escribio P01-P29. El cuestionario la saca de la suma por
+    eso mismo (`benchmark`, no feature), y aqui se va un paso mas alla — no se carga —
+    para que ninguna capa de arriba pueda usarla por descuido y creerse que ha medido algo
+    cuando lo que ha hecho es preguntarle dos veces a la misma fuente. Quien quiera
+    compararse contra ella la tiene en `load_last_run` (`rows[].p30`), que es una vista de
+    lectura y no un camino hacia una orden.
+
+    Devuelve `None` si no hay ni un dia con respuestas: un clon recien hecho no tiene
+    `data/signals_raw/`, y eso no es un fallo.
+    """
+    base = root / AI_REPORTS_DIR
+    if not base.is_dir():
+        return None
+
+    dates = [date] if date else list(reversed(run_dates(root)))
+    for day_name in dates:
+        day = base / day_name
+        if not day.is_dir():
+            continue
+
+        assets: dict[str, dict] = {}
+        for path in sorted(day.glob(f"{ANSWERS_PREFIX}*.json")):
+            match = _CANONICAL.match(path.name)
+            if match is None:
+                continue
+            payload = _read_json(path)
+            if not payload:
+                continue
+            answers = payload.get("respuestas")
+            if not isinstance(answers, dict) or not answers:
+                continue
+            anchor = payload.get("ancla") or {}
+            assets[match.group(1)] = {
+                # Solo las respuestas. `benchmark_llm` se queda fuera a proposito (ver
+                # arriba), y tambien `puntuacion_agregada`: es la media SIN PESOS del
+                # propio fichero, y quien puntua aqui tiene su tabla de pesos.
+                "answers": answers,
+                "cutoff_utc": payload.get("hora_corte_utc"),
+                "anchor_usd": anchor.get("precio_usd"),
+                "anchor_ts": anchor.get("ts_utc"),
+                "questionnaire": payload.get("cuestionario"),
+            }
+
+        if not assets:
+            continue
+
+        summary = _read_json(day / SUMMARY_FILE) or {}
+        first = next(iter(assets.values()))
+        return {
+            "date": day_name,
+            "questionnaire": summary.get("cuestionario") or first["questionnaire"],
+            "cutoff_utc": summary.get("hora_corte_utc") or first["cutoff_utc"],
+            "assets": assets,
+        }
+
     return None
