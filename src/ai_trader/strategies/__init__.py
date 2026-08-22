@@ -2,6 +2,10 @@ from ai_trader.strategies.attention_ignition import (
     AttentionIgnitionConfig,
     AttentionIgnitionStrategy,
 )
+from ai_trader.strategies.daily_report_expert import (
+    DailyReportExpertConfig,
+    DailyReportExpertStrategy,
+)
 from ai_trader.strategies.event_calendar_drift import (
     EventCalendarDriftConfig,
     EventCalendarDriftStrategy,
@@ -42,6 +46,8 @@ __all__ = [
     "AttentionIgnitionStrategy",
     "CryptoMomentumConfig",
     "CryptoMomentumStrategy",
+    "DailyReportExpertConfig",
+    "DailyReportExpertStrategy",
     "EventCalendarDriftConfig",
     "EventCalendarDriftStrategy",
     "FlowPersistenceConfig",

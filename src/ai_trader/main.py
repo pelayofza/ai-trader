@@ -19,10 +19,12 @@ from ai_trader.execution.paper import PaperExecutionEngine
 from ai_trader.execution.polymarket_paper import PolymarketPaperExecutionEngine
 from ai_trader.execution.router import ExecutionRouter
 from ai_trader.notifications.base import Notifier
+from ai_trader.observation.daily_report_scores import DailyReportProvider
 from ai_trader.observation.regime import MarketRegimeProvider
 from ai_trader.observation.signal_themes import ThemedSignalRadarProvider
 from ai_trader.risk.engine import RiskEngine
 from ai_trader.shared.clock import Clock, LiveClock
+from ai_trader.signals.ai_reports import load_day_answers
 from ai_trader.signals.feed import load_frames
 from ai_trader.strategies.registry import build_strategy
 
@@ -146,6 +148,34 @@ def build_signal_radar(config: AppConfig, clock: Clock) -> ThemedSignalRadarProv
     return ThemedSignalRadarProvider(frames, clock)
 
 
+def build_daily_report_provider(clock: Clock) -> DailyReportProvider:
+    """El reporte diario por activo, listo para que lo lea una estrategia.
+
+    SIEMPRE se construye, tenga o no captura detras, y no lleva interruptor en el config a
+    diferencia del radar. El motivo es que el interruptor no anadiria nada: sin la carpeta del
+    dia el proveedor sale vacio, `reading()` devuelve None para todo y la estrategia no emite
+    una sola senal. Apagarlo a mano solo serviria para tener dos formas de decir lo mismo.
+
+    Lo que si hace falta es que se OIGA. Un dia sin captura -- el agente externo falla, la
+    maquina estuvo apagada -- se parece desde fuera a un dia tranquilo, asi que se dice con un
+    warning en vez de dejar un cero silencioso.
+    """
+    day = load_day_answers(Path("."))
+    provider = DailyReportProvider(day, clock)
+    if provider.n_scored:
+        logger.info(
+            "Daily report | captura del %s con %s activos puntuables (corte %s)",
+            provider.date, provider.n_scored, provider.cutoff_utc,
+        )
+    else:
+        logger.warning(
+            "Daily report | sin captura puntuable en data/signals_raw/ai_reports/: la "
+            "estrategia del reporte diario no operara. Es lo esperado en un clon recien "
+            "hecho; en la maquina que opera significa que la tarea de las 08:00 no escribio."
+        )
+    return provider
+
+
 def build_runner(
     config: AppConfig,
     market_data_service: MarketDataService,
@@ -179,6 +209,10 @@ def build_runner(
             clock,
         ),
         "attach_signal_provider": build_signal_radar(config, clock),
+        # El tercer ensamblador, y la linea que el comentario de `backtest/engine.py`
+        # anticipaba: anadir uno es anadir una entrada a este diccionario. Aqui SI y en
+        # backtest NO, a proposito -- ver `strategies/daily_report_expert.py`.
+        "attach_daily_report_provider": build_daily_report_provider(clock),
     }
     for strategy in strategies:
         for method, provider in providers.items():

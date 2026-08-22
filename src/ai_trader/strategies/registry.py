@@ -6,6 +6,10 @@ from ai_trader.strategies.attention_ignition import (
     AttentionIgnitionConfig,
     AttentionIgnitionStrategy,
 )
+from ai_trader.strategies.daily_report_expert import (
+    DailyReportExpertConfig,
+    DailyReportExpertStrategy,
+)
 from ai_trader.strategies.event_calendar_drift import (
     EventCalendarDriftConfig,
     EventCalendarDriftStrategy,
@@ -78,6 +82,18 @@ def _build_signal_composite(params: dict[str, Any]):
     return SignalCompositeStrategy(SignalCompositeConfig(**params))
 
 
+# --- la decima, y la unica SIN nucleo de precio ---------------------------------------
+#
+# Lee las 37 respuestas categoricas del reporte diario por activo y decide con ellas: lado,
+# confianza y horquilla. No entra en `scoring/families.py` ni en `scoring/search_space.py`, y
+# eso NO es un olvido -- es la consecuencia de que su sustrato tenga tres dias de historia.
+# Rankearla contra las otras ocho exigiria un backtest que hoy no significa nada, y
+# optimizarla exigiria datos que no existen. Se afirma y se pone a operar; la evidencia la
+# dara el diario del paper trading.
+def _build_daily_report_expert(params: dict[str, Any]):
+    return DailyReportExpertStrategy(DailyReportExpertConfig(**params))
+
+
 STRATEGY_REGISTRY: dict[str, StrategyFactory] = {
     "crypto_momentum": _build_crypto_momentum,
     "mean_reversion": _build_mean_reversion,
@@ -88,6 +104,7 @@ STRATEGY_REGISTRY: dict[str, StrategyFactory] = {
     "attention_ignition": _build_attention_ignition,
     "flow_persistence": _build_flow_persistence,
     "signal_composite": _build_signal_composite,
+    "daily_report_expert": _build_daily_report_expert,
 }
 
 
