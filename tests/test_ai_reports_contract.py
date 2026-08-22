@@ -214,3 +214,106 @@ def test_la_ultima_ejecucion_es_coherente_si_la_hay() -> None:
     assert run["n_complete"] == run["n_reports"] == run["n_answers"] == run["n_measures"]
     if run["coverage_mean_pct"] is not None:
         assert 0.0 <= run["coverage_mean_pct"] <= 100.0
+
+
+# --- las dos formas del resumen, que es donde ya se rompio una vez ---------------------
+#
+# El 2026-08-22 la tarea externa cambio la forma de `_resumen.json` sin avisar: `activos`
+# paso de lista de filas a recuento entero, las filas se mudaron a `tickers` y los dos
+# bloques agregados se renombraron. El lector, escrito el dia anterior contra la forma
+# vieja, reventaba con `object of type 'int' has no len()`, y con el se caia el generador
+# del dashboard. Aqui quedan las DOS formas congeladas: la de ayer y la de hoy, con datos
+# minimos escritos a mano, para que la proxima vez el fallo salga en la suite y no a las
+# ocho de la manana.
+
+_SUMMARY_OLD = {
+    "fecha": "2026-08-21",
+    "hora_corte_utc": "2026-08-21T06:00:00Z",
+    "cuestionario": "cuestionario_cripto_v2",
+    "n_activos": 2,
+    "agregado": {
+        "media_de_medias": 0.5,
+        "desviacion_medias": 0.1,
+        "cobertura_media_pct": 55.0,
+        "cobertura_min_pct": 50.0,
+        "cobertura_max_pct": 60.0,
+        "reparto_p30": {"alcista": 2},
+    },
+    "diagnostico_cobertura_vs_media": {"pearson": 0.3, "spearman": 0.4},
+    "activos": [
+        {"ticker": "BTC", "media": 0.6, "interpretacion": "alcista", "cobertura_pct": 60.0,
+         "p30": "alcista", "rango_media": 1, "percentil_media": 90.0,
+         "percentil_cobertura": 80.0, "ancla_precio_usd": 75_000.0,
+         "ancla_ts_utc": "2026-08-21T06:00:00Z"},
+        {"ticker": "ETH", "media": 0.4, "interpretacion": "alcista", "cobertura_pct": 50.0,
+         "p30": "alcista", "rango_media": 2, "percentil_media": 10.0,
+         "percentil_cobertura": 20.0, "ancla_precio_usd": 3_000.0,
+         "ancla_ts_utc": "2026-08-21T06:00:00Z"},
+    ],
+}
+
+_SUMMARY_NEW = {
+    "schema_version": "1.0",
+    "fecha": "2026-08-22",
+    "hora_corte_utc": "2026-08-22T06:00:00Z",
+    "cuestionario": "cuestionario_cripto_v2",
+    "activos": 2,
+    "correlacion_media_cobertura": {"pearson": 0.3, "spearman": 0.4},
+    "sesgo_agregado": {
+        "media_de_medias": 0.5,
+        "cobertura_media_pct": 55.0,
+        "p30_distribucion": {"alcista": 2},
+    },
+    "tickers": {
+        "BTC": {"media": 0.6, "interpretacion": "alcista", "cobertura_sumables_pct": 60.0,
+                "sesgo_p30": "alcista", "rank_media": 1,
+                "percentil_seccion_transversal": 90.0, "ancla_precio_usd": 75_000.0,
+                "ancla_ts_utc": "2026-08-22T06:00:00Z"},
+        "ETH": {"media": 0.4, "interpretacion": "alcista", "cobertura_sumables_pct": 50.0,
+                "sesgo_p30": "alcista", "rank_media": 2,
+                "percentil_seccion_transversal": 10.0, "ancla_precio_usd": 3_000.0,
+                "ancla_ts_utc": "2026-08-22T06:00:00Z"},
+    },
+}
+
+
+def _fake_run(tmp_path, summary: dict):
+    day = tmp_path / "data" / "signals_raw" / "ai_reports" / summary["fecha"]
+    (day / "_medidas").mkdir(parents=True)
+    (day / "_resumen.json").write_text(json.dumps(summary), encoding="utf-8")
+    for ticker in ("BTC", "ETH"):
+        (day / f"reporte_{ticker}.html").write_text("<html></html>", encoding="utf-8")
+        (day / f"respuestas_{ticker}.json").write_text("{}", encoding="utf-8")
+        (day / "_medidas" / f"medidas_{ticker}.json").write_text("{}", encoding="utf-8")
+    return load_last_run(tmp_path)
+
+
+@pytest.mark.parametrize("summary", [_SUMMARY_OLD, _SUMMARY_NEW], ids=["forma_vieja", "forma_nueva"])
+def test_las_dos_formas_del_resumen_se_leen_igual(tmp_path, summary) -> None:
+    run = _fake_run(tmp_path, summary)
+
+    assert run is not None
+    assert run["n_assets"] == 2
+    assert run["n_complete"] == 2 and run["incomplete"] == []
+    assert run["mean_of_means"] == 0.5
+    assert run["coverage_mean_pct"] == 55.0
+    # Minimo y maximo: la forma nueva no los publica y se derivan de las filas, que es
+    # aritmetica sin ambiguedad. La desviacion NO se deriva, y por eso puede faltar.
+    assert run["coverage_min_pct"] == 50.0 and run["coverage_max_pct"] == 60.0
+    assert run["p30_split"] == {"alcista": 2}
+    assert run["coverage_bias_pearson"] == 0.3
+    assert [r["ticker"] for r in run["rows"]] == ["BTC", "ETH"]
+    btc = run["rows"][0]
+    assert btc["mean"] == 0.6 and btc["coverage_pct"] == 60.0 and btc["rank"] == 1
+    assert btc["p30"] == "alcista" and btc["anchor_usd"] == 75_000.0
+
+
+def test_un_resumen_que_no_se_entiende_no_revienta(tmp_path) -> None:
+    """El caso que de verdad se dio: una forma que el lector no conoce. Lo correcto es una
+    vista vacia, no una excepcion que se lleva por delante el generador del dashboard."""
+    run = _fake_run(tmp_path, {"fecha": "2026-08-23", "activos": {"lo que sea": 1}})
+
+    assert run is not None
+    assert run["rows"] == []
+    assert run["n_assets"] == 2  # sale del recuento de ficheros, que si esta
+    assert run["mean_of_means"] is None

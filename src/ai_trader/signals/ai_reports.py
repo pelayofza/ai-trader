@@ -256,6 +256,71 @@ def run_dates(root: Path) -> list[str]:
     return sorted(p.name for p in base.iterdir() if p.is_dir() and p.name[:1].isdigit())
 
 
+# --- las dos formas del resumen del dia, y por que hay dos ---------------------------
+#
+# `_resumen.json` lo escribe la tarea externa, cuyo prompt vive FUERA del repo. El
+# 2026-08-22 cambio de forma sin avisar: `activos` paso de ser la lista de filas por activo
+# a ser el RECUENTO (un entero), las filas se mudaron a `tickers` (un dict, no una lista) y
+# los dos bloques agregados se renombraron. El lector, escrito el dia anterior contra la
+# forma vieja, reventaba con `object of type 'int' has no len()` -- y con el se caia el
+# generador del dashboard, que lo lee.
+#
+# La leccion no es "poner un try": es que un lector de la frontera publica NO PUEDE dar por
+# hecha una forma que no controla. Lo que se hace aqui es normalizar las dos a la MISMA
+# estructura, con los nombres nuevos primero, para que el dia que aparezca una tercera se
+# vea de un vistazo donde se anade. Lo que la forma nueva no publica se queda en None y la
+# vista lo pinta como "—"; solo se deriva lo que es aritmetica indiscutible sobre las filas
+# que si estan (minimo y maximo de una lista de coberturas), y nunca un estadistico cuya
+# definicion habria que adivinar.
+_ROW_ALIASES = {
+    "mean": ("media",),
+    "reading": ("interpretacion",),
+    "coverage_pct": ("cobertura_sumables_pct", "cobertura_pct"),
+    "p30": ("sesgo_p30", "p30"),
+    "rank": ("rank_media", "rango_media"),
+    "pct_mean": ("percentil_seccion_transversal", "percentil_media"),
+    "pct_coverage": ("percentil_cobertura",),
+    "anchor_usd": ("ancla_precio_usd",),
+    "anchor_ts": ("ancla_ts_utc",),
+}
+
+
+def _pick(row: dict, keys: tuple[str, ...]):
+    for key in keys:
+        if key in row:
+            return row[key]
+    return None
+
+
+def _summary_rows(summary: dict) -> list[dict]:
+    """Las filas por activo, vengan como lista con `ticker` dentro o como dict por ticker."""
+    tickers = summary.get("tickers")
+    if isinstance(tickers, dict):
+        raw = [{"ticker": t, **v} for t, v in tickers.items() if isinstance(v, dict)]
+    else:
+        listed = summary.get("activos")
+        raw = [r for r in listed if isinstance(r, dict)] if isinstance(listed, list) else []
+    return [
+        {"ticker": row.get("ticker"), **{k: _pick(row, keys) for k, keys in _ROW_ALIASES.items()}}
+        for row in raw
+    ]
+
+
+def _summary_aggregate(summary: dict, rows: list[dict]) -> dict:
+    block = summary.get("sesgo_agregado") or summary.get("agregado") or {}
+    coverages = [r["coverage_pct"] for r in rows if isinstance(r["coverage_pct"], (int, float))]
+    return {
+        "mean_of_means": block.get("media_de_medias"),
+        "spread_of_means": block.get("desviacion_medias"),
+        "coverage_mean_pct": block.get("cobertura_media_pct"),
+        # Derivados de las filas solo si el resumen no los trae. Min y max de una lista no
+        # admiten dos definiciones; la desviacion de arriba si, y por eso esa no se deriva.
+        "coverage_min_pct": block.get("cobertura_min_pct", min(coverages) if coverages else None),
+        "coverage_max_pct": block.get("cobertura_max_pct", max(coverages) if coverages else None),
+        "p30_split": block.get("p30_distribucion") or block.get("reparto_p30") or {},
+    }
+
+
 def load_last_run(root: Path) -> dict | None:
     """La ultima ejecucion con `_resumen.json`, o `None` si todavia no hay ninguna.
 
@@ -271,9 +336,13 @@ def load_last_run(root: Path) -> dict | None:
         if not summary:
             continue
 
-        rows = summary.get("activos") or []
-        aggregate = summary.get("agregado") or {}
-        diagnostic = summary.get("diagnostico_cobertura_vs_media") or {}
+        rows = _summary_rows(summary)
+        aggregate = _summary_aggregate(summary, rows)
+        diagnostic = (
+            summary.get("correlacion_media_cobertura")
+            or summary.get("diagnostico_cobertura_vs_media")
+            or {}
+        )
         labels = next(day.glob(f"{LABELS_PREFIX}*.json"), None)
 
         measures_dir = day / MEASURES_DIR
@@ -294,7 +363,15 @@ def load_last_run(root: Path) -> dict | None:
             "date": date,
             "cutoff_utc": summary.get("hora_corte_utc"),
             "questionnaire": summary.get("cuestionario"),
-            "n_assets": summary.get("n_activos") or len(rows),
+            # `activos` es un entero en la forma nueva y la lista de filas en la vieja: solo
+            # cuenta como recuento cuando de verdad es un numero. El ultimo recurso son los
+            # FICHEROS del dia, que estan ahi aunque el resumen sea ilegible entero.
+            "n_assets": (
+                summary.get("n_activos")
+                or (summary["activos"] if isinstance(summary.get("activos"), int) else 0)
+                or len(rows)
+                or len(answers)
+            ),
             "n_days_captured": len(dates),
             "first_date": dates[0],
             # Los tres artefactos por activo. Que las cifras coincidan es la comprobacion
@@ -312,30 +389,11 @@ def load_last_run(root: Path) -> dict | None:
             # pero contarlos como si fueran activos inflaria el dia por dos.
             "n_extra_files": all_files - len(reports) - len(answers) - len(measures),
             "has_labels": labels is not None,
-            "coverage_mean_pct": aggregate.get("cobertura_media_pct"),
-            "coverage_min_pct": aggregate.get("cobertura_min_pct"),
-            "coverage_max_pct": aggregate.get("cobertura_max_pct"),
-            "mean_of_means": aggregate.get("media_de_medias"),
-            "spread_of_means": aggregate.get("desviacion_medias"),
-            "p30_split": aggregate.get("reparto_p30") or {},
+            **aggregate,
             # El sesgo a vigilar: si la cobertura correlaciona con la media, el ranking del
             # dia esta midiendo CUANTO se pudo medir de cada activo y no cuanto favorable es.
             "coverage_bias_pearson": diagnostic.get("pearson"),
             "coverage_bias_spearman": diagnostic.get("spearman"),
-            "rows": [
-                {
-                    "ticker": r.get("ticker"),
-                    "mean": r.get("media"),
-                    "reading": r.get("interpretacion"),
-                    "coverage_pct": r.get("cobertura_pct"),
-                    "p30": r.get("p30"),
-                    "rank": r.get("rango_media"),
-                    "pct_mean": r.get("percentil_media"),
-                    "pct_coverage": r.get("percentil_cobertura"),
-                    "anchor_usd": r.get("ancla_precio_usd"),
-                    "anchor_ts": r.get("ancla_ts_utc"),
-                }
-                for r in rows
-            ],
+            "rows": rows,
         }
     return None
