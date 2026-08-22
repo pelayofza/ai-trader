@@ -822,6 +822,7 @@ def collect() -> dict:
     # anadir la novena familia obligaria a tocar este fichero Y las marcas literales de la
     # plantilla, en dos sitios que se desincronizan a la primera.
     facts["themed"] = _themed_families()
+    facts["priority"] = _priority_strategy()
     facts["transfer_extended"] = _transfer_extended()
     facts["themes_real"] = _themes_real()
     facts["extended_grid"] = _extended_grid()
@@ -1119,6 +1120,66 @@ def _themed_families() -> list[dict]:
             }
         )
     return out
+
+
+def _priority_strategy() -> dict:
+    """§4.0: la estrategia con prioridad FORZADA, y todo lo que hace falta para auditarla.
+
+    Reproducible en cualquier clon: la tabla de pesos vive en codigo y el reparto de papeles
+    se cuenta del cuestionario, que esta versionado. Ni una cifra sale de
+    `data/signals_raw/`, que esta fuera de git; la vista de la captura es la §2.3.
+    """
+    from ai_trader.observation.daily_report_scores import (
+        BENCHMARK_QUESTION,
+        BLOCK_LABELS,
+        CROWDING_QUESTIONS,
+        DIRECTIONAL,
+        FULL_CONVICTION_SCORE,
+        MIN_COVERAGE,
+        TOTAL_WEIGHT,
+    )
+    from ai_trader.signals.ai_reports import QUESTIONNAIRE_ID, load_contract
+
+    strategy = build_strategy("daily_report_expert")
+    contract = load_contract(ROOT) or {}
+    n_questions = contract.get("n_questions") or 0
+    roles = (
+        ("Dirección", len(DIRECTIONAL), "suman al score con peso y polaridad"),
+        ("Horquilla", 2, "P32 y P33: la volatilidad da la UNIDAD del stop, no un voto"),
+        ("Moduladores", 2, "P34 recorta confianza; P35 escala el bloque de mercado"),
+        ("Benchmark", 1, "P30 es la conclusión del propio redactor y NO se lee"),
+    )
+    if n_questions and sum(r[1] for r in roles) != n_questions:
+        raise ValueError(
+            f"Los papeles reparten {sum(r[1] for r in roles)} preguntas y el cuestionario "
+            f"tiene {n_questions}. Añadir una y olvidar la documentación tiene que romper "
+            "el build, no publicar un reparto que no suma."
+        )
+
+    return {
+        "id": "daily_report_expert",
+        "questionnaire": QUESTIONNAIRE_ID,
+        "n_questions": n_questions,
+        "n_directional": len(DIRECTIONAL),
+        "roles": [{"role": r, "n": n, "why": w} for r, n, w in roles],
+        "total_weight": round(TOTAL_WEIGHT, 2),
+        "min_coverage_pct": round(MIN_COVERAGE * 100, 0),
+        "full_conviction": FULL_CONVICTION_SCORE,
+        "benchmark": BENCHMARK_QUESTION,
+        "contrarian": list(CROWDING_QUESTIONS),
+        "weights": [
+            (
+                qid,
+                f"{q.weight:g}",
+                "−1 contrarian" if q.polarity < 0 else "+1",
+                BLOCK_LABELS.get(q.block, q.block),
+                q.note,
+            )
+            for qid, q in DIRECTIONAL.items()
+        ],
+        "params": _params(strategy.config),
+        "live": [spec.type for spec in load_config(ROOT / "config" / "default.toml").strategies],
+    }
 
 
 def _params(cfg) -> list[tuple[str, str]]:

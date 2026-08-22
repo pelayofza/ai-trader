@@ -429,6 +429,108 @@ def collect_strategies() -> dict:
             },
             *_themed_strategies(),
         ],
+        # Aparte de la lista, y no dentro: no se rankea con ellas. Ver `collect_priority()`.
+        "priority": collect_priority(),
+    }
+
+
+# Prosa editorial de la decima, la unica sin nucleo de precio. Va SEPARADA de las ocho de
+# arriba en el dato y en la vista, y la separacion es el contenido: las ocho se ordenan entre
+# si con evidencia publicada, y esta no compite con nadie porque su sustrato tiene tres dias.
+# Meterla en la misma rejilla de tarjetas insinuaria una comparacion que no existe.
+PRIORITY_PROSE = {
+    "name": "Reporte diario experto",
+    "regime": "reporte",
+    "idea": "La unica primitiva SIN nucleo de precio: la decision entera sale de las 37 "
+            "respuestas categoricas que un agente externo escribe cada manana. El precio solo "
+            "aporta el numero al que se entra.",
+    "rules": [
+        "Frescura: pasadas las horas de la hora de corte, no se opera.",
+        "Lado: conviccion absoluta |score| >= umbral Y estar entre los N mejores del dia.",
+        "Stop: multiplo de la sigma DIARIA que publica el propio reporte (P32/P33).",
+        "Objetivo: multiplo del stop que sube con la conviccion y baja con evento y aglomeracion.",
+    ],
+}
+
+# Los cuatro papeles que reparten las 37 preguntas, y su motivo en una linea. Las cifras NO
+# se escriben: se cuentan de las tablas del modulo, para que anadir una pregunta a la tabla y
+# olvidarse de la vista rompa el build en vez de publicar un reparto que no suma 37.
+PRIORITY_ROLES = (
+    ("Direccion", "suman al score con peso y polaridad"),
+    ("Horquilla", "la volatilidad da la UNIDAD del stop y del objetivo, no un voto"),
+    ("Moduladores", "profundidad recorta confianza; beta escala el bloque de mercado"),
+    ("Benchmark", "P30 es la conclusion del propio redactor y NO se lee"),
+)
+
+
+def collect_priority() -> dict:
+    """La estrategia con prioridad forzada: que hace, con que pesos y por que manda.
+
+    TODO lo que sale de aqui es REPRODUCIBLE en cualquier clon: la tabla de pesos vive en
+    codigo y el reparto de papeles se cuenta del cuestionario, que esta versionado. Ni una
+    cifra de `data/signals_raw/`, que esta fuera de git y cambia cada manana -- la vista de la
+    captura es la del capitulo de datos, y esta es la de la decision.
+    """
+    from ai_trader.observation.daily_report_scores import (
+        BENCHMARK_QUESTION,
+        BLOCK_LABELS,
+        CROWDING_QUESTIONS,
+        DIRECTIONAL,
+        FULL_CONVICTION_SCORE,
+        MIN_COVERAGE,
+        TOTAL_WEIGHT,
+    )
+    from ai_trader.signals.ai_reports import QUESTIONNAIRE_ID, load_contract
+
+    strategy = build_strategy("daily_report_expert")
+    contract = load_contract(ROOT) or {}
+    n_questions = contract.get("n_questions") or 0
+
+    counts = {
+        "Direccion": len(DIRECTIONAL),
+        "Horquilla": 2,       # P32 realizada, P33 implicita
+        "Moduladores": 2,     # P34 profundidad, P35 beta
+        "Benchmark": 1,       # P30
+    }
+    if n_questions and sum(counts.values()) != n_questions:
+        raise ValueError(
+            f"Los papeles reparten {sum(counts.values())} preguntas y el cuestionario tiene "
+            f"{n_questions}. Anadir una pregunta y olvidar el reparto tiene que ROMPER el "
+            "build, no publicar una vista que no suma."
+        )
+
+    # Que estrategias operan HOY, leido del config y no escrito a mano: si alguien reactiva
+    # una familia aparcada, la vista lo dice sola.
+    live = [spec.type for spec in load_config(ROOT / "config" / "default.toml").strategies]
+
+    return {
+        "id": "daily_report_expert",
+        **PRIORITY_PROSE,
+        "params": _params_dict(strategy.config),
+        "questionnaire": QUESTIONNAIRE_ID,
+        "n_questions": n_questions,
+        "roles": [
+            {"role": role, "n": counts[role], "why": why} for role, why in PRIORITY_ROLES
+        ],
+        "total_weight": round(TOTAL_WEIGHT, 2),
+        "min_coverage": MIN_COVERAGE,
+        "full_conviction": FULL_CONVICTION_SCORE,
+        "benchmark": BENCHMARK_QUESTION,
+        "contrarian": list(CROWDING_QUESTIONS),
+        # La tabla entera, pregunta por pregunta. Es el artefacto que hace auditable un juicio
+        # experto: sin ella, "pesos afirmados" es una frase.
+        "weights": [
+            {
+                "id": qid,
+                "weight": q.weight,
+                "polarity": q.polarity,
+                "block": BLOCK_LABELS.get(q.block, q.block),
+                "note": q.note,
+            }
+            for qid, q in DIRECTIONAL.items()
+        ],
+        "live": live,
+        "is_only_live": live == ["daily_report_expert"],
     }
 
 

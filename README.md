@@ -6,6 +6,14 @@ renta variable, cripto y mercados de predicción (Polymarket).
 Estado actual: cripto (vía CCXT/Binance) y Polymarket funcionando en paper. Stocks (vía Alpaca)
 tiene proveedor de datos pero ninguna estrategia.
 
+> **Desde el 2026-08-22 opera UNA sola estrategia, `daily_report_expert`, con la prioridad
+> forzada a mano.** No ganó un ranking ni se comparó con las otras nueve: lee las 37 variables
+> categóricas del reporte diario por activo, cuyo archivo empezó el 2026-08-20, y con tres días
+> no hay backtest posible. Es **paper trading** —no hay dinero real— y es **temporal**: dura
+> hasta que ese archivo tenga calendario para aprender los pesos en vez de afirmarlos. Se
+> deshace descomentando `crypto_momentum` en `config/default.toml`. El detalle está en
+> [Estrategia del reporte diario](#estrategia-del-reporte-diario-prioridad-forzada).
+
 ## Arquitectura
 
 El flujo es siempre el mismo, venga la señal de donde venga:
@@ -18,7 +26,10 @@ Ninguna orden llega al mercado sin pasar por el motor de riesgo, y el riesgo —
 estrategia— es quien fija el stop-loss y el take-profit definitivos.
 
 ```
-config/default.toml     Universo, límites de riesgo, comisiones y estrategias activas.
+config/default.toml     Universo, límites de riesgo, comisiones y lo que OPERA hoy.
+config/backtest.toml    Lo que se MIDE hoy: mismo universo, primitiva de momentum. Es la
+                        referencia de los golden del CLI. Existe porque default.toml dejó
+                        de poder hacer los dos trabajos a la vez (ver más abajo).
 config.py               Carga el TOML y lo valida.
 cli.py                  Entrada headless: `run-cycle`, `report`. No necesita Telegram.
 main.py                 Entrada con bot de Telegram.
@@ -31,6 +42,10 @@ app/state_store.py      La FOTO: estado atómico, con copia rotatoria y arranque
 app/journal.py          La PELÍCULA: diario append-only de ciclos en data/live/.
 
 strategies/registry.py  Registro tipo -> constructor. Una estrategia es {tipo, params}.
+strategies/daily_report_expert.py   La única SIN núcleo de precio: decide con las 37
+                        respuestas categóricas del reporte diario.
+observation/daily_report_scores.py  Los pesos expertos de esas 37 preguntas. Afirmados,
+                        no estimados, y publicados uno por uno.
 risk/engine.py          Puerta única: aprueba, dimensiona y asigna stop-loss/take-profit.
 execution/router.py     Enruta cada orden al motor de su clase de activo.
 execution/paper.py      Simulación de fills: cuánto se llena y a qué precio.
@@ -742,12 +757,84 @@ Tres decisiones que son el contenido del pipeline:
   a T+14 está declarado y **todos sus campos se escriben a `null`**: el proceso que los rellena es
   cálculo numérico sobre mercado y se dejó fuera a propósito.
 
-Está **capturado, no conectado**: ni una línea del paquete lee todavía ese archivo — no hay
-adaptador, no hay feature en el radar y nada llega al motor. Se captura desde ya por el mismo motivo
-que las fuentes *forward capture*: el pasado no se puede descargar. `signals/ai_reports.py` sólo lee
-el contrato y la última ejecución para el dashboard y la metodología, y
-`tests/test_ai_reports_contract.py` comprueba el contrato en cada verificación, porque un JSON mal
-cerrado aquí no rompe nada y rompe la ejecución de mañana en un sandbox donde nadie está mirando.
+Sigue **fuera del radar**: no hay adaptador, no hay *feature* de radar y no pasa por
+`normalize.py`. Lo que sí hay desde el 2026-08-22 es una estrategia que lo lee directamente, y es la
+única que opera. `tests/test_ai_reports_contract.py` comprueba el contrato en cada verificación,
+porque un JSON mal cerrado aquí no rompe nada y rompe la ejecución de mañana en un sandbox donde
+nadie está mirando.
+
+> **Aviso sobre `_resumen.json`.** El 2026-08-22 la tarea externa cambió su forma sin avisar
+> (`activos` pasó de lista de filas a recuento entero, las filas se mudaron a `tickers`, los bloques
+> agregados se renombraron) y el lector, escrito el día anterior, reventaba — y con él el generador
+> del dashboard. Hoy `load_last_run` normaliza **las dos formas** y hay un test que las congela. La
+> lección: un lector de la frontera pública no puede dar por hecha una forma que no controla.
+
+### Estrategia del reporte diario (prioridad forzada)
+
+`daily_report_expert` es la **décima primitiva y la primera sin núcleo de precio**. Las nueve
+anteriores deciden con precio y usan la señal para modular; aquí la decisión entera sale de las 37
+respuestas, y el precio sólo aporta el número al que se entra. Es deliberado: si la segunda vía vale
+algo, tiene que poder sostener una decisión sola.
+
+**Cada una de las 37 preguntas tiene un papel declarado** (`observation/daily_report_scores.py`):
+
+| Papel | Preguntas | Qué hace |
+|---|---|---|
+| Dirección | 32 | suman al score con **peso y polaridad** expertos |
+| Horquilla | 2 | P32/P33: la volatilidad da la **unidad** del stop, no un voto |
+| Moduladores | 2 | P34 recorta confianza; P35 escala el bloque de mercado por beta |
+| Benchmark | 1 | **P30 no se lee** |
+
+Tres de las 32 entran con **polaridad invertida** (P16 interés abierto, P25 RSI, P31 *funding*):
+miden **aglomeración**, no fuerza. El cuestionario ya marca P16 y P25 como estado crudo diciendo que
+la lectura contrarian es *feature engineering* y no captura — éste es el sitio donde ese *feature
+engineering* se hace, y se hace explícito. La lista se para en tres a propósito: la codicia extrema
+del Fear & Greed también es un contrarian clásico, pero esa lectura es una **U** y una U no se
+afirma, se mide, porque todo el contenido está en dónde está el codo.
+
+**P30 no se lee, y no es un olvido.** Es el sesgo global que le pone al día el mismo redactor que
+respondió P01–P29: usarla sería preguntarle dos veces a la misma fuente. `load_day_answers` ni
+siquiera la carga, así que la capa de decisión no podría usarla queriendo.
+
+Cómo decide, en cuatro pasos:
+
+1. **Frescura.** Pasadas `max_report_age_hours` desde la hora de corte no se opera; sin hora de
+   corte legible se trata como caducado.
+2. **Lado y elegibilidad.** Convicción absoluta (`|score| >= min_abs_score`) **y** estar entre los
+   `top_n` mejores del **corte transversal del día** por ese lado. Lo segundo no es adorno: el
+   runner recorre el universo en el orden del config y para en `max_trades_per_cycle`, así que sin
+   ordenación el que opera es el que estaba antes en la lista. El 2026-08-22 las 24 lecturas
+   salieron positivas — con umbral absoluto a secas habrían operado los cinco primeros del fichero,
+   no los cinco mejores.
+3. **Stop y take-profit, variables por señal.** El stop se mide en **sigmas diarias del propio
+   activo**, y la sigma sale del reporte (P32 realizada, P33 implícita, con `valor_crudo` antes que
+   la categoría), no de las barras. El objetivo es un múltiplo del stop que **sube con la
+   convicción** y **baja** con el riesgo de evento (P28, P29) y con la aglomeración en contra. El
+   techo del stop (12 %) se queda por debajo de `max_stop_distance_pct` (15 %) para que el motor de
+   riesgo nunca tenga que reescribir lo que la estrategia dijo.
+4. **Confianza.** Convicción, cobertura y profundidad del libro. Es el mando de tamaño del riesgo.
+
+El score es una **media ponderada sobre lo disponible**, no una suma, con piso de cobertura
+ponderada del 35 %. Es la defensa contra el sesgo que el propio resumen del día vigila: si el score
+sube con cuántas preguntas se pudieron responder, el ranking ordena por disponibilidad de datos y no
+por criterio.
+
+**Lo que esto no promete.** No está medida. No hay backtest, no hay ranking y no hay comparación con
+las otras nueve, y no puede haberla: con tres días de archivo, un backtest no es débil, es vacío.
+Los pesos son juicio **afirmado**, no estimado, y los umbrales se fijaron mirando la única sección
+cruzada disponible — sobreajuste de un día, dicho con todas las letras. Se opera igualmente porque
+la alternativa es no operar, y sin operar no hay diario de paper trading, que es la única evidencia
+que no se puede sobreajustar. Es **papel, no dinero real**, y el motor de riesgo sigue entero por
+delante: la prioridad decide *quién propone*, nunca que se salte una comprobación.
+
+Por eso **no está en `scoring/families.py` ni en `scoring/search_space.py`**, y en backtest **no se
+engancha** a su proveedor: aplicar el reporte de hoy a una barra de 2023 sería *look-ahead* con otro
+nombre. Sin proveedor no emite nada, que es la única respuesta correcta.
+
+Se deshace descomentando `crypto_momentum` en `config/default.toml`. El cambio arrastró una segunda
+decisión: ese fichero hacía dos trabajos —decir lo que se opera y decir lo que se mide— y dejó de
+poder hacer los dos, así que el backtest tiene ahora `config/backtest.toml`, con la primitiva de
+momentum y los parámetros exactos de antes. Es el mismo precedente que abrió `config/synthetic.toml`.
 
 ### Costes de ejecución
 

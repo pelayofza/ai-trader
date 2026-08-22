@@ -26,6 +26,11 @@ a{color:var(--accent);text-decoration:none}
   font-size:15px}
 .why b{font-family:system-ui,sans-serif}
 .note{background:#fbf6e8;border:1px solid #e6d6a8;border-radius:6px;padding:10px 14px;margin:12px 0;font-size:14.5px}
+/* Mas fuerte que `.note`, y hay UNA sola en el documento: la advertencia de que lo
+   que opera hoy tiene la prioridad forzada a mano y es temporal. Si algun dia hay dos,
+   la primera ha dejado de destacar. */
+.warn{background:#fdecea;border:1px solid #e8a49c;border-left:4px solid #c0392b;
+  border-radius:6px;padding:12px 16px;margin:14px 0;font-size:15px}
 .formula{background:#0e0e0e;color:#eee;font-family:ui-monospace,Consolas,monospace;
   padding:12px 16px;border-radius:6px;font-size:14px;margin:12px 0;overflow-x:auto}
 table{border-collapse:collapse;width:100%;margin:12px 0;font-family:system-ui,sans-serif;font-size:13.5px}
@@ -53,7 +58,7 @@ figure{margin:14px 0}
   .page{box-shadow:none;margin:0;max-width:none;padding:0}
   h2{break-before:page;border-top:none}
   h1,h2,h3,h4{break-after:avoid}
-  table,figure,.why,.formula,.note{break-inside:avoid}
+  table,figure,.why,.formula,.note,.warn{break-inside:avoid}
   .noprint{display:none}
   a{color:#000}
 }
@@ -64,8 +69,8 @@ figure{margin:14px 0}
 <h1>AI-Trader — Documentación funcional</h1>
 <div class="sub">Cómo funciona la herramienta, con el detalle necesario para replicarla y auditarla.
 Cada decisión de diseño va justificada.</div>
-<div class="meta">Documento vivo · generado desde el commit <span class="mono">0612206</span>
-(127 commits)2026-08-20 · se regenera con <span class="mono">python -m docs.build_docs</span>.
+<div class="meta">Documento vivo · generado desde el commit <span class="mono">2c59fe8</span>
+(133 commits)2026-08-21 · se regenera con <span class="mono">python -m docs.build_docs</span>.
 Las cifras marcadas son extraídas del repositorio en el momento de generar este documento.</div>
 
 <div class="toc noprint">
@@ -74,7 +79,7 @@ Las cifras marcadas son extraídas del repositorio en el momento de generar este
 <li><a href="#s1">Resumen ejecutivo</a></li>
 <li><a href="#s2">Datos</a> — captura real, señales externas y el reporte diario por activo</li>
 <li><a href="#s3">Trade</a> — cómo se ejecuta una operación, qué cuesta y cómo se contabiliza</li>
-<li><a href="#s4">Estrategias</a> — recompensa, ordenación y validación</li>
+<li><a href="#s4">Estrategias</a> — la que opera hoy (§4.0, prioridad forzada), recompensa, ordenación y validación</li>
 <li><a href="#s5">Resultados</a></li>
 <li><a href="#s6">Limitaciones y evoluciones</a></li>
 <li><a href="#s7">Investigación archivada</a> — el mundo sintético: qué se midió y por qué se aparcó</li>
@@ -644,23 +649,23 @@ del mercado, que es una apuesta distinta y ya disponible mucho más barata.</div
 <span class="mono">.gitignore</span>, así que no existen en un clon recién hecho y cambian solas cada
 mañana. Se incluyen porque un contrato sin una sola ejecución detrás no demuestra que el pipeline
 corra; lo que se congela en la caracterización es el contrato de los apartados anteriores.</p>
-<p>Día <b>2026-08-21</b>, con corte <b>2026-08-21T06:00:00Z</b>: <b>24</b> de
+<p>Día <b>2026-08-22</b>, con corte <b>2026-08-22T06:00:00Z</b>: <b>24</b> de
 24 activos con el <b>trío completo</b> —reporte, respuestas y medidas—, sobre
-<b>2</b> días capturados desde
-2026-08-20. Cobertura media de sumables <b>59,63 %</b>, entre
-48,28 % y 72,41 %.</p>
-<table><thead><tr><th>Ticker</th><th class=n>Media</th><th class=n>Lectura</th><th class=n>Cobertura</th><th class=n>Pct. media</th><th class=n>Pct. cob.</th><th class=n>P30</th><th class=n>Ancla USD</th></tr></thead><tbody><tr><td class=mono>XRP</td><td class=n mono>1,3529</td><td class=n mono>muy_alcista</td><td class=n mono>58,62 %</td><td class=n mono>100,0</td><td class=n mono>47,8</td><td class=n mono>alcista</td><td class=n mono>1,2900</td></tr><tr><td class=mono>LINK</td><td class=n mono>1,2105</td><td class=n mono>muy_alcista</td><td class=n mono>65,52 %</td><td class=n mono>95,7</td><td class=n mono>71,7</td><td class=n mono>alcista</td><td class=n mono>10,6000</td></tr><tr><td class=mono>ADA</td><td class=n mono>1,1429</td><td class=n mono>muy_alcista</td><td class=n mono>48,28 %</td><td class=n mono>91,3</td><td class=n mono>2,2</td><td class=n mono>alcista</td><td class=n mono>0,1960</td></tr><tr><td class=mono>AAVE</td><td class=n mono>1,1000</td><td class=n mono>muy_alcista</td><td class=n mono>68,97 %</td><td class=n mono>87,0</td><td class=n mono>84,8</td><td class=n mono>alcista</td><td class=n mono>100,9500</td></tr><tr><td class=mono>AVAX</td><td class=n mono>1,0667</td><td class=n mono>muy_alcista</td><td class=n mono>51,72 %</td><td class=n mono>82,6</td><td class=n mono>19,6</td><td class=n mono>alcista</td><td class=n mono>7,2000</td></tr><tr><td class=mono>INJ</td><td class=n mono>1,0556</td><td class=n mono>muy_alcista</td><td class=n mono>62,07 %</td><td class=n mono>78,3</td><td class=n mono>60,9</td><td class=n mono>alcista</td><td class=n mono>4,8100</td></tr><tr><td class=mono>BTC</td><td class=n mono>1,0476</td><td class=n mono>muy_alcista</td><td class=n mono>72,41 %</td><td class=n mono>73,9</td><td class=n mono>97,8</td><td class=n mono>alcista</td><td class=n mono>74 700,0000</td></tr><tr><td class=mono>DOGE</td><td class=n mono>1,0000</td><td class=n mono>muy_alcista</td><td class=n mono>48,28 %</td><td class=n mono>65,2</td><td class=n mono>2,2</td><td class=n mono>alcista</td><td class=n mono>0,0816</td></tr><tr><td class=mono>LTC</td><td class=n mono>1,0000</td><td class=n mono>muy_alcista</td><td class=n mono>51,72 %</td><td class=n mono>65,2</td><td class=n mono>19,6</td><td class=n mono>alcista</td><td class=n mono>47,9200</td></tr><tr><td class=mono>UNI</td><td class=n mono>1,0000</td><td class=n mono>muy_alcista</td><td class=n mono>55,17 %</td><td class=n mono>65,2</td><td class=n mono>37,0</td><td class=n mono>alcista</td><td class=n mono>3,8100</td></tr><tr><td class=mono>ETH</td><td class=n mono>0,9524</td><td class=n mono>alcista</td><td class=n mono>72,41 %</td><td class=n mono>56,5</td><td class=n mono>97,8</td><td class=n mono>alcista</td><td class=n mono>2 354,0000</td></tr><tr><td class=mono>SOL</td><td class=n mono>0,9412</td><td class=n mono>alcista</td><td class=n mono>58,62 %</td><td class=n mono>50,0</td><td class=n mono>47,8</td><td class=n mono>alcista</td><td class=n mono>89,1400</td></tr><tr><td class=mono>BNB</td><td class=n mono>0,9412</td><td class=n mono>alcista</td><td class=n mono>58,62 %</td><td class=n mono>50,0</td><td class=n mono>47,8</td><td class=n mono>alcista</td><td class=n mono>631,0300</td></tr><tr><td class=mono>ARB</td><td class=n mono>0,9333</td><td class=n mono>alcista</td><td class=n mono>51,72 %</td><td class=n mono>43,5</td><td class=n mono>19,6</td><td class=n mono>alcista</td><td class=n mono>0,0907</td></tr><tr><td class=mono>SUI</td><td class=n mono>0,9000</td><td class=n mono>alcista</td><td class=n mono>68,97 %</td><td class=n mono>39,1</td><td class=n mono>84,8</td><td class=n mono>alcista</td><td class=n mono>0,7697</td></tr><tr><td class=mono>DOT</td><td class=n mono>0,8667</td><td class=n mono>alcista</td><td class=n mono>51,72 %</td><td class=n mono>32,6</td><td class=n mono>19,6</td><td class=n mono>alcista</td><td class=n mono>0,8320</td></tr><tr><td class=mono>APT</td><td class=n mono>0,8667</td><td class=n mono>alcista</td><td class=n mono>51,72 %</td><td class=n mono>32,6</td><td class=n mono>19,6</td><td class=n mono>alcista</td><td class=n mono>0,5810</td></tr><tr><td class=mono>NEAR</td><td class=n mono>0,8000</td><td class=n mono>alcista</td><td class=n mono>51,72 %</td><td class=n mono>26,1</td><td class=n mono>19,6</td><td class=n mono>alcista</td><td class=n mono>1,7300</td></tr><tr><td class=mono>ETC</td><td class=n mono>0,7778</td><td class=n mono>alcista</td><td class=n mono>62,07 %</td><td class=n mono>21,7</td><td class=n mono>60,9</td><td class=n mono>neutral</td><td class=n mono>7,0840</td></tr><tr><td class=mono>SEI</td><td class=n mono>0,7000</td><td class=n mono>alcista</td><td class=n mono>68,97 %</td><td class=n mono>17,4</td><td class=n mono>84,8</td><td class=n mono>neutral</td><td class=n mono>0,0445</td></tr><tr><td class=mono>ATOM</td><td class=n mono>0,6875</td><td class=n mono>alcista</td><td class=n mono>55,17 %</td><td class=n mono>13,0</td><td class=n mono>37,0</td><td class=n mono>alcista</td><td class=n mono>1,5200</td></tr><tr><td class=mono>FIL</td><td class=n mono>0,6667</td><td class=n mono>alcista</td><td class=n mono>62,07 %</td><td class=n mono>8,7</td><td class=n mono>60,9</td><td class=n mono>neutral</td><td class=n mono>0,7560</td></tr><tr><td class=mono>OP</td><td class=n mono>0,5789</td><td class=n mono>alcista</td><td class=n mono>65,52 %</td><td class=n mono>4,3</td><td class=n mono>71,7</td><td class=n mono>neutral</td><td class=n mono>0,0979</td></tr><tr><td class=mono>TIA</td><td class=n mono>0,4500</td><td class=n mono>alcista</td><td class=n mono>68,97 %</td><td class=n mono>0,0</td><td class=n mono>84,8</td><td class=n mono>neutral</td><td class=n mono>0,3468</td></tr></tbody></table>
+<b>1</b> día capturado desde
+2026-08-22. Cobertura media de sumables <b>57,61 %</b>, entre
+51,72 % y 68,97 %.</p>
+<table><thead><tr><th>Ticker</th><th class=n>Media</th><th class=n>Lectura</th><th class=n>Cobertura</th><th class=n>Pct. media</th><th class=n>Pct. cob.</th><th class=n>P30</th><th class=n>Ancla USD</th></tr></thead><tbody><tr><td class=mono>XRP</td><td class=n mono>1,0588</td><td class=n mono>muy_alcista</td><td class=n mono>58,62 %</td><td class=n mono>97,9</td><td class=n mono>—</td><td class=n mono>alcista</td><td class=n mono>1,5282</td></tr><tr><td class=mono>AAVE</td><td class=n mono>1,0556</td><td class=n mono>muy_alcista</td><td class=n mono>62,07 %</td><td class=n mono>93,8</td><td class=n mono>—</td><td class=n mono>alcista</td><td class=n mono>120,0600</td></tr><tr><td class=mono>BNB</td><td class=n mono>1,0000</td><td class=n mono>muy_alcista</td><td class=n mono>55,17 %</td><td class=n mono>83,3</td><td class=n mono>—</td><td class=n mono>alcista</td><td class=n mono>698,5000</td></tr><tr><td class=mono>BTC</td><td class=n mono>1,0000</td><td class=n mono>muy_alcista</td><td class=n mono>65,52 %</td><td class=n mono>83,3</td><td class=n mono>—</td><td class=n mono>alcista</td><td class=n mono>77 390,4000</td></tr><tr><td class=mono>DOGE</td><td class=n mono>1,0000</td><td class=n mono>muy_alcista</td><td class=n mono>65,52 %</td><td class=n mono>83,3</td><td class=n mono>—</td><td class=n mono>alcista</td><td class=n mono>0,0918</td></tr><tr><td class=mono>LINK</td><td class=n mono>1,0000</td><td class=n mono>muy_alcista</td><td class=n mono>58,62 %</td><td class=n mono>83,3</td><td class=n mono>—</td><td class=n mono>alcista</td><td class=n mono>11,8370</td></tr><tr><td class=mono>SOL</td><td class=n mono>0,9412</td><td class=n mono>alcista</td><td class=n mono>58,62 %</td><td class=n mono>70,8</td><td class=n mono>—</td><td class=n mono>alcista</td><td class=n mono>94,2200</td></tr><tr><td class=mono>SUI</td><td class=n mono>0,9412</td><td class=n mono>alcista</td><td class=n mono>58,62 %</td><td class=n mono>70,8</td><td class=n mono>—</td><td class=n mono>alcista</td><td class=n mono>0,8494</td></tr><tr><td class=mono>ADA</td><td class=n mono>0,9375</td><td class=n mono>alcista</td><td class=n mono>55,17 %</td><td class=n mono>62,5</td><td class=n mono>—</td><td class=n mono>alcista</td><td class=n mono>0,2326</td></tr><tr><td class=mono>ARB</td><td class=n mono>0,9375</td><td class=n mono>alcista</td><td class=n mono>55,17 %</td><td class=n mono>62,5</td><td class=n mono>—</td><td class=n mono>alcista</td><td class=n mono>0,1004</td></tr><tr><td class=mono>LTC</td><td class=n mono>0,8824</td><td class=n mono>alcista</td><td class=n mono>58,62 %</td><td class=n mono>54,2</td><td class=n mono>—</td><td class=n mono>alcista</td><td class=n mono>52,0100</td></tr><tr><td class=mono>TIA</td><td class=n mono>0,8824</td><td class=n mono>alcista</td><td class=n mono>58,62 %</td><td class=n mono>54,2</td><td class=n mono>—</td><td class=n mono>alcista</td><td class=n mono>0,3868</td></tr><tr><td class=mono>UNI</td><td class=n mono>0,8750</td><td class=n mono>alcista</td><td class=n mono>55,17 %</td><td class=n mono>47,9</td><td class=n mono>—</td><td class=n mono>alcista</td><td class=n mono>4,1230</td></tr><tr><td class=mono>ETC</td><td class=n mono>0,8667</td><td class=n mono>alcista</td><td class=n mono>51,72 %</td><td class=n mono>43,8</td><td class=n mono>—</td><td class=n mono>alcista</td><td class=n mono>8,2460</td></tr><tr><td class=mono>NEAR</td><td class=n mono>0,8125</td><td class=n mono>alcista</td><td class=n mono>55,17 %</td><td class=n mono>39,6</td><td class=n mono>—</td><td class=n mono>alcista</td><td class=n mono>1,9660</td></tr><tr><td class=mono>DOT</td><td class=n mono>0,7059</td><td class=n mono>alcista</td><td class=n mono>58,62 %</td><td class=n mono>35,4</td><td class=n mono>—</td><td class=n mono>alcista</td><td class=n mono>0,9650</td></tr><tr><td class=mono>AVAX</td><td class=n mono>0,6875</td><td class=n mono>alcista</td><td class=n mono>55,17 %</td><td class=n mono>31,2</td><td class=n mono>—</td><td class=n mono>neutral</td><td class=n mono>7,6980</td></tr><tr><td class=mono>ETH</td><td class=n mono>0,6500</td><td class=n mono>alcista</td><td class=n mono>68,97 %</td><td class=n mono>27,1</td><td class=n mono>—</td><td class=n mono>alcista</td><td class=n mono>2 440,2600</td></tr><tr><td class=mono>SEI</td><td class=n mono>0,6250</td><td class=n mono>alcista</td><td class=n mono>55,17 %</td><td class=n mono>22,9</td><td class=n mono>—</td><td class=n mono>alcista</td><td class=n mono>0,0475</td></tr><tr><td class=mono>APT</td><td class=n mono>0,5000</td><td class=n mono>alcista</td><td class=n mono>55,17 %</td><td class=n mono>14,6</td><td class=n mono>—</td><td class=n mono>alcista</td><td class=n mono>0,6538</td></tr><tr><td class=mono>INJ</td><td class=n mono>0,5000</td><td class=n mono>alcista</td><td class=n mono>55,17 %</td><td class=n mono>14,6</td><td class=n mono>—</td><td class=n mono>alcista</td><td class=n mono>4,9720</td></tr><tr><td class=mono>OP</td><td class=n mono>0,5000</td><td class=n mono>alcista</td><td class=n mono>55,17 %</td><td class=n mono>14,6</td><td class=n mono>—</td><td class=n mono>alcista</td><td class=n mono>0,1122</td></tr><tr><td class=mono>FIL</td><td class=n mono>0,4667</td><td class=n mono>alcista</td><td class=n mono>51,72 %</td><td class=n mono>6,2</td><td class=n mono>—</td><td class=n mono>alcista</td><td class=n mono>0,7897</td></tr><tr><td class=mono>ATOM</td><td class=n mono>0,4375</td><td class=n mono>alcista</td><td class=n mono>55,17 %</td><td class=n mono>2,1</td><td class=n mono>—</td><td class=n mono>alcista</td><td class=n mono>1,6130</td></tr></tbody></table>
 <div class="why"><b>El primer sesgo a vigilar no es la media: es que la cobertura la explique.</b>
 Los huecos <b>no son aleatorios</b> —faltan más en <i>small caps</i> y en días volátiles, justo donde
 más importa—, así que si la cobertura correlacionase con la puntuación, el ranking del día estaría
 midiendo <b>cuánto se pudo medir</b> de cada activo y no cuánto favorable es. El propio resumen lo
-calcula: Pearson <b>-0,1917</b> y Spearman
-<b>-0,1382</b>. Lo que tranquiliza es la <b>magnitud</b>: con |ρ| por
+calcula: Pearson <b>0,3663</b> y Spearman
+<b>0,5683</b>. Lo que tranquiliza es la <b>magnitud</b>: con |ρ| por
 debajo de 0,20 la cobertura no manda en el orden del día. Lo que <b>no</b> tranquiliza es el
 <b>signo</b>, y no debe venderse como buena noticia — negativo significa que los mejor puntuados
 tienden a ser los <i>menos</i> medidos, que es la dirección incómoda: puntúa más alto aquello de lo
 que menos se sabe. En la tabla se ve en las filas con percentil de media alto y percentil de
-cobertura bajo. Con 2 días de historia y 24 activos eso
+cobertura bajo. Con 1 día de historia y 24 activos eso
 no es un resultado sino una <b>lectura</b>: fija la cifra que hay que seguir mirando, y el día que
 |ρ| suba, el ranking del día deja de significar lo que dice.</div>
 <!--/LIVE-->
@@ -915,6 +920,112 @@ barra gana el stop, y un hueco por debajo del stop se llena al open.</li>
 decisión de selección: las estrategias que existen, lo que ven, cómo se puntúa una muestra, cómo se
 agrega la distribución, cómo se parte el tiempo, contra quién compite, qué se exige para poder competir,
 si el orden sintético se parece al real, cómo se busca y cuánto hay que descontar por haber buscado.</p>
+<p class="lead">Empieza, sin embargo, por una que <b>no</b> pasa por nada de eso. Desde el 2026-08-22 la
+única estrategia activa tiene la prioridad <b>forzada a mano</b> y está <b>fuera del ranking</b>, y eso
+tiene que leerse antes que las ocho que sí se miden, para que el orden de lectura no sugiera lo
+contrario.</p>
+
+
+<h3 id="s40">4.0 · La que opera hoy, y por qué eso no es un resultado</h3>
+<div class="warn"><b>Medida temporal y deliberada.</b> Desde el <b>2026-08-22</b> la única
+estrategia activa en <span class="mono">config/default.toml</span> es
+<span class="mono">daily_report_expert</span>. <b>No ganó un ranking, no batió a nadie y no se comparó con
+las ocho de este capítulo</b>: se le dio la prioridad <b>a mano</b>. Conviene que quien lea esto
+dentro de seis meses lo sepa antes que nada, porque desde fuera se parece a un resultado y no lo
+es. Es <b>paper trading</b>: no hay dinero real detrás de esta decisión.</div>
+<p>Se alimenta de las <b>37 variables categóricas</b> del reporte diario por
+activo (§2.3), la segunda vía de captura. Es la <b>primera primitiva del proyecto sin núcleo de
+precio</b>: las nueve anteriores deciden con precio y usan la señal para modular — incluso el
+compuesto, cuya tesis vive en la capa, necesita que una media móvil le diga <i>cuándo</i>. Aquí la
+decisión entera sale de las respuestas, y el precio sólo aporta el número al que se entra. Es
+deliberado y es el punto: si la segunda vía vale algo, tiene que poder sostener una decisión sola.
+Mezclarla con un filtro de medias haría imposible saber cuál de las dos partes decidió.</p>
+<div class="why"><b>Por qué se opera algo que no está medido.</b> Porque no puede estarlo. El
+archivo del reporte diario empezó el <b>2026-08-20</b>: un backtest sobre tres días no es un
+backtest débil, es un número sin contenido. Y esperar a tenerlo significa no operarla, que
+significa no generar el diario de paper trading — <b>la única evidencia que no se puede
+sobreajustar</b>, y la única que se compra con tiempo de calendario y no con cómputo. Es la
+prioridad que el proyecto fijó el 2026-08-20: poner la herramienta a funcionar aceptando el riesgo
+de sobreajuste, y atacarlo después con evidencia de calendario. Lo que <b>no</b> se relaja es el
+motor de riesgo (§3.2): la prioridad decide <i>quién propone</i>, nunca que se salte una
+comprobación.</div>
+<h4>Qué hace cada una de las 37 preguntas</h4>
+<p>El cuestionario ya separa lo que suma de lo que no, y la separación no es cosmética: las
+excluidas de la suma lo están porque interpretarlas <b>es modelado</b>, y el modelado no le toca a
+quien captura. Aquí es donde toca, y cada pregunta tiene un papel declarado:</p>
+<table><thead><tr><th>Papel</th><th class=n>Preguntas</th><th class=n>Por qué</th></tr></thead><tbody><tr><td class=mono>Dirección</td><td class=n mono>32</td><td class=n mono>suman al score con peso y polaridad</td></tr><tr><td class=mono>Horquilla</td><td class=n mono>2</td><td class=n mono>P32 y P33: la volatilidad da la UNIDAD del stop, no un voto</td></tr><tr><td class=mono>Moduladores</td><td class=n mono>2</td><td class=n mono>P34 recorta confianza; P35 escala el bloque de mercado</td></tr><tr><td class=mono>Benchmark</td><td class=n mono>1</td><td class=n mono>P30 es la conclusión del propio redactor y NO se lee</td></tr></tbody></table>
+<div class="note"><b>P30 no se lee, y no es un olvido.</b> Es el sesgo global que le
+pone al día el mismo redactor que respondió P01–P29: usarla sería preguntarle dos veces a la misma
+fuente y contar la respuesta como dos evidencias. El lector
+(<span class="mono">signals/ai_reports.py</span>) ni siquiera la carga, así que la capa de decisión
+no podría usarla queriendo. Hay un test por cada lado.</div>
+<h4>Los 32 pesos, publicados uno por uno</h4>
+<p><b>Estos pesos no están medidos: son una hipótesis.</b> Se publican enteros porque es lo único
+que hace auditable un juicio experto — sin la tabla, «pesos afirmados» es una frase. El criterio es
+de tres niveles y sin más finura, porque afinar decimales sobre cero datos es teatro: <b>1,0</b> la
+pregunta que sola te haría cambiar de opinión, <b>0,5–0,8</b> evidencia que necesita compañía,
+<b>0,3–0,4</b> contexto que mueve el margen. Peso total <b>20,55</b>.</p>
+<p>Tres van con <b>polaridad invertida</b> — <span class="mono">P16, P25, P31</span> —
+porque miden <b>aglomeración</b> y no fuerza: un RSI de 81 no es una razón para comprar más, es una
+razón para desconfiar del largo que ibas a abrir. Y la lista se para en tres a propósito: la codicia
+extrema del Fear &amp; Greed también es un contrarian clásico, pero esa lectura se sostiene sobre una
+<b>U</b> —bien mientras sube, mal en el extremo— y una U no se afirma, se mide, porque todo el
+contenido está en dónde está el codo. Las tres invertidas no son una U: son un coste o una posición
+abarrotada, monótonos en todo el rango.</p>
+<table><thead><tr><th>Id</th><th class=n>Peso</th><th class=n>Polaridad</th><th class=n>Bloque</th><th class=n>Qué mide</th></tr></thead><tbody><tr><td class=mono>P01</td><td class=n mono>0.5</td><td class=n mono>+1</td><td class=n mono>Precio</td><td class=n mono>24h: la más ruidosa de las cuatro</td></tr><tr><td class=mono>P02</td><td class=n mono>1</td><td class=n mono>+1</td><td class=n mono>Precio</td><td class=n mono>fuerza relativa a 7d: cross-sectional puro</td></tr><tr><td class=mono>P03</td><td class=n mono>0.8</td><td class=n mono>+1</td><td class=n mono>Precio</td><td class=n mono>distancia al máximo de 90 sesiones</td></tr><tr><td class=mono>P04</td><td class=n mono>0.6</td><td class=n mono>+1</td><td class=n mono>Precio</td><td class=n mono>volumen vs media 30d: confirma participación</td></tr><tr><td class=mono>P05</td><td class=n mono>0.7</td><td class=n mono>+1</td><td class=n mono>Mercado</td><td class=n mono>BTC 24h: el factor común de la clase</td></tr><tr><td class=mono>P06</td><td class=n mono>0.35</td><td class=n mono>+1</td><td class=n mono>Mercado</td><td class=n mono>nivel de Fear & Greed, leído como apetito</td></tr><tr><td class=mono>P07</td><td class=n mono>0.5</td><td class=n mono>+1</td><td class=n mono>Mercado</td><td class=n mono>cambio del F&G a 7d: la derivada, no el nivel</td></tr><tr><td class=mono>P08</td><td class=n mono>0.7</td><td class=n mono>+1</td><td class=n mono>Mercado</td><td class=n mono>risk-on / risk-off del día</td></tr><tr><td class=mono>P09</td><td class=n mono>0.6</td><td class=n mono>+1</td><td class=n mono>Whales</td><td class=n mono>ventas masivas de whales</td></tr><tr><td class=mono>P10</td><td class=n mono>0.8</td><td class=n mono>+1</td><td class=n mono>Whales</td><td class=n mono>intensidad de acumulación 48-72h</td></tr><tr><td class=mono>P11</td><td class=n mono>0.6</td><td class=n mono>+1</td><td class=n mono>Whales</td><td class=n mono>tenencias agregadas de grandes wallets</td></tr><tr><td class=mono>P12</td><td class=n mono>0.9</td><td class=n mono>+1</td><td class=n mono>Whales</td><td class=n mono>flujo neto a exchanges: salidas = oferta que se retira</td></tr><tr><td class=mono>P13</td><td class=n mono>1</td><td class=n mono>+1</td><td class=n mono>Institucional</td><td class=n mono>flujos de ETF/ETP: dinero con fecha y cifra</td></tr><tr><td class=mono>P14</td><td class=n mono>0.5</td><td class=n mono>+1</td><td class=n mono>Institucional</td><td class=n mono>divergencia whale vs institucional</td></tr><tr><td class=mono>P15</td><td class=n mono>0.5</td><td class=n mono>+1</td><td class=n mono>Institucional</td><td class=n mono>actividad corporativa (tesorerías, mineras)</td></tr><tr><td class=mono>P17</td><td class=n mono>0.5</td><td class=n mono>+1</td><td class=n mono>Derivados</td><td class=n mono>posicionamiento de grandes traders</td></tr><tr><td class=mono>P18</td><td class=n mono>0.6</td><td class=n mono>+1</td><td class=n mono>Derivados</td><td class=n mono>liquidaciones / squeeze en 24h</td></tr><tr><td class=mono>P19</td><td class=n mono>0.7</td><td class=n mono>+1</td><td class=n mono>Noticias</td><td class=n mono>tono agregado de noticias del activo a 48h</td></tr><tr><td class=mono>P20</td><td class=n mono>1</td><td class=n mono>+1</td><td class=n mono>Noticias</td><td class=n mono>catalizador de alto impacto: listado, hack, upgrade</td></tr><tr><td class=mono>P21</td><td class=n mono>0.6</td><td class=n mono>+1</td><td class=n mono>Noticias</td><td class=n mono>saldo regulatorio del día</td></tr><tr><td class=mono>P22</td><td class=n mono>0.7</td><td class=n mono>+1</td><td class=n mono>Técnico</td><td class=n mono>posición frente a soporte/resistencia</td></tr><tr><td class=mono>P23</td><td class=n mono>1</td><td class=n mono>+1</td><td class=n mono>Técnico</td><td class=n mono>precio vs medias de 50/100/200</td></tr><tr><td class=mono>P24</td><td class=n mono>0.6</td><td class=n mono>+1</td><td class=n mono>Técnico</td><td class=n mono>patrón técnico reportado</td></tr><tr><td class=mono>P26</td><td class=n mono>0.4</td><td class=n mono>+1</td><td class=n mono>Sentimiento</td><td class=n mono>sentimiento de comunidad y redes</td></tr><tr><td class=mono>P27</td><td class=n mono>0.3</td><td class=n mono>+1</td><td class=n mono>Sentimiento</td><td class=n mono>estacionalidad del mes</td></tr><tr><td class=mono>P28</td><td class=n mono>0.8</td><td class=n mono>+1</td><td class=n mono>Riesgo</td><td class=n mono>banderas de riesgo tipificadas activas</td></tr><tr><td class=mono>P29</td><td class=n mono>0.5</td><td class=n mono>+1</td><td class=n mono>Riesgo</td><td class=n mono>eventos macro de alto impacto a 7 días</td></tr><tr><td class=mono>P36</td><td class=n mono>0.7</td><td class=n mono>+1</td><td class=n mono>Oferta</td><td class=n mono>desbloqueo de tokens a 14 días</td></tr><tr><td class=mono>P37</td><td class=n mono>0.4</td><td class=n mono>+1</td><td class=n mono>Oferta</td><td class=n mono>emisión neta anualizada</td></tr><tr><td class=mono>P16</td><td class=n mono>0.5</td><td class=n mono>−1 contrarian</td><td class=n mono>Aglomeración</td><td class=n mono>interés abierto extremo = posición abarrotada</td></tr><tr><td class=mono>P25</td><td class=n mono>0.7</td><td class=n mono>−1 contrarian</td><td class=n mono>Aglomeración</td><td class=n mono>RSI alto = recorrido ya consumido</td></tr><tr><td class=mono>P31</td><td class=n mono>0.5</td><td class=n mono>−1 contrarian</td><td class=n mono>Aglomeración</td><td class=n mono>funding positivo = el largo PAGA por estar</td></tr></tbody></table>
+<h4>Cómo decide, en cuatro pasos</h4>
+<ol>
+<li><b>Frescura.</b> El reporte tiene hora de corte (06:00Z). Pasadas
+<span class="mono">max_report_age_hours</span> no se opera, y sin hora de corte legible se trata
+como caducado: una lectura de anteayer repetida cada quince minutos sería la peor versión de
+esto.</li>
+<li><b>Lado y elegibilidad.</b> Hacen falta las dos cosas: convicción <b>absoluta</b>
+(|score| ≥ umbral) <b>y</b> estar entre los <span class="mono">top_n</span> mejores del <b>corte
+transversal</b> del día por ese lado.</li>
+<li><b>La horquilla.</b> El stop se mide en <b>sigmas diarias del propio activo</b>, y la sigma sale
+del reporte (P32 realizada, P33 implícita), no de las barras. El objetivo es un múltiplo del stop
+que <b>sube con la convicción</b> y <b>baja</b> con el riesgo de evento (P28, P29) y con la
+aglomeración en contra. Eso es lo que hace la horquilla variable: dos activos con el mismo lado y
+distinto reporte salen con stop y objetivo distintos.</li>
+<li><b>Confianza.</b> Convicción, cobertura y profundidad del libro. Es el mando de tamaño del motor
+de riesgo, así que un reporte flojo entra con menos dinero.</li>
+</ol>
+<div class="why"><b>Por qué el corte transversal, y no un umbral a secas.</b> El runner recorre el
+universo <b>en el orden del config</b> y para al llegar a
+<span class="mono">max_trades_per_cycle</span>. Con un umbral absoluto y un día en que todo apunta
+al mismo lado —que es exactamente lo que pasó el 2026-08-22, con las 24 lecturas positivas— el que
+acaba operando no es el mejor: es el que estaba antes en la lista. Ordenar viendo a los 24 a la vez
+es lo que convierte eso en una elección. El precio a pagar, y hay que decirlo: ese día las
+puntuaciones estaban <b>muy juntas</b>, así que el top-5 de la primera sección cruzada es casi tan
+arbitrario como el orden del fichero.</div>
+<div class="why"><b>Por qué el score es una media ponderada y no una suma.</b> Porque el propio
+resumen del día publica la correlación entre cobertura y media para vigilar exactamente esto: si el
+score sube con <b>cuántas preguntas se pudieron responder</b>, el ranking ordena por disponibilidad
+de datos y no por criterio. Dividir por el peso <b>disponible</b> pone a todos los activos en la
+misma escala [−1, +1], y por debajo de un piso de cobertura ponderada del
+<b>35%</b> el activo no se puntúa — no puntúa mal: no puntúa. El piso es
+una <b>constante</b> y no un parámetro: sorteable, permitiría convertir la estrategia en un filtro
+de «qué activos tuvieron buen día de captura».</div>
+<h4>Parámetros por defecto</h4>
+<table><thead><tr><th>Parámetro</th><th class=n>Valor</th></tr></thead><tbody><tr><td class=mono>min_abs_score</td><td class=n mono>0.2</td></tr><tr><td class=mono>top_n</td><td class=n mono>5</td></tr><tr><td class=mono>max_report_age_hours</td><td class=n mono>30.0</td></tr><tr><td class=mono>allow_short</td><td class=n mono>True</td></tr><tr><td class=mono>stop_sigma_mult</td><td class=n mono>2.0</td></tr><tr><td class=mono>min_stop_pct</td><td class=n mono>2.0</td></tr><tr><td class=mono>max_stop_pct</td><td class=n mono>12.0</td></tr><tr><td class=mono>base_reward</td><td class=n mono>1.4</td></tr><tr><td class=mono>conviction_reward</td><td class=n mono>1.6</td></tr><tr><td class=mono>event_reward_drag</td><td class=n mono>0.5</td></tr><tr><td class=mono>crowding_reward_drag</td><td class=n mono>0.5</td></tr><tr><td class=mono>min_reward</td><td class=n mono>1.0</td></tr><tr><td class=mono>max_reward</td><td class=n mono>3.5</td></tr></tbody></table>
+<div class="note"><b>Ninguno entra en el espacio de búsqueda ni en la rejilla de familias.</b> No
+está en <span class="mono">scoring/families.py</span> ni en
+<span class="mono">scoring/search_space.py</span>, y eso no es un olvido: entre los
+32 pesos y estos parámetros hay del orden de medio centenar de números libres, y el
+único día disponible aporta 24 observaciones que apuntan todas al mismo sitio. Ajustar lo uno contra
+lo otro no sería una calibración. La línea del proyecto para la capa de señal —«la capa se
+afirma, no se optimiza»— vale aquí con más motivo. El siguiente paso declarado es hacer evolucionar
+los pesos con el histórico que se vaya capturando, con un método que controle el sobreajuste (RL,
+algoritmos genéticos u otro), y ahí sí vuelve a haber algo que rankear.</div>
+<div class="note"><b>Cómo se deshace, y qué arrastró.</b> Descomentar
+<span class="mono">crypto_momentum</span> en <span class="mono">config/default.toml</span>: no se ha
+borrado nada y su evidencia publicada sigue entera. Activas hoy: <span class=mono>daily_report_expert</span>. El cambio arrastró una
+segunda decisión: <span class="mono">default.toml</span> hacía dos trabajos —decir lo que se opera y
+decir lo que se mide— y dejó de poder hacerlos a la vez, así que el backtest tiene ahora su propio
+<span class="mono">config/backtest.toml</span>, que conserva la primitiva de momentum con los
+parámetros exactos de antes. Es el mismo precedente que abrió
+<span class="mono">config/synthetic.toml</span>.</div>
+
 
 <h3>4.1 · Dos primitivas de regímenes opuestos</h3>
 <p>El sistema arranca con dos estrategias paramétricas, puras y <b>sin IA</b>, elegidas como regímenes
@@ -1745,6 +1856,32 @@ actual) y el CPCV dentro del optimizador. Y la optimización CEM completa queda 
 entrada 3, donde además lleva la capa de señal.</td></tr>
 </tbody></table>
 
+<h3>6.2-bis · La prioridad forzada, que es una limitación con fecha de caducidad</h3>
+<div class="warn"><b>Desde el 2026-08-22 la única estrategia activa no está medida, y se le dio la
+prioridad a mano.</b> Todo lo que este capítulo llama «cerrado» se midió sobre las primitivas de precio;
+lo que <b>opera</b> hoy es §4.0, que lee el reporte diario por activo y cuyo sustrato tiene tres días de
+archivo. Las dos afirmaciones conviven en el mismo documento y no se contradicen, pero leerlas por
+separado sí engaña, así que quedan juntas aquí.</div>
+<p>Lo que se acepta a sabiendas, en tres puntos:</p>
+<ul>
+<li><b>No hay backtest y no lo habrá pronto.</b> Con tres capturas no se estima una media, no se
+estandariza, no se ajusta un peso y no se rankea. El número que saldría no sería débil: sería vacío.</li>
+<li><b>Los umbrales están sobreajustados a un día.</b> Se fijaron mirando la única sección cruzada
+disponible, y ese día las 24 lecturas salieron del mismo signo y muy juntas entre sí. La ordenación que
+produce el corte transversal es, en la primera sección, casi tan arbitraria como el orden del fichero
+de configuración.</li>
+<li><b>Las nueve primitivas medidas están apagadas.</b> Su evidencia sigue publicada y su configuración
+intacta; simplemente no proponen nada mientras dure la medida.</li>
+</ul>
+<p>Y lo que hace que el riesgo sea asumible: es <b>paper trading</b> —no hay dinero real—, el motor de
+riesgo del §3.2 sigue entero por delante, y deshacerlo cuesta descomentar cuatro líneas.</p>
+<div class="why"><b>La condición de salida, declarada por adelantado para que no se pueda mover
+después.</b> La prioridad forzada dura hasta que el archivo del reporte diario tenga calendario
+suficiente para que sus pesos se puedan <b>aprender en vez de afirmar</b>, con un método que controle el
+sobreajuste — aprendizaje por refuerzo, algoritmos genéticos u otro— y para que la estrategia pueda
+entrar en la rejilla del §4.4 y competir con las demás como una más. Mientras tanto lo que se acumula es
+lo único que no se puede sobreajustar: días de diario de paper trading.</div>
+
 <h3>6.3 · Los límites que no se van a cerrar</h3>
 <p>No todo hueco es trabajo pendiente. Estos cuatro son propiedades del enfoque, y se declaran para que
 nadie los lea como promesas:</p>
@@ -2053,7 +2190,7 @@ solo declarar.</div>
 reproducible con <span class="mono">python -m ai_trader.research.fidelity_study</span>
 (30 escenarios × 5 caminos; 2026-08-10).</p>
 <h3>7.9 · Qué garantizan los tests sobre los datos</h3>
-<p>La base cuenta con <b>924 tests</b> automatizados y <i>linting</i> (ruff) sobre todo el código.
+<p>La base cuenta con <b>966 tests</b> automatizados y <i>linting</i> (ruff) sobre todo el código.
 Más allá del número importa <b>qué</b> se garantiza, así que la lista va repartida por capítulos: aquí los
 invariantes del sustrato, en §3.10 los de una operación y en §4.15 los del ranking.</p>
 <ul>
@@ -2320,5 +2457,5 @@ agrupamiento de volatilidad, autocorrelación) que un buen simulador debe reprod
 <li><b>Forward capture:</b> fuente cuyo pasado nadie publica: su profundidad histórica sólo crece
 capturando, un día por día real.</li>
 </ul>
-<p class="meta">Fin del documento · AI-Trader · commit <span class="mono">0612206</span>.</p>
+<p class="meta">Fin del documento · AI-Trader · commit <span class="mono">2c59fe8</span>.</p>
 </div></body></html>

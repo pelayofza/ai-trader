@@ -483,12 +483,17 @@ function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replac
 function renderOverview(){
   const k=D.kpis, host=$('#overview'), M=D.market||{}, F=D.fidelity, T=D.transfer, A=D.activity, V=D.validation;
   const rho=T?T.transfer.spearman:null;
+  // La decima NO esta en `FAMILIES` -- no se rankea --, asi que el recuento sale de sumar la
+  // rejilla del scoring y la presencia del bloque de prioridad. Sigue siendo derivado: el dia
+  // que la prioridad se retire, el bloque desaparece y la cifra vuelve sola a ocho.
+  const nPriority=(D.strategies&&D.strategies.priority)?1:0;
   const tiles=[
     ['Pares operados', M.n_symbols||'-', 'cripto en '+esc(M.exchange||'-')+' · velas diarias'],
     ['Fuentes de señal', (D.signals_platform?D.signals_platform.summary.n_sources:'-'),
       (D.signals_platform?D.signals_platform.sources.filter(s=>s.connected).length:'-')+' con adaptador'],
     ['Mundos sintéticos', k.ai_v2?k.ai_v2.samples:'-', (k.lineage||[]).join(' → ')],
-    ['Estrategias', k.n_strategies,'primitivas paramétricas'],
+    ['Estrategias', k.n_strategies+nPriority,
+      k.n_strategies+' se rankean'+(nPriority?' · '+nPriority+' fuera del ranking, y es la que opera':'')],
     ['Features de observación', (k.n_own_features+k.n_regime_features),
       k.n_own_features+' propio + '+k.n_regime_features+' régimen + radar'],
   ];
@@ -500,7 +505,7 @@ function renderOverview(){
     ['2','Señales externas','Diecisiete fuentes fuera del precio, normalizadas y con su profundidad histórica medida, no declarada.','signals','Datos'],
     ['3','Sub-ventanas reales','El histórico cerrado se trocea en sub-ventanas disjuntas; dentro de cada una, folds CPCV con purga y embargo. Las más recientes se reservan y no se optimizan.','ranking','Datos'],
     ['4','Observación','Lo que la política ve al decidir: mercado propio, contexto cross-sectional y radar de señales. Solo datos hasta el cierre de ayer.','strategies','Estrategias'],
-    ['5','Señal','Ocho primitivas proponen entrada, confianza y salidas: dos de régimen opuesto que solo miran precio, y seis temáticas con núcleo de precio y capa de señal.','strategies','Estrategias'],
+    ['5','Señal','Nueve primitivas proponen entrada, confianza y salidas: dos de régimen opuesto que solo miran precio, seis temáticas con núcleo de precio y capa de señal, y una sin núcleo de precio que lee el reporte diario. Hoy sólo opera la última, con prioridad forzada a mano.','strategies','Estrategias'],
     ['6','Riesgo','Puerta única: tamaño, exposición, confianza mínima, pérdida diaria y propiedad del stop.','trade','Trade'],
     ['7','Ejecución','Se llena al open del día siguiente pagando spread, volatilidad e impacto, con techo de capacidad.','trade','Trade'],
     ['8','Contabilidad','PnL neto de comisiones en las dos patas, equity marcado a diario y rotación medida.','trade','Trade'],
@@ -1291,16 +1296,81 @@ function renderTransfer(){
   rankScatter($('#rankchart'),T.points,{n:n});
 }
 
+function priorityPanel(P){
+  if(!P) return '';
+  const pol=v=>v<0?'<span class="chip alto">−1 contrarian</span>':'<span class="tag">+1</span>';
+  const rows=P.weights.map(w=>`<tr><td class="mono">${esc(w.id)}</td><td class="num mono">${fmt(w.weight,2)}</td>
+    <td>${pol(w.polarity)}</td><td class="mono">${esc(w.block)}</td><td class="tag">${esc(w.note)}</td></tr>`).join('');
+  return `
+    <div class="card" style="border-left:4px solid var(--warn)">
+      <h3>${esc(P.name)} <span class="chip pendiente">prioridad forzada</span>
+        <span class="chip aparcada">fuera del ranking</span></h3>
+      <p class="lead" style="margin:6px 0 10px">${esc(P.idea)}</p>
+      <div class="note"><b>Esto no ganó nada: se le dio la prioridad a mano, y es temporal.</b>
+        No hay backtest, no hay ranking y no hay comparación con las ocho de abajo — y no puede
+        haberla, porque su sustrato —el reporte diario por activo, en el capítulo de Datos— empezó el <b>2026-08-20</b>.
+        Un backtest sobre tres días no es un backtest débil: es un número sin contenido. Sus
+        ${P.weights.length} pesos son <b>juicio experto afirmado</b>, no estimado, y sus umbrales se
+        fijaron mirando la única sección cruzada disponible, que es <b>sobreajuste de un día</b>, dicho
+        con todas las letras. Se pone a operar igualmente porque la alternativa es no operar, y sin
+        operar no hay diario de paper trading — la única evidencia que no se puede sobreajustar. Es
+        <b>papel, no dinero real</b>, y el motor de riesgo sigue entero por delante: la prioridad
+        decide <i>quién propone</i>, nunca que se salte una comprobación.</div>
+      <b class="tag">Cómo decide</b>
+      <ul style="margin:6px 0 10px;padding-left:18px">${P.rules.map(r=>`<li>${esc(r)}</li>`).join('')}</ul>
+      <b class="tag">Qué hace cada una de las ${P.n_questions} preguntas</b>
+      <div class="tblwrap"><table><thead><tr><th>Papel</th><th class="n">Preguntas</th><th>Por qué</th></tr></thead>
+        <tbody>${P.roles.map(r=>`<tr><td><b>${esc(r.role)}</b></td><td class="num mono">${r.n}</td>
+          <td class="tag">${esc(r.why)}</td></tr>`).join('')}</tbody></table></div>
+      <p class="tag" style="margin-top:8px"><b>${esc(P.benchmark)} no se lee, y no es un olvido.</b>
+        Es el sesgo global que le pone al día el mismo redactor que respondió P01–P29: usarla sería
+        preguntarle dos veces a la misma fuente y contar la respuesta como dos evidencias. El lector
+        ni siquiera la carga.</p>
+      <div class="split" style="grid-template-columns:1fr 1fr;margin-top:12px">
+        <div>
+          <b class="tag">Los ${P.weights.length} pesos, uno por línea</b>
+          <p class="tag" style="margin:4px 0 6px">Peso total ${fmt(P.total_weight,2)} · piso de cobertura
+            ponderada ${fmt(P.min_coverage*100,0)}% · convicción plena a |score| = ${fmt(P.full_conviction,2)}.
+            Las tres de <span class="mono">${P.contrarian.join(', ')}</span> entran con polaridad
+            invertida: miden <b>aglomeración</b>, no fuerza.</p>
+          <div class="tblwrap" style="max-height:340px;overflow:auto"><table>
+            <thead><tr><th>Id</th><th class="n">Peso</th><th>Polaridad</th><th>Bloque</th><th>Qué mide</th></tr></thead>
+            <tbody>${rows}</tbody></table></div>
+        </div>
+        <div>
+          <b class="tag">Parámetros</b>
+          <div class="tblwrap"><table><tbody>${P.params.map(p=>`<tr><td class="mono">${esc(p.name)}</td>
+            <td class="num mono">${p.value}</td></tr>`).join('')}</tbody></table></div>
+          <p class="tag" style="margin-top:8px">Ni éstos ni los pesos entran en el espacio de
+            búsqueda (<span class="mono">scoring/search_space.py</span>) ni en la rejilla de familias
+            (<span class="mono">scoring/families.py</span>). Entre las dos tablas hay
+            ${P.weights.length+P.params.length} números libres, y el único día disponible aporta 24
+            observaciones que apuntan todas al mismo sitio: eso no sería una calibración.</p>
+          <p class="tag" style="margin-top:8px"><b>Cómo se deshace:</b> descomentar
+            <span class="mono">crypto_momentum</span> en <span class="mono">config/default.toml</span>.
+            No se ha borrado nada. Activas hoy:
+            <span class="mono">${P.live.map(esc).join(', ')||'ninguna'}</span>.</p>
+        </div>
+      </div>
+    </div>`;
+}
+
 function renderStrategies(){
   const host=$('#strategies'),S=D.strategies;
   const demo=D.signals||{};
   host.innerHTML=`
     <p class="crumb">Capítulo 4 · Estrategias</p>
     <h1>Estrategias y espacio de observación</h1>
-    <p class="lead">Ocho primitivas paramétricas y el vector de features con el que deciden. Lo que ven
-      es tan importante como la regla, y aquí hay <b>dos grupos con evidencia muy distinta</b>: las dos
-      de precio, sobre las que se midió todo lo publicado, y las seis temáticas, cuya capa de señal está
-      inerte en el ranking y cuyos dos temas en vivo no tienen historia que mirar hacia atrás.</p>
+    <p class="lead">Nueve primitivas paramétricas y el vector de features con el que deciden. Lo que ven
+      es tan importante como la regla, y aquí hay <b>tres grupos con evidencia muy distinta</b>: las dos
+      de precio, sobre las que se midió todo lo publicado; las seis temáticas, cuya capa de señal está
+      inerte en el ranking y cuyos dos temas en vivo no tienen historia que mirar hacia atrás; y una
+      décima <b>fuera del ranking</b> que hoy es la única que opera.</p>
+    <h2>La que opera hoy, y por qué eso no es un resultado</h2>
+    ${priorityPanel(S.priority)}
+    <h2>Las ocho que se rankean</h2>
+    <p class="lead">Éstas sí compiten entre sí con la maquinaria de los capítulos siguientes. Ninguna
+      está activa en <span class="mono">config/default.toml</span> mientras dure la prioridad forzada.</p>
     <div class="grid cards">
     ${S.strategies.map(st=>`<div class="card">
       <h3>${esc(st.name)} <span class="chip ${st.regime}">${st.regime}</span></h3>

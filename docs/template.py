@@ -29,6 +29,11 @@ a{color:var(--accent);text-decoration:none}
   font-size:15px}
 .why b{font-family:system-ui,sans-serif}
 .note{background:#fbf6e8;border:1px solid #e6d6a8;border-radius:6px;padding:10px 14px;margin:12px 0;font-size:14.5px}
+/* Mas fuerte que `.note`, y hay UNA sola en el documento: la advertencia de que lo
+   que opera hoy tiene la prioridad forzada a mano y es temporal. Si algun dia hay dos,
+   la primera ha dejado de destacar. */
+.warn{background:#fdecea;border:1px solid #e8a49c;border-left:4px solid #c0392b;
+  border-radius:6px;padding:12px 16px;margin:14px 0;font-size:15px}
 .formula{background:#0e0e0e;color:#eee;font-family:ui-monospace,Consolas,monospace;
   padding:12px 16px;border-radius:6px;font-size:14px;margin:12px 0;overflow-x:auto}
 table{border-collapse:collapse;width:100%;margin:12px 0;font-family:system-ui,sans-serif;font-size:13.5px}
@@ -56,7 +61,7 @@ figure{margin:14px 0}
   .page{box-shadow:none;margin:0;max-width:none;padding:0}
   h2{break-before:page;border-top:none}
   h1,h2,h3,h4{break-after:avoid}
-  table,figure,.why,.formula,.note{break-inside:avoid}
+  table,figure,.why,.formula,.note,.warn{break-inside:avoid}
   .noprint{display:none}
   a{color:#000}
 }
@@ -1706,6 +1711,126 @@ adopta nada nuevo: se publica que dos rejillas distintas eligen el mismo número
 """
 
 
+def _priority_block(p) -> str:
+    """Seccion 4.0: la decima primitiva, la unica sin nucleo de precio y la unica que opera.
+
+    Va la PRIMERA del capitulo y no la ultima, a proposito. Quien abra el capitulo de
+    estrategias tiene que leer antes que nada que lo que opera hoy no gano nada: se le dio la
+    prioridad a mano y es temporal. Ponerla detras de las ocho medidas dejaria que el orden de
+    lectura sugiriese lo contrario.
+    """
+    if not p:
+        return ""
+    roles = _rows(
+        [(r["role"], r["n"], r["why"]) for r in p["roles"]],
+        ["Papel", "Preguntas", "Por qué"],
+    )
+    weights = _rows(p["weights"], ["Id", "Peso", "Polaridad", "Bloque", "Qué mide"])
+    params = _rows(p["params"], ["Parámetro", "Valor"])
+    live = ", ".join(f"<span class=mono>{x}</span>" for x in p["live"]) or "ninguna"
+    return f"""
+<h3 id="s40">4.0 · La que opera hoy, y por qué eso no es un resultado</h3>
+<div class="warn"><b>Medida temporal y deliberada.</b> Desde el <b>2026-08-22</b> la única
+estrategia activa en <span class="mono">config/default.toml</span> es
+<span class="mono">{p['id']}</span>. <b>No ganó un ranking, no batió a nadie y no se comparó con
+las ocho de este capítulo</b>: se le dio la prioridad <b>a mano</b>. Conviene que quien lea esto
+dentro de seis meses lo sepa antes que nada, porque desde fuera se parece a un resultado y no lo
+es. Es <b>paper trading</b>: no hay dinero real detrás de esta decisión.</div>
+<p>Se alimenta de las <b>{p['n_questions']} variables categóricas</b> del reporte diario por
+activo (§2.3), la segunda vía de captura. Es la <b>primera primitiva del proyecto sin núcleo de
+precio</b>: las nueve anteriores deciden con precio y usan la señal para modular — incluso el
+compuesto, cuya tesis vive en la capa, necesita que una media móvil le diga <i>cuándo</i>. Aquí la
+decisión entera sale de las respuestas, y el precio sólo aporta el número al que se entra. Es
+deliberado y es el punto: si la segunda vía vale algo, tiene que poder sostener una decisión sola.
+Mezclarla con un filtro de medias haría imposible saber cuál de las dos partes decidió.</p>
+<div class="why"><b>Por qué se opera algo que no está medido.</b> Porque no puede estarlo. El
+archivo del reporte diario empezó el <b>2026-08-20</b>: un backtest sobre tres días no es un
+backtest débil, es un número sin contenido. Y esperar a tenerlo significa no operarla, que
+significa no generar el diario de paper trading — <b>la única evidencia que no se puede
+sobreajustar</b>, y la única que se compra con tiempo de calendario y no con cómputo. Es la
+prioridad que el proyecto fijó el 2026-08-20: poner la herramienta a funcionar aceptando el riesgo
+de sobreajuste, y atacarlo después con evidencia de calendario. Lo que <b>no</b> se relaja es el
+motor de riesgo (§3.2): la prioridad decide <i>quién propone</i>, nunca que se salte una
+comprobación.</div>
+<h4>Qué hace cada una de las {p['n_questions']} preguntas</h4>
+<p>El cuestionario ya separa lo que suma de lo que no, y la separación no es cosmética: las
+excluidas de la suma lo están porque interpretarlas <b>es modelado</b>, y el modelado no le toca a
+quien captura. Aquí es donde toca, y cada pregunta tiene un papel declarado:</p>
+{roles}
+<div class="note"><b>{p['benchmark']} no se lee, y no es un olvido.</b> Es el sesgo global que le
+pone al día el mismo redactor que respondió P01–P29: usarla sería preguntarle dos veces a la misma
+fuente y contar la respuesta como dos evidencias. El lector
+(<span class="mono">signals/ai_reports.py</span>) ni siquiera la carga, así que la capa de decisión
+no podría usarla queriendo. Hay un test por cada lado.</div>
+<h4>Los {p['n_directional']} pesos, publicados uno por uno</h4>
+<p><b>Estos pesos no están medidos: son una hipótesis.</b> Se publican enteros porque es lo único
+que hace auditable un juicio experto — sin la tabla, «pesos afirmados» es una frase. El criterio es
+de tres niveles y sin más finura, porque afinar decimales sobre cero datos es teatro: <b>1,0</b> la
+pregunta que sola te haría cambiar de opinión, <b>0,5–0,8</b> evidencia que necesita compañía,
+<b>0,3–0,4</b> contexto que mueve el margen. Peso total <b>{_n(p['total_weight'])}</b>.</p>
+<p>Tres van con <b>polaridad invertida</b> — <span class="mono">{', '.join(p['contrarian'])}</span> —
+porque miden <b>aglomeración</b> y no fuerza: un RSI de 81 no es una razón para comprar más, es una
+razón para desconfiar del largo que ibas a abrir. Y la lista se para en tres a propósito: la codicia
+extrema del Fear &amp; Greed también es un contrarian clásico, pero esa lectura se sostiene sobre una
+<b>U</b> —bien mientras sube, mal en el extremo— y una U no se afirma, se mide, porque todo el
+contenido está en dónde está el codo. Las tres invertidas no son una U: son un coste o una posición
+abarrotada, monótonos en todo el rango.</p>
+{weights}
+<h4>Cómo decide, en cuatro pasos</h4>
+<ol>
+<li><b>Frescura.</b> El reporte tiene hora de corte (06:00Z). Pasadas
+<span class="mono">max_report_age_hours</span> no se opera, y sin hora de corte legible se trata
+como caducado: una lectura de anteayer repetida cada quince minutos sería la peor versión de
+esto.</li>
+<li><b>Lado y elegibilidad.</b> Hacen falta las dos cosas: convicción <b>absoluta</b>
+(|score| ≥ umbral) <b>y</b> estar entre los <span class="mono">top_n</span> mejores del <b>corte
+transversal</b> del día por ese lado.</li>
+<li><b>La horquilla.</b> El stop se mide en <b>sigmas diarias del propio activo</b>, y la sigma sale
+del reporte (P32 realizada, P33 implícita), no de las barras. El objetivo es un múltiplo del stop
+que <b>sube con la convicción</b> y <b>baja</b> con el riesgo de evento (P28, P29) y con la
+aglomeración en contra. Eso es lo que hace la horquilla variable: dos activos con el mismo lado y
+distinto reporte salen con stop y objetivo distintos.</li>
+<li><b>Confianza.</b> Convicción, cobertura y profundidad del libro. Es el mando de tamaño del motor
+de riesgo, así que un reporte flojo entra con menos dinero.</li>
+</ol>
+<div class="why"><b>Por qué el corte transversal, y no un umbral a secas.</b> El runner recorre el
+universo <b>en el orden del config</b> y para al llegar a
+<span class="mono">max_trades_per_cycle</span>. Con un umbral absoluto y un día en que todo apunta
+al mismo lado —que es exactamente lo que pasó el 2026-08-22, con las 24 lecturas positivas— el que
+acaba operando no es el mejor: es el que estaba antes en la lista. Ordenar viendo a los 24 a la vez
+es lo que convierte eso en una elección. El precio a pagar, y hay que decirlo: ese día las
+puntuaciones estaban <b>muy juntas</b>, así que el top-5 de la primera sección cruzada es casi tan
+arbitrario como el orden del fichero.</div>
+<div class="why"><b>Por qué el score es una media ponderada y no una suma.</b> Porque el propio
+resumen del día publica la correlación entre cobertura y media para vigilar exactamente esto: si el
+score sube con <b>cuántas preguntas se pudieron responder</b>, el ranking ordena por disponibilidad
+de datos y no por criterio. Dividir por el peso <b>disponible</b> pone a todos los activos en la
+misma escala [−1, +1], y por debajo de un piso de cobertura ponderada del
+<b>{_n(p['min_coverage_pct'], 0)}%</b> el activo no se puntúa — no puntúa mal: no puntúa. El piso es
+una <b>constante</b> y no un parámetro: sorteable, permitiría convertir la estrategia en un filtro
+de «qué activos tuvieron buen día de captura».</div>
+<h4>Parámetros por defecto</h4>
+{params}
+<div class="note"><b>Ninguno entra en el espacio de búsqueda ni en la rejilla de familias.</b> No
+está en <span class="mono">scoring/families.py</span> ni en
+<span class="mono">scoring/search_space.py</span>, y eso no es un olvido: entre los
+{p['n_directional']} pesos y estos parámetros hay del orden de medio centenar de números libres, y el
+único día disponible aporta 24 observaciones que apuntan todas al mismo sitio. Ajustar lo uno contra
+lo otro no sería una calibración. La línea del proyecto para la capa de señal —«la capa se
+afirma, no se optimiza»— vale aquí con más motivo. El siguiente paso declarado es hacer evolucionar
+los pesos con el histórico que se vaya capturando, con un método que controle el sobreajuste (RL,
+algoritmos genéticos u otro), y ahí sí vuelve a haber algo que rankear.</div>
+<div class="note"><b>Cómo se deshace, y qué arrastró.</b> Descomentar
+<span class="mono">crypto_momentum</span> en <span class="mono">config/default.toml</span>: no se ha
+borrado nada y su evidencia publicada sigue entera. Activas hoy: {live}. El cambio arrastró una
+segunda decisión: <span class="mono">default.toml</span> hacía dos trabajos —decir lo que se opera y
+decir lo que se mide— y dejó de poder hacerlos a la vez, así que el backtest tiene ahora su propio
+<span class="mono">config/backtest.toml</span>, que conserva la primitiva de momentum con los
+parámetros exactos de antes. Es el mismo precedente que abrió
+<span class="mono">config/synthetic.toml</span>.</div>
+"""
+
+
 def _themed_families_block(families) -> str:
     """
     Las seis tematicas, una tarjeta cada una. Se ITERA sobre lo que el generador publica y no
@@ -2253,6 +2378,7 @@ def render_html(f: dict) -> str:
         "MR_PARAMS": _rows(f.get("mr_params", []), ["Parámetro", "Valor"]),
         "SPACE_MOM": _rows(f.get("space_mom", []), ["Parámetro", "Rango CEM"]),
         "SPACE_MR": _rows(f.get("space_mr", []), ["Parámetro", "Rango CEM"]),
+        "PRIORITY": _priority_block(f.get("priority")),
         "THEMED_FAMILIES": _themed_families_block(f.get("themed", [])),
         "THEMED_SPACES": _themed_spaces_block(f.get("themed", [])),
         "MARKET": _market_block(f.get("market")),
@@ -2301,7 +2427,7 @@ Las cifras marcadas son extraídas del repositorio en el momento de generar este
 <li><a href="#s1">Resumen ejecutivo</a></li>
 <li><a href="#s2">Datos</a> — captura real, señales externas y el reporte diario por activo</li>
 <li><a href="#s3">Trade</a> — cómo se ejecuta una operación, qué cuesta y cómo se contabiliza</li>
-<li><a href="#s4">Estrategias</a> — recompensa, ordenación y validación</li>
+<li><a href="#s4">Estrategias</a> — la que opera hoy (§4.0, prioridad forzada), recompensa, ordenación y validación</li>
 <li><a href="#s5">Resultados</a></li>
 <li><a href="#s6">Limitaciones y evoluciones</a></li>
 <li><a href="#s7">Investigación archivada</a> — el mundo sintético: qué se midió y por qué se aparcó</li>
@@ -2555,6 +2681,12 @@ barra gana el stop, y un hueco por debajo del stop se llena al open.</li>
 decisión de selección: las estrategias que existen, lo que ven, cómo se puntúa una muestra, cómo se
 agrega la distribución, cómo se parte el tiempo, contra quién compite, qué se exige para poder competir,
 si el orden sintético se parece al real, cómo se busca y cuánto hay que descontar por haber buscado.</p>
+<p class="lead">Empieza, sin embargo, por una que <b>no</b> pasa por nada de eso. Desde el 2026-08-22 la
+única estrategia activa tiene la prioridad <b>forzada a mano</b> y está <b>fuera del ranking</b>, y eso
+tiene que leerse antes que las ocho que sí se miden, para que el orden de lectura no sugiera lo
+contrario.</p>
+
+%%PRIORITY%%
 
 <h3>4.1 · Dos primitivas de regímenes opuestos</h3>
 <p>El sistema arranca con dos estrategias paramétricas, puras y <b>sin IA</b>, elegidas como regímenes
@@ -2998,6 +3130,32 @@ instrumento en vez de usarlo. Dos están <b>hechas</b>: mover el sustrato al his
 actual) y el CPCV dentro del optimizador. Y la optimización CEM completa queda <b>absorbida</b> por la
 entrada 3, donde además lleva la capa de señal.</td></tr>
 </tbody></table>
+
+<h3>6.2-bis · La prioridad forzada, que es una limitación con fecha de caducidad</h3>
+<div class="warn"><b>Desde el 2026-08-22 la única estrategia activa no está medida, y se le dio la
+prioridad a mano.</b> Todo lo que este capítulo llama «cerrado» se midió sobre las primitivas de precio;
+lo que <b>opera</b> hoy es §4.0, que lee el reporte diario por activo y cuyo sustrato tiene tres días de
+archivo. Las dos afirmaciones conviven en el mismo documento y no se contradicen, pero leerlas por
+separado sí engaña, así que quedan juntas aquí.</div>
+<p>Lo que se acepta a sabiendas, en tres puntos:</p>
+<ul>
+<li><b>No hay backtest y no lo habrá pronto.</b> Con tres capturas no se estima una media, no se
+estandariza, no se ajusta un peso y no se rankea. El número que saldría no sería débil: sería vacío.</li>
+<li><b>Los umbrales están sobreajustados a un día.</b> Se fijaron mirando la única sección cruzada
+disponible, y ese día las 24 lecturas salieron del mismo signo y muy juntas entre sí. La ordenación que
+produce el corte transversal es, en la primera sección, casi tan arbitraria como el orden del fichero
+de configuración.</li>
+<li><b>Las nueve primitivas medidas están apagadas.</b> Su evidencia sigue publicada y su configuración
+intacta; simplemente no proponen nada mientras dure la medida.</li>
+</ul>
+<p>Y lo que hace que el riesgo sea asumible: es <b>paper trading</b> —no hay dinero real—, el motor de
+riesgo del §3.2 sigue entero por delante, y deshacerlo cuesta descomentar cuatro líneas.</p>
+<div class="why"><b>La condición de salida, declarada por adelantado para que no se pueda mover
+después.</b> La prioridad forzada dura hasta que el archivo del reporte diario tenga calendario
+suficiente para que sus pesos se puedan <b>aprender en vez de afirmar</b>, con un método que controle el
+sobreajuste — aprendizaje por refuerzo, algoritmos genéticos u otro— y para que la estrategia pueda
+entrar en la rejilla del §4.4 y competir con las demás como una más. Mientras tanto lo que se acumula es
+lo único que no se puede sobreajustar: días de diario de paper trading.</div>
 
 <h3>6.3 · Los límites que no se van a cerrar</h3>
 <p>No todo hueco es trabajo pendiente. Estos cuatro son propiedades del enfoque, y se declaran para que

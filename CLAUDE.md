@@ -45,6 +45,30 @@ Consecuencia práctica: **no propongas trabajo de rigor de backtesting** (afinar
 re-calibrar pesos, más esquemas de validación) salvo que se pida. Se retiró del roadmap a
 propósito.
 
+### La estrategia con prioridad forzada (desde 2026-08-22)
+
+`config/default.toml` lleva **una sola estrategia activa**, `daily_report_expert`, y
+`crypto_momentum` está comentada. **Eso es intencionado y no hay que "arreglarlo".** Lee las 37
+variables categóricas del reporte diario por activo, cuyo archivo empezó el 2026-08-20: con tres
+días no hay backtest, así que no ganó nada — se le dio la prioridad a mano, es paper trading y es
+temporal. Los pesos viven en `observation/daily_report_scores.py` y están **afirmados, no
+estimados**.
+
+Lo que se sigue de ahí, y conviene no volver a descubrirlo:
+
+- **No la metas en `scoring/families.py` ni en `scoring/search_space.py`.** No se rankea ni se
+  optimiza contra un día de datos. `FAMILIES` sigue siendo 8 y su orden está congelado por un test.
+- **No la enganches en `backtest/engine.py`.** Sin proveedor no emite nada, y eso es lo correcto:
+  aplicar el reporte de hoy a una barra de 2023 es look-ahead con otro nombre. El proveedor se
+  inyecta sólo en `main.py`.
+- **`config/default.toml` = lo que OPERA; `config/backtest.toml` = lo que se MIDE.** Los cinco
+  golden del CLI apuntan al segundo. Si backtesteas con el primero, sale todo a cero por diseño.
+- **P30 no se lee nunca.** Es la conclusión del propio redactor del reporte; hay un test por cada
+  lado y el lector ni la carga.
+
+Lo siguiente en esta línea, ya declarado: hacer evolucionar esos pesos con el histórico que se vaya
+capturando (RL, algoritmos genéticos u otro método con control de sobreajuste).
+
 ## Regla 3: el entorno
 
 - `poetry run` **está roto** (falla mudo, exit 1). Invoca `.venv\Scripts\python.exe`
