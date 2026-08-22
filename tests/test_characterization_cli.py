@@ -51,6 +51,15 @@ def test_synth_list() -> None:
 # ------------------------------------------------------------------------ backtest e2e
 # El pipeline end-to-end completo: config -> barras sinteticas -> estrategias -> riesgo
 # -> ejecucion -> metricas -> score. Es el camino que mas codigo atraviesa.
+#
+# APUNTAN A `config/backtest.toml` Y NO AL DEFECTO, Y ESO ES EL PUNTO. Desde el 2026-08-22
+# el config por defecto lleva una sola estrategia, `daily_report_expert`, que en backtest no
+# se engancha a su proveedor a proposito: emite cero senales y el informe sale entero a cero.
+# Congelar ESO seria tener cinco casos que pasan en verde aunque el motor de backtest se
+# rompiera de arriba abajo. `config/backtest.toml` conserva `crypto_momentum` con los
+# parametros exactos que tenia el defecto antes del cambio, asi que estas cinco referencias
+# siguen valiendo byte a byte y siguen midiendo lo que decian medir.
+BACKTEST_CONFIG = ("--config", "config/backtest.toml")
 
 
 @pytest.mark.slow
@@ -58,7 +67,7 @@ def test_synth_list() -> None:
 def test_backtest_single_split_json() -> None:
     assert_golden(
         "cli_backtest_single_split.json",
-        run_cli("backtest", "--synthetic", SAMPLE, "--json"),
+        run_cli(*BACKTEST_CONFIG, "backtest", "--synthetic", SAMPLE, "--json"),
     )
 
 
@@ -68,7 +77,7 @@ def test_backtest_single_split_text() -> None:
     """El formato impreso, no solo las cifras: es lo que se lee por terminal."""
     assert_golden(
         "cli_backtest_single_split.txt",
-        run_cli("backtest", "--synthetic", SAMPLE),
+        run_cli(*BACKTEST_CONFIG, "backtest", "--synthetic", SAMPLE),
     )
 
 
@@ -77,7 +86,10 @@ def test_backtest_single_split_text() -> None:
 def test_backtest_walk_forward_json() -> None:
     assert_golden(
         "cli_backtest_walk_forward.json",
-        run_cli("backtest", "--synthetic", SAMPLE, "--validation", "walk_forward", "--json"),
+        run_cli(
+            *BACKTEST_CONFIG, "backtest", "--synthetic", SAMPLE,
+            "--validation", "walk_forward", "--json",
+        ),
     )
 
 
@@ -86,7 +98,9 @@ def test_backtest_walk_forward_json() -> None:
 def test_backtest_cpcv_json() -> None:
     assert_golden(
         "cli_backtest_cpcv.json",
-        run_cli("backtest", "--synthetic", SAMPLE, "--validation", "cpcv", "--json"),
+        run_cli(
+            *BACKTEST_CONFIG, "backtest", "--synthetic", SAMPLE, "--validation", "cpcv", "--json"
+        ),
     )
 
 
@@ -96,7 +110,9 @@ def test_backtest_multiwindow_text() -> None:
     """La tabla multiventana con actividad y gate: mucha logica de formato en una salida."""
     assert_golden(
         "cli_backtest_walk_forward.txt",
-        run_cli("backtest", "--synthetic", SAMPLE, "--validation", "walk_forward"),
+        run_cli(
+            *BACKTEST_CONFIG, "backtest", "--synthetic", SAMPLE, "--validation", "walk_forward"
+        ),
     )
 
 

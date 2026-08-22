@@ -1,5 +1,35 @@
-# Configuracion por defecto de ai-trader.
-# Todo esto estaba antes hardcodeado en main.py.
+# Configuracion de BACKTEST sobre mercado real.
+#
+# POR QUE EXISTE ESTE FICHERO, Y POR QUE ES UNA COPIA DE `default.toml`
+# ----------------------------------------------------------------------
+# Hasta el 2026-08-22, `config/default.toml` hacia dos trabajos: decia lo que se OPERA y
+# decia lo que se MIDE. Funcionaba mientras las dos respuestas eran la misma. Dejo de
+# funcionar el dia que la estrategia con prioridad forzada paso a ser `daily_report_expert`,
+# que lee el reporte diario por activo y en backtest NO SE ENGANCHA a proposito: su archivo
+# tiene tres dias y aplicar el reporte de hoy a una barra de 2023 seria look-ahead con otro
+# nombre. Backtestearla da cero operaciones, que es correcto y es inutil.
+#
+# Asi que las dos respuestas se separan, siguiendo el precedente que ya abrio
+# `config/synthetic.toml` el dia que el universo del generador dejo de coincidir con el
+# universo operado:
+#
+#     config/default.toml    lo que OPERA hoy       -> daily_report_expert
+#     config/backtest.toml   lo que se MIDE hoy     -> crypto_momentum (este fichero)
+#     config/synthetic.toml  el universo del generador sintetico
+#
+# Se usa con:
+#     ai-trader --config config/backtest.toml backtest ...
+#
+# Y es la referencia de los cinco casos de caracterizacion del CLI
+# (`tests/test_characterization_cli.py`): son el unico sitio donde el pipeline entero
+# --config, barras, estrategia, riesgo, ejecucion, metricas, score-- se recorre de punta a
+# punta, y apuntarlos a una estrategia que no puede operar los dejaria en verde aunque el
+# motor se rompiera entero.
+#
+# QUE SE PUEDE TOCAR AQUI. Nada, mientras los goldens sigan siendo la referencia: los
+# parametros de `crypto_momentum` y el universo son EXACTAMENTE los que tenia
+# `config/default.toml` antes del cambio, y cualquier retoque mueve las cifras congeladas.
+# Si hay que cambiarlos, se regenera la referencia y se revisa el diff linea a linea.
 
 # Universo de simbolos.
 #   "BTC/USDT"  -> cripto (CCXT)
@@ -94,73 +124,16 @@ enabled = false
 
 # Estrategias activas. `type` se resuelve contra el registro de strategies/registry.py.
 # Este bloque es el formato que emitira el generador de estrategias con IA.
-#
-# ============================================================================
-# MEDIDA TEMPORAL Y DELIBERADA: HOY SOLO OPERA EL REPORTE DIARIO EXPERTO
-# ============================================================================
-# Desde el 2026-08-22, la unica estrategia activa es `daily_report_expert`. No gano un
-# ranking, no batio a nadie y no se comparo con las otras nueve: se le dio la prioridad A
-# MANO. Conviene que quien lea esto dentro de seis meses sepa exactamente por que, porque
-# desde fuera esto se parece a un resultado y no lo es.
-#
-# EL MOTIVO. Se alimenta de las 37 variables categoricas del reporte diario por activo, la
-# segunda via de captura, que empezo el 2026-08-20 y hoy tiene tres dias de archivo. Con tres
-# dias no hay backtest: ni ranking, ni PBO, ni pesos calibrados, ni comparacion con las ocho
-# familias del `scoring/`. Medirla contra ellas exigiria un numero que hoy no significa nada,
-# y esperar a tenerlo significa no operarla -- y no operarla significa no generar el diario
-# que es la unica evidencia que no se puede sobreajustar. Es la Regla 2 del proyecto tal cual:
-# poner la herramienta a funcionar, aceptando el sobreajuste, y atacarlo despues con
-# evidencia de calendario.
-#
-# QUE HACE ESTO SEGURO DE HACER. Es PAPER TRADING. No hay dinero real detras de esta linea, y
-# lo unico que se arriesga es el tiempo que tarde en verse que no funciona. El motor de riesgo
-# sigue entero por delante (cupo, exposicion, perdida diaria, minimo de confianza): la
-# prioridad forzada decide QUIEN propone, nunca que se salte una comprobacion.
-#
-# HASTA CUANDO. Hasta que haya calendario suficiente para evaluarla de verdad. El siguiente
-# paso ya declarado es hacer evolucionar sus pesos con los datos historicos que se vayan
-# capturando (RL, algoritmos geneticos u otro metodo con control de sobreajuste), y ahi
-# vuelve a haber algo que rankear.
-#
-# COMO SE DESHACE. Descomentar el bloque de `crypto_momentum`. No se ha borrado: esta aparcado,
-# con sus parametros intactos, y su evidencia publicada sigue en `data/` y en el dashboard.
 [[strategies]]
-type = "daily_report_expert"
-id = "daily_report_expert_v1"
+type = "crypto_momentum"
+id = "crypto_momentum_v1"
 
 [strategies.params]
-# Los cuatro de elegibilidad. `top_n` = 5 empareja con `max_open_positions` de arriba: la
-# estrategia ordena la seccion cruzada del dia y propone los cinco mejores, en vez de dejar
-# que el orden del universo elija por ella.
-min_abs_score = 0.20
-top_n = 5
-max_report_age_hours = 30.0
-allow_short = true
-# La horquilla, en sigmas DIARIAS del propio activo tomadas del reporte (P32/P33). El techo
-# del stop se queda por debajo de `max_stop_distance_pct` (15%) para que el motor de riesgo
-# nunca tenga que reescribir lo que la estrategia dijo.
-stop_sigma_mult = 2.0
-min_stop_pct = 2.0
-max_stop_pct = 12.0
-base_reward = 1.4
-conviction_reward = 1.6
-event_reward_drag = 0.5
-crowding_reward_drag = 0.5
-min_reward = 1.0
-max_reward = 3.5
-
-# APARCADA, no retirada. Es la primitiva sobre la que se midio todo lo publicado y vuelve en
-# cuanto el reporte diario tenga historia con la que competir.
-# [[strategies]]
-# type = "crypto_momentum"
-# id = "crypto_momentum_v1"
-#
-# [strategies.params]
-# fast_sma_window = 10
-# slow_sma_window = 20
-# atr_window = 14
-# breakout_lookback = 5
-# min_atr_pct = 0.2
-# risk_atr_multiple = 2.0
-# reward_atr_multiple = 3.0
-# require_breakout = true
+fast_sma_window = 10
+slow_sma_window = 20
+atr_window = 14
+breakout_lookback = 5
+min_atr_pct = 0.2
+risk_atr_multiple = 2.0
+reward_atr_multiple = 3.0
+require_breakout = true
